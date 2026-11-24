@@ -10,6 +10,7 @@ import { newApprovalId } from "./runState.js";
 import { isResumable } from "./runTurn.js";
 import { buildOutcomeRow } from "./telemetry/outcomeRow.js";
 import { tallyVerify } from "./telemetry/runTally.js";
+import { measureWorkflow, measureWorkflowSync, workflowScope } from "./telemetry/workflowMetrics.js";
 
 /** What a terminal outcome carries beyond the state. */
 interface SettleExtra {
@@ -43,6 +44,10 @@ export async function settle(
   kind: RunOutcome["kind"],
   extra: SettleExtra,
 ): Promise<RunOutcome> {
+  return measureWorkflow(input.ports.events, workflowScope(input, state.step), 'settle', () => settleCore(input, hooks, state, transcript, kind, extra), (result) => result.kind === 'failed' ? result.reason === RUN_CANCELLED_REASON ? 'cancelled' : 'failed' : result.kind === 'paused' ? 'blocked' : 'completed');
+}
+
+async function settleCore(input: RunAgentInput, hooks: PolicyHooks, state: RunState, transcript: RunMessage[], kind: RunOutcome['kind'], extra: SettleExtra): Promise<RunOutcome> {
   state.messages = transcript;
   // Forced closing turns can bypass the interactive finish gate. They must still report outstanding assigned work.
   const unfinished = kind === "finished" ? hooks.finish.unfinishedWork(state) : null;
@@ -91,9 +96,9 @@ export async function settle(
 
   // The uniform §8.2 outcome row, built from the run state the whole run carried (its tally is in `state.telemetry`).
   if (kind === "finished" || kind === "failed") {
-    const row = buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, parentRunId: input.task.dispatch.parentRunId, kind, ...(extra.reason !== undefined ? { reason: extra.reason } : {}), state });
+    const row = measureWorkflowSync(input.ports.events, workflowScope(input, state.step), 'grade', () => buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, parentRunId: input.task.dispatch.parentRunId, kind, ...(extra.reason !== undefined ? { reason: extra.reason } : {}), state }), (row) => ({ ...(row.work ?? { assigned: 0, done: 0, blocked: 0, inReview: 0, open: 0 }) }));
     try {
-      await input.ports.events.outcome?.(row);
+      if (input.ports.events.outcome) await measureWorkflow(input.ports.events, workflowScope(input, state.step), 'outcome', () => input.ports.events.outcome!(row));
     } catch {
       // As with the trace: a broken sink records nothing.
     }

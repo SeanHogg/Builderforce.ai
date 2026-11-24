@@ -294,6 +294,8 @@ import {
   listPriceOf,
   liveChatBindHolder,
   localToolsIn,
+  measureWorkflow,
+  measureWorkflowSync,
   memoryReplayable,
   memoryToolsIn,
   midRunNotice,
@@ -408,7 +410,7 @@ import {
   workFiledNotStaffedVerdict,
   workFinishPorts,
   workSupportsRoutingSample
-} from "./chunk-RPJ7SAFZ.mjs";
+} from "./chunk-CFW3Z45U.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -10486,6 +10488,237 @@ function deviceLeverOn(id) {
   return isCostLeverOn(env, id, null);
 }
 
+// src/runStore/runEndOutcome.ts
+var notes = /* @__PURE__ */ new WeakMap();
+function noteRunId(c, runId) {
+  if (runId) notes.set(c, { runId, contained: false });
+}
+function noteBudgetContained(c) {
+  const n2 = notes.get(c);
+  if (n2) n2.contained = true;
+}
+function runEndOutcome(state) {
+  if (state.contained) return "budget-contained";
+  if (state.aborted) return "stopped";
+  return state.failed ? "failed" : "succeeded";
+}
+function reportRunEnd(c, req, state) {
+  const n2 = notes.get(c);
+  notes.delete(c);
+  if (!n2 || !req.recordRunOutcome) return;
+  try {
+    void Promise.resolve(req.recordRunOutcome({ runId: n2.runId, outcome: runEndOutcome({ ...state, contained: n2.contained }) })).catch((e) => unrecorded(c, e));
+  } catch (e) {
+    unrecorded(c, e);
+  }
+}
+function unrecorded(c, e) {
+  pushTrace(c, { ts: nowIso(), category: "message", label: "run.outcome_unrecorded", result: e instanceof Error ? e.message : String(e) });
+}
+
+// src/runStore/turnContext.ts
+import { defaultEstimateTokens as defaultEstimateTokens3 } from "@seanhogg/builderforce-memory/handoff";
+var OPEN = "<turn_context>\nContext for this turn only (recalled memory and run directives) \u2014 not part of the request:";
+var CLOSE = "</turn_context>";
+var attached = /* @__PURE__ */ new WeakMap();
+var measured = /* @__PURE__ */ new WeakMap();
+function turnContextBlock(parts) {
+  const body = parts.map((p) => (p ?? "").trim()).filter(Boolean).join("\n\n");
+  return body ? `${OPEN}
+
+${body}
+${CLOSE}` : null;
+}
+function turnContextCarrier(c) {
+  const a = attached.get(c);
+  return a && a.convo[a.index] === a.carrier ? a.carrier : void 0;
+}
+function restoreTurnContext(c) {
+  measured.delete(c);
+  const prior = attached.get(c);
+  if (!prior) return;
+  if (prior.convo[prior.index] === prior.carrier) prior.convo[prior.index] = prior.original;
+  attached.delete(c);
+}
+function attachTurnContext(c, convo, block) {
+  restoreTurnContext(c);
+  measured.set(c, defaultEstimateTokens3(block));
+  for (let i = convo.length - 1; i >= 0; i -= 1) {
+    const original = convo[i];
+    if (original.role !== "user") continue;
+    const content = typeof original.content === "string" ? `${original.content}
+
+${block}` : [...original.content, { type: "text", text: block }];
+    const carrier = { ...original, content };
+    convo[i] = carrier;
+    attached.set(c, { convo, index: i, carrier, original });
+    return true;
+  }
+  return false;
+}
+function turnContextTokens(c) {
+  return measured.get(c) ?? 0;
+}
+
+// src/run/stallTrace.ts
+var text = (v) => typeof v === "string" && v ? v : void 0;
+var num = (v) => typeof v === "number" ? v : void 0;
+var menuArg = (d) => num(d.advertisedTools) !== void 0 ? { advertisedTools: num(d.advertisedTools) } : {};
+function stallTraceStep(event, ts) {
+  const d = event.detail ?? {};
+  const shape = d.shape;
+  switch (event.action) {
+    case "steer": {
+      const attempt = num(d.attempt);
+      if (attempt === void 0) return null;
+      const handedOff = shape === "handed-off";
+      return {
+        ts,
+        category: "message",
+        label: handedOff ? "loop.recover_handed_off_work" : "loop.recover_announced_tool_call",
+        args: { step: event.step, attempt, of: MAX_ANNOUNCEMENT_RECOVERIES, ...menuArg(d), shape },
+        result: handedOff ? `Model ended by telling the user to run the commands itself holds tools for \u2014 re-prompted to run them (${attempt}/${MAX_ANNOUNCEMENT_RECOVERIES}).` : `Model announced a tool call without making one \u2014 re-prompted (${attempt}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
+      };
+    }
+    case "escalate": {
+      const from = text(d.from);
+      const to = text(d.to);
+      if (!to) return null;
+      return {
+        ts,
+        category: "message",
+        label: "loop.model_failover",
+        args: { step: event.step, from: from ?? "default", to, attempt: num(d.attempt), of: num(d.of) },
+        result: text(d.notice) ?? modelFailoverNotice(from ?? "default", to, shape)
+      };
+    }
+    case "pause":
+      return {
+        ts,
+        category: "error",
+        label: "loop.stall_unrecovered",
+        args: { step: event.step, model: text(d.model), ...num(d.attempts) !== void 0 ? { attempts: num(d.attempts) } : {}, tried: d.tried, ...menuArg(d), shape },
+        result: event.note ?? "The model kept describing calls instead of making them.",
+        isError: true
+      };
+    default:
+      return null;
+  }
+}
+
+// src/unsettledAnswer.ts
+var BUDGET_CONTAINED_STEP = "run.budget_contained";
+function isForcedFinishStep(event) {
+  return event.label === "llm.complete" && event.args?.forcedFinish === true;
+}
+function isUnsettledAnswer(trace2) {
+  return trace2.some((event) => event.label === BUDGET_CONTAINED_STEP || isForcedFinishStep(event));
+}
+
+// src/run/eventSink.ts
+function traceStepFor(event, ts) {
+  switch (event.kind) {
+    case "model.preflight":
+      if (event.notices.length === 0) return null;
+      return {
+        ts,
+        category: "message",
+        label: "model.preflight",
+        args: { status: event.status },
+        result: `Before the first turn: ${event.notices.join(" ")}`
+      };
+    case "llm.model_downgrade":
+      return {
+        ts,
+        category: "message",
+        label: "llm.model_downgrade",
+        args: { requestedModel: event.requestedModel, model: event.model, step: event.step },
+        result: event.reason
+      };
+    case "steer.applied":
+      return {
+        ts,
+        category: "message",
+        label: "steer.applied",
+        args: { step: event.step, messages: 1 },
+        result: "The person sent direction while the run was working; it reached the next model call."
+      };
+    case "budget.warning":
+      return { ts, category: "message", label: "run.budget_warning", args: { spentMillicents: event.spentMc, capMillicents: event.capMc }, result: event.text };
+    case "budget.contained":
+      return {
+        ts,
+        category: "message",
+        label: BUDGET_CONTAINED_STEP,
+        args: { spentMillicents: event.spentMc, capMillicents: event.capMc, unpricedCalls: event.unpricedCalls },
+        result: event.text
+      };
+    case "budget.unpriced":
+      return {
+        ts,
+        category: "message",
+        label: "run.budget_unpriced",
+        args: { model: event.model ?? null },
+        result: "A call had no known price, so the run cap counts only the spend that is priced."
+      };
+    case "stall.recovered":
+      return stallTraceStep(event, ts);
+    case "run.routed":
+      return {
+        ts,
+        category: "message",
+        label: "run.routed",
+        args: { step: event.step, route: event.route, score: event.score },
+        result: `The run was routed ${event.route} (route score ${event.score}).`
+      };
+    case "finish.close_out_error":
+      return {
+        ts,
+        category: "message",
+        label: "finish.close_out_error",
+        args: { step: event.step, reason: event.reason },
+        result: `The run's close-out failed before the finish gate (${event.reason}); the finish went on without it.`
+      };
+    default:
+      return null;
+  }
+}
+function brainEventSink(c, outcome, on = {}) {
+  const render = (event) => {
+    if (on.recorded?.has(event.kind)) return;
+    if (event.kind === "budget.contained") {
+      noteBudgetContained(c);
+      on.budgetStop?.(event);
+    }
+    if (event.kind === "stall.recovered" && event.action === "pause" && event.note) c.error = event.note;
+    if (event.kind === "model.coder_reask" && on.coderReask) return on.coderReask(event);
+    const step = traceStepFor(event, nowIso());
+    if (step) {
+      pushTrace(c, step);
+      return;
+    }
+    emit(c);
+  };
+  return {
+    workflow(metric) {
+      pushTrace(c, { ts: new Date(metric.endedAt ?? metric.startedAt).toISOString(), category: "message", label: `workflow.stage.${metric.id}.${metric.status}`, args: metric, ...metric.durationMs !== void 0 ? { durationMs: metric.durationMs } : {} });
+    },
+    emit(event) {
+      const kept = event.kind === "model.coder_reask" ? void 0 : on.turnKept?.();
+      return kept instanceof Promise ? kept.then(() => render(event)) : render(event);
+    },
+    // The host's report may resolve to anything (a stored id, a response); the sink's contract is
+    // `void`, so what it resolves to is dropped here.
+    ...outcome ? { outcome: async (row) => {
+      await outcome(withHostContext(row, c));
+    } } : {}
+  };
+}
+function withHostContext(row, c) {
+  const tokens = turnContextTokens(c);
+  return tokens > 0 ? { ...row, contextPackTokens: (row.contextPackTokens ?? 0) + tokens } : row;
+}
+
 // src/turnOptimization.ts
 var MAX_ROUTING_QUERY_CHARS = 4e3;
 var ROUTING_USER_TURNS = 4;
@@ -11506,7 +11739,7 @@ function emitEvermindLearnReconcile(run, assistantMsg, finalText) {
 
 // src/runStore/prefetchGate.ts
 var NOTHING = { answered: false, tail: [] };
-function unrecorded(c, what, e) {
+function unrecorded2(c, what, e) {
   pushTrace(c, { ts: nowIso(), category: "message", label: "prefetch.unrecorded", args: { what }, result: e instanceof Error ? e.message : String(e) });
 }
 function bestEffort(c, what, write) {
@@ -11514,10 +11747,10 @@ function bestEffort(c, what, write) {
   try {
     pending = write();
   } catch (e) {
-    unrecorded(c, what, e);
+    unrecorded2(c, what, e);
     return;
   }
-  void Promise.resolve(pending).then(void 0, (e) => unrecorded(c, what, e));
+  void Promise.resolve(pending).then(void 0, (e) => unrecorded2(c, what, e));
 }
 function settlePending(c, port, req, request) {
   const pending = c.pendingGate;
@@ -11705,50 +11938,6 @@ function recordServedReads(coverage, reads, anchor) {
       anchor
     });
   }
-}
-
-// src/runStore/turnContext.ts
-import { defaultEstimateTokens as defaultEstimateTokens3 } from "@seanhogg/builderforce-memory/handoff";
-var OPEN = "<turn_context>\nContext for this turn only (recalled memory and run directives) \u2014 not part of the request:";
-var CLOSE = "</turn_context>";
-var attached = /* @__PURE__ */ new WeakMap();
-var measured = /* @__PURE__ */ new WeakMap();
-function turnContextBlock(parts) {
-  const body = parts.map((p) => (p ?? "").trim()).filter(Boolean).join("\n\n");
-  return body ? `${OPEN}
-
-${body}
-${CLOSE}` : null;
-}
-function turnContextCarrier(c) {
-  const a = attached.get(c);
-  return a && a.convo[a.index] === a.carrier ? a.carrier : void 0;
-}
-function restoreTurnContext(c) {
-  measured.delete(c);
-  const prior = attached.get(c);
-  if (!prior) return;
-  if (prior.convo[prior.index] === prior.carrier) prior.convo[prior.index] = prior.original;
-  attached.delete(c);
-}
-function attachTurnContext(c, convo, block) {
-  restoreTurnContext(c);
-  measured.set(c, defaultEstimateTokens3(block));
-  for (let i = convo.length - 1; i >= 0; i -= 1) {
-    const original = convo[i];
-    if (original.role !== "user") continue;
-    const content = typeof original.content === "string" ? `${original.content}
-
-${block}` : [...original.content, { type: "text", text: block }];
-    const carrier = { ...original, content };
-    convo[i] = carrier;
-    attached.set(c, { convo, index: i, carrier, original });
-    return true;
-  }
-  return false;
-}
-function turnContextTokens(c) {
-  return measured.get(c) ?? 0;
 }
 
 // src/runStore/serverChat.ts
@@ -12558,7 +12747,7 @@ async function prepareBrainRun(chatId, c, req, runKey, reportRunRow) {
   const runMode = normalizeChatMode(req.chatMode ?? "work");
   seedConfigLog(c, { model: req.model, modelStrict: req.modelStrict, routingMode: req.routingMode, runMode });
   const serverChatId = resolveServerChatId(chatId, req);
-  const route = decideRoute(req, latestUserText(convo), isFollowUpTurn(convo));
+  const route = measureWorkflowSync(brainEventSink(c), { runId: c.runId, entryPoint: req.entryPoint, step: 0 }, "route", () => decideRoute(req, latestUserText(convo), isFollowUpTurn(convo)), (r) => ({ reusedDecision: 0, quick: Number(r.pipeline?.route === "quick"), full: Number(r.pipeline?.route === "full") }));
   const pipeline = route.pipeline;
   if (pipeline) {
     pushTrace(c, {
@@ -15004,190 +15193,6 @@ async function settleBrainRun(run, outcome, last) {
   req.onActivity?.(chatId);
 }
 
-// src/runStore/runEndOutcome.ts
-var notes = /* @__PURE__ */ new WeakMap();
-function noteRunId(c, runId) {
-  if (runId) notes.set(c, { runId, contained: false });
-}
-function noteBudgetContained(c) {
-  const n2 = notes.get(c);
-  if (n2) n2.contained = true;
-}
-function runEndOutcome(state) {
-  if (state.contained) return "budget-contained";
-  if (state.aborted) return "stopped";
-  return state.failed ? "failed" : "succeeded";
-}
-function reportRunEnd(c, req, state) {
-  const n2 = notes.get(c);
-  notes.delete(c);
-  if (!n2 || !req.recordRunOutcome) return;
-  try {
-    void Promise.resolve(req.recordRunOutcome({ runId: n2.runId, outcome: runEndOutcome({ ...state, contained: n2.contained }) })).catch((e) => unrecorded2(c, e));
-  } catch (e) {
-    unrecorded2(c, e);
-  }
-}
-function unrecorded2(c, e) {
-  pushTrace(c, { ts: nowIso(), category: "message", label: "run.outcome_unrecorded", result: e instanceof Error ? e.message : String(e) });
-}
-
-// src/run/stallTrace.ts
-var text = (v) => typeof v === "string" && v ? v : void 0;
-var num = (v) => typeof v === "number" ? v : void 0;
-var menuArg = (d) => num(d.advertisedTools) !== void 0 ? { advertisedTools: num(d.advertisedTools) } : {};
-function stallTraceStep(event, ts) {
-  const d = event.detail ?? {};
-  const shape = d.shape;
-  switch (event.action) {
-    case "steer": {
-      const attempt = num(d.attempt);
-      if (attempt === void 0) return null;
-      const handedOff = shape === "handed-off";
-      return {
-        ts,
-        category: "message",
-        label: handedOff ? "loop.recover_handed_off_work" : "loop.recover_announced_tool_call",
-        args: { step: event.step, attempt, of: MAX_ANNOUNCEMENT_RECOVERIES, ...menuArg(d), shape },
-        result: handedOff ? `Model ended by telling the user to run the commands itself holds tools for \u2014 re-prompted to run them (${attempt}/${MAX_ANNOUNCEMENT_RECOVERIES}).` : `Model announced a tool call without making one \u2014 re-prompted (${attempt}/${MAX_ANNOUNCEMENT_RECOVERIES}).`
-      };
-    }
-    case "escalate": {
-      const from = text(d.from);
-      const to = text(d.to);
-      if (!to) return null;
-      return {
-        ts,
-        category: "message",
-        label: "loop.model_failover",
-        args: { step: event.step, from: from ?? "default", to, attempt: num(d.attempt), of: num(d.of) },
-        result: text(d.notice) ?? modelFailoverNotice(from ?? "default", to, shape)
-      };
-    }
-    case "pause":
-      return {
-        ts,
-        category: "error",
-        label: "loop.stall_unrecovered",
-        args: { step: event.step, model: text(d.model), ...num(d.attempts) !== void 0 ? { attempts: num(d.attempts) } : {}, tried: d.tried, ...menuArg(d), shape },
-        result: event.note ?? "The model kept describing calls instead of making them.",
-        isError: true
-      };
-    default:
-      return null;
-  }
-}
-
-// src/unsettledAnswer.ts
-var BUDGET_CONTAINED_STEP = "run.budget_contained";
-function isForcedFinishStep(event) {
-  return event.label === "llm.complete" && event.args?.forcedFinish === true;
-}
-function isUnsettledAnswer(trace2) {
-  return trace2.some((event) => event.label === BUDGET_CONTAINED_STEP || isForcedFinishStep(event));
-}
-
-// src/run/eventSink.ts
-function traceStepFor(event, ts) {
-  switch (event.kind) {
-    case "model.preflight":
-      if (event.notices.length === 0) return null;
-      return {
-        ts,
-        category: "message",
-        label: "model.preflight",
-        args: { status: event.status },
-        result: `Before the first turn: ${event.notices.join(" ")}`
-      };
-    case "llm.model_downgrade":
-      return {
-        ts,
-        category: "message",
-        label: "llm.model_downgrade",
-        args: { requestedModel: event.requestedModel, model: event.model, step: event.step },
-        result: event.reason
-      };
-    case "steer.applied":
-      return {
-        ts,
-        category: "message",
-        label: "steer.applied",
-        args: { step: event.step, messages: 1 },
-        result: "The person sent direction while the run was working; it reached the next model call."
-      };
-    case "budget.warning":
-      return { ts, category: "message", label: "run.budget_warning", args: { spentMillicents: event.spentMc, capMillicents: event.capMc }, result: event.text };
-    case "budget.contained":
-      return {
-        ts,
-        category: "message",
-        label: BUDGET_CONTAINED_STEP,
-        args: { spentMillicents: event.spentMc, capMillicents: event.capMc, unpricedCalls: event.unpricedCalls },
-        result: event.text
-      };
-    case "budget.unpriced":
-      return {
-        ts,
-        category: "message",
-        label: "run.budget_unpriced",
-        args: { model: event.model ?? null },
-        result: "A call had no known price, so the run cap counts only the spend that is priced."
-      };
-    case "stall.recovered":
-      return stallTraceStep(event, ts);
-    case "run.routed":
-      return {
-        ts,
-        category: "message",
-        label: "run.routed",
-        args: { step: event.step, route: event.route, score: event.score },
-        result: `The run was routed ${event.route} (route score ${event.score}).`
-      };
-    case "finish.close_out_error":
-      return {
-        ts,
-        category: "message",
-        label: "finish.close_out_error",
-        args: { step: event.step, reason: event.reason },
-        result: `The run's close-out failed before the finish gate (${event.reason}); the finish went on without it.`
-      };
-    default:
-      return null;
-  }
-}
-function brainEventSink(c, outcome, on = {}) {
-  const render = (event) => {
-    if (on.recorded?.has(event.kind)) return;
-    if (event.kind === "budget.contained") {
-      noteBudgetContained(c);
-      on.budgetStop?.(event);
-    }
-    if (event.kind === "stall.recovered" && event.action === "pause" && event.note) c.error = event.note;
-    if (event.kind === "model.coder_reask" && on.coderReask) return on.coderReask(event);
-    const step = traceStepFor(event, nowIso());
-    if (step) {
-      pushTrace(c, step);
-      return;
-    }
-    emit(c);
-  };
-  return {
-    emit(event) {
-      const kept = event.kind === "model.coder_reask" ? void 0 : on.turnKept?.();
-      return kept instanceof Promise ? kept.then(() => render(event)) : render(event);
-    },
-    // The host's report may resolve to anything (a stored id, a response); the sink's contract is
-    // `void`, so what it resolves to is dropped here.
-    ...outcome ? { outcome: async (row) => {
-      await outcome(withHostContext(row, c));
-    } } : {}
-  };
-}
-function withHostContext(row, c) {
-  const tokens = turnContextTokens(c);
-  return tokens > 0 ? { ...row, contextPackTokens: (row.contextPackTokens ?? 0) + tokens } : row;
-}
-
 // src/runStore/openLinkedWorkHold.ts
 var MAX_LISTED_TICKETS = 15;
 var UNMOVED_LOCAL_STATUS = "backlog";
@@ -16013,7 +16018,7 @@ async function runPrepared(run) {
   const ports = buildBrainRunPorts(binding);
   const signal = c.abort?.signal;
   const outcome = await openRun({
-    task: { ...brainRunTask(binding), persona: run.systemPrompt, transcript },
+    task: { ...brainRunTask(binding), runId: c.runId, persona: run.systemPrompt, transcript },
     policy: brainRunPolicy(binding),
     ports: { ...ports, model: withoutUncallableTurns(ports.model, req) },
     // The run's route, decided ONCE in the preamble (`runStore/runRoute.ts`): handed over as decided, so `openRun` folds it and never routes again.
@@ -16127,7 +16132,7 @@ async function startRun(runKey, request, claim) {
   c.closeOutFinished = false;
   let evidence;
   try {
-    const prepared = await prepareBrainRun(chatId, c, req, runKey, holdRunRow);
+    const prepared = await measureWorkflow(brainEventSink(c), { runId: c.runId, entryPoint: req.entryPoint, step: 0 }, "surface", () => prepareBrainRun(chatId, c, req, runKey, holdRunRow), void 0, c.abort?.signal);
     if (prepared) {
       evidence = prepared.evidence;
       noteRunId(c, prepared.metadata.guestTurnId);
@@ -16185,7 +16190,7 @@ async function startRun(runKey, request, claim) {
       } else if (agentRow && req.reportRunRecord) {
         const held = agentRow.model?.trim() ? agentRow : { ...agentRow, model: askedModelOf(req.model, trace2) };
         const record = runOutcomeRequestOf(held, { clientRunId: c.runId, stopped: aborted, projectId: req.projectId });
-        if (record) void req.reportRunRecord({ ...record, steps: completedTurns(trace2).length, routingSignal: false }).catch((e) => unrecorded2(c, e));
+        if (record) void req.reportRunRecord({ ...record, steps: completedTurns(trace2).length, routingSignal: false }).catch((e) => unrecorded(c, e));
       }
       reportRunEnd(c, req, { aborted, failed: c.error !== "" });
       c.persistStep = null;

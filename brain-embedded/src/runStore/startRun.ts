@@ -25,6 +25,8 @@ import { forgetChatTicketListing } from './chatTickets';
 import { verificationOf } from '../run/brainCloseOut';
 import { prepareBrainRun } from './runPreamble';
 import { runPrepared } from '../run/runPrepared';
+import { measureWorkflow } from '@builderforce/agent-run';
+import { brainEventSink } from '../run/eventSink';
 import { noteRunId, reportRunEnd, unrecorded } from './runEndOutcome';
 import { beginRun } from './beginRun';
 import { noteContinuationProgress } from './autoContinueGuard';
@@ -117,7 +119,7 @@ export async function startRun(runKey: number, request: BrainRunRequest, claim?:
   // The checks the host verifier ran for this run - what the continuation-progress verdict reads (none before a run is prepared).
   let evidence: Parameters<typeof verificationOf>[0];
   try {
-    const prepared = await prepareBrainRun(chatId, c, req, runKey, holdRunRow);
+    const prepared = await measureWorkflow(brainEventSink(c), { runId: c.runId, entryPoint: req.entryPoint, step: 0 }, 'surface', () => prepareBrainRun(chatId, c, req, runKey, holdRunRow), undefined, c.abort?.signal);
     // Memory answered: the run is over before a model was asked.
     if (prepared) {
       evidence = prepared.evidence;

@@ -112,6 +112,33 @@ flowchart TD
 
 The start contract must preserve local/durable identity and authorization. Background admission and eventual settlement are separate events. Shared finish policy can only enforce evidence supplied through the host's available ports.
 
+### Workflow diagnostics metrics (2026-11-24)
+
+`Copy diagnostics` now includes a `workflow.metrics` table; the same measurements are stored in `run.workflow` in the JSON capture. The canonical stage IDs live in `packages/agent-run/src/telemetry/workflowMetrics.ts`. They are protocol fields, so exports retain their exact names.
+
+| Diagram step / metric ID | Measured boundary and available facts |
+| --- | --- |
+| Surface / `surface` | Brain preparation: catalog, grounding, preflight and prepared request. Host authentication before Brain entry is outside this span. |
+| Shared start / `start` | `openRun` entry-point and catalog validation. Editor journals, change-set admission and remote authentication remain host-owned; this duration does not claim to measure them. |
+| Routing / `route` | The actual route decision, including quick/full counters. Brain measures its pre-decided route in the preamble; `openRun` does not count intake as a second decision. A resumed route is reused, not remeasured. |
+| Work plan / `work` | Initial `planWork`: assigned-item and criterion counts. |
+| Opening / `opening` | Initial `openingRows`: assembled message count. A resumed tick reuses the opening and does not add another sample. |
+| Composition / `compose` | Shared policy factory composition. Actual composition happens before `runAgent` constructs its work plan and opening; the diagram describes logical responsibilities rather than strict call order. |
+| Kernel / `kernel` | Each `runAgentLoop` invocation, with steps and the latest cumulative tool-call, tool-error and token counters. A yielded tick is an invocation completion, not a terminal run. |
+| Dispatch / `dispatch` | Actual dispatch, including the registry's capability resolution and tool execution. Earlier kernel/platform preflight and approval waits are outside this span. |
+| Child dispatch / `spawn` | A recognized spawn tool's dispatch interval. Some hosts return admission handles and others return completed reports; this interval is not universally child lifetime. Children report their own execution stages separately. |
+| Work ledger / `ledger` | The finish policy's scoped evidence refresh and open-work check; latest assigned/done/blocked/in-review/open counts. |
+| Finish / `finish` | Finish-tool gates, prose settle checks and live-child checks, with distinct blocked and failed attempts. Policy defaults completing are not evidence that an absent host verifier ran. |
+| Settlement / `settle` | Shared settlement, including memory write-back, state save and terminal-row handling. This excludes later host-specific settlement and inbox draining. |
+| Evaluation / `grade` | Deterministic outcome/scorecard construction and its assigned/done/blocked/in-review/open counts. |
+| Feedback / `outcome` | The host outcome callback, when bound. Callback completion is not proof of remote ingestion, routing training or deployment. |
+
+Every row reports observed attempts, completed/failed/blocked/cancelled counts, unclosed spans, total measured milliseconds and maximum measured milliseconds. `latestCounters` are snapshots, not additive counters. Timing uses explicit start/end observations, never the gap between unrelated events. Parent spans include nested spans, so summing the rows is not end-to-end latency. A measured 0 ms is valid at the clock's resolution; `null` means unmeasured. `completed` means that invocation returned, not that work was accepted or shipped.
+
+Uninstrumented steps and old captures are `not_observed`, with null duration. A start without a matching completion is `incomplete`, not a success or proof that the stage is still running. The report summarizes the trace available at capture time, potentially across multiple runs; `runIds` identifies observed runs. Truncated history can therefore provide partial evidence. Start/end samples have distinct trace identities even when their timestamps are equal, and merged live/durable copies count once.
+
+Measurements use the optional `EventSink.workflow` channel, separate from semantic `RunEvent` conformance traces. Brain persists that channel into diagnostic steps for the VSIX, web and other Brain-backed surfaces. Non-Brain hosts must bind the channel to their own telemetry store before their captures can claim stage coverage. Metrics failures never block execution, and metric payloads contain IDs, outcomes and numeric counters rather than prompts or tool arguments.
+
 ## 6. Integration verification (2026-11-23)
 
 - The full shared suite passed 857 tests. Focused Brain continuation, close-out, and gates passed 68 tests. Editor host steering, child spawn, and start gates passed 30 tests using the current Brain source. On-prem channel conformance, native outcome, child, and outbox suites passed 23 tests.

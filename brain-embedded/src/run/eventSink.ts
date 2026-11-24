@@ -129,6 +129,10 @@ export function brainEventSink(c: RunCell, outcome?: OutcomeReport, on: SinkReac
     emit(c);
   };
   return {
+    workflow(metric) {
+      // Trace merging keys on category/label/timestamp. Distinguish spans and phases even at 0 ms.
+      pushTrace(c, { ts: new Date(metric.endedAt ?? metric.startedAt).toISOString(), category: 'message', label: `workflow.stage.${metric.id}.${metric.status}`, args: metric, ...(metric.durationMs !== undefined ? { durationMs: metric.durationMs } : {}) });
+    },
     emit(event: RunEvent): Promise<void> | void {
       const kept = event.kind === 'model.coder_reask' ? undefined : on.turnKept?.();
       return kept instanceof Promise ? kept.then(() => render(event)) : render(event);

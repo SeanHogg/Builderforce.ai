@@ -292,6 +292,32 @@ interface ChatInputAttachment {
  */
 type BrainModality = string;
 
+/** Section 5 of the pipeline map. IDs are diagnostic protocol fields, not UI copy. */
+declare const WORKFLOW_STAGES: readonly ["surface", "start", "route", "work", "opening", "compose", "kernel", "dispatch", "spawn", "ledger", "finish", "settle", "grade", "outcome"];
+type WorkflowStage = typeof WORKFLOW_STAGES[number];
+type WorkflowStatus = 'running' | 'completed' | 'failed' | 'blocked' | 'cancelled';
+interface WorkflowStageSummary {
+    stage: WorkflowStage;
+    status: 'not_observed' | 'incomplete' | WorkflowStatus;
+    attempts: number;
+    completed: number;
+    failed: number;
+    blocked: number;
+    cancelled: number;
+    running: number;
+    /** Null means unmeasured. Sum/max cover observed finished attempts, excluding gaps. */
+    totalMs: number | null;
+    maxMs: number | null;
+    latestCounters?: Record<string, number>;
+}
+interface WorkflowSummary {
+    schemaVersion: 1;
+    observedStages: number;
+    totalStages: number;
+    runIds: string[];
+    stages: WorkflowStageSummary[];
+}
+
 /**
  * WHAT a failed model request looked like - the structured detail a stream interruption
  * carries, so a transcript and the editor's log name the destination, the phase it died in,
@@ -1336,6 +1362,7 @@ declare function parseRoleGateRefusal(message: string | null | undefined): {
     callerRole: string | null;
 };
 interface BrainDiagnostics {
+    workflow?: WorkflowSummary;
     turns: number;
     toolCalls: number;
     errors: number;

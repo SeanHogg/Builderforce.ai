@@ -1,40 +1,2081 @@
-"use strict";(()=>{var rt=Object.defineProperty;var nt=(e,t,r)=>t in e?rt(e,t,{enumerable:!0,configurable:!0,writable:!0,value:r}):e[t]=r;var y=(e,t,r)=>nt(e,typeof t!="symbol"?t+"":t,r);var D={format:2,targetFramework:"net10.0",hostAssembly:"Bfwc.DotnetHost",npmPackage:"@seanhogg/builderforce-webcontainers-dotnet",packages:{npgsql:{name:"Npgsql",version:"9.0.3",repository:"https://github.com/npgsql/npgsql.git",tag:"v9.0.3",commit:"97dc1739c6cf5890acf450f20f04e64c14c7ffd5"}}},j=`install ${D.npmPackage} at the same version as @seanhogg/builderforce-webcontainers and serve its directory (or build it from source with scripts/build-dotnet-runtime.mjs)`;var E=class extends Error{constructor(){super(...arguments);y(this,"name","DotnetBundleError")}},ot="/dotnet/refs",ue="bfwc-dotnet-",fe=e=>e.endsWith("/")?e:`${e}/`,st=e=>e instanceof Error?e.message:String(e);async function q(e){let t=new Uint8Array(await crypto.subtle.digest("SHA-256",e));return Array.from(t,r=>r.toString(16).padStart(2,"0")).join("")}function it(e){let t=e.Bfwc?.Host?.Exports;if(!t)throw new E("The .NET runtime bundle has no Bfwc.Host.Exports: it was not built from dotnet-host/.");return t}async function V(e,t,r){try{return await e(t,r)}catch(n){throw new E(`The .NET runtime bundle could not be reached (${t}: ${st(n)}).`)}}async function me(e,t){let r=`${fe(e)}manifest.json`,n=await V(t,r);if(!n.ok)throw new E(`The .NET runtime bundle's manifest could not be loaded (${r}: HTTP ${n.status}).`);let o=await n.text(),s;try{s=JSON.parse(o)}catch{throw new E(`The .NET runtime bundle's manifest (${r}) is not JSON.`)}if(s?.format!==D.format)throw new E(`The .NET runtime bundle at ${e} is format ${String(s?.format)}; this runtime reads format ${D.format}. To get one this runtime reads, ${j}.`);return{manifest:s,text:o}}async function he(e,t=fetch){return(await me(e,t)).manifest}async function at(e,t){let r=globalThis.caches;if(!r)return(s,i)=>V(t,s,i);let n=`${ue}${(await q(new TextEncoder().encode(e))).slice(0,32)}`,o;try{o=await r.open(n);for(let s of await r.keys())s.startsWith(ue)&&s!==n&&r.delete(s)}catch{o=void 0}return async(s,i)=>{let a=await o?.match(s).catch(()=>{});if(a)return a;let c=await V(t,s,i);return c.ok&&o&&await o.put(s,c.clone()).catch(()=>{}),c}}async function pe(e,t,r,n){let o=r.files?.[n];if(!o)throw new E(`The .NET runtime bundle's manifest has no hash for ${n}: to get a complete one, ${j}.`);let s=await e(new URL(n,t).href);if(!s.ok)throw new E(`${n} of the .NET runtime bundle could not be loaded (HTTP ${s.status}).`);let i=new Uint8Array(await s.arrayBuffer());if(await q(i)!==o)throw new E(`${n} of the .NET runtime bundle does not match its manifest's hash: refusing it.`);return i}async function ct(e,t,r){let n=[];for(let o of r){let{offset:s,length:i}=o;if(!(Number.isSafeInteger(s)&&Number.isSafeInteger(i)&&s>=0&&i>=0&&s+i<=t.byteLength)||!/^[\w.-]+\.dll$/i.test(o.name))throw new E(`The "${e}" reference pack's entry ${JSON.stringify(o.name)} is out of bounds or misnamed: refusing it.`);let c=t.subarray(s,s+i);if(await q(c)!==o.sha256)throw new E(`${e}/${o.name} does not match its manifest's hash: refusing it.`);n.push({name:o.name,bytes:c})}return n}async function ge(e){let t=e.fetch??((h,l)=>fetch(h,l)),r=fe(e.bundleUrl),{manifest:n,text:o}=await me(r,t),s=await at(o,t);await pe(s,r,n,n.entry);let i=e.importModule??(h=>import(h)),{dotnet:a}=await i(new URL(n.entry,r).href),c=a.withEnvironmentVariables(e.env).withModuleConfig({onExit:h=>e.onExit?.(h)});globalThis.caches&&(c=c.withResourceLoader((h,l,m,g)=>h==="dotnetjs"?void 0:s(m,g?{integrity:g}:void 0)));let d=await c.create();d.setModuleImports("bfwc",e.imports);let u=it(await d.getAssemblyExports(n.assembly)),p=d.Module.FS,f=new Map;async function b(h){let l=f.get(h);if(l)return l;let m=n.references[h];if(!m)throw new E(`The .NET runtime bundle has no "${h}" reference assemblies.`);let g=await ct(h,await pe(s,r,n,m.pack),m.files),w=`${ot}/${h}`;p.mkdirTree(w);let v=new Map;for(let I of g){let $=`${w}/${I.name}`;p.writeFile($,I.bytes),v.set(`${h}/${I.name}`,$)}return f.set(h,v),v}return{exports:u,FS:p,manifest:n,async mountReferences(h){let l=new Map;for(let m of new Set(h))for(let[g,w]of await b(m))l.set(g,w);return l}}}var lt=/^(?:[^/]|$)|\/\/|\/\.\.?(?:\/|$)|[\s\S]\/$|\\/;function k(e){if(!lt.test(e))return e;let t=[];for(let r of e.replace(/\\/g,"/").split("/"))!r||r==="."||(r===".."?t.pop():t.push(r));return"/"+t.join("/")}function P(e){let t=k(e),r=t.lastIndexOf("/");return r<=0?"/":t.slice(0,r)}function O(e){let t=k(e);return t.slice(t.lastIndexOf("/")+1)}function S(...e){return k(e.join("/"))}function C(e,t){return t.startsWith("/")?k(t):S(e,t)}var dt=new TextDecoder,N=class{constructor(){y(this,"files",new Map);y(this,"versions",new Map);y(this,"mtimes",new Map);y(this,"children",new Map([["/",new Set]]));y(this,"explicit",new Set);y(this,"listeners",new Map);y(this,"queued",[]);y(this,"dispatching",!1);y(this,"clock",0);y(this,"content",t=>{let r=this.files.get(t);if(typeof r!="function")return r;let n=r();return this.files.set(t,n),n})}writeFile(t,r){let n=k(t);if(n==="/"||this.children.has(n))throw new Error(`EISDIR: illegal operation on a directory, open '${n}'`);let o=!this.files.has(n);o&&this.link(n),this.files.set(n,r),this.versions.set(n,++this.clock),this.mtimes.set(n,Date.now()),this.emit({type:"write",path:n,created:o})}readFile(t){return this.content(k(t))}readText(t){let r=this.readFile(t);if(r!==void 0)return typeof r=="string"?r:dt.decode(r)}isFile(t){return this.files.has(k(t))}isDirectory(t){return this.children.has(k(t))}exists(t){return this.isFile(t)||this.isDirectory(t)}mkdir(t){let r=k(t);if(this.files.has(r))throw new Error(`EEXIST: file already exists, mkdir '${r}'`);if(r==="/")return;let n=this.children.has(r),o=n&&!this.explicit.has(r);if(this.explicit.add(r),n){o&&this.emit({type:"mkdir",path:r,promoted:!0},!0);return}this.ensureDir(r),this.emit({type:"mkdir",path:r})}seed(t,r=[]){for(let o of r){let s=k(o);if(s!=="/"){if(this.files.has(s))throw new Error(`EEXIST: file already exists, mkdir '${s}'`);this.explicit.add(s),this.ensureDir(s)}}let n=Date.now();for(let[o,s]of t){let i=k(o);if(i==="/"||this.children.has(i))throw new Error(`EISDIR: illegal operation on a directory, open '${i}'`);this.files.has(i)||this.link(i),this.files.set(i,s),this.versions.set(i,++this.clock),this.mtimes.set(i,n)}}readdir(t){return[...this.children.get(k(t))??[]].sort()}entries(t){let r=k(t);return this.readdir(r).map(n=>({name:n,kind:this.children.has(S(r,n))?"directory":"file"}))}rename(t,r){let n=k(t),o=k(r);if(n===o)return;if(!this.exists(n))throw new Error(`ENOENT: no such file or directory, rename '${n}' -> '${o}'`);if(this.exists(o))throw new Error(`EEXIST: file already exists, rename '${n}' -> '${o}'`);if(o.startsWith(n+"/"))throw new Error(`EINVAL: cannot move '${n}' into itself`);if(this.files.has(n)){let c=this.content(n);this.removeFile(n),this.writeFile(o,c);return}let s=n+"/",i=[...this.files.keys()].filter(c=>c.startsWith(s)).map(c=>[c,this.content(c)]),a=[...this.explicit].filter(c=>c===n||c.startsWith(s));this.rm(n),this.mkdir(o);for(let c of a)this.mkdir(o+c.slice(n.length));for(let[c,d]of i)this.writeFile(o+c.slice(n.length),d)}list(){return[...this.files.keys()].sort()}explicitDirectories(){return[...this.explicit].sort()}rm(t){let r=k(t);if(this.files.has(r)){this.removeFile(r);return}if(!this.children.has(r))return;for(let o of[...this.children.get(r)??[]])this.rm(r==="/"?"/"+o:`${r}/${o}`);if(r==="/")return;let n=this.explicit.delete(r);this.children.has(r)&&this.unlinkDir(r),n&&this.emit({type:"remove",path:r})}version(t){return this.versions.get(k(t))}mtime(t){return this.mtimes.get(k(t))}writeTree(t,r="/"){for(let[n,o]of Object.entries(t)){let s=S(r,n);typeof o=="string"||o instanceof Uint8Array?this.writeFile(s,o):(this.mkdir(s),this.writeTree(o,s))}}toFlat(){let t={};for(let r of this.files.keys())t[r.slice(1)]=this.content(r);return t}watch(t,r={}){let n=r.under===void 0?void 0:k(r.under),o=n===void 0||n==="/"?t:s=>(s.path===n||s.path.startsWith(n+"/"))&&t(s);return this.listeners.set(o,!!r.promotions),()=>this.listeners.delete(o)}removeFile(t){this.files.delete(t),this.versions.delete(t),this.mtimes.delete(t),this.unlink(t),this.emit({type:"remove",path:t})}link(t){let r=P(t);this.ensureDir(r),this.children.get(r).add(t.slice(t.lastIndexOf("/")+1))}ensureDir(t){if(!this.children.has(t)){if(this.files.has(t))throw new Error(`ENOTDIR: not a directory, '${t}'`);this.children.set(t,new Set),this.link(t)}}unlink(t){let r=P(t),n=this.children.get(r);n&&(n.delete(t.slice(t.lastIndexOf("/")+1)),n.size===0&&r!=="/"&&!this.explicit.has(r)&&this.unlinkDir(r))}unlinkDir(t){this.children.delete(t),this.unlink(t)}emit(t,r=!1){if(this.queued.push([t,r]),!this.dispatching){this.dispatching=!0;try{for(let n=this.queued.shift();n;n=this.queued.shift()){let[o,s]=n;for(let[i,a]of this.listeners)(a||!s)&&i(o)}}finally{this.dispatching=!1,this.queued.length=0}}}};function B(e,t){for(let r of t)r.op==="write"?e.writeFile(r.path,r.content):r.op==="mkdir"?e.mkdir(r.path):e.rm(r.path)}var kr=new TextEncoder,ut=new TextDecoder("utf-8",{ignoreBOM:!0});function be(e){let t="";for(let r=0;r<e.length;r+=8192)t+=String.fromCharCode.apply(null,e.subarray(r,r+8192));return t}function ye(e){let t=new Uint32Array(e,0,8);if(t[0]!==1263552066||t[1]!==1)throw new Error("Not a file-system pack (or a pack from another runtime version).");let r=t[2]+t[3]*2**32,n=t[4],o=t[5],s=t[6],i=t[7],a=n+o,c=new Uint32Array(e,8*4,a),d=(8+a)*4,u=new Uint32Array(e,d,n*3),p=be(new Uint16Array(e,d+n*12,s)),f=new Array(a),b=0;for(let l=0;l<a;l++){let m=b+c[l];f[l]=p.slice(b,m),b=m}let h=new Array(n);for(let l=0;l<n;l++){let m=u[l*3],g=i+u[l*3+1],w=u[l*3+2];h[l]=[f[l],()=>pt(e,m,g,w)]}return{seq:r,files:h,dirs:f.slice(n)}}function pt(e,t,r,n){return t===1?new Uint8Array(e.slice(r,r+n)):t===2?be(new Uint16Array(e.slice(r,r+n))):ut.decode(new Uint8Array(e,r,n))}var Sr=1024*1024;function U(e,t){let{files:r,dirs:n}=ye(t.pack);e.seed(r,n),B(e,t.ops)}function ke(e){return new ReadableStream({start(t){e.byteLength&&t.enqueue(e),t.close()}})}function K(e,t){return{status:e,headers:{"content-type":"text/plain; charset=utf-8"},body:ke(new TextEncoder().encode(t))}}function X(e){return{status:e.status,statusText:e.statusText,headers:e.headers}}function z(e,t){let r=e.getReader(),n=!1;return(async()=>{try{for(;;){let{value:o,done:s}=await r.read();if(s||n)break;t.chunk(o)}n||t.end()}catch(o){n||t.end(o instanceof Error?o.message:String(o))}})(),()=>{n||(n=!0,r.cancel().catch(()=>{}))}}var W=class{constructor(){y(this,"peer");y(this,"closed",!1);y(this,"manual",!1);y(this,"data",new Set);y(this,"closes",new Set);y(this,"credits",new Set)}send(t){if(this.closed)return;let r=new Uint8Array(t);queueMicrotask(()=>{let n=this.peer;if(!n.closed){for(let o of n.data)o(r);n.manual||n.consumed(r.byteLength)}})}manualFlowControl(){this.manual=!0}close(){this.closed||(this.closed=!0,queueMicrotask(()=>{if(!this.peer.closed){this.peer.closed=!0;for(let t of this.peer.closes)t()}}))}consumed(t){this.closed||t<=0||queueMicrotask(()=>{for(let r of this.peer.credits)r(t)})}onData(t){return this.data.add(t),()=>this.data.delete(t)}onClose(t){return this.closes.add(t),()=>this.closes.delete(t)}onConsumed(t){return this.credits.add(t),()=>this.credits.delete(t)}};function L(){let e=new W,t=new W;return e.peer=t,t.peer=e,[e,t]}function ft(e){e.onData(()=>e.close())}function J(e){let[t,r]=L();return(e??ft)(r),t}var Y={SIGHUP:129,SIGINT:130,SIGKILL:137,SIGPIPE:141,SIGTERM:143},mt=Y.SIGPIPE;function Z(e){return Y[e]??1}var F=class{constructor(t,r){this.kind=t;this.post=r;y(this,"ends",new Map)}owns(t){return t.type===`${this.kind}-data`||t.type===`${this.kind}-ack`||t.type===`${this.kind}-close`}get size(){return this.ends.size}add(t,r){let{kind:n}=this;this.ends.set(t,r),r.manualFlowControl(),r.onData(o=>this.post({type:`${n}-data`,connId:t,data:o})),r.onConsumed(o=>this.post({type:`${n}-ack`,connId:t,bytes:o})),r.onClose(()=>{this.ends.delete(t)&&this.post({type:`${n}-close`,connId:t})})}receive(t){let r=this.ends.get(t.connId);t.type===`${this.kind}-data`?r?.send(t.data):t.type===`${this.kind}-ack`?r?.consumed(t.bytes):this.hangUp(t.connId)}hangUp(t){let r=this.ends.get(t);this.ends.delete(t),r?.close()}closeAll(t=!1){let r=[...this.ends.keys()];for(let n of r)this.hangUp(n),t&&this.post({type:`${this.kind}-close`,connId:n})}};var gt=new Set(["socket-data","socket-ack","socket-close","dial-result","dial-data","dial-ack","dial-close"]);function bt(e){return gt.has(e.type)}function we(e){let t=yt(e);return{dial:r=>t.dial(r),receive(r){return!bt(r)||!r.type.startsWith("dial")?!1:(t.receive(r),!0)}}}function yt(e){let t=new F("socket",e),r=new F("dial",e),n=new Map,o=1;return{upgraded(s,i,a){if(!a)return e({type:"socket-close",connId:s});let[c,d]=L();t.add(s,c),a(i,d)},accepted(s,i){if(!i)return e({type:"socket-close",connId:s});t.add(s,J(i.accept))},dial(s){let i=o++;return e({type:"dial",connId:i,port:s}),new Promise(a=>{n.set(i,c=>{if(!c)return a(void 0);let[d,u]=L();r.add(i,d),a(u)})})},receive(s){if(s.type==="dial-result"){let i=n.get(s.connId);return n.delete(s.connId),i?.(s.ok)}if(t.owns(s))return t.receive(s);if(r.owns(s))return r.receive(s)}}}var M="/project",kt=new Set(["node_modules",".git"]),wt=50,H=e=>e.split("/").some(t=>kt.has(t)),T=e=>e==="/"?M:S(M,e);function Q(e){let t=k(e);return t===M?"/":t.startsWith(`${M}/`)?t.slice(M.length):void 0}var xt=new TextDecoder("utf-8",{fatal:!0,ignoreBOM:!0});function Et(e){try{return xt.decode(e)}catch{return e.slice()}}var te=(e,t)=>e.analyzePath(t).exists,re=(e,t)=>te(e,t)&&e.isDir(e.stat(t).mode);var ne=(e,t)=>t.startsWith("/")?t:S(e.cwd(),t),xe=(e,t)=>e.readdir(t).filter(r=>r!=="."&&r!=="..");function ee(e,t){if(te(e,t)){if(!re(e,t))return e.unlink(t);for(let r of xe(e,t))ee(e,`${t}/${r}`);e.rmdir(t)}}function Ee(e,t){t.mkdirTree(M);for(let r of e.explicitDirectories())H(r)||t.mkdirTree(T(r));for(let r of e.list()){if(H(r))continue;let n=T(r);t.mkdirTree(P(n)),t.writeFile(n,e.readFile(r)??"")}}function ve(e,t){for(let r of t){if(H(r.path))continue;let n=T(r.path);r.op==="write"?(e.mkdirTree(P(n)),re(e,n)&&ee(e,n),e.writeFile(n,r.content)):r.op==="mkdir"?e.mkdirTree(n):ee(e,n)}}function Pe(e,t,r=()=>!1){let n=new Set,o=[],s=!1,i=0,a,c=(l,m)=>{let g=T(l);return m==="mkdir"||m==="remove"?[{op:m,path:l}]:te(e,g)?re(e,g)?m==="write"?[]:[{op:"mkdir",path:l},...xe(e,g).flatMap(w=>c(S(l,w),"tree"))]:[{op:"write",path:l,content:Et(e.readFile(g))}]:[]},d=()=>{if(s=!1,!o.length)return;let l=o;o=[];let m=l.flatMap(({op:g,path:w})=>c(w,g)).filter(g=>!r(g.path));m.length&&t(m)},u=(l,m)=>{let g=Q(m);if(!(i||g===void 0||g==="/"||r(g)||H(g))){if(l==="write"){let w;for(let v of o)v.path===g&&(w=v);if(w?.op==="write")return}o.push({op:l,path:g}),s||(s=!0,queueMicrotask(d))}},p=()=>{for(let l of n)u("write",l)},f={openedForWrite(l){!i&&Q(l)!==void 0&&n.add(l)},written(l){i||Q(l)===void 0||(n.add(l),clearTimeout(a),a=setTimeout(p,wt))},closed(l){n.delete(l)&&u("write",l)},madeDirectory:l=>u("mkdir",l),symlinked:l=>u("tree",l),deleted:l=>u("remove",l),moved(l,m){u("remove",l),u("tree",m)}},b=e.truncate.bind(e),h=e.ftruncate.bind(e);return e.truncate=(l,m)=>{b(l,m),typeof l=="string"&&u("write",ne(e,l))},e.ftruncate=(l,m)=>{h(l,m);let g=e.getStream(l)?.path;g&&u("write",g)},{events:f,tracker:{quietly(l){i++;try{l()}finally{i--}},flush(){clearTimeout(a),p(),d()}}}}var vt=3,Pt=64,Tt=512;function St(e){return typeof e=="string"?/[wa+]/.test(e):(e&vt)!==0||(e&(Pt|Tt))!==0}function Te(e,t){let{tracker:r,events:n}=Pe(e,t),o=i=>ne(e,i),s={open:e.open,write:e.write,close:e.close,mkdir:e.mkdir,unlink:e.unlink,rmdir:e.rmdir,rename:e.rename,symlink:e.symlink};return e.open=function(i,a,c){let d=s.open.call(this,i,a,c);return St(a)&&d.path&&n.openedForWrite(d.path),d},e.write=function(i,...a){let c=s.write.call(this,i,...a);return i.path&&n.written(i.path),c},e.close=function(i){let a=i.path;s.close.call(this,i),a&&n.closed(a)},e.mkdir=function(i,a){let c=s.mkdir.call(this,i,a);return n.madeDirectory(o(i)),c},e.unlink=function(i){s.unlink.call(this,i),n.deleted(o(i))},e.rmdir=function(i){s.rmdir.call(this,i),n.deleted(o(i))},e.rename=function(i,a){s.rename.call(this,i,a),n.moved(o(i),o(a))},e.symlink=function(i,a){let c=s.symlink.call(this,i,a);return n.symlinked(o(a)),c},r}var Rt=new TextEncoder;function Se(e,t,r,n){let o=!1,s,i=()=>{o||(o=!0,n?.())};return r.then(a=>{if(o)return void a?.body.cancel().catch(()=>{});if(!a)return e({type:"response-head",reqId:t,head:null}),i();e({type:"response-head",reqId:t,head:X(a)}),s=z(a.body,{chunk:c=>e({type:"response-chunk",reqId:t,data:c}),end:c=>{e(c?{type:"response-end",reqId:t,error:c}:{type:"response-end",reqId:t}),i()}})},a=>{o||(e({type:"response-head",reqId:t,head:{status:500,headers:{"content-type":"text/plain"}}}),e({type:"response-chunk",reqId:t,data:Rt.encode(String(a instanceof Error?a.stack:a))}),e({type:"response-end",reqId:t}),i())}),()=>{s?.(),i()}}var Dt=e=>K(502,`Nothing is listening on port ${e}.`);function Re(e){let t=new Set,r=new Map;return{taken:t,receive(n){switch(n.type){case"ports":for(let o of n.open)t.add(o);for(let o of n.closed)e.handlerFor(o)||t.delete(o);return!0;case"http-request":{let{reqId:o}=n,s=e.handlerFor(n.port),i=s?s(n.request):Promise.resolve(Dt(n.port));return r.set(o,Se(e.post,o,i,()=>r.delete(o))),!0}case"request-cancel":return r.get(n.reqId)?.(),!0;case"listen-failed":return e.onListenFailed(n.port,n.message,n.id),!0;case"listened":return e.onListened?.(n.port,n.id),!0;default:return!1}},cancelAll(){for(let n of[...r.values()])n();r.clear()}}}function De(e,t){let r=new N,n,o,s,i,a=!1,c=l=>{if(!a){n?.flush(),a=!0,s!==void 0&&e({type:"unlisten",port:s});for(let m of i?.listening??[])e({type:"unlisten",port:m});i?.closeAll(),e({type:"exit",code:l})}},d={post:e,io:{stdout:l=>!a&&e({type:"stdout",data:l}),stderr:l=>!a&&e({type:"stderr",data:l})},get exited(){return a},exit:c,mounted(l){r=void 0,n=l},get takenPorts(){return p.taken}},u=async(l,m=Z(l))=>{let g=o;o=void 0,p.cancelAll();try{i?.stop()}catch{}try{await g?.close()}finally{c(m)}},p=Re({post:e,handlerFor:l=>o&&l===s?o.handle:i?.handlerFor(l),onListenFailed(l){if(l===s)s=void 0;else if(!i?.listening.has(l))return;d.io.stderr(f.addressInUse(l)),u("SIGTERM",1)}}),f=t(d),b=l=>{r?B(r,l):n?.apply(l)};async function h(l){let{snapshot:m}=l;m.pack?U(r,m):b(m.ops);for(let I of l.ports)p.taken.add(I);let g=f.plan(l,r);if(!g.ok)return d.io.stderr(g.message),c(g.code);if(g.port!==void 0&&p.taken.has(g.port))return d.io.stderr(f.addressInUse(g.port)),c(1);let w=await g.run(r);if(w.kind==="exited")return c(w.code);if(w.kind==="running")return i=w.ports,c(await w.done);let{port:v}=w.server;if(a||p.taken.has(v))return await w.server.close(),a||d.io.stderr(f.addressInUse(v)),c(1);o=w.server,s=v,p.taken.add(v),e({type:"listen",port:v}),d.io.stderr(w.banner)}return{receive(l){if(!(p.receive(l)||f.receive?.(l)))switch(l.type){case"prime":return U(r,l.snapshot),e({type:"primed"});case"start":h(l).catch(m=>{d.io.stderr(`${m instanceof Error?m.stack??m.message:String(m)}
-`),c(1)});return;case"fs":return b(l.ops);case"kill":return void u(l.signal);case"stdin":return f.stdin?.(l.data);case"socket-open":case"socket-accept":return e({type:"socket-close",connId:l.connId});default:return}}}}var Ct="^dotnet(?:\\.exe)?$",Ot=new RegExp(Ct),At=e=>Ot.test(O(e)),Ae={watch:"`dotnet watch` is not available in the browser runtime: run `dotnet run`, and restart the service to pick up changes.",test:"`dotnet test` is not available in the browser runtime (no test host).",publish:"`dotnet publish` is not available in the browser runtime: `dotnet build` compiles, `dotnet run` runs.",pack:"`dotnet pack` is not available in the browser runtime.",new:"`dotnet new` is not available in the browser runtime: create the project files directly.",tool:".NET tools are not available in the browser runtime.",ef:"`dotnet ef` is not available in the browser runtime: apply migrations from the program (`Database.Migrate()`), or run SQL.",add:"`dotnet add` is not available in the browser runtime: edit the project file (only bundled packages resolve).",remove:"`dotnet remove` is not available in the browser runtime: edit the project file.",sln:"Solutions are not built in the browser runtime: build or run one project.",workload:"Workloads are not available in the browser runtime.",nuget:"NuGet commands are not available in the browser runtime.","dev-certs":"There is no TLS in the browser runtime: serve plain HTTP.","user-secrets":"`dotnet user-secrets` is not available in the browser runtime: use environment variables.",msbuild:"MSBuild is not available in the browser runtime: the runtime builds projects itself."},It={"--version":"version","--info":"info","--list-sdks":"list-sdks","--list-runtimes":"list-runtimes","--help":"help","-h":"help","-?":"help"},Mt=new Set(["-f","--framework","-r","--runtime","-v","--verbosity","-a","--arch","--os","--source","-s","--packages","--configfile"]),$t=new Set(["--nologo","--no-restore","--no-dependencies","--interactive","--force","--no-incremental","--self-contained","--sc","--no-self-contained","--disable-build-servers","--no-cache","--use-current-runtime","--ucr"]),jt=/^(?:-p|--property|\/p|\/property):(.+)$/i,oe=e=>/\.cs$/i.test(e),Ce=e=>/\.dll$/i.test(e);function Ie(e,t){let r={positional:[],forwarded:[],noBuild:!1};for(let n=0;n<e.length;n++){let o=e[n],s=()=>{let i=e[++n];if(i===void 0)throw new Error(`Required argument missing for option: '${o}'.`);return i};try{if(o==="--"){r.forwarded.push(...e.slice(n+1));break}let i=jt.exec(o);if(i)for(let a of i[1].split(";")){let c=a.indexOf("=");c>0&&a.slice(0,c).trim().toLowerCase()==="configuration"&&a.slice(c+1).trim()&&(r.configuration=a.slice(c+1).trim())}else if(o==="--project"||o==="-p"||o==="--file"&&t)r.project=s();else if(o==="-c"||o==="--configuration")r.configuration=s();else if(o==="-o"||o==="--output")r.output=s();else if(o==="--no-build")r.noBuild=!0;else if(o==="--launch-profile"||o==="-lp")r.launchProfile=s();else if(o==="--no-launch-profile")r.launchProfile=null;else if(Mt.has(o))s();else{if($t.has(o)||/^--tl(?::|$)/.test(o)||/^-(?:v|-verbosity):/.test(o))continue;if(o.startsWith("-")&&t)r.forwarded.push(o);else{if(o.startsWith("-"))return{ok:!1,reason:`Unknown option '${o}'.`};r.positional.push(o),t&&r.forwarded.push(o)}}}catch(i){return{ok:!1,reason:i.message}}}return{ok:!0,options:r}}function Oe(e){let t=Ie(e,!0);if(!t.ok)return t;let{options:r}=t,n=r.configuration??"Debug",o=r.positional[0];if(!r.project&&o&&oe(o)){let s=[...r.forwarded];return s.splice(s.indexOf(o),1),{ok:!0,invocation:{kind:"run",file:o,configuration:n,noBuild:!1,launchProfile:null,appArgs:s}}}return r.project&&oe(r.project)?{ok:!0,invocation:{kind:"run",file:r.project,configuration:n,noBuild:!1,launchProfile:null,appArgs:r.forwarded}}:{ok:!0,invocation:{kind:"run",project:r.project,configuration:n,noBuild:r.noBuild,launchProfile:r.launchProfile,appArgs:r.forwarded}}}function Nt(e,t){let r=Ie(t,!1);if(!r.ok)return r;let{options:n}=r;if(n.positional.length>1)return{ok:!1,reason:`Only one project can be specified (got ${n.positional.join(", ")}).`};let o=n.positional[0]??n.project;if(o&&/\.(?:sln|slnx)$/i.test(o))return{ok:!1,reason:Ae.sln};let s=n.configuration??"Debug";return e==="restore"?{ok:!0,invocation:{kind:e,project:o}}:e==="clean"?{ok:!0,invocation:{kind:e,project:o,configuration:s}}:{ok:!0,invocation:{kind:e,project:o,configuration:s,output:n.output}}}function Me(e,t){if(!At(e))return{ok:!1,reason:`"${e}" is not dotnet.`};let[r,...n]=t;if(r===void 0)return{ok:!0,invocation:{kind:"info",what:"help"}};let o=It[r];if(o)return{ok:!0,invocation:{kind:"info",what:o}};if(r==="run")return Oe(n);if(r==="build"||r==="clean"||r==="restore")return Nt(r,n);if(r==="exec"){let[i,...a]=n;return!i||!Ce(i)?{ok:!1,reason:"`dotnet exec` needs the path to an application assembly (app.dll)."}:{ok:!0,invocation:{kind:"exec",assembly:i,appArgs:a}}}if(Ce(r))return{ok:!0,invocation:{kind:"exec",assembly:r,appArgs:n}};if(oe(r))return Oe(t);let s=Ae[r];return s?{ok:!1,reason:s}:r.startsWith("-")?{ok:!1,reason:`Unknown option '${r}'.`}:{ok:!1,reason:`\`dotnet ${r}\` is not available in the browser runtime (it runs run, build, clean, restore and app.dll).`}}function Bt(e){let t={};for(let[r,n]of Object.entries(JSON.parse(e)))t[r.toLowerCase()]=n.length===1?n[0]:n;return t}function $e(e){let t,r=new Set,n=new Map,o=new Map,s=1,i=1,a=d=>u=>new Promise((p,f)=>{if(!t)return f(new Error("The .NET runtime is not running."));let b=s++;n.set(b,{resolve:p,reject:f}),t.Request(b,d,u.method,u.url,JSON.stringify(u.headers),u.body??new Uint8Array(0))});return{imports:{stdout:d=>e.stdout(d),stderr:d=>e.stderr(d),listen(d){return e.taken.has(d)&&!r.has(d)?!1:(e.taken.add(d),r.add(d),e.post({type:"listen",port:d}),!0)},unlisten(d){r.delete(d)&&(e.taken.delete(d),e.post({type:"unlisten",port:d}))},respondHead(d,u,p){let f=n.get(d);if(!f)return;let b=new ReadableStream({start:h=>{f.body=h},cancel:()=>{n.delete(d),t?.CancelRequest(d)}});f.resolve({status:u,headers:Bt(p),body:b})},respondChunk(d,u){n.get(d)?.body?.enqueue(u.slice())},respondEnd(d,u){let p=n.get(d);if(n.delete(d),!!p){if(!p.body)return p.reject(new Error(u??"The response ended before its head."));u?p.body.error(new Error(u)):p.body.close()}},async dial(d){let u=await e.dial(d);if(!u)return-1;let p=i++;return o.set(p,u),u.onData(f=>o.has(p)&&t?.TcpData(p,f)),u.onClose(()=>{o.delete(p)&&t?.TcpClosed(p)}),p},send(d,u){o.get(d)?.send(u.slice())},hangUp(d){let u=o.get(d);o.delete(d),u?.close()}},listening:r,handlerFor:d=>r.has(d)?a(d):void 0,attach(d){t=d},stop(){t?.Stop()},closeAll(){for(let d of n.values())d.body?d.body.error(new Error("The process exited.")):d.reject(new Error("The process exited."));n.clear();for(let d of o.values())d.close();o.clear()}}}var se=e=>e.replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,"&"),je=e=>e===" "||e==="	"||e===`
-`||e==="\r",ie=e=>/[\w:.-]/.test(e);function Lt(e){let t={},r=0;for(;r<e.length;){for(;r<e.length&&!ie(e[r]);)r++;let n=r;for(;r<e.length&&ie(e[r]);)r++;let o=e.slice(n,r);for(;r<e.length&&je(e[r]);)r++;if(!o||e[r]!=="=")continue;for(r++;r<e.length&&je(e[r]);)r++;let s=e[r];if(s!=='"'&&s!=="'")continue;let i=e.indexOf(s,r+1);if(i<0)break;t[o.toLowerCase()]=se(e.slice(r+1,i)),r=i+1}return t}function Ft(e,t){let r;for(let n=t;n<e.length;n++){let o=e[n];if(r)o===r&&(r=void 0);else if(o==='"'||o==="'")r=o;else if(o===">")return n}return-1}function _t(e){let t={name:"#document",attrs:{},children:[],text:""},r=[t],n=0;for(;n<e.length;){let o=e.indexOf("<",n),s=r[r.length-1];if(o<0){s.text+=se(e.slice(n));break}if(s.text+=se(e.slice(n,o)),e.startsWith("<!--",o)){let i=e.indexOf("-->",o+4);n=i<0?e.length:i+3}else if(e.startsWith("<![CDATA[",o)){let i=e.indexOf("]]>",o+9);s.text+=e.slice(o+9,i<0?e.length:i),n=i<0?e.length:i+3}else if(e.startsWith("<?",o)||e.startsWith("<!",o)){let i=e.indexOf(">",o+2);n=i<0?e.length:i+1}else if(e.startsWith("</",o)){let i=e.indexOf(">",o+2),a=e.slice(o+2,i<0?e.length:i).trim().toLowerCase();for(let c=r.length-1;c>0;c--)if(r[c].name.toLowerCase()===a){r.length=c;break}n=i<0?e.length:i+1}else{let i=Ft(e,o+1);if(i<0)break;let a=e.slice(o+1,i),c=a.endsWith("/");c&&(a=a.slice(0,-1));let d=0;for(;d<a.length&&ie(a[d]);)d++;let u={name:a.slice(0,d),attrs:Lt(a.slice(d)),children:[],text:""};s.children.push(u),!c&&u.name&&r.push(u),n=i+1}}return t}var A=(e,t)=>e.name.toLowerCase()===t.toLowerCase(),_=(e,t)=>e.children.filter(r=>A(r,t)),Ne=e=>e.text.trim(),Le=(e,t)=>e.children.some(r=>t.some(n=>A(r,n))||Le(r,t));function G(e,t){return e.replace(/\$\(([\w.]+)\)/g,(r,n)=>t[n.toLowerCase()]??"")}function Ut(e,t){let r=G(e,t).trim();return r?r.split(/\s+or\s+/i).some(o=>o.split(/\s+and\s+/i).every(s=>{let i=/^\(?\s*'([^']*)'\s*(==|!=)\s*'([^']*)'\s*\)?$/.exec(s.trim());if(!i)return!1;let a=i[1].toLowerCase()===i[3].toLowerCase();return i[2]==="=="?a:!a})):!0}var Fe=e=>e.split("/")[0].trim(),Be=e=>e.split(";").map(t=>t.trim()).filter(Boolean);function ae(e,t,r){for(let n of e.children)if(A(n,"PropertyGroup")||A(n,"ItemGroup"))t(n.attrs)&&r(n);else if(A(n,"Choose")){let o=_(n,"When").find(s=>t(s.attrs))??_(n,"Otherwise")[0];o&&ae(o,t,r)}}function _e(e,t,r){let n=O(t),o=_t(e).children.find(u=>A(u,"Project"));if(!o)throw new Error(`${n} is not an MSBuild project (no <Project> element).`);let s=o.attrs.sdk??_(o,"Sdk")[0]?.attrs.name??_(o,"Import").find(u=>u.attrs.sdk)?.attrs.sdk;if(!s)throw new Error(`${n} is not an SDK-style project (no Sdk attribute): the browser runtime builds SDK-style projects only.`);if(_(o,"Target").some(u=>Le(u,["PropertyGroup","ItemGroup"])))throw new Error(`${n} sets properties or items inside a <Target>: the browser runtime does not run MSBuild targets, so it cannot build this project as MSBuild would.`);let i=P(t),a={configuration:r,platform:"AnyCPU",os:"Unix",msbuildprojectname:n.replace(/\.\w+proj$/i,""),msbuildprojectdirectory:i},c=u=>u.condition===void 0||Ut(u.condition,a);if(ae(o,c,u=>{if(A(u,"PropertyGroup"))for(let p of u.children)p.name&&c(p.attrs)&&(a[p.name.toLowerCase()]=G(Ne(p),a))}),a.targetframework??(a.targetframework=(a.targetframeworks??"").split(";")[0]?.trim()??""),(a.enabledefaultcompileitems??"").trim().toLowerCase()==="false")throw new Error(`${n} sets EnableDefaultCompileItems to false: the browser runtime compiles every .cs file under the project (less <Compile Remove>), so it cannot build an explicit source list.`);let d={path:t,dir:i,sdk:Fe(s),properties:a,packages:[],projectReferences:[],frameworkReferences:[],usings:[],compileRemove:[],fileBased:!1};return ae(o,c,u=>{if(A(u,"ItemGroup"))for(let p of u.children){if(!p.name||!c(p.attrs))continue;let f=G(p.attrs.include??p.attrs.update??"",a);switch(p.name.toLowerCase()){case"packagereference":{if(!p.attrs.include)break;let b=Object.fromEntries(p.children.map(m=>[m.name.toLowerCase(),Ne(m)])),h=p.attrs.version??b.version,l=(p.attrs.privateassets??b.privateassets??"").toLowerCase()==="all";d.packages.push({name:f,...h?{version:h}:{},privateAssets:l});break}case"projectreference":d.projectReferences.push(f);break;case"frameworkreference":d.frameworkReferences.push(f);break;case"using":p.attrs.remove?d.usings.push({include:p.attrs.remove,static:!1,remove:!0}):f&&d.usings.push({include:f,...p.attrs.alias?{alias:p.attrs.alias}:{},static:(p.attrs.static??"").toLowerCase()==="true",remove:!1});break;case"compile":if(p.attrs.remove&&d.compileRemove.push(...Be(G(p.attrs.remove,a))),p.attrs.include){let b=Be(f).filter(h=>{let l=C(i,h.replace(/\\/g,"/"));return l!==i&&!l.startsWith(i==="/"?"/":`${i}/`)});if(b.length)throw new Error(`${n} compiles files outside its project (<Compile Include="${b.join(";")}">): the browser runtime builds one project's own sources.`)}break}}}),d}function Ue(e,t){let r={outputtype:"Exe",implicitusings:"enable",nullable:"enable",targetframework:"net10.0"},n={path:t,dir:P(t),sdk:"Microsoft.NET.Sdk",properties:r,packages:[],projectReferences:[],frameworkReferences:[],usings:[],compileRemove:[],fileBased:!0};for(let o of Wt(e)){let{kind:s,value:i}=o;if(s==="sdk")n.sdk=Fe(i.replace("@","/"));else if(s==="package"){let[a,c]=i.split("@",2);n.packages.push({name:a.trim(),...c?{version:c.trim()}:{},privateAssets:!1})}else if(s==="property"){let[a,c]=i.split("=",2);a&&c!==void 0&&(r[a.trim().toLowerCase()]=c.trim())}else s==="project"&&n.projectReferences.push(i)}return n}function Wt(e){let t=[],r=e.split(`
-`);for(let n=0;n<r.length;n++){let o=r[n].replace(/\r$/,"").trim();if(n===0&&o.startsWith("#!")||!o||o.startsWith("//"))continue;if(!o.startsWith("#:"))break;let s=/^#:(\w+)\s+(.+?)\s*$/.exec(o);s&&t.push({line:n,kind:s[1],value:s[2]})}return t}function We(e){let t=e.replace(/\\/g,"/").replace(/^\.\//,"").replace(/[.+^${}()|[\]]/g,"\\$&").replace(/\*\*\//g,"\0").replace(/\*\*/g,"").replace(/\*/g,"[^/]*").replace(/\?/g,"[^/]").replace(/\u0000/g,"(?:.*/)?").replace(/\u0001/g,".*"),r=new RegExp(`^${t}$`,"i");return n=>r.test(n)}var Ht=new Set(["microsoft.net.sdk","microsoft.net.sdk.web","microsoft.net.sdk.worker"]),Gt=/^Microsoft\.Extensions\.(?:Caching\.(?:Abstractions|Memory)|Configuration(?:\.(?:Abstractions|Binder|CommandLine|EnvironmentVariables|FileExtensions|Ini|Json|UserSecrets|Xml))?|DependencyInjection(?:\.Abstractions)?|Diagnostics(?:\.Abstractions|\.HealthChecks(?:\.Abstractions)?)?|Features|FileProviders\.(?:Abstractions|Composite|Embedded|Physical)|FileSystemGlobbing|Hosting(?:\.Abstractions)?|Http|Localization(?:\.Abstractions)?|Logging(?:\.(?:Abstractions|Configuration|Console|Debug|EventSource|TraceSource))?|ObjectPool|Options(?:\.(?:ConfigurationExtensions|DataAnnotations))?|Primitives|WebEncoders)$/i,Vt=["System","System.Collections.Generic","System.IO","System.Linq","System.Net.Http","System.Threading","System.Threading.Tasks"],qt=["System.Net.Http.Json","Microsoft.AspNetCore.Builder","Microsoft.AspNetCore.Hosting","Microsoft.AspNetCore.Http","Microsoft.AspNetCore.Routing","Microsoft.Extensions.Configuration","Microsoft.Extensions.DependencyInjection","Microsoft.Extensions.Hosting","Microsoft.Extensions.Logging"],Kt=["Microsoft.Extensions.Configuration","Microsoft.Extensions.DependencyInjection","Microsoft.Extensions.Hosting","Microsoft.Extensions.Logging"],ce=e=>(e??"").trim().toLowerCase()==="true",Xt=e=>["enable","true"].includes((e??"").trim().toLowerCase()),He=e=>(e??"").split(/[;,]/).map(t=>t.trim()).filter(Boolean);function Ge(e,t,r,n){let o=r?C(t,r):t;if(/\.csproj$/i.test(o))return e.readText(o)===void 0?{ok:!1,reason:`MSB1009: Project file does not exist. Switch: ${r}`}:{ok:!0,path:o};if(/\.(?:fs|vb)proj$/i.test(o))return{ok:!1,reason:`${O(o)}: only C# projects build in the browser runtime.`};if(!e.isDirectory(o))return{ok:!1,reason:`MSB1009: Project file does not exist. Switch: ${r??o}`};let s=o==="/"?"/":`${o}/`,i=e.list().filter(a=>a.startsWith(s)&&!a.slice(s.length).includes("/")&&/\.csproj$/i.test(a));return i.length===1?{ok:!0,path:i[0]}:i.length>1?{ok:!1,reason:"MSB1011: Specify which project or solution file to use because this folder contains more than one project or solution file."}:{ok:!1,reason:n==="run"?`Couldn't find a project to run. Ensure a project exists in ${o}, or pass the path to the project using --project.`:"MSB1003: Specify a project or solution file. The current working directory does not contain a project or solution file."}}function zt(e,t){let r=["NET","NETCOREAPP",`NET${e}_${t}`];for(let n=e;n>=5;n--)r.push(`NET${n}_0_OR_GREATER`);return r.push("NETCOREAPP1_0_OR_GREATER","NETCOREAPP2_0_OR_GREATER","NETCOREAPP3_0_OR_GREATER","NETCOREAPP3_1_OR_GREATER"),r}function Jt(e,t){let r=[];Xt(e.properties.implicitusings)&&(r.push(...Vt),t?r.push(...qt):e.sdk.toLowerCase()==="microsoft.net.sdk.worker"&&r.push(...Kt));let n=new Set(e.usings.filter(s=>s.remove).map(s=>s.include)),o=r.filter(s=>!n.has(s)).map(s=>`global using global::${s};`);for(let s of e.usings)s.remove||n.has(s.include)||(s.alias?o.push(`global using ${s.alias} = global::${s.include};`):o.push(`global using ${s.static?"static ":""}global::${s.include};`));return o.length?`// <auto-generated/>
-${[...new Set(o)].join(`
-`)}
-`:""}function le(e,t,r,n){let o=e.readText(t);if(o===void 0)return{ok:!1,reason:`${t} does not exist.`};let s;try{s=/\.cs$/i.test(t)?Ue(o,t):_e(o,t,r)}catch(x){return{ok:!1,reason:x.message}}let i=O(t);if(!Ht.has(s.sdk.toLowerCase()))return{ok:!1,reason:`${i}: the ${s.sdk} SDK is not available in the browser runtime (it builds Microsoft.NET.Sdk, .Web and .Worker projects).`};let a=s.properties.targetframework??"",c=/^net(\d+)\.(\d+)$/i.exec(a);if(!c||Number(c[1])<5)return{ok:!1,reason:`${i}: target framework "${a||"(none)"}" is not available in the browser runtime (it runs .NET 5\u201310 projects as ${D.targetFramework}).`};if(Number(c[1])>10)return{ok:!1,reason:`${i} targets ${a}; the browser runtime is ${D.targetFramework}.`};if(s.projectReferences.length)return{ok:!1,reason:`${i}: project references (${s.projectReferences.join(", ")}) are not built in the browser runtime: build one project.`};let d=[],u=[],p=[],f=!1;for(let x of s.packages){let R=D.packages[x.name.toLowerCase()];R?(u.push(x.name.toLowerCase()),x.version&&x.version!==R.version&&d.push(`${x.name} ${x.version} resolves to the bundled ${R.version}.`)):Gt.test(x.name)?f=!0:x.privateAssets||p.push(x.name)}if(p.length){let x=Object.values(D.packages).map(R=>`${R.name} ${R.version}`).join(", ");return{ok:!1,reason:`${i} references NuGet packages the browser runtime does not carry: ${p.join(", ")} (bundled: ${x}).`}}let b=s.sdk.toLowerCase(),h=b==="microsoft.net.sdk.web"||s.frameworkReferences.some(x=>x.toLowerCase()==="microsoft.aspnetcore.app"),l=s.properties,m=l.assemblyname||i.replace(/\.(?:csproj|cs)$/i,"");if(!er(m))return{ok:!1,reason:`${i}: AssemblyName "${m}" is not a valid assembly name (it names a file: no / \\ or :, and not . or ..).`};let g=(l.outputtype||(b==="microsoft.net.sdk"?"Library":"Exe")).toLowerCase(),w=r.toLowerCase()==="release",v=s.dir==="/"?"/":`${s.dir}/`,I=s.compileRemove.map(We),$=s.fileBased?[t]:e.list().filter(x=>x.startsWith(v)&&/\.cs$/i.test(x)).filter(x=>{let R=x.slice(v.length);return!/^(?:bin|obj)\//i.test(R)&&!I.some(tt=>tt(R))}).sort();if(!$.length)return{ok:!1,reason:`${i}: no C# sources (.cs files) in ${s.dir}.`};for(let x of Qt(e,s.dir))d.push(`${x} is ignored: the browser runtime does not read MSBuild imports.`);let Qe=[...He(tr(l.defineconstants)),...w?["RELEASE"]:["DEBUG"],"TRACE",...zt(Number(c[1]),Number(c[2]))],et=s.fileBased?`/tmp/dotnet-run/${m}/${m}.dll`:k(`${n?C(s.dir,n):`${s.dir}/bin/${r}/${a.toLowerCase()}`}/${m}.dll`);return{ok:!0,plan:{projectFile:t,projectDir:s.dir,sdk:s.sdk,web:h,fileBased:s.fileBased,assemblyName:m,outputKind:g==="exe"||g==="winexe"?"exe":"library",outputPath:et,outputInProject:!s.fileBased,sources:$,globalUsings:Jt(s,h),nullable:(l.nullable||"disable").toLowerCase(),allowUnsafe:ce(l.allowunsafeblocks),langVersion:l.langversion||Yt(Number(c[1])),defines:[...new Set(Qe)],optimize:l.optimize?ce(l.optimize):w,warningsAsErrors:ce(l.treatwarningsaserrors),noWarn:["1701","1702",...He(l.nowarn)],referenceGroups:h||f||u.length?["netcore","aspnetcore"]:["netcore"],packages:u,notes:d}}}var Yt=e=>String(e+4),Zt=["Directory.Build.props","Directory.Build.targets","Directory.Packages.props"];function Qt(e,t){let r=[];for(let n=t;;n=P(n)){for(let o of Zt)e.readText(`${n==="/"?"":n}/${o}`)!==void 0&&r.push(`${n==="/"?"":n}/${o}`);if(n==="/")return r}}var er=e=>!!e.trim()&&!/[/\\:\u0000-\u001f]/.test(e)&&e!=="."&&e!=="..";function Ve(e){if(!e.outputInProject)return{ok:!0,paths:[]};let t=`${e.projectDir==="/"?"":k(e.projectDir)}/bin/`,r=k(e.outputPath);return!r.startsWith(t)||r.length<=t.length?{ok:!1,reason:`Refusing to clean ${r}: it is not under ${t}.`}:{ok:!0,paths:[r]}}var tr=e=>(e??"").replace(/\$\(DefineConstants\)/gi,"");function rr(e){return[...e.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map(t=>t[1]??t[2]??t[3])}function qe(e,t,r,n){if(r===null)return{ok:!0};let o=S(t,"Properties","launchSettings.json"),s=e(o);if(s===void 0)return r?{ok:!1,reason:`The launch profile "${r}" could not be applied: ${o} does not exist.`}:{ok:!0};let i;try{i=JSON.parse(s).profiles??{}}catch(p){return{ok:!1,reason:`A JSON parsing exception occurred in ${o}: ${p.message}`}}let a=r?Object.entries(i).find(([p])=>p===r):Object.entries(i).find(([,p])=>p.commandName==="Project");if(!a)return r?{ok:!1,reason:`The launch profile "${r}" could not be applied: it is not in ${o}.`}:{ok:!0};let[c,d]=a,u={};for(let[p,f]of Object.entries(d.environmentVariables??{}))u[p]=String(f);return d.applicationUrl&&n.ASPNETCORE_URLS===void 0&&u.ASPNETCORE_URLS===void 0&&(u.ASPNETCORE_URLS=d.applicationUrl),{ok:!0,profile:{name:c,env:u,args:d.commandLineArgs?rr(d.commandLineArgs):[]}}}var nr={DOTNET_CLI_TELEMETRY_OPTOUT:"1",DOTNET_NOLOGO:"1",DOTNET_SKIP_FIRST_TIME_EXPERIENCE:"1"},Ke=e=>e.outputInProject?T(e.outputPath):e.outputPath;function or(e,t){let r=`Microsoft.AspNetCore.App ${t.runtimeVersion} [browser]
-Microsoft.NETCore.App ${t.runtimeVersion} [browser]
-`;switch(e){case"version":return`${t.sdkVersion}
-`;case"list-sdks":return`${t.sdkVersion} [browser]
-`;case"list-runtimes":return r;case"info":return`.NET SDK:
- Version:           ${t.sdkVersion}
+"use strict";(()=>{var nn=Object.defineProperty;var sn=(e,t,r)=>t in e?nn(e,t,{enumerable:!0,configurable:!0,writable:!0,value:r}):e[t]=r;var y=(e,t,r)=>sn(e,typeof t!="symbol"?t+"":t,r);var Ze="3.1.62",on="8.3",an={"8.1":"8.1.34","8.2":"8.2.35","8.3":"8.3.36","8.4":"8.4.27"},Wt=Object.keys(an),ln="https://cdn.jsdelivr.net/npm/",cn=e=>e.endsWith("/")?e:`${e}/`;function Ce(e){let t=e??on;if(!Wt.includes(t))throw new Error(`PHP ${t} is not available in the browser runtime (php-wasm ${Ze} builds ${Wt.join(", ")}).`);return t}function un(e,t,r){let n=cn(e);return{universal:`${n}@php-wasm/universal@${Ze}/+esm`,loader:`${n}@php-wasm/web-${t.replace(".","-")}@${Ze}/${r}/php_${t.replace(".","_")}.js`}}var me;async function Gt(e={}){let t=Ce(e.phpVersion),r="Suspending"in WebAssembly?"jspi":"asyncify",n=un(e.baseUrl??ln,t,r),s=`${n.universal} ${n.loader}`;if(me?.key!==s){let f=Promise.all([import(n.universal),import(n.loader)]);me={key:s,load:f},f.catch(()=>{me?.load===f&&(me=void 0)})}let[i,o]=await me.load,l=globalThis;l.setImmediate??(l.setImmediate=f=>setTimeout(f,0));let a=await i.loadPHPRuntime(o,{phpWasmAsyncMode:r,websocket:{}}),u=new i.PHP(a);return{php:u,module:u[i.__private__dont__use]}}var fn=/^(?:[^/]|$)|\/\/|\/\.\.?(?:\/|$)|[\s\S]\/$|\\/;function k(e){if(!fn.test(e))return e;let t=[];for(let r of e.replace(/\\/g,"/").split("/"))!r||r==="."||(r===".."?t.pop():t.push(r));return"/"+t.join("/")}function Y(e){let t=k(e),r=t.lastIndexOf("/");return r<=0?"/":t.slice(0,r)}function Ht(e){let t=k(e);return t.slice(t.lastIndexOf("/")+1)}function x(...e){return k(e.join("/"))}function ce(e,t){return t.startsWith("/")?k(t):x(e,t)}function Je(e){let t=Ht(e),r=t.lastIndexOf(".");return r<=0?"":t.slice(r).toLowerCase()}var pn=new TextDecoder,se=class{constructor(){y(this,"files",new Map);y(this,"versions",new Map);y(this,"mtimes",new Map);y(this,"children",new Map([["/",new Set]]));y(this,"explicit",new Set);y(this,"listeners",new Map);y(this,"queued",[]);y(this,"dispatching",!1);y(this,"clock",0);y(this,"content",t=>{let r=this.files.get(t);if(typeof r!="function")return r;let n=r();return this.files.set(t,n),n})}writeFile(t,r){let n=k(t);if(n==="/"||this.children.has(n))throw new Error(`EISDIR: illegal operation on a directory, open '${n}'`);let s=!this.files.has(n);s&&this.link(n),this.files.set(n,r),this.versions.set(n,++this.clock),this.mtimes.set(n,Date.now()),this.emit({type:"write",path:n,created:s})}readFile(t){return this.content(k(t))}readText(t){let r=this.readFile(t);if(r!==void 0)return typeof r=="string"?r:pn.decode(r)}isFile(t){return this.files.has(k(t))}isDirectory(t){return this.children.has(k(t))}exists(t){return this.isFile(t)||this.isDirectory(t)}mkdir(t){let r=k(t);if(this.files.has(r))throw new Error(`EEXIST: file already exists, mkdir '${r}'`);if(r==="/")return;let n=this.children.has(r),s=n&&!this.explicit.has(r);if(this.explicit.add(r),n){s&&this.emit({type:"mkdir",path:r,promoted:!0},!0);return}this.ensureDir(r),this.emit({type:"mkdir",path:r})}seed(t,r=[]){for(let s of r){let i=k(s);if(i!=="/"){if(this.files.has(i))throw new Error(`EEXIST: file already exists, mkdir '${i}'`);this.explicit.add(i),this.ensureDir(i)}}let n=Date.now();for(let[s,i]of t){let o=k(s);if(o==="/"||this.children.has(o))throw new Error(`EISDIR: illegal operation on a directory, open '${o}'`);this.files.has(o)||this.link(o),this.files.set(o,i),this.versions.set(o,++this.clock),this.mtimes.set(o,n)}}readdir(t){return[...this.children.get(k(t))??[]].sort()}entries(t){let r=k(t);return this.readdir(r).map(n=>({name:n,kind:this.children.has(x(r,n))?"directory":"file"}))}rename(t,r){let n=k(t),s=k(r);if(n===s)return;if(!this.exists(n))throw new Error(`ENOENT: no such file or directory, rename '${n}' -> '${s}'`);if(this.exists(s))throw new Error(`EEXIST: file already exists, rename '${n}' -> '${s}'`);if(s.startsWith(n+"/"))throw new Error(`EINVAL: cannot move '${n}' into itself`);if(this.files.has(n)){let a=this.content(n);this.removeFile(n),this.writeFile(s,a);return}let i=n+"/",o=[...this.files.keys()].filter(a=>a.startsWith(i)).map(a=>[a,this.content(a)]),l=[...this.explicit].filter(a=>a===n||a.startsWith(i));this.rm(n),this.mkdir(s);for(let a of l)this.mkdir(s+a.slice(n.length));for(let[a,u]of o)this.writeFile(s+a.slice(n.length),u)}list(){return[...this.files.keys()].sort()}explicitDirectories(){return[...this.explicit].sort()}rm(t){let r=k(t);if(this.files.has(r)){this.removeFile(r);return}if(!this.children.has(r))return;for(let s of[...this.children.get(r)??[]])this.rm(r==="/"?"/"+s:`${r}/${s}`);if(r==="/")return;let n=this.explicit.delete(r);this.children.has(r)&&this.unlinkDir(r),n&&this.emit({type:"remove",path:r})}version(t){return this.versions.get(k(t))}mtime(t){return this.mtimes.get(k(t))}writeTree(t,r="/"){for(let[n,s]of Object.entries(t)){let i=x(r,n);typeof s=="string"||s instanceof Uint8Array?this.writeFile(i,s):(this.mkdir(i),this.writeTree(s,i))}}toFlat(){let t={};for(let r of this.files.keys())t[r.slice(1)]=this.content(r);return t}watch(t,r={}){let n=r.under===void 0?void 0:k(r.under),s=n===void 0||n==="/"?t:i=>(i.path===n||i.path.startsWith(n+"/"))&&t(i);return this.listeners.set(s,!!r.promotions),()=>this.listeners.delete(s)}removeFile(t){this.files.delete(t),this.versions.delete(t),this.mtimes.delete(t),this.unlink(t),this.emit({type:"remove",path:t})}link(t){let r=Y(t);this.ensureDir(r),this.children.get(r).add(t.slice(t.lastIndexOf("/")+1))}ensureDir(t){if(!this.children.has(t)){if(this.files.has(t))throw new Error(`ENOTDIR: not a directory, '${t}'`);this.children.set(t,new Set),this.link(t)}}unlink(t){let r=Y(t),n=this.children.get(r);n&&(n.delete(t.slice(t.lastIndexOf("/")+1)),n.size===0&&r!=="/"&&!this.explicit.has(r)&&this.unlinkDir(r))}unlinkDir(t){this.children.delete(t),this.unlink(t)}emit(t,r=!1){if(this.queued.push([t,r]),!this.dispatching){this.dispatching=!0;try{for(let n=this.queued.shift();n;n=this.queued.shift()){let[s,i]=n;for(let[o,l]of this.listeners)(l||!i)&&o(s)}}finally{this.dispatching=!1,this.queued.length=0}}}};function ge(e,t){for(let r of t)r.op==="write"?e.writeFile(r.path,r.content):r.op==="mkdir"?e.mkdir(r.path):e.rm(r.path)}var Zs=new TextEncoder,dn=new TextDecoder("utf-8",{ignoreBOM:!0});function Vt(e){let t="";for(let r=0;r<e.length;r+=8192)t+=String.fromCharCode.apply(null,e.subarray(r,r+8192));return t}function Bt(e){let t=new Uint32Array(e,0,8);if(t[0]!==1263552066||t[1]!==1)throw new Error("Not a file-system pack (or a pack from another runtime version).");let r=t[2]+t[3]*2**32,n=t[4],s=t[5],i=t[6],o=t[7],l=n+s,a=new Uint32Array(e,8*4,l),u=(8+l)*4,f=new Uint32Array(e,u,n*3),c=Vt(new Uint16Array(e,u+n*12,i)),d=new Array(l),g=0;for(let p=0;p<l;p++){let m=g+a[p];d[p]=c.slice(g,m),g=m}let h=new Array(n);for(let p=0;p<n;p++){let m=f[p*3],v=o+f[p*3+1],b=f[p*3+2];h[p]=[d[p],()=>hn(e,m,v,b)]}return{seq:r,files:h,dirs:d.slice(n)}}function hn(e,t,r,n){return t===1?new Uint8Array(e.slice(r,r+n)):t===2?Vt(new Uint16Array(e.slice(r,r+n))):dn.decode(new Uint8Array(e,r,n))}var si=1024*1024;function Oe(e,t){let{files:r,dirs:n}=Bt(t.pack);e.seed(r,n),ge(e,t.ops)}function Xe(e,t){let r=k(t),n=k(e);return n==="/"?r:r==="/"?n:n+r}var q=Uint8Array,ue=Uint16Array,$n=Int32Array,zt=new q([0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0,0,0,0]),Qt=new q([0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13,0,0]),mn=new q([16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15]),Kt=function(e,t){for(var r=new ue(31),n=0;n<31;++n)r[n]=t+=1<<e[n-1];for(var s=new $n(r[30]),n=1;n<30;++n)for(var i=r[n];i<r[n+1];++i)s[i]=i-r[n]<<5|n;return{b:r,r:s}},Yt=Kt(zt,2),Zt=Yt.b,gn=Yt.r;Zt[28]=258,gn[258]=28;var Jt=Kt(Qt,0),vn=Jt.b,ui=Jt.r,nt=new ue(32768);for(_=0;_<32768;++_)Z=(_&43690)>>1|(_&21845)<<1,Z=(Z&52428)>>2|(Z&13107)<<2,Z=(Z&61680)>>4|(Z&3855)<<4,nt[_]=((Z&65280)>>8|(Z&255)<<8)>>1;var Z,_,ve=function(e,t,r){for(var n=e.length,s=0,i=new ue(t);s<n;++s)e[s]&&++i[e[s]-1];var o=new ue(t);for(s=1;s<t;++s)o[s]=o[s-1]+i[s-1]<<1;var l;if(r){l=new ue(1<<t);var a=15-t;for(s=0;s<n;++s)if(e[s])for(var u=s<<4|e[s],f=t-e[s],c=o[e[s]-1]++<<f,d=c|(1<<f)-1;c<=d;++c)l[nt[c]>>a]=u}else for(l=new ue(n),s=0;s<n;++s)e[s]&&(l[s]=nt[o[e[s]-1]++]>>15-e[s]);return l},ye=new q(288);for(_=0;_<144;++_)ye[_]=8;var _;for(_=144;_<256;++_)ye[_]=9;var _;for(_=256;_<280;++_)ye[_]=7;var _;for(_=280;_<288;++_)ye[_]=8;var _,Xt=new q(32);for(_=0;_<32;++_)Xt[_]=5;var _;var yn=ve(ye,9,1);var wn=ve(Xt,5,1),et=function(e){for(var t=e[0],r=1;r<e.length;++r)e[r]>t&&(t=e[r]);return t},G=function(e,t,r){var n=t/8|0;return(e[n]|e[n+1]<<8)>>(t&7)&r},tt=function(e,t){var r=t/8|0;return(e[r]|e[r+1]<<8|e[r+2]<<16)>>(t&7)},bn=function(e){return(e+7)/8|0},it=function(e,t,r){return(t==null||t<0)&&(t=0),(r==null||r>e.length)&&(r=e.length),new q(e.subarray(t,r))};var Pn=["unexpected EOF","invalid block type","invalid length/literal","invalid distance","stream finished","no stream handler",,"no callback","invalid UTF-8 data","extra field too long","date not in range 1980-2099","filename too long","stream finishing","invalid zip data"],D=function(e,t,r){var n=new Error(t||Pn[e]);if(n.code=e,Error.captureStackTrace&&Error.captureStackTrace(n,D),!r)throw n;return n},xn=function(e,t,r,n){var s=e.length,i=n?n.length:0;if(!s||t.f&&!t.l)return r||new q(0);var o=!r,l=o||t.i!=2,a=t.i;o&&(r=new q(s*3));var u=function(Ut){var Ft=r.length;if(Ut>Ft){var jt=new q(Math.max(Ft*2,Ut));jt.set(r),r=jt}},f=t.f||0,c=t.p||0,d=t.b||0,g=t.l,h=t.d,p=t.m,m=t.n,v=s*8;do{if(!g){f=G(e,c,1);var b=G(e,c+1,3);if(c+=3,b)if(b==1)g=yn,h=wn,p=9,m=5;else if(b==2){var w=G(e,c,31)+257,O=G(e,c+10,15)+4,T=w+G(e,c+5,31)+1;c+=14;for(var C=new q(T),N=new q(19),$=0;$<O;++$)N[mn[$]]=G(e,c+$*3,7);c+=O*3;for(var S=et(N),A=(1<<S)-1,I=ve(N,S,1),$=0;$<T;){var W=I[G(e,c,A)];c+=W&15;var P=W>>4;if(P<16)C[$++]=P;else{var U=0,E=0;for(P==16?(E=3+G(e,c,3),c+=2,U=C[$-1]):P==17?(E=3+G(e,c,7),c+=3):P==18&&(E=11+G(e,c,127),c+=7);E--;)C[$++]=U}}var K=C.subarray(0,w),L=C.subarray(w);p=et(K),m=et(L),g=ve(K,p,1),h=ve(L,m,1)}else D(1);else{var P=bn(c)+4,R=e[P-4]|e[P-3]<<8,M=P+R;if(M>s){a&&D(0);break}l&&u(d+R),r.set(e.subarray(P,M),d),t.b=d+=R,t.p=c=M*8,t.f=f;continue}if(c>v){a&&D(0);break}}l&&u(d+131072);for(var ze=(1<<p)-1,tn=(1<<m)-1,Qe=c;;Qe=c){var U=g[tt(e,c)&ze],le=U>>4;if(c+=U&15,c>v){a&&D(0);break}if(U||D(2),le<256)r[d++]=le;else if(le==256){Qe=c,g=null;break}else{var Dt=le-254;if(le>264){var $=le-257,$e=zt[$];Dt=G(e,c,(1<<$e)-1)+Zt[$],c+=$e}var Ke=h[tt(e,c)&tn],Ye=Ke>>4;Ke||D(3),c+=Ke&15;var L=vn[Ye];if(Ye>3){var $e=Qt[Ye];L+=tt(e,c)&(1<<$e)-1,c+=$e}if(c>v){a&&D(0);break}l&&u(d+131072);var qt=d+Dt;if(d<L){var Mt=i-L,rn=Math.min(L,qt);for(Mt+d<0&&D(3);d<rn;++d)r[d]=n[Mt+d]}for(;d<qt;++d)r[d]=r[d-L]}}t.l=g,t.p=Qe,t.b=d,t.f=f,g&&(f=1,t.m=p,t.d=h,t.n=m)}while(!f);return d!=r.length&&o?it(r,0,d):r.subarray(0,d)};var Sn=new q(0);var B=function(e,t){return e[t]|e[t+1]<<8},F=function(e,t){return(e[t]|e[t+1]<<8|e[t+2]<<16|e[t+3]<<24)>>>0},rt=function(e,t){return F(e,t)+F(e,t+4)*4294967296};function _n(e,t){return xn(e,{i:2},t&&t.out,t&&t.dictionary)}var st=typeof TextDecoder<"u"&&new TextDecoder,kn=0;try{st.decode(Sn,{stream:!0}),kn=1}catch{}var En=function(e){for(var t="",r=0;;){var n=e[r++],s=(n>127)+(n>223)+(n>239);if(r+s>e.length)return{s:t,r:it(e,r-1)};s?s==3?(n=((n&15)<<18|(e[r++]&63)<<12|(e[r++]&63)<<6|e[r++]&63)-65536,t+=String.fromCharCode(55296|n>>10,56320|n&1023)):s&1?t+=String.fromCharCode((n&31)<<6|e[r++]&63):t+=String.fromCharCode((n&15)<<12|(e[r++]&63)<<6|e[r++]&63):t+=String.fromCharCode(n)}};function Rn(e,t){if(t){for(var r="",n=0;n<e.length;n+=16384)r+=String.fromCharCode.apply(null,e.subarray(n,n+16384));return r}else{if(st)return st.decode(e);var s=En(e),i=s.s,r=s.r;return r.length&&D(8),i}}var Tn=function(e,t){return t+30+B(e,t+26)+B(e,t+28)},Cn=function(e,t,r){var n=B(e,t+28),s=B(e,t+30),i=Rn(e.subarray(t+46,t+46+n),!(B(e,t+8)&2048)),o=t+46+n,l=On(e,o,s,r,F(e,t+20),F(e,t+24),F(e,t+42)),a=l[0],u=l[1],f=l[2];return[B(e,t+10),a,u,i,o+s+B(e,t+32),f]},On=function(e,t,r,n,s,i,o){var l=s==4294967295,a=i==4294967295,u=o==4294967295,f=t+r,c=l+a+u;if(n&&c){for(;t+4<f;t+=4+B(e,t+2))if(B(e,t)==1)return[l?rt(e,t+4+8*a):s,a?rt(e,t+4):i,u?rt(e,t+4+8*(a+l)):o,1];n<2&&D(13)}return[s,i,o,0]};function er(e,t){for(var r={},n=e.length-22;F(e,n)!=101010256;--n)(!n||e.length-n>65558)&&D(13);var s=B(e,n+8);if(!s)return{};var i=F(e,n+16),o=F(e,n-20)==117853008;if(o){var l=F(e,n-12);o=F(e,l)==101075792,o&&(s=F(e,l+32),i=F(e,l+48))}for(var a=t&&t.filter,u=0;u<s;++u){var f=Cn(e,i,o),c=f[0],d=f[1],g=f[2],h=f[3],p=f[4],m=f[5],v=Tn(e,m);i=p,(!a||a({name:h,size:d,originalSize:g,compression:c}))&&(c?c==8?r[h]=_n(e.subarray(v,v+d),{out:new q(g)}):D(14,"unknown compression type "+c):r[h]=it(e,v,v+d))}return r}var $i=new TextEncoder,An=new TextDecoder("utf-8",{fatal:!0});var tr={maxEntries:25e4,maxEntryBytes:256*1024*1024,maxTotalBytes:1024*1024*1024},ee=class extends Error{constructor(r,n,s,i){super(`The zip exceeds ${r} (${n} > ${s})${i?` at "${i}"`:""}.`);y(this,"limit");y(this,"value");y(this,"max");y(this,"entry");y(this,"code","EZIPLIMIT");this.limit=r,this.value=n,this.max=s,this.entry=i,this.name="ZipLimitError"}};function ot(e,t,r="/",n={}){let{maxEntries:s,maxEntryBytes:i,maxTotalBytes:o}={...tr,...n},l=0,a=0,u=er(t,{filter({name:f,size:c,originalSize:d,compression:g}){if(++l>s)throw new ee("maxEntries",l,s);let h=g===0?Math.max(c,d):d;if(h>i)throw new ee("maxEntryBytes",h,i,f);if(a+=h,a>o)throw new ee("maxTotalBytes",a,o,f);return!0}});for(let[f,c]of Object.entries(u)){if(f.endsWith("/")){e.mkdir(Xe(r,f.slice(0,-1)));continue}let d=c;try{d=An.decode(c)}catch{}e.writeFile(Xe(r,f),d)}}var In=/^[ \t]*(?:export[ \t]+)?([A-Za-z_][\w.-]*)[ \t]*=[ \t]*/,Nn={n:`
+`,r:"\r",t:"	",'"':'"',"\\":"\\",$:"$"};function Ln(e,t,r){if(r==="'")return e.indexOf("'",t);for(let n=t;n<e.length;n++)if(e[n]==="\\")n++;else if(e[n]==='"')return n;return-1}function at(e){let t={},r=e.replace(/\r\n?/g,`
+`),n=i=>{let o=r.indexOf(`
+`,i);return o<0?r.length:o},s=0;for(;s<r.length;){let i=n(s),o=In.exec(r.slice(s,i));if(!o){s=i+1;continue}let l=o[1],a=s+o[0].length,u=r[a];if(u==='"'||u==="'"){let c=Ln(r,a+1,u);if(c>=0){let d=r.slice(a+1,c);t[l]=u==="'"?d:d.replace(/\\(.)/gs,(g,h)=>Nn[h]??g),s=n(c)+1;continue}}let f=r.slice(a,i);t[l]=f.startsWith("#")?"":f.replace(/[ \t]+#.*$/,"").trim(),s=i+1}return t}var Dn={".html":"text/html; charset=utf-8",".htm":"text/html; charset=utf-8",".css":"text/css; charset=utf-8",".js":"text/javascript; charset=utf-8",".mjs":"text/javascript; charset=utf-8",".json":"application/json; charset=utf-8",".map":"application/json; charset=utf-8",".txt":"text/plain; charset=utf-8",".md":"text/markdown; charset=utf-8",".xml":"application/xml; charset=utf-8",".svg":"image/svg+xml",".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".gif":"image/gif",".webp":"image/webp",".avif":"image/avif",".ico":"image/x-icon",".woff":"font/woff",".woff2":"font/woff2",".ttf":"font/ttf",".otf":"font/otf",".mp3":"audio/mpeg",".wav":"audio/wav",".mp4":"video/mp4",".webm":"video/webm",".wasm":"application/wasm",".pdf":"application/pdf"};function lt(e){return Dn[e]??"application/octet-stream"}function we(e){return new ReadableStream({start(t){e.byteLength&&t.enqueue(e),t.close()}})}function fe(e,t){return{status:e,headers:{"content-type":"text/plain; charset=utf-8"},body:we(new TextEncoder().encode(t))}}function ct(e){return{status:e.status,statusText:e.statusText,headers:e.headers}}function ut(e,t){let r=e.getReader(),n=!1;return(async()=>{try{for(;;){let{value:s,done:i}=await r.read();if(i||n)break;t.chunk(s)}n||t.end()}catch(s){n||t.end(s instanceof Error?s.message:String(s))}})(),()=>{n||(n=!0,r.cancel().catch(()=>{}))}}var Ae=class{constructor(){y(this,"peer");y(this,"closed",!1);y(this,"manual",!1);y(this,"data",new Set);y(this,"closes",new Set);y(this,"credits",new Set)}send(t){if(this.closed)return;let r=new Uint8Array(t);queueMicrotask(()=>{let n=this.peer;if(!n.closed){for(let s of n.data)s(r);n.manual||n.consumed(r.byteLength)}})}manualFlowControl(){this.manual=!0}close(){this.closed||(this.closed=!0,queueMicrotask(()=>{if(!this.peer.closed){this.peer.closed=!0;for(let t of this.peer.closes)t()}}))}consumed(t){this.closed||t<=0||queueMicrotask(()=>{for(let r of this.peer.credits)r(t)})}onData(t){return this.data.add(t),()=>this.data.delete(t)}onClose(t){return this.closes.add(t),()=>this.closes.delete(t)}onConsumed(t){return this.credits.add(t),()=>this.credits.delete(t)}};function be(){let e=new Ae,t=new Ae;return e.peer=t,t.peer=e,[e,t]}function qn(e){e.onData(()=>e.close())}function ft(e){let[t,r]=be();return(e??qn)(r),t}var pt={SIGHUP:129,SIGINT:130,SIGKILL:137,SIGPIPE:141,SIGTERM:143},Mn=pt.SIGPIPE;function dt(e){return pt[e]??1}function ht(e){let t="";for(let r=0;r<e.length;r++)t+=String.fromCharCode(e[r]);return btoa(t)}var Pe=class{constructor(t,r){this.kind=t;this.post=r;y(this,"ends",new Map)}owns(t){return t.type===`${this.kind}-data`||t.type===`${this.kind}-ack`||t.type===`${this.kind}-close`}get size(){return this.ends.size}add(t,r){let{kind:n}=this;this.ends.set(t,r),r.manualFlowControl(),r.onData(s=>this.post({type:`${n}-data`,connId:t,data:s})),r.onConsumed(s=>this.post({type:`${n}-ack`,connId:t,bytes:s})),r.onClose(()=>{this.ends.delete(t)&&this.post({type:`${n}-close`,connId:t})})}receive(t){let r=this.ends.get(t.connId);t.type===`${this.kind}-data`?r?.send(t.data):t.type===`${this.kind}-ack`?r?.consumed(t.bytes):this.hangUp(t.connId)}hangUp(t){let r=this.ends.get(t);this.ends.delete(t),r?.close()}closeAll(t=!1){let r=[...this.ends.keys()];for(let n of r)this.hangUp(n),t&&this.post({type:`${this.kind}-close`,connId:n})}};var Fn=new Set(["socket-data","socket-ack","socket-close","dial-result","dial-data","dial-ack","dial-close"]);function jn(e){return Fn.has(e.type)}function rr(e){let t=Wn(e);return{dial:r=>t.dial(r),receive(r){return!jn(r)||!r.type.startsWith("dial")?!1:(t.receive(r),!0)}}}function Wn(e){let t=new Pe("socket",e),r=new Pe("dial",e),n=new Map,s=1;return{upgraded(i,o,l){if(!l)return e({type:"socket-close",connId:i});let[a,u]=be();t.add(i,a),l(o,u)},accepted(i,o){if(!o)return e({type:"socket-close",connId:i});t.add(i,ft(o.accept))},dial(i){let o=s++;return e({type:"dial",connId:o,port:i}),new Promise(l=>{n.set(o,a=>{if(!a)return l(void 0);let[u,f]=be();r.add(o,u),l(f)})})},receive(i){if(i.type==="dial-result"){let o=n.get(i.connId);return n.delete(i.connId),o?.(i.ok)}if(t.owns(i))return t.receive(i);if(r.owns(i))return r.receive(i)}}}var Gn=new TextEncoder;function nr(e,t,r,n){let s=!1,i,o=()=>{s||(s=!0,n?.())};return r.then(l=>{if(s)return void l?.body.cancel().catch(()=>{});if(!l)return e({type:"response-head",reqId:t,head:null}),o();e({type:"response-head",reqId:t,head:ct(l)}),i=ut(l.body,{chunk:a=>e({type:"response-chunk",reqId:t,data:a}),end:a=>{e(a?{type:"response-end",reqId:t,error:a}:{type:"response-end",reqId:t}),o()}})},l=>{s||(e({type:"response-head",reqId:t,head:{status:500,headers:{"content-type":"text/plain"}}}),e({type:"response-chunk",reqId:t,data:Gn.encode(String(l instanceof Error?l.stack:l))}),e({type:"response-end",reqId:t}),o())}),()=>{i?.(),o()}}var Hn=e=>fe(502,`Nothing is listening on port ${e}.`);function sr(e){let t=new Set,r=new Map;return{taken:t,receive(n){switch(n.type){case"ports":for(let s of n.open)t.add(s);for(let s of n.closed)e.handlerFor(s)||t.delete(s);return!0;case"http-request":{let{reqId:s}=n,i=e.handlerFor(n.port),o=i?i(n.request):Promise.resolve(Hn(n.port));return r.set(s,nr(e.post,s,o,()=>r.delete(s))),!0}case"request-cancel":return r.get(n.reqId)?.(),!0;case"listen-failed":return e.onListenFailed(n.port,n.message,n.id),!0;case"listened":return e.onListened?.(n.port,n.id),!0;default:return!1}},cancelAll(){for(let n of[...r.values()])n();r.clear()}}}function ir(e,t){let r=new se,n,s,i,o,l=!1,a=p=>{if(!l){n?.flush(),l=!0,i!==void 0&&e({type:"unlisten",port:i});for(let m of o?.listening??[])e({type:"unlisten",port:m});o?.closeAll(),e({type:"exit",code:p})}},u={post:e,io:{stdout:p=>!l&&e({type:"stdout",data:p}),stderr:p=>!l&&e({type:"stderr",data:p})},get exited(){return l},exit:a,mounted(p){r=void 0,n=p},get takenPorts(){return c.taken}},f=async(p,m=dt(p))=>{let v=s;s=void 0,c.cancelAll();try{o?.stop()}catch{}try{await v?.close()}finally{a(m)}},c=sr({post:e,handlerFor:p=>s&&p===i?s.handle:o?.handlerFor(p),onListenFailed(p){if(p===i)i=void 0;else if(!o?.listening.has(p))return;u.io.stderr(d.addressInUse(p)),f("SIGTERM",1)}}),d=t(u),g=p=>{r?ge(r,p):n?.apply(p)};async function h(p){let{snapshot:m}=p;m.pack?Oe(r,m):g(m.ops);for(let R of p.ports)c.taken.add(R);let v=d.plan(p,r);if(!v.ok)return u.io.stderr(v.message),a(v.code);if(v.port!==void 0&&c.taken.has(v.port))return u.io.stderr(d.addressInUse(v.port)),a(1);let b=await v.run(r);if(b.kind==="exited")return a(b.code);if(b.kind==="running")return o=b.ports,a(await b.done);let{port:P}=b.server;if(l||c.taken.has(P))return await b.server.close(),l||u.io.stderr(d.addressInUse(P)),a(1);s=b.server,i=P,c.taken.add(P),e({type:"listen",port:P}),u.io.stderr(b.banner)}return{receive(p){if(!(c.receive(p)||d.receive?.(p)))switch(p.type){case"prime":return Oe(r,p.snapshot),e({type:"primed"});case"start":h(p).catch(m=>{u.io.stderr(`${m instanceof Error?m.stack??m.message:String(m)}
+`),a(1)});return;case"fs":return g(p.ops);case"kill":return void f(p.signal);case"stdin":return d.stdin?.(p.data);case"socket-open":case"socket-accept":return e({type:"socket-close",connId:p.connId});default:return}}}}var ar=/^php(\d+(\.\d+)?)?(-cli)?(\.exe)?$/,mt=/^composer(\.phar)?$/,$t=e=>e.replace(/\\/g,"/").split("/").pop()??e,Vn=`^(?:${ar.source.slice(1,-1)}|${mt.source.slice(1,-1)})$`,xo=new RegExp(Vn);var H=e=>({ok:!1,reason:e}),Ie=e=>({ok:!0,invocation:e}),lr=new Set(["-d","-c","-z","-t","-S","-f","-r","-B","-R","-F","-E","--rf","--rc","--re","--rz","--ri"]);function cr(e,t,r){return{env:e,cwd:t,readText:n=>r?.readText(n)}}function ur(e,t,r={}){let n=$t(e);if(mt.test(n))return or(t);if(!ar.test(n))return H(`"${e}" is not a PHP command.`);for(let s=0;s<t.length;s++){let i=t[s];if(i==="-S")return zn(t);if(i==="-a")return H("Interactive PHP (-a) needs a terminal, which the PHP runtime does not provide.");if(lr.has(i)){s++;continue}if(i==="--")break;if(!i.startsWith("-")){if(mt.test($t(i)))return or(t.slice(s+1));if($t(i)==="artisan"){let o=Yn(t,s+1);if(t[o]==="serve")return Jn(i,[...t.slice(s+1,o),...t.slice(o+1)],r)}break}}return t.length?Ie({kind:"cli",argv:[...t]}):H("Interactive PHP (no script or -r code) needs a terminal, which the PHP runtime does not provide.")}function Bn(e){if(!e)return"Option -S needs host:port (php -S localhost:8000).";let t=/^(\[[^\]]+\]|[^:]*):(\d+)$/.exec(e),r=Number(t?.[2]);return!t||!Number.isInteger(r)||r<1||r>65535?`Invalid address "${e}": php -S needs host:port (php -S localhost:8000).`:{host:t[1]||"localhost",port:r}}function zn(e){let t={ini:{}};for(let r=0;r<e.length;r++){let n=e[r];if(n==="-S"){let s=Bn(e[++r]);if(typeof s=="string")return H(s);Object.assign(t,s)}else if(n==="-t"){let s=e[++r];if(!s)return H("Option -t needs a document root.");t.docroot=s}else if(n==="-d"){let s=e[++r]??"",i=s.indexOf("=");t.ini[i===-1?s:s.slice(0,i)]=i===-1?"1":s.slice(i+1)}else if(n==="-c"||n==="-z")r++;else if(n.startsWith("-")){if(n!=="-q"&&n!=="-n"&&n!=="-e"&&n!=="-H")return H(`Option ${n} is not supported with php -S in the PHP runtime.`)}else{if(t.router)return H(`php -S takes one router script; "${n}" is extra.`);t.router=n}}return Ie({kind:"serve",server:t})}var Qn="vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php",Kn=new Set(["--env"]);function Yn(e,t){let r=t;for(;r<e.length&&e[r].startsWith("-");)Kn.has(e[r])&&e[r+1]!==void 0&&!e[r+1].startsWith("-")&&r++,r++;return r}function Zn(e){let t=/^(\[[^\]]*\])(?::(\d*))?$/.exec(e);if(t)return t[2]?{host:t[1],port:t[2]}:{host:t[1]};let[r,n]=e.split(":");return n?{host:r,port:n}:{host:r}}function Jn(e,t,r){let n=e.replace(/\\/g,"/"),s=n.lastIndexOf("/"),i=s<0?"":n.slice(0,s+1)||"/",o=i.startsWith("/")?`${i}.env`:`${(r.cwd??"/").replace(/\/+$/,"")}/${i}.env`,l=r.readText?.(k(o)),a={...l===void 0?{}:at(l),...r.env},u=a.SERVER_HOST??"127.0.0.1",f=a.SERVER_PORT;for(let p=0;p<t.length;p++){let m=t[p],v=m.indexOf("="),[b,P]=m.startsWith("--")&&v!==-1?[m.slice(0,v),m.slice(v+1)]:[m,void 0];if(b!=="--host"&&b!=="--port")continue;let R=P??(t[p+1]!==void 0&&!t[p+1].startsWith("-")?t[++p]:void 0);R!==void 0&&(b==="--host"?u=R:f=R)}let{host:c,port:d}=Zn(u),g=(f??d)||void 0,h=g===void 0?8e3:Number(g);return!Number.isInteger(h)||h<1||h>65535?H(`Invalid port "${g}" for artisan serve.`):Ie({kind:"serve",server:{host:c||"127.0.0.1",port:h,docroot:`${i}public`,routerIfPresent:`${i}${Qn}`,ini:{}}})}var Xn=new Set(["--prefer-install","--apcu-autoloader-prefix","--audit-format","--ignore-platform-req"]),es={install:"install",i:"install",update:"update",u:"update",upgrade:"update",require:"require",r:"require","dump-autoload":"dump-autoload",dumpautoload:"dump-autoload"};function or(e){let t={command:"install",packages:[],noDev:!1,ignorePlatformReqs:!1,dev:!1},r;for(let s=0;s<e.length;s++){let i=e[s],[o,l]=i.startsWith("--")&&i.includes("=")?[i.slice(0,i.indexOf("=")),i.slice(i.indexOf("=")+1)]:[i,void 0];if(o==="-d"||o==="--working-dir")t.workingDir=l??e[++s];else if(o==="--no-dev")t.noDev=!0;else if(o==="--dev")t.dev=!0;else if(o==="--ignore-platform-reqs")t.ignorePlatformReqs=!0;else if(Xn.has(o))l===void 0&&s++;else{if(o.startsWith("-"))continue;r===void 0?r=i:t.packages.push(i)}}let n=es[r??"install"];return n?(t.command=n,n==="require"&&!t.packages.length?H("composer require needs a package (composer require vendor/name)."):n!=="require"&&n!=="update"&&t.packages.length?H(`composer ${n} takes no packages.`):Ie({kind:"composer",...t})):H(`composer ${r} is not supported; the PHP runtime runs composer install, update, require and dump-autoload.`)}function fr(e,t){let r=n=>n?.startsWith("/")?t(n):n;switch(e.kind){case"serve":return{...e,server:{...e.server,docroot:r(e.server.docroot),router:r(e.server.router),...e.server.routerIfPresent===void 0?{}:{routerIfPresent:r(e.server.routerIfPresent)}}};case"composer":return{...e,workingDir:r(e.workingDir)};default:{let n=[...e.argv];for(let s=0;s<n.length;s++){if(lr.has(n[s])){if(n[s]==="-f"&&(n[s+1]=r(n[s+1])??""),n[s]==="-r")break;s++;continue}if(n[s]==="--")break;if(!n[s].startsWith("-")){n[s]=r(n[s])??n[s];break}}return{kind:"cli",argv:n}}}}var ie="/project",ts=new Set(["node_modules",".git"]),rs=50,Le=e=>e.split("/").some(t=>ts.has(t)),J=e=>e==="/"?ie:x(ie,e);function Ne(e){let t=k(e);return t===ie?"/":t.startsWith(`${ie}/`)?t.slice(ie.length):void 0}var ns=new TextDecoder("utf-8",{fatal:!0,ignoreBOM:!0});function ss(e){try{return ns.decode(e)}catch{return e.slice()}}var pe=(e,t)=>e.analyzePath(t).exists,Se=(e,t)=>pe(e,t)&&e.isDir(e.stat(t).mode),_e=(e,t)=>pe(e,t)&&!e.isDir(e.stat(t).mode),gt=(e,t)=>t.startsWith("/")?t:x(e.cwd(),t),De=(e,t)=>e.readdir(t).filter(r=>r!=="."&&r!=="..");function xe(e,t){if(pe(e,t)){if(!Se(e,t))return e.unlink(t);for(let r of De(e,t))xe(e,`${t}/${r}`);e.rmdir(t)}}function vt(e,t){t.mkdirTree(ie);for(let r of e.explicitDirectories())Le(r)||t.mkdirTree(J(r));for(let r of e.list()){if(Le(r))continue;let n=J(r);t.mkdirTree(Y(n)),t.writeFile(n,e.readFile(r)??"")}}function yt(e,t){for(let r of t){if(Le(r.path))continue;let n=J(r.path);r.op==="write"?(e.mkdirTree(Y(n)),Se(e,n)&&xe(e,n),e.writeFile(n,r.content)):r.op==="mkdir"?e.mkdirTree(n):xe(e,n)}}function pr(e,t,r=()=>!1){let n=new Set,s=[],i=!1,o=0,l,a=(p,m)=>{let v=J(p);return m==="mkdir"||m==="remove"?[{op:m,path:p}]:pe(e,v)?Se(e,v)?m==="write"?[]:[{op:"mkdir",path:p},...De(e,v).flatMap(b=>a(x(p,b),"tree"))]:[{op:"write",path:p,content:ss(e.readFile(v))}]:[]},u=()=>{if(i=!1,!s.length)return;let p=s;s=[];let m=p.flatMap(({op:v,path:b})=>a(b,v)).filter(v=>!r(v.path));m.length&&t(m)},f=(p,m)=>{let v=Ne(m);if(!(o||v===void 0||v==="/"||r(v)||Le(v))){if(p==="write"){let b;for(let P of s)P.path===v&&(b=P);if(b?.op==="write")return}s.push({op:p,path:v}),i||(i=!0,queueMicrotask(u))}},c=()=>{for(let p of n)f("write",p)},d={openedForWrite(p){!o&&Ne(p)!==void 0&&n.add(p)},written(p){o||Ne(p)===void 0||(n.add(p),clearTimeout(l),l=setTimeout(c,rs))},closed(p){n.delete(p)&&f("write",p)},madeDirectory:p=>f("mkdir",p),symlinked:p=>f("tree",p),deleted:p=>f("remove",p),moved(p,m){f("remove",p),f("tree",m)}},g=e.truncate.bind(e),h=e.ftruncate.bind(e);return e.truncate=(p,m)=>{g(p,m),typeof p=="string"&&f("write",gt(e,p))},e.ftruncate=(p,m)=>{h(p,m);let v=e.getStream(p)?.path;v&&f("write",v)},{events:d,tracker:{quietly(p){o++;try{p()}finally{o--}},flush(){clearTimeout(l),c(),u()}}}}var is=3,os=64,as=512;function ls(e){return typeof e=="string"?/[wa+]/.test(e):(e&is)!==0||(e&(os|as))!==0}function dr(e,t){let{tracker:r,events:n}=pr(e,t),s=o=>gt(e,o),i={open:e.open,write:e.write,close:e.close,mkdir:e.mkdir,unlink:e.unlink,rmdir:e.rmdir,rename:e.rename,symlink:e.symlink};return e.open=function(o,l,a){let u=i.open.call(this,o,l,a);return ls(l)&&u.path&&n.openedForWrite(u.path),u},e.write=function(o,...l){let a=i.write.call(this,o,...l);return o.path&&n.written(o.path),a},e.close=function(o){let l=o.path;i.close.call(this,o),l&&n.closed(l)},e.mkdir=function(o,l){let a=i.mkdir.call(this,o,l);return n.madeDirectory(s(o)),a},e.unlink=function(o){i.unlink.call(this,o),n.deleted(s(o))},e.rmdir=function(o){i.rmdir.call(this,o),n.deleted(s(o))},e.rename=function(o,l){i.rename.call(this,o,l),n.moved(s(o),s(l))},e.symlink=function(o,l){let a=i.symlink.call(this,o,l);return n.symlinked(s(l)),a},r}var qe=e=>`'${e.replace(/\\/g,"\\\\").replace(/'/g,"\\'")}'`;function oe(e,t){return e==null?"null":typeof e=="boolean"||typeof e=="number"?JSON.stringify(e):typeof e=="string"?t?.(e)??qe(e):Array.isArray(e)?`[${e.map(r=>oe(r,t)).join(", ")}]`:`[${Object.entries(e).map(([r,n])=>`${oe(r)} => ${oe(n,t)}`).join(", ")}]`}var hr=String.raw`<?php
+// Generated by the BuilderForce WebContainers PHP runtime (composer install).
+require_once __DIR__ . '/composer/ClassLoader.php';
+require_once __DIR__ . '/composer/InstalledVersions.php';
+return \Composer\Autoload\ClassLoader::bfwcBoot(require __DIR__ . '/composer/autoload_bfwc.php');
+`,$r=String.raw`<?php
+namespace Composer\Autoload;
 
-Runtime Environment:
- OS Name:     browser
- RID:         browser-wasm
+class ClassLoader
+{
+    private array $psr4 = [];
+    private array $psr0 = [];
+    private array $classMap = [];
+    private static ?self $booted = null;
 
-.NET runtimes installed:
-${r.replace(/^/gm,"  ").trimEnd()}
-`;default:return`Usage: dotnet [command] [options]
+    /** @internal The generated maps, registered once; their files required once. */
+    public static function bfwcBoot(array $maps): self
+    {
+        if (self::$booted) {
+            return self::$booted;
+        }
+        $loader = new self();
+        foreach ($maps['psr4'] as $prefix => $paths) {
+            $loader->addPsr4($prefix, $paths);
+        }
+        foreach ($maps['psr0'] as $prefix => $paths) {
+            $loader->add($prefix, $paths);
+        }
+        $loader->addClassMap($maps['classmap']);
+        $loader->register(true);
+        self::$booted = $loader;
+        foreach ($maps['files'] as $file) {
+            require_once $file;
+        }
+        return $loader;
+    }
 
-Commands available in the browser runtime:
-  run        Build and run a project, or a file-based program (dotnet run app.cs).
-  build      Build a project.
-  clean      Remove a project's build output.
-  restore    Check a project's packages against the bundled ones.
-  <app.dll>  Run a built application.
-`}}function de(e,t){let r="configuration"in t?t.configuration:"Debug";if(t.kind==="run"&&t.file)return le(e.files,C(e.cwd,t.file),r);let n=Ge(e.files,e.cwd,t.project,t.kind==="run"?"run":"build");return n.ok?le(e.files,n.path,r,t.kind==="build"?t.output:void 0):n}async function Xe(e,t){let{io:r}=t,n=s=>(r.stderr(`${s}
-`),{kind:"done",code:1}),o={...nr,...t.env};switch(e.kind){case"info":return r.stdout(or(e.what,await t.manifest())),{kind:"done",code:0};case"exec":return{kind:"runtime",work:{env:o,run:{assembly:T(C(t.cwd,e.assembly)),args:e.appArgs,cwd:T(t.cwd)}}};case"restore":case"clean":{let s=de(t,e);if(!s.ok)return n(s.reason);if(e.kind==="clean"){let i=Ve(s.plan);if(!i.ok)return n(i.reason);let a=i.paths.filter(c=>t.files.isFile(c));a.length&&t.sendOps(a.map(c=>({op:"remove",path:c}))),r.stdout(a.length?a.map(c=>`  Deleting file "${c}".
-`).join(""):`  Nothing to clean in ${P(s.plan.outputPath)}.
-`)}else{for(let i of s.plan.notes)r.stdout(`  ${i}
-`);r.stdout(`  Restore complete: ${s.plan.projectFile} uses ${s.plan.packages.length?"bundled packages only":"no NuGet packages"}.
-`)}return{kind:"done",code:0}}case"build":{let s=de(t,e);return s.ok?{kind:"runtime",work:{env:o,build:s.plan}}:n(s.reason)}case"run":{let s=de(t,e);if(!s.ok)return n(s.reason);let i=s.plan;if(i.outputKind!=="exe")return n(`Unable to run your project.
-Ensure you have a runnable project type and ensure '${i.projectFile}' supports running: its OutputType is Library.`);let a=i.fileBased?{ok:!0}:qe(d=>t.files.readText(d),i.projectDir,e.launchProfile,o);if(!a.ok)return n(a.reason);let c=i.web?i.projectDir:t.cwd;return{kind:"runtime",work:{env:{...o,...a.profile?.env},build:e.noBuild?void 0:i,run:{assembly:Ke(i),args:[...a.profile?.args??[],...e.appArgs],cwd:T(c)}}}}}}function sr(e,t,r,n=!1){let o=new Set;for(let s of e.referenceGroups)for(let i of r.references[s]?.files??[])o.add(t.get(`${s}/${i.name}`));for(let s of e.packages)for(let i of r.packages[s]?.references??[])t.has(i)&&o.add(t.get(i));return JSON.stringify({projectFile:T(e.projectFile),projectDir:T(e.projectDir),assemblyName:e.assemblyName,outputKind:e.outputKind,outputPath:Ke(e),sources:e.sources.map(T),globalUsings:e.globalUsings,references:[...o].filter(Boolean),nullable:e.nullable,allowUnsafe:e.allowUnsafe,langVersion:e.langVersion,fileBased:e.fileBased,defines:e.defines,optimize:e.optimize,warningsAsErrors:e.warningsAsErrors,noWarn:e.noWarn,quiet:n})}async function ze(e,t,r){if(e.build){let n=e.build;for(let a of n.notes)r.stdout(`  ${a}
-`);let o=[...n.referenceGroups,...n.packages.flatMap(a=>(t.manifest.packages[a]?.references??[]).map(c=>c.split("/")[0]))],s=await t.mountReferences(o),i=await t.exports.Build(sr(n,s,t.manifest,!!e.run));if(i!==0)return e.run&&r.stderr(`
-The build failed. Fix the build errors and run again.
-`),i}return e.run?t.exports.Run(e.run.assembly,e.run.args,e.run.cwd):0}var Je=`The .NET runtime bundle is not configured: the host must pass \`dotnet.bundleUrl\` (to get the bundle, ${j}).`,ir=e=>`Unhandled exception. System.IO.IOException: Failed to bind to address http://localhost:${e}: address already in use.
-`;function Ye(e){let t=e.dial?void 0:we(e.post),r=e.dial??(n=>t.dial(n));return De(e.post,n=>{let o={stdout:c=>n.io.stdout(c),stderr:c=>n.io.stderr(c)},s=$e({post:e.post,dial:r,taken:n.takenPorts,...o});async function i(c,d,u,p){let f=await e.loadDotnet({bundleUrl:c,env:d,imports:s.imports,onExit:h=>n.exit(h),fetch:e.fetch});Ee(p,f.FS);let b=Te(f.FS,h=>{n.exited||e.post({type:"fs",ops:h})});return n.mounted({apply:h=>b.quietly(()=>ve(f.FS,h)),flush(){try{f.exports.Flush()}catch{}b.flush()}}),f.exports.Init(),s.attach(f.exports),f.FS.mkdirTree(T(u)),f}let a=c=>{if(!(c instanceof E))throw c;return o.stderr(`${c.message}
-`),1};return{addressInUse:ir,receive:c=>!!t?.receive(c),plan(c){let d=Me(c.command,c.args);if(!d.ok)return{ok:!1,message:`${d.reason}
-`,code:1};let u=c.dotnet?.bundleUrl;return{ok:!0,async run(p){try{let f=await Xe(d.invocation,{files:p,cwd:c.cwd,env:c.env,io:o,sendOps:h=>e.post({type:"fs",ops:h}),manifest:()=>u?he(u,e.fetch):Promise.reject(new E(Je))});if(f.kind==="done")return{kind:"exited",code:f.code};if(!u)throw new E(Je);let b=await i(u,f.work.env,c.cwd,p);return n.exited?{kind:"exited",code:1}:{kind:"running",ports:s,done:ze(f.work,b,o).catch(a)}}catch(f){return{kind:"exited",code:a(f)}}}}}}})}var Ze=globalThis,ar=Ye({post:e=>Ze.postMessage(e),loadDotnet:e=>ge(e)});Ze.addEventListener("message",e=>ar.receive(e.data));})();
+    public function addPsr4(string $prefix, array|string $paths, bool $prepend = false): void
+    {
+        $existing = $this->psr4[$prefix] ?? [];
+        $this->psr4[$prefix] = $prepend ? array_merge((array) $paths, $existing) : array_merge($existing, (array) $paths);
+        krsort($this->psr4);
+    }
+
+    public function setPsr4(string $prefix, array|string $paths): void
+    {
+        $this->psr4[$prefix] = (array) $paths;
+        krsort($this->psr4);
+    }
+
+    public function add(string $prefix, array|string $paths, bool $prepend = false): void
+    {
+        $existing = $this->psr0[$prefix] ?? [];
+        $this->psr0[$prefix] = $prepend ? array_merge((array) $paths, $existing) : array_merge($existing, (array) $paths);
+    }
+
+    public function addClassMap(array $classMap): void
+    {
+        $this->classMap = array_merge($this->classMap, $classMap);
+    }
+
+    public function getPrefixesPsr4(): array
+    {
+        return $this->psr4;
+    }
+
+    public function getPrefixes(): array
+    {
+        return $this->psr0;
+    }
+
+    public function getClassMap(): array
+    {
+        return $this->classMap;
+    }
+
+    public function register(bool $prepend = false): void
+    {
+        spl_autoload_register([$this, 'loadClass'], true, $prepend);
+    }
+
+    public function unregister(): void
+    {
+        spl_autoload_unregister([$this, 'loadClass']);
+    }
+
+    public function loadClass(string $class): ?bool
+    {
+        $file = $this->findFile($class);
+        if ($file === false) {
+            return null;
+        }
+        (static function (string $file) {
+            include $file;
+        })($file);
+        return true;
+    }
+
+    public function findFile(string $class): string|false
+    {
+        if (isset($this->classMap[$class])) {
+            return $this->classMap[$class];
+        }
+        $relative = strtr($class, '\\', '/') . '.php';
+        foreach ($this->psr4 as $prefix => $dirs) {
+            if (str_starts_with($class, $prefix)) {
+                foreach ($dirs as $dir) {
+                    $file = rtrim($dir, '/') . '/' . substr($relative, strlen($prefix));
+                    if (is_file($file)) {
+                        return $file;
+                    }
+                }
+            }
+        }
+        $position = strrpos($class, '\\');
+        $psr0 = $position === false ? strtr($class, '_', '/') . '.php' : strtr(substr($class, 0, $position + 1), '\\', '/') . strtr(substr($class, $position + 1), '_', '/') . '.php';
+        foreach ($this->psr0 as $prefix => $dirs) {
+            if ($prefix === '' || str_starts_with($class, $prefix)) {
+                foreach ($dirs as $dir) {
+                    if (is_file($file = rtrim($dir, '/') . '/' . $psr0)) {
+                        return $file;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    public static function getRegisteredLoaders(): array
+    {
+        return self::$booted ? [dirname(__DIR__) => self::$booted] : [];
+    }
+}
+`,mr=String.raw`<?php
+namespace Composer;
+
+class InstalledVersions
+{
+    private static ?array $installed = null;
+
+    private static function data(): array
+    {
+        return self::$installed ??= require __DIR__ . '/installed.php';
+    }
+
+    public static function getInstalledPackages(): array
+    {
+        return array_keys(self::data()['versions']);
+    }
+
+    public static function isInstalled(string $packageName, bool $includeDevRequirements = true): bool
+    {
+        $entry = self::data()['versions'][$packageName] ?? null;
+        return $entry !== null && ($includeDevRequirements || !$entry['dev_requirement']);
+    }
+
+    public static function getVersion(string $packageName): ?string
+    {
+        return self::entry($packageName)['version'] ?? null;
+    }
+
+    public static function getPrettyVersion(string $packageName): ?string
+    {
+        return self::entry($packageName)['pretty_version'] ?? null;
+    }
+
+    public static function getReference(string $packageName): ?string
+    {
+        return self::entry($packageName)['reference'] ?? null;
+    }
+
+    public static function getInstallPath(string $packageName): ?string
+    {
+        return self::entry($packageName)['install_path'] ?? null;
+    }
+
+    public static function getRootPackage(): array
+    {
+        return self::data()['root'];
+    }
+
+    public static function getRawData(): array
+    {
+        return self::data();
+    }
+
+    private static function entry(string $packageName): array
+    {
+        $entry = self::data()['versions'][$packageName] ?? null;
+        if ($entry === null) {
+            throw new \OutOfBoundsException('Package "' . $packageName . '" is not installed');
+        }
+        return $entry;
+    }
+}
+`;var cs=/^\s*(?:(?:abstract|final|readonly)\s+)*(class|interface|trait|enum)\s+([A-Za-z_\x80-￿][A-Za-z0-9_\x80-￿]*)/gm,us=/^\s*namespace\s+([A-Za-z_\\][A-Za-z0-9_\\]*)\s*[;{]/m;function fs(e){let t=e.replace(/\/\*[\s\S]*?\*\//g,"").replace(/^\s*(\/\/|#).*$/gm,""),r=us.exec(t)?.[1];return[...t.matchAll(cs)].map(n=>r?`${r}\\${n[2]}`:n[2])}function wt(e,t,r,n,s){var l,a,u;if(!s)return;let i=f=>x(r,n,f);for(let[f,c]of Object.entries(s["psr-4"]??{}))((l=e.psr4)[f]??(l[f]=[])).push(...[c].flat().map(i));for(let[f,c]of Object.entries(s["psr-0"]??{}))((a=e.psr0)[f]??(a[f]=[])).push(...[c].flat().map(i));for(let f of s.files??[])e.files.push(i(f));let o=(s["exclude-from-classmap"]??[]).map(i);for(let f of s.classmap??[]){let c=i(f),d=t.isDir(c)?t.list(c).filter(g=>/\.(php|inc|hh)$/.test(g)):[c];for(let g of d)if(!o.some(h=>g.startsWith(h)))for(let h of fs(t.read(g)??""))(u=e.classmap)[h]??(u[h]=g)}}var ps=e=>t=>t===e||t.startsWith(`${e}/`)?`$baseDir . ${oe(t.slice(e.length))}`:void 0;function ds(e){let t=new Map(e.map(i=>[i.name.toLowerCase(),i])),r=new Set,n=[],s=(i,o)=>{let l=i.name.toLowerCase();if(!(r.has(l)||o.has(l))){o.add(l);for(let a of Object.keys(i.require??{}).sort()){let u=t.get(a.toLowerCase());u&&s(u,o)}o.delete(l),r.add(l),n.push(i)}};for(let i of[...e].sort((o,l)=>o.name.localeCompare(l.name)))s(i,new Set);return n}function bt(e,t,r,n,s){let i={psr4:{},psr0:{},classmap:{},files:[]};wt(i,e,t,"",r.autoload),s.dev&&wt(i,e,t,"",r["autoload-dev"]);let o=i.files.splice(0);for(let c of ds(n))wt(i,e,t,`vendor/${c.name}`,c.autoload);i.files.push(...o);let l=x(t,"vendor"),a=ps(t);e.write(x(l,"autoload.php"),hr),e.write(x(l,"composer/ClassLoader.php"),$r),e.write(x(l,"composer/InstalledVersions.php"),mr),e.write(x(l,"composer/autoload_bfwc.php"),`<?php
+// Generated by the BuilderForce WebContainers PHP runtime.
+$baseDir = dirname(__DIR__, 2);
+return ${oe(i,a)};
+`),e.write(x(l,"composer/installed.json"),`${JSON.stringify({packages:n,dev:s.dev,"dev-package-names":[...s.devPackages]},null,4)}
+`);let u=Object.fromEntries(n.map(c=>[c.name,{pretty_version:c.version,version:c.version_normalized??c.version,reference:c.dist?.reference??c.source?.reference??null,type:c.type??"library",install_path:x(l,c.name),aliases:[],dev_requirement:s.devPackages.has(c.name)}])),f={name:r.name??"__root__",pretty_version:r.version??"dev-main",version:r.version??"dev-main",reference:null,type:"project",install_path:t,aliases:[],dev:s.dev};e.write(x(l,"composer/installed.php"),`<?php
+$baseDir = dirname(__DIR__, 2);
+return ${oe({root:f,versions:{...u,[f.name]:{...f,dev_requirement:!1}}},a)};
+`)}var de={dev:0,alpha:1,beta:2,RC:3,stable:4},gr=/^[._-]?(stable|beta|b|RC|rc|alpha|a|patch|pl|p|dev)((?:[.-]?\d+)*)$/;function te(e){let t=e.trim().replace(/^v(?=\d)/i,"");if(/^dev-/i.test(t))return{parts:[],stability:"dev",pre:0,branch:t.toLowerCase()};let r=/^(\d+)(?:\.(\d+|[x*]))?(?:\.(\d+|[x*]))?(?:\.(\d+|[x*]))?(.*)$/i.exec(t);if(!r)return;let n=[r[1],r[2],r[3],r[4]].map(a=>a===void 0?0:/[x*]/i.test(a)?9999999:Number(a)),s=r[5]??"";if(!s)return{parts:n,stability:"stable",pre:0};let i=gr.exec(s.replace(/^-?(?=[a-z])/i,"-"))??gr.exec(s);if(!i)return;let o=i[1].toLowerCase(),l=o==="dev"?"dev":o==="rc"?"RC":o.startsWith("b")?"beta":o.startsWith("a")?"alpha":"stable";return{parts:n,stability:/-dev$/i.test(s)?"dev":l,pre:Number((i[2]??"").replace(/\D/g,"")||0)}}function X(e,t){if(e.branch||t.branch)return e.branch&&t.branch?e.branch.localeCompare(t.branch):e.branch?-1:1;for(let r=0;r<4;r++)if(e.parts[r]!==t.parts[r])return e.parts[r]-t.parts[r];return de[e.stability]-de[t.stability]||e.pre-t.pre}var xt=(e,t)=>de[e.stability]>=de[t];function St(e){let t=(e??"stable").toLowerCase();return t==="rc"?"RC":["dev","alpha","beta","stable"].find(r=>r===t)??"stable"}var V=(e,t="dev")=>({parts:[...e,0,0,0,0].slice(0,4),stability:t,pre:0}),ke=e=>t=>!t.branch&&X(t,e)>=0,Ee=e=>t=>!t.branch&&X(t,e)<0,Me=(e,t)=>r=>e(r)&&t(r),Pt=e=>e.replace(/^v/i,"").split(/[-@+]/)[0].split(".").filter(t=>/^\d+$/.test(t)).map(Number);function hs(e){let t=/@(stable|rc|beta|alpha|dev)$/i.exec(e),r=t?e.slice(0,t.index):e,n=t?St(t[1]):void 0,s=(c,d)=>({test:c,stability:n??d});if(r===""||r==="*"||/^[*x](\.[*x])*$/i.test(r))return s(()=>!0);if(/^dev-/i.test(r)){let c=r.toLowerCase();return s(d=>d.branch===c,"dev")}let i=/^(\^|~|>=|<=|>|<|!=|==|=)?\s*(.+)$/.exec(r);if(!i)return;let[,o="",l=""]=i,a=te(l);if(!a)return;let u=a.stability==="stable"?void 0:a.stability,f=Pt(l);if(/[*x]$/i.test(l.replace(/-dev$/i,""))&&o===""&&!/-dev$/i.test(l)){let c=f,d=[...c.slice(0,-1),(c[c.length-1]??-1)+1];return s(c.length?Me(ke(V(c)),Ee(V(d))):()=>!0)}switch(o){case"^":{let c=f.findIndex(h=>h!==0),d=c===-1?Math.max(f.length-1,0):c,g=[...f.slice(0,d),(f[d]??0)+1];return s(Me(ke(V(f,a.stability==="stable"?"dev":a.stability)),Ee(V(g))),u)}case"~":{let c=Math.max(f.length-2,0),d=[...f.slice(0,c),(f[c]??0)+1];return s(Me(ke(V(f,a.stability==="stable"?"dev":a.stability)),Ee(V(d))),u)}case">=":return s(ke(a.stability==="stable"?V(f):a),u);case">":return s(c=>!c.branch&&X(c,a)>0,u);case"<":return s(Ee(a.stability==="stable"?V(f):a),u);case"<=":return s(c=>!c.branch&&X(c,a)<=0,u);case"!=":return s(c=>c.branch!==void 0||X(c,a)!==0,u);default:return s(c=>!c.branch&&X(c,a)===0,u)}}var vr=e=>e.reduce((t,r)=>r&&(!t||de[r]<de[t])?r:t,void 0);function Ue(e){let t=e.trim().split(/\s*\|\|?\s*/),r=[];for(let n of t){let s=n.replace(/(\^|~|>=|<=|>|<|!=|==|=)\s+/g,"$1").trim(),i=/^(\S+)\s+-\s+(\S+)$/.exec(s);if(i){let a=te(i[1]),u=Pt(i[2]);if(!a)return;let f=u.length<3?Ee(V([...u.slice(0,-1),u[u.length-1]+1])):c=>!c.branch&&X(c,V(u,"stable"))<=0;r.push({test:Me(ke(V(Pt(i[1]))),f)});continue}let o=s.split(/\s*,\s*|\s+/).filter(Boolean).map(hs);if(!o.length||o.some(a=>!a))return;let l=o;r.push({test:a=>l.every(u=>u.test(a)),stability:vr(l.map(a=>a.stability))})}return{test:n=>r.some(s=>s.test(n)),stability:vr(r.map(n=>n.stability))}}function _t(e,t){let r=te(e),n=Ue(t);return!!r&&!!n&&n.test(r)}var kt={composer:"2.8.0","composer-plugin-api":"2.6.0","composer-runtime-api":"2.2.2"},$s=/^(?:php(?:-64bit|-ipv6|-zts|-debug)?|hhvm|(?:ext|lib)-[a-z0-9](?:[_.-]?[a-z0-9]+)*|composer(?:-(?:plugin|runtime)-api)?)$/,re=e=>$s.test(e.toLowerCase()),ms="php-wasm's images have no pgsql/pdo_pgsql extension (and no libpq to build one); new PDO('pgsql:\u2026') and the pg_* functions still work, on the runtime's pure-PHP driver (\\Bfwc\\Pgsql\\PDO), but a package that requires the extension itself is declined",yr={"zend-opcache":"zend opcache",opcache:"zend opcache"};function Fe(e,t,r){let n=e.toLowerCase();if(n==="php"||n==="php-zts"||n==="php-debug")return n!=="php"?`${e} is not available (php-wasm is a non-thread-safe release build).`:_t(r.phpVersion,t)?void 0:`PHP ${r.phpVersion} does not satisfy php ${t}.`;if(n==="php-64bit")return"php-64bit is not available (php-wasm is 32-bit).";if(n!=="php-ipv6"&&re(n)){if(n==="hhvm")return"hhvm is not available (the runtime is PHP on php-wasm).";if(Object.hasOwn(kt,n))return _t(kt[n],t)?void 0:`${e} ${t} is not provided (the runtime's installer answers as ${e} ${kt[n]}).`;if(n.startsWith("ext-")){let s=n.slice(4);return r.extensions.has(Object.hasOwn(yr,s)?yr[s]:s)?void 0:s==="pgsql"||s==="pdo_pgsql"?`ext-${s}: ${ms}.`:`ext-${s} is not in the php-wasm image (loaded: ${[...r.extensions].sort().join(", ")}).`}}}var gs=/^[a-z0-9](?:[_.-]?[a-z0-9]+)*\/[a-z0-9](?:(?:[_.]?|-{0,2})[a-z0-9]+)*$/,ae=class extends Error{},wr=e=>gs.test(e)&&!br(e),br=e=>e.split("/").some(t=>t==="."||t===".."||t===""),Et=(e,t)=>new ae(`Invalid package name "${e}" in ${t}: Composer names are vendor/package, lower-case letters, digits and [_.-] separators.`);function z(e,t){let r=e.toLowerCase();if(re(r)||wr(r))return r;throw Et(e,t)}function je(e,t){let r=typeof e=="string"?e.toLowerCase():"";if(wr(r))return r;throw Et(String(e),t)}function We(e,t){return x(e,"vendor",je(t,"a vendor path"))}function Pr(e){if(br(e))throw Et(e,"a repository URL");return e.split("/").map(encodeURIComponent).join("/")}function xr(e){let r=(Array.isArray(e.repositories)?e.repositories:Object.entries(e.repositories??{}).map(([n,s])=>s===!1?{type:`${n}: false`}:s)).map(n=>n).filter(n=>!(n?.type==="composer"&&typeof n.url=="string"&&/^https:\/\/(repo\.)?packagist\.org\/?$/.test(n.url))).map(n=>typeof n?.type=="string"?n.type:"unknown");if(r.length)return`composer.json declares repositories of type ${[...new Set(r)].join(", ")}, which the PHP runtime does not support (it installs from Packagist, or the host's php.composer.repositoryUrl, only).`}function Rt(e){let t=[];for(let r of e){let n=/^([^:=\s]+)[:=](.+)$/.exec(r);n?t.push({name:z(n[1],"composer require"),constraint:n[2]}):!r.includes("/")&&t.length&&t[t.length-1].constraint===void 0?t[t.length-1].constraint=r:t.push({name:z(r,"composer require")})}return t}function Sr(e,t){let r=new Map;for(let i of t.values())for(let o of[...Object.keys(i.replace??{}),...Object.keys(i.provide??{})])r.set(o.toLowerCase(),i.name);let n=new Set,s=Object.keys(e.require??{}).map(i=>i.toLowerCase());for(;s.length;){let i=s.shift(),o=t.get(i)??t.get(r.get(i)??"");!o||n.has(o.name)||(n.add(o.name),s.push(...Object.keys(o.require??{}).map(l=>l.toLowerCase())))}return n}function _r(e,t){return`${JSON.stringify({_readme:["This file locks the dependencies of your project to a known state","Written by the BuilderForce WebContainers PHP runtime"],...e,aliases:[],"minimum-stability":t.minimumStability,"stability-flags":{},"prefer-stable":t.preferStable,"prefer-lowest":!1,platform:{},"platform-dev":{},"plugin-api-version":"2.6.0"},null,4)}
+`}var Q=class extends Error{},Tt=e=>te(e.version_normalized??e.version),kr=e=>Object.entries(e.require??{}).map(([t,r])=>({name:z(t,`${e.name}'s require`),constraint:r,from:e.name})),Er=e=>[...Object.keys(e.replace??{}),...Object.keys(e.provide??{})].map(t=>t.toLowerCase());function Ct(e,t,r){return Tr(e,t,r)[0]}function Tr(e,t,r,n){let s=t.reduce((a,u)=>u.stability&&xt({parts:[],stability:a,pre:0},u.stability)?u.stability:a,r.minimumStability),i=e.map(a=>({pkg:a,version:Tt(a)})).filter(a=>!!a.version&&xt(a.version,s)&&t.every(u=>u.test(a.version))).sort((a,u)=>X(u.version,a.version)),o=r.preferStable?[...i.filter(a=>a.version.stability==="stable"),...i.filter(a=>a.version.stability!=="stable")]:i,l=n===void 0?-1:o.findIndex(a=>a.pkg.version===n);return l>0&&o.unshift(...o.splice(l,1)),o.map(a=>a.pkg)}function Rr(e,t){return t.map(r=>{let n=Ue(r.constraint);if(!n)throw new Q(`Cannot read the version constraint "${r.constraint}" on ${e} (required by ${r.from}).`);return n})}async function Cr(e,t,r,n={}){let s=new Set(Er(n)),i={steps:r.maxSteps??2e4},o="",l=-1,a=(h,p)=>{h>=l&&(o=p,l=h)},u=new Map,f=async h=>(u.has(h)||u.set(h,await t.versions(h)),u.get(h)),c=h=>{let p=[{from:"root",conflict:n.conflict},...[...h.values()].map(m=>({from:m.name,conflict:m.conflict}))];for(let{from:m,conflict:v}of p)for(let[b,P]of Object.entries(v??{})){let R=b.toLowerCase(),M=Ue(P),w=h.get(R),O=w&&Tt(w);if(O&&M?.test(O))return`${m} conflicts with ${w.name} ${P}`;for(let T of h.values()){let C={...T.provide,...T.replace},N=Object.entries(C).find(([S])=>S.toLowerCase()===R)?.[1];if(N===void 0)continue;let $=te(N==="self.version"?T.version_normalized??T.version:N.replace(/^[=\s]+/,""));if($&&M?.test($))return`${m} conflicts with ${R} ${P} (${T.name} ${N==="self.version"?"replaces/provides it":`provides ${N}`})`}}},d=async h=>{if(--i.steps<0)throw new Q("Dependency resolution took too long; pin the conflicting packages in composer.json.");let p=new Map;for(let w of[...e,...[...h.values()].flatMap(kr)])re(w.name)||p.set(w.name,[...p.get(w.name)??[],w]);let m=new Set([...s,...[...h.values()].flatMap(Er)]);for(let[w,O]of h){let T=p.get(w)??[],C=Tt(O),N=Rr(w,T),$=T.find((S,A)=>!N[A].test(C));if($){a(h.size,`${w} ${O.version} was chosen, but ${$.from} requires ${w} ${$.constraint}.`);return}}let v=c(h);if(v){a(h.size,`${v}.`);return}let b=[...p.keys()].filter(w=>!h.has(w)&&!m.has(w)),P;for(let w of b)if(await f(w)){P=w;break}if(P===void 0){if(!b.length)return h;let w=b[0];a(h.size,`Package ${w} (required by ${p.get(w).map(O=>O.from).join(", ")}) was not found in the repository, and no chosen package provides or replaces it.`);return}let R=p.get(P),M=Tr(await f(P),Rr(P,R),r,r.preferred?.get(P));if(!M.length){a(h.size,`No version of ${P} satisfies ${R.map(w=>`${w.constraint} (required by ${w.from})`).join(" and ")} at minimum-stability ${r.minimumStability}.`);return}for(let w of M){let O=r.platform&&Object.entries(w.require??{}).map(([C,N])=>re(C.toLowerCase())?Fe(C,N,r.platform):void 0).find(Boolean);if(O){a(h.size,`${w.name} ${w.version} is declined: ${O}`);continue}try{kr(w)}catch(C){if(!(C instanceof ae))throw C;a(h.size,`${w.name} ${w.version} is skipped: ${C.message}`);continue}let T=await d(new Map([...h,[P,w]]));if(T)return T}},g=await d(new Map);if(!g)throw new Q(o||"No installable set of packages satisfies composer.json.");return{packages:g}}function Or(e,t){return[...Object.entries(e.require??{}),...t?[]:Object.entries(e["require-dev"]??{})].map(([n,s])=>({name:n.toLowerCase(),constraint:s,from:"root"}))}var ne=class extends Error{},vs=["pre-install-cmd","post-install-cmd","pre-update-cmd","post-update-cmd","post-autoload-dump","post-root-package-install","post-create-project-cmd"],Ge=(e,t)=>{try{return JSON.parse(e)}catch(r){throw new ne(`${t} does not contain valid JSON: ${r instanceof Error?r.message:String(r)}`)}};function Ot(e,t,r,n){return[...Object.entries({...e.require,...r?e["require-dev"]:{}}).map(([o,l])=>({name:o,constraint:l,from:"your project"})),...t.flatMap(o=>Object.entries(o.require??{}).map(([l,a])=>({name:l,constraint:a,from:o.name})))].flatMap(({name:o,constraint:l,from:a})=>{let u=re(o.toLowerCase())?Fe(o,l,n):void 0;return u?[`${a} requires ${o} ${l}: ${u}`]:[]})}async function Ar(e,t){let{files:r,projectDir:n}=t,s=x(n,"composer.json"),i=x(n,"composer.lock"),o=x(n,"vendor/composer/installed.json"),l=r.read(s),a=r.read(i),u=!e.noDev;try{if(l===void 0&&e.command!=="require")throw new ne(`Composer could not find a composer.json file in ${n}`);let f=Ge(l??"{}",s),c=xr(f);if(c)throw new ne(c);for(let $ of["require","require-dev","replace","provide","conflict"])for(let S of Object.keys(f[$]??{}))z(S,`composer.json ${$}`);let g=(()=>{let $=r.read(o);if($===void 0)return{packages:[],devNames:[]};let S=Ge($,o);for(let A of S.packages??[])je(A.name,o);return{packages:S.packages??[],devNames:S["dev-package-names"]??[]}})();if(e.command==="dump-autoload"){let{packages:$,devNames:S}=g,A=new Set(S);return bt(r,n,f,u?$:$.filter(I=>!A.has(I.name)),{dev:u,devPackages:u?A:new Set}),t.out(`Generating autoload files
+Generated autoload files
+`),0}let h={minimumStability:St(f["minimum-stability"]),preferStable:!!f["prefer-stable"]};if(e.command==="require"){let $=e.dev?"require-dev":"require";for(let{name:S,constraint:A}of Rt(e.packages)){let I=A;if(!I){let W=await t.source.versions(S),U=W?.filter(ze=>e.ignorePlatformReqs||!Ot({},[ze],!1,t.platform).length),E=U&&Ct(U,[],h),K=!E&&W&&Ct(W,[],h);if(K)throw new Q(`${K.name} ${K.version} is declined: ${Ot({},[K],!1,t.platform).join("; ")}`);let L=E&&te(E.version_normalized??E.version);if(!L||L.branch)throw new Q(`Could not find a stable version of package ${S}.`);I=`^${L.parts[0]}.${L.parts[1]}`}f[$]={...f[$],[S]:I},t.err(`./composer.json has been updated (${S}: ${I})
+`)}}let p=`${JSON.stringify(f,null,4)}
+`,m=e.command==="install"&&a!==void 0?Ge(a,i):void 0,v=!1;if(m){t.err("Installing dependencies from lock file"+(u?" (including require-dev)":"")+`
+`);for(let $ of[...m.packages??[],...m["packages-dev"]??[]])je($.name,i);m["content-hash"]&&m["content-hash"]!==await t.contentHash(l??p)&&t.err("Warning: The lock file is not up to date with the latest changes in composer.json. Run `composer update`.\n")}else{t.err(e.command==="install"?`No composer.lock file present. Updating dependencies to latest instead of installing from lock file.
+`:`Updating dependencies
+`);let $=e.command==="require"?Rt(e.packages).map(E=>E.name):e.packages.map(E=>z(E,"composer update")),S=$.length&&a!==void 0?Ge(a,i):void 0,A=new Map([...S?.packages??[],...S?.["packages-dev"]??[]].filter(E=>!$.includes(E.name)).map(E=>[E.name,E.version])),I=await Cr(Or(f,!1),t.source,{...h,preferred:A,platform:e.ignorePlatformReqs?void 0:t.platform},f);for(let E of I.packages.values())t.err(`  - Locking ${E.name} (${E.version})
+`);let W=Sr(f,I.packages),U=[...I.packages.values()].sort((E,K)=>E.name.localeCompare(K.name));m={"content-hash":await t.contentHash(p),packages:U.filter(E=>W.has(E.name)),"packages-dev":U.filter(E=>!W.has(E.name))},v=!0}let b=[...m.packages??[],...u?m["packages-dev"]??[]:[]],P=new Set(u?(m["packages-dev"]??[]).map($=>$.name):[]),R=e.ignorePlatformReqs?[]:Ot(f,b,u,t.platform);if(R.length)throw new ne(`Your requirements could not be resolved to an installable set of packages.
+${R.map($=>`  - Declined: ${$}`).join(`
+`)}`);e.command==="require"&&r.write(s,p),v&&(r.write(i,_r(m,h)),t.err(`Writing lock file
+`));let M=new Map(g.packages.map($=>[$.name,$])),w=($,S)=>!!$&&$.version===S.version&&($.dist?.reference??null)===(S.dist?.reference??null)&&r.isDir(We(n,S.name)),O=b.filter($=>!w(M.get($.name),$)),T=[...M.keys()].filter($=>!b.some(S=>S.name===$));t.err(`Package operations: ${O.length} install${O.length===1?"":"s"}, 0 updates, ${T.length} removal${T.length===1?"":"s"}
+`);let C=[];for(let $ of O){t.err(`  - Downloading ${$.name} (${$.version})
+`);let S=await t.source.files($);for(let A of S.keys())if(A.split("/").some(I=>I===".."||I==="."||I===""))throw new ne(`${$.name} ${$.version} holds a file outside its directory ("${A}").`);C.push([$,S])}for(let $ of T)r.remove(We(n,$)),t.err(`  - Removing ${$}
+`);for(let[$,S]of C){let A=We(n,$.name);t.err(`  - Installing ${$.name} (${$.version})
+`),r.remove(A);for(let[I,W]of S)r.write(x(A,I),W);$.type==="composer-plugin"&&t.err(`    ${$.name} is a Composer plugin; plugins do not run in the PHP runtime.
+`)}!O.length&&!T.length&&t.err(`Nothing to install, update or remove
+`),t.err(`Generating autoload files
+`),bt(r,n,f,b,{dev:u,devPackages:P});let N=vs.filter($=>f.scripts?.[$]!==void 0);return N.length&&t.err(`Composer scripts do not run in the PHP runtime (${N.join(", ")}); run their commands yourself if needed.
+`),0}catch(f){(e.command==="require"||e.command==="update")&&(l===void 0?r.remove(s):r.read(s)!==l&&r.write(s,l),a===void 0?r.remove(i):r.read(i)!==a&&r.write(i,a));let c=f instanceof Q||f instanceof ne||f instanceof ae,d=f instanceof Q?`Your requirements could not be resolved to an installable set of packages.
+  `:"";return t.err(`${d}${f instanceof Error?f.message:String(f)}
+`),c?2:1}}var ys="https://packagist.org/packages/{name}.json",ws="https://cdn.jsdelivr.net/gh/",bs="https://data.jsdelivr.com/v1/packages/gh/";function Ps(e){let t=[],r={};for(let n of e){let s={...r};for(let[i,o]of Object.entries(n))o==="__unset"?delete s[i]:s[i]=o;t.push(s),r=s}return t}function xs(e,t){let r=t;if(r.package?.versions)return Object.values(r.package.versions).map(s=>({...s,name:e}));let n=r.packages?.[e];if(Array.isArray(n))return(r.minified?Ps(n):n).map(s=>({...s,name:e}));if(n)return Object.values(n).map(s=>({...s,name:e}))}function Ir(e){let t=e&&/^https:\/\/(?:api\.)?github\.com\/(?:repos\/)?([^/]+)\/([^/]+?)(?:\.git)?(?:\/|$)/.exec(e);return t?{owner:t[1],repo:t[2]}:void 0}var he={maxEntries:5e4,maxTotalBytes:256*1024*1024,maxEntryBytes:64*1024*1024},At=128*1024*1024,j=class extends Error{};function Ss(e){let t=new se;try{ot(t,e,"/",he)}catch(o){throw o instanceof ee?new j(o.message):o}let r=t.list(),n=new Set(r.map(o=>o.split("/")[1])),s=n.size===1&&r.every(o=>o.split("/").length>2)?`/${[...n][0]}/`:"/",i=new Map;for(let o of r){let l=t.readFile(o);i.set(o.slice(s.length),typeof l=="string"?new TextEncoder().encode(l):l??new Uint8Array)}return i}async function It(e,t){let r=await e(t);if(!r.ok)throw new Error(`GET ${t}: ${r.status} ${r.statusText}`);return r}async function He(e,t,r){let n=Number(e.headers.get("content-length"));if(n>t)throw new j(`${r} is ${n} bytes, over the ${t}-byte limit.`);if(!e.body)return new Uint8Array(await e.arrayBuffer());let s=e.body.getReader(),i=[],o=0;for(;;){let{value:u,done:f}=await s.read();if(f)break;if(o+=u.byteLength,o>t)throw await s.cancel(),new j(`${r} exceeds the ${t}-byte limit.`);i.push(u)}let l=new Uint8Array(o),a=0;for(let u of i)l.set(u,a),a+=u.byteLength;return l}async function _s(e,t,r){if(!t)return;let s=[...new Uint8Array(await crypto.subtle.digest("SHA-1",e))].map(i=>i.toString(16).padStart(2,"0")).join("");if(s!==t.toLowerCase())throw new j(`${r}: checksum mismatch (sha1 ${s}, metadata says ${t}).`)}function ks(e,t){let r;try{r=new URL(e)}catch{throw new j(`${t}: dist URL "${e}" is not an absolute URL.`)}let n=r.hostname==="localhost"||r.hostname==="[::1]"||/^127\./.test(r.hostname);if(r.protocol!=="https:"&&!(r.protocol==="http:"&&n))throw new j(`${t}: dist URL "${e}" is not https.`)}var Es=/^[A-Za-z0-9._-]+$/;async function Rs(e,t,r,n){if(![t,r,n].every(a=>Es.test(a)))throw new j(`Refusing GitHub source ${t}/${r}@${n}: not a plain repository and commit.`);let i=(JSON.parse(new TextDecoder().decode(await He(await It(e,`${bs}${t}/${r}@${n}?structure=flat`),At,"The jsDelivr listing"))).files??[]).map(a=>a.name);if(i.length>he.maxEntries)throw new j(`${t}/${r} has ${i.length} files, over the ${he.maxEntries}-entry limit.`);for(let a of i)if(!a.startsWith("/")||a.split("/").some(u=>u===".."||u==="."))throw new j(`Refusing file "${a}" in ${t}/${r}.`);let o=new Map,l=0;for(let a=0;a<i.length;a+=8)await Promise.all(i.slice(a,a+8).map(async u=>{let f=await He(await It(e,`${ws}${t}/${r}@${n}${u.split("/").map(encodeURIComponent).join("/")}`),he.maxEntryBytes,u);if(l+=f.byteLength,l>he.maxTotalBytes)throw new j(`${t}/${r} exceeds the ${he.maxTotalBytes}-byte limit.`);o.set(u.slice(1),f)}));return o}function Nr(e={}){let t=e.fetch??((s,i)=>fetch(s,i)),r=e.repositoryUrl??ys,n=new Map;return{versions(s){let i;try{i=z(s,"a package request")}catch(l){return Promise.reject(l)}let o=n.get(i);return o||(o=(async()=>{let l=await t(r.replace("{name}",Pr(i)));if(l.status!==404){if(!l.ok)throw new Error(`Package metadata for ${i}: ${l.status} ${l.statusText}`);return xs(i,JSON.parse(new TextDecoder().decode(await He(l,At,`Package metadata for ${i}`))))}})(),n.set(i,o)),o},async files(s){let i=s.dist,o=Ir(i?.url)??Ir(s.source?.url??void 0),l=i?.reference??s.source?.reference,a=`${s.name} ${s.version}`;if(i?.url&&(i.type??"zip")==="zip"){ks(i.url,a);let u=e.distProxy?`${e.distProxy}${encodeURIComponent(i.url)}`:i.url,f;try{f=await It(t,u)}catch(c){if(!o||!l||e.distProxy)throw c}if(f){let c=await He(f,At,a);return await _s(c,i.shasum,a),Ss(c)}}if(o&&l)return Rs(t,o.owner,o.repo,l);throw new Error(`${a} has no zip dist or GitHub source the PHP runtime can fetch.`)}}}var Lr=e=>e instanceof ArrayBuffer?new Uint8Array(e):new Uint8Array(e.buffer,e.byteOffset,e.byteLength);function Dr(e){let t=e.getReader();return new ReadableStream({async pull(r){let{value:n,done:s}=await t.read();if(s)return r.close();let i=Lr(n);i.byteLength&&r.enqueue(i.slice())},cancel:r=>t.cancel(r)})}async function Nt(e,t){let r=e.getReader();for(;;){let{value:n,done:s}=await r.read();if(s)return;let i=Lr(n);i.byteLength&&t(i.slice())}}async function Ve(e,t){let r=new TextDecoder;await Nt(e,s=>{let i=r.decode(s,{stream:!0});i&&t(i)});let n=r.decode();n&&t(n)}var Be="/bfwc/php-server-front.php",Mr="x-bfwc-router-declined";function Ts(e){return["<?php",...Object.entries(e).map(([r,n])=>`ini_set(${qe(r)}, ${qe(n)});`),"if (($_SERVER['HTTPS'] ?? '') === 'off') unset($_SERVER['HTTPS']);","if ((require $_SERVER['SCRIPT_FILENAME']) === false && !headers_sent()) header('X-Bfwc-Router-Declined: 1');",""].join(`
+`)}var Cs=e=>/\.[^/]+$/.test(e);function Os(e,t,r){let n=k(e),s=a=>a==="/"?t:x(t,a),i=(a,u,f)=>a.endsWith(".php")?{kind:"script",file:a,scriptName:u,pathInfo:f}:{kind:"file",file:a},o=a=>["index.php","index.html"].map(u=>({url:x(a,u),file:x(s(a),u)})).find(({file:u})=>r.isFile(u));if(r.isFile(s(n)))return i(s(n),n);if(r.isDir(s(n))){let a=o(n);if(a)return i(a.file,a.url)}let l=n.split("/").filter(Boolean);for(let a=l.length-1;a>0;a--){let u=`/${l.slice(0,a).join("/")}`;if(u.endsWith(".php")&&r.isFile(s(u)))return i(s(u),u,`/${l.slice(a).join("/")}`)}if(Cs(n))return{kind:"missing"};for(let a=l.length;a>=0;a--){let u=`/${l.slice(0,a).join("/")}`;if(!r.isDir(s(u)))continue;let f=o(u);if(f)return i(f.file,f.url,n===u?void 0:n.slice(u==="/"?0:u.length)||void 0)}return{kind:"missing"}}var qr=e=>({status:404,headers:{"content-type":"text/html; charset=UTF-8"},body:we(new TextEncoder().encode(`<!doctype html><html><head><title>404 Not Found</title></head><body><h1>Not Found</h1><p>The requested resource <code>${e.replace(/[<>&"]/g,"")}</code> was not found on this server.</p></body></html>`))});function As(e){let t={};for(let[r,n]of Object.entries(e)){let s=r.toLowerCase();s===Mr||!n.length||(t[s]=n.length===1?n[0]:[...n])}return t}async function Ur(e,t){let{php:r,files:n,docroot:s,router:i}=t;n.mkdirTree(Be.slice(0,Be.lastIndexOf("/"))),n.write(Be,Ts(e.ini)),r.chdir(s);let o=e.host.replace(/^\[|\]$/g,""),l=`${o.includes(":")?`[${o}]`:o}:${e.port}`,a=async(c,d)=>{let g=c.url.includes("?")?c.url.slice(c.url.indexOf("?")+1):"",h={DOCUMENT_ROOT:s,SCRIPT_FILENAME:d.file,SCRIPT_NAME:d.scriptName,PHP_SELF:d.scriptName+(d.pathInfo??""),SERVER_NAME:o,SERVER_PORT:String(e.port),SERVER_PROTOCOL:"HTTP/1.1",SERVER_SOFTWARE:`PHP ${t.phpVersion} Development Server (php-wasm, BuilderForce WebContainers)`,REMOTE_ADDR:"127.0.0.1",QUERY_STRING:g};return d.pathInfo&&(h.PATH_INFO=d.pathInfo),r.runStream({scriptPath:Be,relativeUri:c.url,method:c.method.toUpperCase(),headers:{host:l,...c.headers},protocol:"http",body:c.body??void 0,env:t.env,$_SERVER:h})},u=async(c,d,g)=>{if(g.kind==="missing")return qr(d);if(g.kind==="file")return{status:200,headers:{"content-type":lt(Je(g.file))},body:we(n.read(g.file))};let h=await a(c,g);Ve(h.stderr,t.log).catch(()=>{});let[p,m]=await Promise.all([h.httpStatusCode,h.headers]);return m[Mr]?.length?(h.stdout.cancel(),"declined"):{status:p,headers:As(m),body:Dr(h.stdout)}};return{spec:e,handle:async c=>{let d=c.url.split("?")[0].split("#")[0],g;try{g=decodeURIComponent(d)||"/"}catch{return fe(400,"Bad Request")}try{let h=i?await u(c,g,{kind:"script",file:i,scriptName:i.startsWith(`${s}/`)?i.slice(s.length):`/${i.split("/").pop()}`}):"declined";return h==="declined"&&(h=await u(c,g,Os(g,s,n)),h==="declined"&&(h=qr(g))),t.log(`[${h.status}]: ${c.method.toUpperCase()} ${c.url}
+`),h}catch(h){let p=h instanceof Error?h.message:String(h);return t.log(`[500]: ${c.method.toUpperCase()} ${c.url} - ${p}
+`),fe(500,`PHP failed to handle the request: ${p}`)}}}}var Re=Se;function Is(e){let t=n=>De(e,n).flatMap(s=>Re(e,x(n,s))?t(x(n,s)):[x(n,s)]);return{read:n=>_e(e,n)?new TextDecoder().decode(e.readFile(n)):void 0,write(n,s){e.mkdirTree(Y(n)),e.writeFile(n,s)},isDir:n=>Re(e,n),list:n=>Re(e,n)?t(n):[],remove:n=>xe(e,n)}}async function Fr(e,t){let r=await e.php.run({code:t});if(r.exitCode!==0)throw new Error(`PHP failed: ${r.errors||r.text}`);return r.text}var Ns=e=>`<?php
+$c = json_decode(base64_decode('${ht(new TextEncoder().encode(e))}'), true) ?: [];
+$keys = ['name', 'version', 'require', 'require-dev', 'conflict', 'replace', 'provide', 'minimum-stability', 'prefer-stable', 'repositories', 'extra'];
+$r = array_intersect_key($c, array_flip($keys));
+if (isset($c['config']['platform'])) { $r['config']['platform'] = $c['config']['platform']; }
+ksort($r);
+echo md5(json_encode($r));`;async function jr(e,t){let[r,n]=JSON.parse(await Fr(e,'<?php echo json_encode([PHP_VERSION, array_map("strtolower", get_loaded_extensions())]);')),s={phpVersion:r,extensions:new Set(n)};return t.platformKnown?.(s),s}async function Ls(e,t,r){let n=await jr(e,r),s=t.workingDir?ce(r.cwd,t.workingDir):r.cwd;return Ar(t,{files:Is(e.module.FS),source:Nr({...r.composer,fetch:r.fetch}),platform:n,projectDir:s,contentHash:i=>Fr(e,Ns(i)),out:i=>r.io.stdout(i),err:i=>r.io.stderr(i)})}async function Wr(e,t,r){let{php:n,module:s}=e;if(t.kind==="composer")return{kind:"exited",code:await Ls(e,t,r)};if(t.kind==="serve"){await n.setSapiName("cli-server");let o=(await jr(e,r)).phpVersion,l=t.server.docroot?ce(r.cwd,t.server.docroot):r.cwd;if(!Re(s.FS,l))return r.io.stderr(`Directory ${t.server.docroot} does not exist.
+`),{kind:"exited",code:1};let a=t.server.routerIfPresent?ce(r.cwd,t.server.routerIfPresent):void 0,u=t.server.router?ce(r.cwd,t.server.router):a&&_e(s.FS,a)?a:void 0;if(u&&!_e(s.FS,u))return r.io.stderr(`Could not open input file: ${t.server.router}
+`),{kind:"exited",code:1};let f=await Ur(t.server,{php:n,files:{isFile:c=>_e(s.FS,c),isDir:c=>Re(s.FS,c),read:c=>s.FS.readFile(c),write:(c,d)=>s.FS.writeFile(c,d),mkdirTree:c=>s.FS.mkdirTree(c)},docroot:l,router:u,env:{...r.env},log:c=>r.io.stderr(c),phpVersion:o});return{kind:"serving",server:{port:f.spec.port,handle:f.handle,close:async()=>{}},banner:`[${new Date().toUTCString()}] PHP ${o} Development Server (http://${t.server.host}:${t.server.port}) started (request-driven)
+`}}let i=await n.cli(["php",...t.argv],{env:{...r.env}});return await Promise.all([Nt(i.stdout,o=>r.io.stdout(o)),Ve(i.stderr,o=>r.io.stderr(o))]),{kind:"exited",code:await i.exitCode}}var Gr=String.raw`<?php
+namespace Bfwc\Pgsql;
+
+/** What a rewritten 'new PDO(...)' calls: the runtime's PDO for pgsql: DSNs, the native one for the rest. */
+function pdo(string $dsn, ?string $username = null, #[\SensitiveParameter] ?string $password = null, ?array $options = null): \PDO
+{
+    $pgsql = PDO::pgsqlDsn($dsn);
+    return $pgsql !== null ? new PDO($pgsql, $username, $password, $options) : new \PDO($dsn, $username, $password, $options);
+}
+
+/** What a rewritten 'PDO::connect(...)' / 'Pdo\Pgsql::connect(...)' (PHP 8.4) calls. */
+function connect(string $dsn, ?string $username = null, #[\SensitiveParameter] ?string $password = null, ?array $options = null): \PDO
+{
+    $pgsql = PDO::pgsqlDsn($dsn);
+    if ($pgsql !== null) {
+        return PHP_VERSION_ID >= 80400 ? new \Pdo\Pgsql($pgsql, $username, $password, $options) : new PDO($pgsql, $username, $password, $options);
+    }
+    return method_exists(\PDO::class, 'connect') ? \PDO::connect($dsn, $username, $password, $options) : new \PDO($dsn, $username, $password, $options);
+}
+
+final class Includes
+{
+    private const FOR_INCLUDE = 128; // STREAM_OPEN_FOR_INCLUDE (not exposed to PHP code)
+    private const RUNTIME_ROOT = '/bfwc/';
+    private const CACHE = '/bfwc/cache';
+    private const UNCHANGED = '=';
+    private const REWRITTEN = '+';
+
+    /** @var resource|null */
+    public $context;
+    /** @var resource|null a native file or directory handle */
+    private $handle;
+    /** An included file's (rewritten) source, served from memory, and the file's stat. */
+    private ?string $source = null;
+    private int $position = 0;
+    private array $stat = [];
+    /** @var array<string, array{0: string, 1: array}> the CLI script's rewritten source and stat, by real path, until its include opens it */
+    private static array $handoff = [];
+
+    public static function register(): void
+    {
+        @stream_wrapper_unregister('file');
+        stream_wrapper_register('file', self::class);
+    }
+
+    /**
+     * Run $call on the native file wrapper (one restore and one re-register per
+     * operation) under a scoped error handler: errors are kept, not shown,
+     * and the app's error_get_last() is left as it was. When $call fails
+     * (false or null) and $report, the first E_WARNING (else the last error)
+     * is raised again.
+     */
+    private static function native(callable $call, bool $report = true): mixed
+    {
+        $error = null;
+        $warned = false;
+        set_error_handler(static function (int $level, string $message) use (&$error, &$warned): bool {
+            if (!$warned) {
+                $error = $message;
+                $warned = $level === E_WARNING;
+            }
+            return true;
+        });
+        stream_wrapper_restore('file');
+        try {
+            $result = $call();
+        } finally {
+            self::register();
+            restore_error_handler();
+        }
+        if ($report && $error !== null && ($result === false || $result === null)) {
+            trigger_error($error, E_USER_WARNING);
+        }
+        return $result;
+    }
+
+    /** The CLI script's real path once rewritesPrimary() said it needs the rewrite (the prepend requires it). */
+    public static ?string $primary = null;
+
+    /** Whether the CLI's script needs the rewrite; if so it is handed over for the prepend's require of {@see $primary}. */
+    public static function rewritesPrimary(): bool
+    {
+        $script = $_SERVER['SCRIPT_FILENAME'] ?? '';
+        // Under php -S the primary script is the runtime's front script, which requires the target itself.
+        if (PHP_SAPI === 'cli-server' || $script === '' || str_starts_with($script, self::RUNTIME_ROOT) || str_starts_with($script, '/internal/')) {
+            return false;
+        }
+        self::$primary = self::native(static function () use ($script): ?string {
+            $path = realpath($script);
+            $loaded = $path === false ? null : self::load($path);
+            if ($loaded === null || $loaded[2] === false) {
+                return null;
+            }
+            // The CLI skips a leading #! line; required, it would print. It becomes the open tag's line, so the line numbers hold.
+            self::$handoff[$path] = [preg_replace(['/\A#![^\n]*\n<\?php(?=\s)/', '/\A#![^\n]*/'], ["<?php\n", ''], $loaded[0], 1), $loaded[1]];
+            return $path;
+        }, false);
+        return self::$primary !== null;
+    }
+
+    /**
+     * $path's source, rewritten where needed, its stat, and whether it changed;
+     * null when it is not a regular file or cannot be read. Native wrapper only.
+     * @return array{0: string, 1: array, 2: bool}|null
+     */
+    private static function load(string $path): ?array
+    {
+        if (!is_file($path)) {
+            return null;
+        }
+        $source = file_get_contents($path);
+        if ($source === false) {
+            return null;
+        }
+        $stat = stat($path) ?: [];
+        if (str_starts_with($path, self::RUNTIME_ROOT) || !Rewriter::isCandidate($source)) {
+            return [$source, $stat, false];
+        }
+        $hash = md5($source);
+        $slot = self::CACHE . '/' . md5($path);
+        $cached = is_file($slot) ? file_get_contents($slot) : false;
+        if ($cached !== false && str_starts_with($cached, $hash)) {
+            $changed = $cached[32] === self::REWRITTEN;
+            return [$changed ? substr($cached, 33) : $source, $stat, $changed];
+        }
+        $rewritten = Rewriter::rewriteCandidate($source);
+        $changed = $rewritten !== $source;
+        if (is_dir(self::CACHE) || mkdir(self::CACHE, 0777, true)) {
+            file_put_contents($slot, $hash . ($changed ? self::REWRITTEN . $rewritten : self::UNCHANGED));
+        }
+        return [$rewritten, $stat, $changed];
+    }
+
+    public function stream_open(string $path, string $mode, int $options, ?string &$openedPath): bool
+    {
+        if ($options & self::FOR_INCLUDE) {
+            if (isset(self::$handoff[$path])) {
+                [$this->source, $this->stat] = self::$handoff[$path];
+                unset(self::$handoff[$path]);
+            } else {
+                // A missing include gets PHP's own two warnings ("call failed", "Failed opening … for inclusion"), not a third.
+                $loaded = self::native(static fn () => self::load($path), false);
+                if ($loaded === null) {
+                    return false;
+                }
+                [$this->source, $this->stat] = $loaded;
+            }
+            $this->stat[7] = $this->stat['size'] = strlen($this->source);
+        } else {
+            $usePath = (bool) ($options & STREAM_USE_PATH);
+            $this->handle = self::native(fn () => fopen($path, $mode, $usePath, $this->context));
+            if (!$this->handle) {
+                return false;
+            }
+        }
+        $openedPath = $path;
+        return true;
+    }
+
+    public function stream_read(int $count): string|false
+    {
+        if ($this->source === null) {
+            return fread($this->handle, $count);
+        }
+        $chunk = substr($this->source, $this->position, $count);
+        $this->position += strlen($chunk);
+        return $chunk;
+    }
+
+    public function stream_write(string $data): int|false
+    {
+        return $this->source === null ? fwrite($this->handle, $data) : false;
+    }
+
+    public function stream_eof(): bool
+    {
+        return $this->source === null ? feof($this->handle) : $this->position >= strlen($this->source);
+    }
+
+    public function stream_tell(): int|false
+    {
+        return $this->source === null ? ftell($this->handle) : $this->position;
+    }
+
+    public function stream_seek(int $offset, int $whence = SEEK_SET): bool
+    {
+        if ($this->source === null) {
+            return fseek($this->handle, $offset, $whence) === 0;
+        }
+        $target = match ($whence) { SEEK_CUR => $this->position + $offset, SEEK_END => strlen($this->source) + $offset, default => $offset };
+        if ($target < 0) {
+            return false;
+        }
+        $this->position = $target;
+        return true;
+    }
+
+    public function stream_flush(): bool
+    {
+        return $this->source === null ? fflush($this->handle) : true;
+    }
+
+    public function stream_close(): void
+    {
+        if (is_resource($this->handle)) {
+            fclose($this->handle);
+        }
+    }
+
+    public function stream_stat(): array|false
+    {
+        return $this->source === null ? fstat($this->handle) : $this->stat;
+    }
+
+    public function stream_lock(int $operation): bool
+    {
+        return $this->source !== null || $operation === 0 ? true : flock($this->handle, $operation);
+    }
+
+    public function stream_truncate(int $size): bool
+    {
+        return $this->source === null && ftruncate($this->handle, $size);
+    }
+
+    public function stream_set_option(int $option, int $arg1, ?int $arg2): bool
+    {
+        if ($this->source !== null) {
+            return false;
+        }
+        return match ($option) {
+            STREAM_OPTION_BLOCKING => stream_set_blocking($this->handle, (bool) $arg1),
+            STREAM_OPTION_READ_TIMEOUT => stream_set_timeout($this->handle, $arg1, (int) $arg2),
+            STREAM_OPTION_WRITE_BUFFER => stream_set_write_buffer($this->handle, (int) $arg2) === 0,
+            default => false,
+        };
+    }
+
+    /** @return resource|false */
+    public function stream_cast(int $castAs)
+    {
+        return $this->handle ?? false;
+    }
+
+    public function stream_metadata(string $path, int $option, mixed $value): bool
+    {
+        return self::native(static fn () => match ($option) {
+            STREAM_META_TOUCH => touch($path, ...array_values((array) $value)),
+            STREAM_META_OWNER_NAME, STREAM_META_OWNER => chown($path, $value),
+            STREAM_META_GROUP_NAME, STREAM_META_GROUP => chgrp($path, $value),
+            STREAM_META_ACCESS => chmod($path, $value),
+            default => false,
+        });
+    }
+
+    public function url_stat(string $path, int $flags): array|false
+    {
+        $stat = $flags & STREAM_URL_STAT_LINK ? 'lstat' : 'stat';
+        return self::native(static fn () => $stat($path), false); // PHP reports a failed stat itself where it should
+    }
+
+    public function unlink(string $path): bool
+    {
+        return self::native(fn () => unlink($path, $this->context));
+    }
+
+    public function rename(string $from, string $to): bool
+    {
+        return self::native(fn () => rename($from, $to, $this->context));
+    }
+
+    public function mkdir(string $path, int $mode, int $options): bool
+    {
+        return self::native(fn () => mkdir($path, $mode, (bool) ($options & STREAM_MKDIR_RECURSIVE), $this->context));
+    }
+
+    public function rmdir(string $path, int $options): bool
+    {
+        return self::native(fn () => rmdir($path, $this->context));
+    }
+
+    public function dir_opendir(string $path, int $options): bool
+    {
+        $this->handle = self::native(fn () => opendir($path, $this->context));
+        return (bool) $this->handle;
+    }
+
+    public function dir_readdir(): string|false
+    {
+        return readdir($this->handle);
+    }
+
+    public function dir_rewinddir(): bool
+    {
+        rewinddir($this->handle);
+        return true;
+    }
+
+    public function dir_closedir(): bool
+    {
+        closedir($this->handle);
+        return true;
+    }
+}
+`;var Hr=String.raw`<?php
+namespace Pdo;
+
+if (PHP_VERSION_ID >= 80400 && !class_exists(Pgsql::class, false)) {
+    class Pgsql extends \Bfwc\Pgsql\PDO
+    {
+        public function escapeIdentifier(string $input): string
+        {
+            return '"' . str_replace('"', '""', $input) . '"';
+        }
+
+        public function getPid(): int
+        {
+            return $this->bfwcWire()->pid;
+        }
+    }
+}
+`;var Vr=String.raw`<?php
+namespace Bfwc\Pgsql;
+
+class PDO extends \PDO
+{
+    private Wire $wire;
+    private array $attributes = [
+        \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+        \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_BOTH,
+        \PDO::ATTR_STRINGIFY_FETCHES => false,
+        \PDO::ATTR_EMULATE_PREPARES => false,
+        \PDO::ATTR_CASE => \PDO::CASE_NATURAL,
+    ];
+    private array $error = ['00000', null, null];
+
+    /**
+     * $dsn as the pgsql: DSN it names, or null for another driver. Resolved as
+     * PDO resolves it (no trimming): an alias (no colon) through the
+     * pdo.dsn.<name> ini setting, and 'uri:<url>' through the first line read
+     * from that URL.
+     */
+    public static function pgsqlDsn(string $dsn): ?string
+    {
+        if (!str_contains($dsn, ':')) {
+            $dsn = (string) ini_get('pdo.dsn.' . $dsn); // an alias may itself be a uri:
+        }
+        if (str_starts_with($dsn, 'uri:')) {
+            $handle = @fopen(substr($dsn, 4), 'rb');
+            $dsn = $handle ? rtrim((string) fgets($handle), "\r\n") : '';
+            $handle && fclose($handle);
+        }
+        return str_starts_with($dsn, 'pgsql:') ? $dsn : null;
+    }
+
+    public function __construct(string $dsn, ?string $username = null, #[\SensitiveParameter] ?string $password = null, ?array $options = null)
+    {
+        $resolved = self::pgsqlDsn($dsn);
+        if ($resolved === null) {
+            throw new \PDOException('Bfwc\Pgsql\PDO connects to pgsql: DSNs only; use \PDO for "' . strtok($dsn, ':') . '"');
+        }
+        $config = [];
+        foreach (preg_split('/[;\s]+/', substr($resolved, 6), -1, PREG_SPLIT_NO_EMPTY) as $pair) {
+            [$key, $value] = array_pad(explode('=', $pair, 2), 2, '');
+            $config[strtolower(trim($key))] = trim($value, " '\"");
+        }
+        foreach ($options ?? [] as $attribute => $value) {
+            $this->attributes[$attribute] = $value;
+        }
+        $this->wire = Wire::fromConfig($config, $username, $password);
+    }
+
+    /** @internal The wire client (Pdo\Pgsql::getPid). */
+    protected function bfwcWire(): Wire
+    {
+        return $this->wire;
+    }
+
+    /** @internal Run one statement; failures follow the error mode (null when not thrown). */
+    public function bfwcRun(string $sql, array $params, ?object $reporter = null): ?array
+    {
+        try {
+            $result = $params === [] && $reporter === null ? $this->wire->simple($sql) : $this->wire->execute($sql, $params);
+            $this->error = ['00000', null, null];
+            return $result;
+        } catch (Exception $exception) {
+            $this->error = $exception->errorInfo;
+            if ($reporter && method_exists($reporter, 'bfwcFailed')) {
+                $reporter->bfwcFailed($exception->errorInfo);
+            }
+            $mode = $this->attributes[\PDO::ATTR_ERRMODE];
+            if ($mode === \PDO::ERRMODE_EXCEPTION) {
+                throw $exception;
+            }
+            if ($mode === \PDO::ERRMODE_WARNING) {
+                trigger_error($exception->getMessage(), E_USER_WARNING);
+            }
+            return null;
+        }
+    }
+
+    public function prepare(string $query, array $options = []): Statement|false
+    {
+        return new Statement($this, $query, $this->attributes[\PDO::ATTR_DEFAULT_FETCH_MODE], (bool) $this->attributes[\PDO::ATTR_STRINGIFY_FETCHES]);
+    }
+
+    public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): Statement|false
+    {
+        $statement = $this->prepare($query);
+        if ($fetchMode !== null) {
+            $statement->setFetchMode($fetchMode, ...$fetchModeArgs);
+        }
+        return $statement->execute() ? $statement : false;
+    }
+
+    public function exec(string $statement): int|false
+    {
+        $result = $this->bfwcRun($statement, []);
+        return $result === null ? false : $result['affected'];
+    }
+
+    public function beginTransaction(): bool
+    {
+        if ($this->inTransaction()) {
+            throw new \PDOException('There is already an active transaction');
+        }
+        return $this->bfwcRun('BEGIN', []) !== null;
+    }
+
+    public function commit(): bool
+    {
+        if (!$this->inTransaction()) {
+            throw new \PDOException('There is no active transaction');
+        }
+        return $this->bfwcRun('COMMIT', []) !== null;
+    }
+
+    public function rollBack(): bool
+    {
+        if (!$this->inTransaction()) {
+            throw new \PDOException('There is no active transaction');
+        }
+        return $this->bfwcRun('ROLLBACK', []) !== null;
+    }
+
+    public function inTransaction(): bool
+    {
+        return $this->wire->status !== 'I';
+    }
+
+    public function lastInsertId(?string $name = null): string|false
+    {
+        $result = $name === null ? $this->bfwcRun('SELECT lastval()', [], $this) : $this->bfwcRun('SELECT currval($1)', [$name], $this);
+        return $result === null ? false : (string) $result['rows'][0][0];
+    }
+
+    public function quote(string $string, int $type = \PDO::PARAM_STR): string|false
+    {
+        return "'" . str_replace("'", "''", $string) . "'";
+    }
+
+    public function setAttribute(int $attribute, mixed $value): bool
+    {
+        $this->attributes[$attribute] = $value;
+        return true;
+    }
+
+    public function getAttribute(int $attribute): mixed
+    {
+        return match ($attribute) {
+            \PDO::ATTR_DRIVER_NAME => 'pgsql',
+            \PDO::ATTR_SERVER_VERSION => $this->wire->parameters['server_version'] ?? '',
+            \PDO::ATTR_CLIENT_VERSION => 'bfwc-pgsql',
+            \PDO::ATTR_CONNECTION_STATUS => 'Connection OK; waiting to send.',
+            default => $this->attributes[$attribute] ?? null,
+        };
+    }
+
+    public function errorCode(): ?string
+    {
+        return $this->error[0];
+    }
+
+    public function errorInfo(): array
+    {
+        return $this->error;
+    }
+
+    public static function getAvailableDrivers(): array
+    {
+        return ['pgsql'];
+    }
+}
+`;var Br=String.raw`<?php
+namespace {
+    use Bfwc\Pgsql\Pg;
+
+    const PGSQL_ASSOC = 1;
+    const PGSQL_NUM = 2;
+    const PGSQL_BOTH = 3;
+    const PGSQL_CONNECT_FORCE_NEW = 2;
+    const PGSQL_CONNECT_ASYNC = 4;
+    const PGSQL_CONNECTION_OK = 0;
+    const PGSQL_CONNECTION_BAD = 1;
+    const PGSQL_CONNECTION_STARTED = 2;
+    const PGSQL_CONNECTION_MADE = 3;
+    const PGSQL_CONNECTION_AWAITING_RESPONSE = 4;
+    const PGSQL_CONNECTION_AUTH_OK = 5;
+    const PGSQL_CONNECTION_SETENV = 6;
+    const PGSQL_TRANSACTION_IDLE = 0;
+    const PGSQL_TRANSACTION_ACTIVE = 1;
+    const PGSQL_TRANSACTION_INTRANS = 2;
+    const PGSQL_TRANSACTION_INERROR = 3;
+    const PGSQL_TRANSACTION_UNKNOWN = 4;
+    const PGSQL_EMPTY_QUERY = 0;
+    const PGSQL_COMMAND_OK = 1;
+    const PGSQL_TUPLES_OK = 2;
+    const PGSQL_COPY_OUT = 3;
+    const PGSQL_COPY_IN = 4;
+    const PGSQL_BAD_RESPONSE = 5;
+    const PGSQL_NONFATAL_ERROR = 6;
+    const PGSQL_FATAL_ERROR = 7;
+    const PGSQL_STATUS_LONG = 1;
+    const PGSQL_STATUS_STRING = 2;
+    const PGSQL_SEEK_SET = 0;
+    const PGSQL_SEEK_CUR = 1;
+    const PGSQL_SEEK_END = 2;
+    const PGSQL_ERRORS_TERSE = 0;
+    const PGSQL_ERRORS_DEFAULT = 1;
+    const PGSQL_ERRORS_VERBOSE = 2;
+    const PGSQL_DIAG_SEVERITY = 83;
+    const PGSQL_DIAG_SQLSTATE = 67;
+    const PGSQL_DIAG_MESSAGE_PRIMARY = 77;
+    const PGSQL_DIAG_MESSAGE_DETAIL = 68;
+    const PGSQL_DIAG_MESSAGE_HINT = 72;
+    const PGSQL_CONV_IGNORE_DEFAULT = 2;
+    const PGSQL_CONV_FORCE_NULL = 4;
+    const PGSQL_CONV_IGNORE_NOT_NULL = 8;
+    const PGSQL_DML_NO_CONV = 256;
+    const PGSQL_DML_EXEC = 512;
+    const PGSQL_DML_ASYNC = 1024;
+    const PGSQL_DML_STRING = 2048;
+    const PGSQL_DML_ESCAPE = 4096;
+
+    function pg_connect(#[\SensitiveParameter] string $connection_string, int $flags = 0): PgSql\Connection|false { return Pg::connect($connection_string, $flags); }
+    function pg_pconnect(#[\SensitiveParameter] string $connection_string, int $flags = 0): PgSql\Connection|false { return Pg::connect($connection_string, $flags); }
+    function pg_close(?PgSql\Connection $connection = null): bool { Pg::close($connection); return true; }
+    function pg_connection_reset(PgSql\Connection $connection): bool { return Pg::reset($connection); }
+    function pg_ping(?PgSql\Connection $connection = null): bool { return Pg::ping($connection); }
+    function pg_query($connection, ?string $query = null): PgSql\Result|false { [$connection, $query] = Pg::split($connection, $query); return Pg::run($connection, 'pg_query', $query, null); }
+    function pg_query_params($connection, $query, ?array $params = null): PgSql\Result|false
+    {
+        [$connection, $query, $params] = Pg::split3($connection, $query, $params);
+        return Pg::run($connection, 'pg_query_params', $query, $params);
+    }
+    function pg_prepare($connection, string $name, ?string $query = null): PgSql\Result|false
+    {
+        [$connection, $name, $query] = Pg::split3($connection, $name, $query);
+        return Pg::prepare($connection, $name, $query);
+    }
+    function pg_execute($connection, $name, ?array $params = null): PgSql\Result|false
+    {
+        [$connection, $name, $params] = Pg::split3($connection, $name, $params);
+        return Pg::run($connection, 'pg_execute', $name, $params, true);
+    }
+    function pg_fetch_assoc(PgSql\Result $result, ?int $row = null): array|false { return Pg::row($result, $row, PGSQL_ASSOC); }
+    function pg_fetch_row(PgSql\Result $result, ?int $row = null, int $mode = PGSQL_NUM): array|false { return Pg::row($result, $row, $mode); }
+    function pg_fetch_array(PgSql\Result $result, ?int $row = null, int $mode = PGSQL_BOTH): array|false { return Pg::row($result, $row, $mode); }
+    function pg_fetch_object(PgSql\Result $result, ?int $row = null, string $class = 'stdClass', array $constructor_args = []): object|false
+    {
+        $values = Pg::row($result, $row, PGSQL_ASSOC);
+        if ($values === false || $class === 'stdClass') {
+            return $values === false ? false : (object) $values;
+        }
+        return Bfwc\Pgsql\Statement::instance($class, $constructor_args, $values, false);
+    }
+    function pg_fetch_all(PgSql\Result $result, int $mode = PGSQL_ASSOC): array { return array_map(static fn (int $index) => Pg::row($result, $index, $mode, false), array_keys($result->rows)); }
+    function pg_fetch_all_columns(PgSql\Result $result, int $field = 0): array { return array_column($result->rows, Pg::field($result, $field, 'pg_fetch_all_columns', 2)); }
+    function pg_fetch_result(PgSql\Result $result, $row, $field = null): string|false|null { return Pg::cell($result, $row, $field, 'pg_fetch_result'); }
+    function pg_field_is_null(PgSql\Result $result, $row, $field = null): int|false
+    {
+        $value = Pg::cell($result, $row, $field, 'pg_field_is_null');
+        return $value === false ? false : (int) ($value === null);
+    }
+    function pg_field_prtlen(PgSql\Result $result, $row, $field = null): int|false
+    {
+        $value = Pg::cell($result, $row, $field, 'pg_field_prtlen');
+        return $value === false ? false : strlen((string) $value);
+    }
+    function pg_num_rows(PgSql\Result $result): int { return count($result->rows); }
+    function pg_num_fields(PgSql\Result $result): int { return count($result->fields); }
+    function pg_field_name(PgSql\Result $result, int $field): string { return $result->fields[Pg::field($result, $field, 'pg_field_name', 2)]['name']; }
+    function pg_field_num(PgSql\Result $result, string $field): int
+    {
+        try {
+            return Pg::field($result, $field, 'pg_field_num', 2);
+        } catch (ValueError) {
+            return -1;
+        }
+    }
+    function pg_field_type(PgSql\Result $result, int $field): string { return Pg::typeName($result->fields[Pg::field($result, $field, 'pg_field_type', 2)]['type']); }
+    function pg_field_type_oid(PgSql\Result $result, int $field): string|int { return $result->fields[Pg::field($result, $field, 'pg_field_type_oid', 2)]['type']; }
+    function pg_field_size(PgSql\Result $result, int $field): int { return $result->fields[Pg::field($result, $field, 'pg_field_size', 2)]['size']; }
+    function pg_field_table(PgSql\Result $result, int $field, bool $oid_only = false): string|int|false
+    {
+        $oid = $result->fields[Pg::field($result, $field, 'pg_field_table', 2)]['table'];
+        if ($oid === 0 || $oid_only) {
+            return $oid === 0 ? false : $oid;
+        }
+        $name = Pg::run(Pg::of($result->connection), 'pg_field_table', 'SELECT relname FROM pg_class WHERE oid = $1', [$oid]);
+        return $name && $name->rows ? $name->rows[0][0] : false;
+    }
+    function pg_affected_rows(PgSql\Result $result): int { return $result->affected; }
+    function pg_free_result(PgSql\Result $result): bool { $result->rows = []; return true; }
+    function pg_result_seek(PgSql\Result $result, int $row): bool { if (!isset($result->rows[$row])) return false; $result->cursor = $row; return true; }
+    function pg_result_error(PgSql\Result $result): string|false { return ''; }
+    function pg_result_error_field(PgSql\Result $result, int $field_code): string|false|null { return null; }
+    function pg_result_status(PgSql\Result $result, int $mode = PGSQL_STATUS_LONG): string|int
+    {
+        return $mode === PGSQL_STATUS_STRING ? $result->command : ($result->fields !== [] ? PGSQL_TUPLES_OK : PGSQL_COMMAND_OK);
+    }
+    function pg_last_oid(PgSql\Result $result): string|int|false
+    {
+        $tag = explode(' ', $result->command);
+        return $tag[0] === 'INSERT' && (int) ($tag[1] ?? 0) !== 0 ? (int) $tag[1] : false; // InvalidOid: false, as the extension returns
+    }
+    function pg_last_error(?PgSql\Connection $connection = null): string { return Pg::live($connection)->lastError; }
+    function pg_dbname(?PgSql\Connection $connection = null): string { return Pg::live($connection)->dbname; }
+    function pg_host(?PgSql\Connection $connection = null): string { return (string) (Pg::live($connection)->config['host'] ?? 'localhost'); }
+    function pg_port(?PgSql\Connection $connection = null): string { return (string) (Pg::live($connection)->config['port'] ?? '5432'); }
+    function pg_options(?PgSql\Connection $connection = null): string { return (string) (Pg::live($connection)->config['options'] ?? ''); }
+    function pg_get_pid(PgSql\Connection $connection): int { return Pg::live($connection)->wire?->pid ?? 0; }
+    function pg_set_error_verbosity($connection, ?int $verbosity = null): int
+    {
+        [$connection, $verbosity] = Pg::split($connection, $verbosity);
+        $state = Pg::state($connection);
+        [$previous, $state->verbosity] = [$state->verbosity, $verbosity];
+        return $previous;
+    }
+    function pg_escape_string($connection, ?string $string = null): string { return str_replace("'", "''", $string ?? $connection); }
+    function pg_escape_literal($connection, ?string $string = null): string|false { return Pg::quote(Pg::split($connection, $string)[1], "'"); }
+    function pg_escape_identifier($connection, ?string $string = null): string|false { return Pg::quote(Pg::split($connection, $string)[1], '"'); }
+    function pg_escape_bytea($connection, ?string $string = null): string { return '\\x' . bin2hex($string ?? $connection); }
+    function pg_unescape_bytea(string $string): string
+    {
+        if (str_starts_with($string, '\\x')) {
+            return (string) hex2bin(substr($string, 2));
+        }
+        return preg_replace_callback('/\\\\([0-7]{3}|\\\\)/', static fn (array $m) => $m[1] === '\\' ? '\\' : chr(octdec($m[1])), $string); // the escape format
+    }
+    function pg_set_client_encoding($connection, ?string $encoding = null): int
+    {
+        [$connection, $encoding] = Pg::split($connection, $encoding);
+        return @Pg::run($connection, 'pg_set_client_encoding', 'SET client_encoding TO ' . Pg::quote($encoding, "'"), null) === false ? -1 : 0;
+    }
+    function pg_client_encoding(?PgSql\Connection $connection = null): string { return Pg::live($connection)->wire?->parameters['client_encoding'] ?? 'UTF8'; }
+    function pg_connection_status(PgSql\Connection $connection): int { return Pg::live($connection)->wire ? PGSQL_CONNECTION_OK : PGSQL_CONNECTION_BAD; }
+    function pg_connection_busy(PgSql\Connection $connection): bool { return false; }
+    function pg_transaction_status(PgSql\Connection $connection): int
+    {
+        return match (Pg::state($connection)->wire?->status) { 'I' => PGSQL_TRANSACTION_IDLE, 'T' => PGSQL_TRANSACTION_INTRANS, 'E' => PGSQL_TRANSACTION_INERROR, default => PGSQL_TRANSACTION_UNKNOWN };
+    }
+    function pg_parameter_status($connection, ?string $name = null): string|false
+    {
+        [$connection, $name] = Pg::split($connection, $name);
+        return Pg::state($connection)->wire?->parameters[$name] ?? false;
+    }
+    function pg_version(?PgSql\Connection $connection = null): array
+    {
+        return ['client' => 'bfwc-pgsql', 'protocol' => 3, 'server' => Pg::live($connection)->wire?->parameters['server_version'] ?? ''];
+    }
+}
+`;var zr=String.raw`<?php
+namespace PgSql {
+    final class Connection
+    {
+        public function __construct()
+        {
+            throw new \Error('Cannot directly construct PgSql\Connection, use pg_connect() instead');
+        }
+
+        public function __clone(): void
+        {
+            throw new \Error('Trying to clone an uncloneable object of class PgSql\Connection');
+        }
+
+        public function __serialize(): array
+        {
+            throw new \Exception("Serialization of 'PgSql\Connection' is not allowed");
+        }
+
+        public function __unserialize(array $data): void
+        {
+            throw new \Exception("Unserialization of 'PgSql\Connection' is not allowed");
+        }
+    }
+
+    final class Result
+    {
+        /** @internal */
+        public int $cursor = 0;
+
+        /** @internal */
+        public function __construct(public array $fields, public array $rows, public int $affected, public string $command, public ?Connection $connection = null)
+        {
+        }
+    }
+}
+
+namespace Bfwc\Pgsql {
+    use PgSql;
+
+    /** @internal The pg_* functions' shared work. */
+    final class Pg
+    {
+        public static ?PgSql\Connection $last = null;
+        /** @var array<string, PgSql\Connection> open connections by a hash of their connection string (reused, as the extension does) */
+        private static array $open = [];
+        private static ?\WeakMap $state = null;
+        private const NO_SERVER = 'no connection to the server';
+        private const TYPES = [16 => 'bool', 17 => 'bytea', 18 => 'char', 19 => 'name', 20 => 'int8', 21 => 'int2', 23 => 'int4', 25 => 'text', 26 => 'oid', 114 => 'json', 700 => 'float4', 701 => 'float8', 1042 => 'bpchar', 1043 => 'varchar', 1082 => 'date', 1083 => 'time', 1114 => 'timestamp', 1184 => 'timestamptz', 1186 => 'interval', 1700 => 'numeric', 2950 => 'uuid', 3802 => 'jsonb'];
+
+        /** A connection's state: wire (null when BAD or closed), closed, config, key, dbname, lastError, verbosity. */
+        public static function state(PgSql\Connection $connection): object
+        {
+            if (!isset(self::$state[$connection])) {
+                throw new \Error('This PgSql\Connection was not opened by pg_connect()');
+            }
+            return self::$state[$connection];
+        }
+
+        /** The state of the connection to use ($connection, else the last opened), which must not be closed. */
+        public static function live(?PgSql\Connection $connection): object
+        {
+            return self::state(self::of($connection));
+        }
+
+        /** pg_connect's conninfo ('host=… dbname=…', values optionally quoted with \' and \\ escapes) or URI ('postgresql://user:pass@host:port/db'). */
+        public static function connect(#[\SensitiveParameter] string $conninfo, int $flags): PgSql\Connection|false
+        {
+            $key = hash('sha256', $conninfo);
+            $reuse = self::$open[$key] ?? null;
+            if ($reuse && self::state($reuse)->wire && !($flags & PGSQL_CONNECT_FORCE_NEW)) {
+                return self::$last = $reuse;
+            }
+            $config = [];
+            if (preg_match('#^postgres(?:ql)?://#', $conninfo)) {
+                $url = parse_url($conninfo);
+                $config = array_filter(['host' => $url['host'] ?? null, 'port' => $url['port'] ?? null, 'user' => isset($url['user']) ? urldecode($url['user']) : null, 'password' => isset($url['pass']) ? urldecode($url['pass']) : null, 'dbname' => ltrim($url['path'] ?? '', '/') ?: null], static fn ($value) => $value !== null);
+            } else {
+                preg_match_all("/(\\w+)\\s*=\\s*('(?:[^'\\\\]|\\\\.)*'|\\S+)/", $conninfo, $pairs, PREG_SET_ORDER);
+                foreach ($pairs as [, $name, $value]) {
+                    $config[strtolower($name)] = str_starts_with($value, "'") ? preg_replace("/\\\\(['\\\\])/", '$1', substr($value, 1, -1)) : $value;
+                }
+            }
+            try {
+                $wire = Wire::fromConfig($config);
+            } catch (Exception $exception) {
+                trigger_error('pg_connect(): Unable to connect to PostgreSQL server: ' . $exception->errorInfo[2], E_USER_WARNING);
+                return false;
+            }
+            $connection = (new \ReflectionClass(PgSql\Connection::class))->newInstanceWithoutConstructor();
+            self::$state ??= new \WeakMap();
+            self::$state[$connection] = (object) ['wire' => $wire, 'closed' => false, 'config' => $config, 'key' => $key, 'dbname' => $wire->database, 'lastError' => '', 'verbosity' => PGSQL_ERRORS_DEFAULT];
+            return self::$last = self::$open[$key] = $connection;
+        }
+
+        /** The connection to use ($connection, else the last opened); throws, as the extension does, when there is none or it was closed. */
+        public static function of(?PgSql\Connection $connection): PgSql\Connection
+        {
+            $connection ??= self::$last;
+            if (!$connection) {
+                throw new \Error('No PostgreSQL connection opened yet');
+            }
+            if (self::state($connection)->closed) {
+                throw new \Error('PostgreSQL connection has already been closed');
+            }
+            return $connection;
+        }
+
+        public static function close(?PgSql\Connection $connection): void
+        {
+            $connection = self::of($connection);
+            $state = self::state($connection);
+            $state->wire?->close();
+            $state->wire = null;
+            $state->closed = true;
+            if ((self::$open[$state->key] ?? null) === $connection) {
+                unset(self::$open[$state->key]);
+            }
+            if (self::$last === $connection) {
+                self::$last = null;
+            }
+        }
+
+        /** Reconnect with the same settings (a closed connection throws). */
+        public static function reset(PgSql\Connection $connection): bool
+        {
+            $state = self::live($connection);
+            $state->wire?->close();
+            try {
+                $state->wire = Wire::fromConfig($state->config);
+                return true;
+            } catch (Exception) {
+                $state->wire = null;
+                return false;
+            }
+        }
+
+        /** Whether the server answers; a BAD connection is reset first, as libpq's PQping-and-reset does. */
+        public static function ping(?PgSql\Connection $connection): bool
+        {
+            $connection = self::of($connection);
+            $state = self::state($connection);
+            if ($state->wire) {
+                try {
+                    $state->wire->simple('SELECT 1');
+                    return true;
+                } catch (Exception) {
+                    // fall through to a reset
+                }
+            }
+            return self::reset($connection);
+        }
+
+        /** Run $sql: a simple query when $params is null, a named prepared statement when $prepared; failures warn and return false. */
+        public static function run(PgSql\Connection $connection, string $function, string $sql, ?array $params, bool $prepared = false): PgSql\Result|false
+        {
+            return self::attempt($connection, $function, static function (Wire $wire) use ($connection, $sql, $params, $prepared): PgSql\Result {
+                $values = $params === null ? null : array_map(static fn ($value) => Wire::text($value, '1', ''), array_values($params));
+                $result = match (true) {
+                    $prepared => $wire->executePrepared($sql, $values ?? []),
+                    $values === null => $wire->simple($sql),
+                    default => $wire->execute($sql, $values),
+                };
+                return new PgSql\Result($result['fields'], $result['rows'], $result['affected'], $result['command'], $connection);
+            });
+        }
+
+        public static function prepare(PgSql\Connection $connection, string $name, string $sql): PgSql\Result|false
+        {
+            return self::attempt($connection, 'pg_prepare', static fn (Wire $wire) => new PgSql\Result([], [], 0, $wire->prepare($name, $sql)['command'], $connection));
+        }
+
+        /** $work on the connection's wire; a failure (or a BAD connection) sets the last error, warns "Query failed" and returns false. */
+        private static function attempt(PgSql\Connection $connection, string $function, callable $work): PgSql\Result|false
+        {
+            $state = self::state($connection);
+            $message = self::NO_SERVER;
+            if ($state->wire) {
+                try {
+                    $result = $work($state->wire);
+                    $state->lastError = '';
+                    return $result;
+                } catch (Exception $exception) {
+                    $message = $exception->errorInfo[2];
+                    $code = (string) $exception->errorInfo[0];
+                    if (str_starts_with($code, '08') || str_starts_with($code, '57P')) {
+                        // A broken connection (or a terminated backend) is BAD from now on, as libpq's is.
+                        $state->wire->close();
+                        $state->wire = null;
+                    }
+                }
+            }
+            $state->lastError = $message;
+            trigger_error($function . '(): Query failed: ' . $message, E_USER_WARNING);
+            return false;
+        }
+
+        /** Row $row (the cursor's when null, which then advances) shaped by $mode; false past the end. */
+        public static function row(PgSql\Result $result, ?int $row, int $mode, bool $advance = true): array|false
+        {
+            $index = $row ?? $result->cursor;
+            if (!isset($result->rows[$index])) {
+                return false;
+            }
+            if ($advance) {
+                $result->cursor = $index + 1;
+            }
+            $values = $result->rows[$index];
+            if ($mode === PGSQL_NUM) {
+                return $values;
+            }
+            $out = [];
+            foreach ($result->fields as $i => $field) {
+                if ($mode !== PGSQL_ASSOC) {
+                    $out[$i] = $values[$i];
+                }
+                $out[$field['name']] = $values[$i];
+            }
+            return $out;
+        }
+
+        /** Field $field (index or name) of $result, or a ValueError naming $function's argument $argument, as the extension throws. */
+        public static function field(PgSql\Result $result, int|string $field, string $function, int $argument): int
+        {
+            if (is_int($field)) {
+                if ($field < 0 || $field >= count($result->fields)) {
+                    throw new \ValueError($function . '(): Argument #' . $argument . ' ($field) must be less than the number of fields for this result set');
+                }
+                return $field;
+            }
+            $at = array_search($field, array_column($result->fields, 'name'), true);
+            if ($at === false) {
+                throw new \ValueError($function . '(): Argument #' . $argument . ' ($field) must be a field name from this result set');
+            }
+            return $at;
+        }
+
+        /**
+         * One cell, called as pg_fetch_result is: ($result, $field) reads the
+         * cursor's row and advances (false, silently, past the end); ($result,
+         * $row, $field) reads $row (false with the extension's warning past the end).
+         */
+        public static function cell(PgSql\Result $result, mixed $rowOrField, mixed $field, string $function): string|false|null
+        {
+            if ($field === null) {
+                $column = self::field($result, $rowOrField, $function, 2);
+                if (!isset($result->rows[$result->cursor])) {
+                    return false;
+                }
+                return $result->rows[$result->cursor++][$column];
+            }
+            $column = self::field($result, $field, $function, 3);
+            if (!isset($result->rows[$rowOrField])) {
+                trigger_error($function . '(): Unable to jump to row ' . $rowOrField . ' on PostgreSQL result index', E_USER_WARNING);
+                return false;
+            }
+            return $result->rows[$rowOrField][$column];
+        }
+
+        public static function typeName(int $oid): string
+        {
+            return self::TYPES[$oid] ?? 'unknown';
+        }
+
+        public static function quote(string $value, string $quote): string
+        {
+            return $quote . str_replace($quote, $quote . $quote, $value) . $quote;
+        }
+
+        /** The connection and the remaining argument of a function whose leading connection is optional. */
+        public static function split(mixed $first, mixed $second): array
+        {
+            return $second === null ? [self::of(null), $first] : [self::of($first), $second];
+        }
+
+        /** The same for a function with two further arguments. */
+        public static function split3(mixed $first, mixed $second, mixed $third): array
+        {
+            return $third === null ? [self::of(null), $first, $second] : [self::of($first), $second, $third];
+        }
+    }
+}
+`;var Qr=String.raw`<?php
+namespace Bfwc\Pgsql;
+
+final class Rewriter
+{
+    /** Cheap test for a file that might need the rewrite: a construction or connect naming PDO, or an import mentioning it. */
+    public const CANDIDATE = '/\bnew\b[^;(]*\bpdo\b|\b(?:pdo|pgsql)\s*::\s*connect\b|\buse\b[^;]*\bpdo\b/i';
+
+    private const SKIP = [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT];
+    private const TARGETS = ['pdo', 'pdo\\pgsql'];
+
+    public static function isCandidate(string $source): bool
+    {
+        return preg_match(self::CANDIDATE, $source) === 1 && stripos($source, '__halt_compiler') === false;
+    }
+
+    public static function rewrite(string $source): string
+    {
+        return self::isCandidate($source) ? self::rewriteCandidate($source) : $source;
+    }
+
+    /** The rewrite of a source {@see isCandidate()} accepted. */
+    public static function rewriteCandidate(string $source): string
+    {
+        try {
+            $tokens = \PhpToken::tokenize($source);
+        } catch (\Throwable) {
+            return $source;
+        }
+        $constant = self::constantContexts($tokens);
+        $global = true;
+        $aliases = []; // lower-case local name => the lower-case class it imports
+        $out = '';
+        $changed = false;
+        for ($i = 0, $count = count($tokens); $i < $count; $i++) {
+            $token = $tokens[$i];
+            $replace = null;
+            if ($token->id === T_NAMESPACE) {
+                $next = self::next($tokens, $i + 1);
+                $global = $next === null || in_array($tokens[$next]->text, [';', '{'], true);
+                $aliases = [];
+            } elseif ($token->id === T_USE && self::isImport($tokens, $i)) {
+                $aliases = self::imports($tokens, $i + 1) + $aliases;
+            } elseif (!$constant[$i] && $token->id === T_NEW) {
+                $name = self::next($tokens, $i + 1);
+                $paren = $name === null ? null : self::next($tokens, $name + 1);
+                if ($paren !== null && $tokens[$paren]->text === '(' && self::resolve($tokens[$name], $global, $aliases) === 'pdo') {
+                    $replace = ['\\Bfwc\\Pgsql\\pdo', $paren];
+                }
+            } elseif (!$constant[$i] && self::resolve($token, $global, $aliases) !== null) {
+                $colons = self::next($tokens, $i + 1);
+                $method = $colons === null ? null : self::next($tokens, $colons + 1);
+                $paren = $method === null ? null : self::next($tokens, $method + 1);
+                if ($paren !== null && $tokens[$colons]->id === T_DOUBLE_COLON && strtolower($tokens[$method]->text) === 'connect' && $tokens[$paren]->text === '(') {
+                    $previous = self::previous($tokens, $i - 1);
+                    if ($previous === null || !in_array($tokens[$previous]->id, [T_NEW, T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION], true)) {
+                        $replace = ['\\Bfwc\\Pgsql\\connect', $paren];
+                    }
+                }
+            }
+            if ($replace) {
+                [$call, $paren] = $replace;
+                $skipped = '';
+                for ($j = $i; $j < $paren; $j++) {
+                    $skipped .= $tokens[$j]->text;
+                }
+                $out .= $call . str_repeat("\n", substr_count($skipped, "\n"));
+                $changed = true;
+                $i = $paren - 1;
+                continue;
+            }
+            $out .= $token->text;
+        }
+        return $changed ? $out : $source;
+    }
+
+    /**
+     * For each token, whether it sits where only a constant expression may:
+     * a parameter list (its defaults), an attribute, a 'const' declaration, or
+     * (before PHP 8.3) a 'static $x =' initialiser.
+     * @return list<bool>
+     */
+    private static function constantContexts(array $tokens): array
+    {
+        $flags = [];
+        $parens = 0;
+        $parameterLists = []; // the paren depth each open parameter list started at
+        $attribute = 0; // bracket depth inside #[ … ]
+        $statement = false; // inside a const / static-variable declaration, until ';'
+        $awaitingParameters = false;
+        $count = count($tokens);
+        for ($i = 0; $i < $count; $i++) {
+            $token = $tokens[$i];
+            if ($attribute > 0) {
+                $attribute += $token->text === '[' ? 1 : ($token->text === ']' ? -1 : 0);
+                $flags[$i] = true;
+                continue;
+            }
+            if ($token->id === T_ATTRIBUTE) {
+                $attribute = 1;
+                $flags[$i] = true;
+                continue;
+            }
+            $previous = self::previous($tokens, $i - 1);
+            $afterUse = $previous !== null && $tokens[$previous]->id === T_USE;
+            if ($token->id === T_CONST && !$afterUse) {
+                $statement = true;
+            } elseif ($token->id === T_STATIC && PHP_VERSION_ID < 80300) {
+                $next = self::next($tokens, $i + 1);
+                $starts = $previous === null || in_array($tokens[$previous]->id, [T_OPEN_TAG, T_ELSE], true) || in_array($tokens[$previous]->text, [';', '{', '}', ':', ')'], true);
+                if ($next !== null && $tokens[$next]->id === T_VARIABLE && $starts) {
+                    $statement = true;
+                }
+            } elseif (($token->id === T_FUNCTION || $token->id === T_FN) && !$afterUse) {
+                $awaitingParameters = true;
+            } elseif ($token->text === '(') {
+                $parens++;
+                if ($awaitingParameters) {
+                    $parameterLists[] = $parens;
+                    $awaitingParameters = false;
+                }
+            } elseif ($token->text === ')') {
+                if ($parameterLists && end($parameterLists) === $parens) {
+                    array_pop($parameterLists);
+                }
+                $parens--;
+            } elseif ($token->text === ';') {
+                $statement = false;
+            }
+            $flags[$i] = $statement || $parameterLists !== [];
+        }
+        return $flags;
+    }
+
+    /** The class $name refers to, when it is the global PDO or Pdo\Pgsql ('pdo', 'pdo\pgsql'); otherwise null. */
+    private static function resolve(\PhpToken $name, bool $global, array $aliases): ?string
+    {
+        $lower = strtolower($name->text);
+        $class = match ($name->id) {
+            T_NAME_FULLY_QUALIFIED => substr($lower, 1),
+            T_NAME_QUALIFIED => isset($aliases[strstr($lower, '\\', true)]) ? $aliases[strstr($lower, '\\', true)] . strstr($lower, '\\') : ($global ? $lower : null),
+            T_STRING => $aliases[$lower] ?? ($global ? $lower : null),
+            default => null,
+        };
+        return in_array($class, self::TARGETS, true) ? $class : null;
+    }
+
+    private static function next(array $tokens, int $from): ?int
+    {
+        for ($i = $from, $n = count($tokens); $i < $n; $i++) {
+            if (!$tokens[$i]->is(self::SKIP)) {
+                return $i;
+            }
+        }
+        return null;
+    }
+
+    private static function previous(array $tokens, int $from): ?int
+    {
+        for ($i = $from; $i >= 0; $i--) {
+            if (!$tokens[$i]->is(self::SKIP)) {
+                return $i;
+            }
+        }
+        return null;
+    }
+
+    /** An import 'use' (not a closure's 'use (…)' and not a trait 'use' inside a class body, which follows '{' or ';' within braces). */
+    private static function isImport(array $tokens, int $at): bool
+    {
+        $next = self::next($tokens, $at + 1);
+        if ($next === null || $tokens[$next]->text === '(') {
+            return false;
+        }
+        $depth = 0;
+        for ($i = $at - 1; $i >= 0; $i--) {
+            if ($tokens[$i]->text === '}') {
+                $depth++;
+            } elseif ($tokens[$i]->text === '{' || $tokens[$i]->id === T_CURLY_OPEN || $tokens[$i]->id === T_DOLLAR_OPEN_CURLY_BRACES) {
+                if ($depth === 0) {
+                    // Directly inside braces: only a braced namespace's body holds imports.
+                    $opener = self::previous($tokens, $i - 1);
+                    $before = $opener === null ? null : self::previous($tokens, $opener - 1);
+                    return $opener !== null && ($tokens[$opener]->id === T_NAMESPACE || ($before !== null && $tokens[$before]->id === T_NAMESPACE));
+                }
+                $depth--;
+            }
+        }
+        return true;
+    }
+
+    /** What an import statement's names say about PDO: local name => the class it imports (PDO, Pdo\Pgsql, or a class shadowing PDO). */
+    private static function imports(array $tokens, int $from): array
+    {
+        $aliases = [];
+        $name = null;
+        $alias = null;
+        $expectAlias = false;
+        for ($i = $from, $n = count($tokens); $i < $n; $i++) {
+            $token = $tokens[$i];
+            if ($token->is(self::SKIP)) {
+                continue;
+            }
+            if ($token->text === '{' || ($name === null && in_array(strtolower($token->text), ['function', 'const'], true))) {
+                return []; // group imports and function/constant imports never name the PDO class
+            }
+            if ($token->id === T_AS) {
+                $expectAlias = true;
+            } elseif ($token->text === ',' || $token->text === ';') {
+                if ($name !== null) {
+                    $target = strtolower(ltrim($name, '\\'));
+                    $local = strtolower($alias ?? substr((string) strrchr('\\' . $name, '\\'), 1));
+                    if ($local === 'pdo' || in_array($target, self::TARGETS, true)) {
+                        $aliases[$local] = $target; // 'pdo' / 'pdo\pgsql', or what shadows the name PDO
+                    }
+                }
+                $name = $alias = null;
+                $expectAlias = false;
+                if ($token->text === ';') {
+                    return $aliases;
+                }
+            } elseif ($expectAlias) {
+                $alias = $token->text;
+            } else {
+                $name = $token->text;
+            }
+        }
+        return $aliases;
+    }
+}
+`;var Kr=String.raw`<?php
+namespace Bfwc\Pgsql;
+
+class Statement extends \PDOStatement
+{
+    private string $sql;
+    /** @var list<int|string> placeholder keys, in $n order */
+    private array $keys;
+    private array $bound = [];
+    private array $fields = [];
+    private array $rows = [];
+    /** The next row to fetch (a cursor: fetchAll stays linear). */
+    private int $cursor = 0;
+    private int $affected = 0;
+    private array $fetchArgs = [];
+    private array $error = ['00000', null, null];
+
+    public function __construct(private PDO $pdo, string $query, private int $fetchMode, private bool $stringify)
+    {
+        $this->queryString = $query;
+        [$this->sql, $this->keys] = self::placeholders($query);
+    }
+
+    /** Whether $char continues an identifier (so a $ or E' there does not start a quote). */
+    private static function identifierChar(string $char): bool
+    {
+        return $char !== '' && (ctype_alnum($char) || $char === '_' || $char === '$' || ord($char) >= 0x80);
+    }
+
+    private static function invalidParameters(string $why): Exception
+    {
+        return Exception::fromState('HY093', 'Invalid parameter number: ' . $why);
+    }
+
+    /**
+     * ? and :name as $1…, outside quotes ('…', E'…' at a token boundary, "…"),
+     * comments (-- to the line end; nested block comments), dollar quotes ($tag$…$tag$, not inside an
+     * identifier) and :: casts; ?? is a literal ?. Mixing named and positional
+     * placeholders is refused, as PDO does.
+     */
+    public static function placeholders(string $sql): array
+    {
+        $out = '';
+        $keys = [];
+        $named = [];
+        $positional = false;
+        $length = strlen($sql);
+        for ($i = 0; $i < $length; $i++) {
+            $char = $sql[$i];
+            $next = $sql[$i + 1] ?? '';
+            $previous = $i > 0 ? $sql[$i - 1] : '';
+            if ($char === "'" || $char === '"') {
+                $end = $i + 1;
+                $escapes = $char === "'" && ($previous === 'E' || $previous === 'e') && !self::identifierChar($i > 1 ? $sql[$i - 2] : '');
+                while ($end < $length && ($sql[$end] !== $char || ($sql[$end + 1] ?? '') === $char)) {
+                    $end += ($sql[$end] === $char || ($escapes && $sql[$end] === '\\')) ? 2 : 1;
+                }
+                $out .= substr($sql, $i, $end - $i + 1);
+                $i = $end;
+            } elseif ($char === '-' && $next === '-') {
+                $end = strpos($sql, "\n", $i);
+                $end = $end === false ? $length : $end;
+                $out .= substr($sql, $i, $end - $i);
+                $i = $end - 1;
+            } elseif ($char === '/' && $next === '*') {
+                $depth = 0;
+                for ($end = $i; $end < $length; $end++) {
+                    if ($sql[$end] === '/' && ($sql[$end + 1] ?? '') === '*') {
+                        $depth++;
+                        $end++;
+                    } elseif ($sql[$end] === '*' && ($sql[$end + 1] ?? '') === '/') {
+                        $depth--;
+                        $end++;
+                        if ($depth === 0) {
+                            break;
+                        }
+                    }
+                }
+                $end = min($end + 1, $length);
+                $out .= substr($sql, $i, $end - $i);
+                $i = $end - 1;
+            } elseif ($char === '$' && !self::identifierChar($previous) && preg_match('/\G\$([A-Za-z_][A-Za-z0-9_]*)?\$/', $sql, $tag, 0, $i)) {
+                $end = strpos($sql, $tag[0], $i + strlen($tag[0]));
+                $end = $end === false ? $length : $end + strlen($tag[0]);
+                $out .= substr($sql, $i, $end - $i);
+                $i = $end - 1;
+            } elseif ($char === ':' && $next === ':') {
+                $out .= '::';
+                $i++;
+            } elseif ($char === ':' && preg_match('/\G:([A-Za-z_][A-Za-z0-9_]*)/', $sql, $name, 0, $i)) {
+                if ($positional) {
+                    throw self::invalidParameters('mixed named and positional parameters');
+                }
+                $named[$name[1]] ??= count($keys) + 1;
+                if ($named[$name[1]] === count($keys) + 1) {
+                    $keys[] = $name[1];
+                }
+                $out .= '$' . $named[$name[1]];
+                $i += strlen($name[0]) - 1;
+            } elseif ($char === '?' && $next === '?') {
+                $out .= '?';
+                $i++;
+            } elseif ($char === '?') {
+                if ($named) {
+                    throw self::invalidParameters('mixed named and positional parameters');
+                }
+                $positional = true;
+                $keys[] = count($keys);
+                $out .= '$' . count($keys);
+            } else {
+                $out .= $char;
+            }
+        }
+        return [$out, $keys];
+    }
+
+    private static function text(mixed $value, int $type): ?string
+    {
+        if ($value === null || $type === \PDO::PARAM_NULL) {
+            return null;
+        }
+        return Wire::text($type === \PDO::PARAM_BOOL && !is_resource($value) ? (bool) $value : $value);
+    }
+
+    public function bindValue(int|string $param, mixed $value, int $type = \PDO::PARAM_STR): bool
+    {
+        $this->bound[is_int($param) ? $param - 1 : ltrim($param, ':')] = [$value, $type];
+        return true;
+    }
+
+    public function bindParam(int|string $param, mixed &$var, int $type = \PDO::PARAM_STR, int $maxLength = 0, mixed $driverOptions = null): bool
+    {
+        $this->bound[is_int($param) ? $param - 1 : ltrim($param, ':')] = [&$var, $type];
+        return true;
+    }
+
+    /** @internal */
+    public function bfwcFailed(array $errorInfo): void
+    {
+        $this->error = $errorInfo;
+    }
+
+    public function execute(?array $params = null): bool
+    {
+        $values = [];
+        if ($params !== null && count($params) !== count($this->keys)) {
+            throw self::invalidParameters('number of bound variables does not match number of tokens');
+        }
+        foreach ($this->keys as $key) {
+            if ($params !== null) {
+                $name = is_int($key) ? $key : (array_key_exists($key, $params) ? $key : ':' . $key);
+                if (!array_key_exists($name, $params)) {
+                    throw self::invalidParameters('parameter was not defined');
+                }
+                $values[] = self::text($params[$name], \PDO::PARAM_STR);
+            } else {
+                if (!array_key_exists($key, $this->bound)) {
+                    throw self::invalidParameters('parameter was not defined');
+                }
+                [$value, $type] = $this->bound[$key];
+                $values[] = self::text($value, $type);
+            }
+        }
+        $result = $this->pdo->bfwcRun($this->sql, $values, $this);
+        if ($result === null) {
+            return false;
+        }
+        $this->error = ['00000', null, null];
+        $this->fields = $result['fields'];
+        $this->rows = $result['rows'];
+        $this->cursor = 0;
+        $this->affected = $result['affected'];
+        return true;
+    }
+
+    private function value(?string $text, int $type): mixed
+    {
+        if ($text === null || $this->stringify) {
+            return $text;
+        }
+        return match ($type) {
+            16 => $text === 't',
+            // int8 and oid fit PHP's int only on 64-bit; past PHP_INT_MAX (php-wasm is 32-bit) they stay strings, as pdo_pgsql leaves them.
+            20, 21, 23, 26 => PHP_INT_SIZE === 8 || (string) (int) $text === ltrim($text, '+') ? (int) $text : $text,
+            700, 701 => (float) $text,
+            default => $text,
+        };
+    }
+
+    private function shape(array $row, int $mode, array $args): mixed
+    {
+        $values = [];
+        foreach ($row as $i => $text) {
+            $values[$i] = $this->value($text, $this->fields[$i]['type']);
+        }
+        $names = array_column($this->fields, 'name');
+        return match ($mode & ~\PDO::FETCH_PROPS_LATE) {
+            \PDO::FETCH_ASSOC => array_combine($names, $values),
+            \PDO::FETCH_NUM => $values,
+            \PDO::FETCH_BOTH => array_combine($names, $values) + $values,
+            \PDO::FETCH_OBJ => (object) array_combine($names, $values),
+            \PDO::FETCH_COLUMN => $values[$args[0] ?? 0] ?? null,
+            \PDO::FETCH_CLASS => self::instance($args[0] ?? \stdClass::class, $args[1] ?? [], array_combine($names, $values), (bool) ($mode & \PDO::FETCH_PROPS_LATE)),
+            default => throw new \PDOException('Fetch mode ' . $mode . ' is not supported by the runtime\'s pgsql client (ASSOC, NUM, BOTH, OBJ, COLUMN, KEY_PAIR, CLASS are)'),
+        };
+    }
+
+    /** @internal An object of $class with $properties set before its constructor runs (after, when $late); pg_fetch_object shares it. */
+    public static function instance(string $class, array $args, array $properties, bool $late): object
+    {
+        $object = (new \ReflectionClass($class))->newInstanceWithoutConstructor();
+        $assign = function () use ($object, $properties) {
+            foreach ($properties as $name => $value) {
+                $object->$name = $value;
+            }
+        };
+        if (!$late) {
+            \Closure::bind($assign, null, $class)();
+        }
+        if (method_exists($object, '__construct')) {
+            $object->__construct(...$args);
+        }
+        if ($late) {
+            \Closure::bind($assign, null, $class)();
+        }
+        return $object;
+    }
+
+    private function mode(int $mode): int
+    {
+        return $mode === \PDO::FETCH_DEFAULT ? $this->fetchMode : $mode;
+    }
+
+    private function next(): ?array
+    {
+        return $this->cursor < count($this->rows) ? $this->rows[$this->cursor++] : null;
+    }
+
+    public function fetch(int $mode = \PDO::FETCH_DEFAULT, int $cursorOrientation = \PDO::FETCH_ORI_NEXT, int $cursorOffset = 0): mixed
+    {
+        $row = $this->next();
+        if ($row === null) {
+            return false;
+        }
+        $mode = $this->mode($mode);
+        return $mode === \PDO::FETCH_KEY_PAIR ? [$this->value($row[0], $this->fields[0]['type']) => $this->value($row[1], $this->fields[1]['type'])] : $this->shape($row, $mode, $this->fetchArgs);
+    }
+
+    public function fetchAll(int $mode = \PDO::FETCH_DEFAULT, mixed ...$args): array
+    {
+        $mode = $this->mode($mode);
+        $args = $args ?: $this->fetchArgs;
+        $out = [];
+        while (($row = $this->next()) !== null) {
+            if ($mode === \PDO::FETCH_KEY_PAIR) {
+                $out[$this->value($row[0], $this->fields[0]['type'])] = $this->value($row[1], $this->fields[1]['type']);
+            } else {
+                $out[] = $this->shape($row, $mode, $args);
+            }
+        }
+        return $out;
+    }
+
+    public function fetchColumn(int $column = 0): mixed
+    {
+        $row = $this->next();
+        return $row === null ? false : $this->value($row[$column] ?? null, $this->fields[$column]['type'] ?? 25);
+    }
+
+    public function fetchObject(?string $class = 'stdClass', array $constructorArgs = []): object|false
+    {
+        $row = $this->next();
+        return $row === null ? false : $this->shape($row, \PDO::FETCH_CLASS, [$class ?? \stdClass::class, $constructorArgs]);
+    }
+
+    public function setFetchMode(int $mode, mixed ...$args): bool
+    {
+        $this->fetchMode = $mode;
+        $this->fetchArgs = $args;
+        return true;
+    }
+
+    public function rowCount(): int
+    {
+        return $this->affected;
+    }
+
+    public function columnCount(): int
+    {
+        return count($this->fields);
+    }
+
+    public function getColumnMeta(int $column): array|false
+    {
+        $field = $this->fields[$column] ?? null;
+        return $field ? ['name' => $field['name'], 'pgsql:oid' => $field['type'], 'native_type' => (string) $field['type'], 'len' => -1, 'precision' => -1, 'flags' => []] : false;
+    }
+
+    public function closeCursor(): bool
+    {
+        $this->rows = [];
+        $this->cursor = 0;
+        return true;
+    }
+
+    public function errorCode(): ?string
+    {
+        return $this->error[0];
+    }
+
+    public function errorInfo(): array
+    {
+        return $this->error;
+    }
+
+    public function getIterator(): \Iterator
+    {
+        while (($row = $this->fetch()) !== false) {
+            yield $row;
+        }
+    }
+}
+`;var Yr=String.raw`<?php
+namespace Bfwc\Pgsql;
+
+final class Wire
+{
+    /** @var resource */
+    private $socket;
+    private string $buffer = '';
+    /** ReadyForQuery's status: I (idle), T (in a transaction), E (in a failed transaction). */
+    public string $status = 'I';
+    /** The database connected to. */
+    public string $database;
+    /** The backend's process id (BackendKeyData). */
+    public int $pid = 0;
+    /** @var array<string, string> ParameterStatus values (server_version …). */
+    public array $parameters = [];
+    private string $endpoint;
+    /** Whether the server has sent anything yet. */
+    private bool $answered = false;
+    /** An ErrorResponse waiting for ReadyForQuery, rethrown if the server hangs up first. */
+    private ?Exception $pending = null;
+
+    public function __construct(string $host, int $port, string $user, string $database, ?string $password, float $timeout)
+    {
+        $this->endpoint = '"' . $host . '", port ' . $port;
+        $this->database = $database;
+        $socket = @stream_socket_client('tcp://' . $host . ':' . $port, $errno, $errstr, $timeout);
+        if (!$socket) {
+            throw Exception::fromState('08006', 'connection to server at "' . $host . '", port ' . $port . ' failed: ' . ($errstr ?: 'Connection refused'));
+        }
+        stream_set_blocking($socket, true);
+        $this->socket = $socket;
+        $params = "user\0" . $user . "\0database\0" . $database . "\0client_encoding\0UTF8\0application_name\0bfwc-php\0\0";
+        $this->send(pack('NN', 8 + strlen($params), 196608) . $params);
+        $this->authenticate($user, $password ?? '');
+        $this->untilReady();
+    }
+
+    /**
+     * Connect from libpq-style settings (host, port, dbname, user, password,
+     * connect_timeout), as a DSN or conninfo string gives them; explicit
+     * credentials win. The database defaults to the user, as libpq's does.
+     */
+    public static function fromConfig(#[\SensitiveParameter] array $config, ?string $user = null, #[\SensitiveParameter] ?string $password = null): self
+    {
+        $user ??= $config['user'] ?? 'postgres';
+        return new self($config['host'] ?? 'localhost', (int) ($config['port'] ?? 5432), $user, $config['dbname'] ?? $user, $password ?? $config['password'] ?? null, (float) ($config['connect_timeout'] ?? 30));
+    }
+
+    /** A PHP value as a text-format parameter: null stays null, a stream is read, booleans become $true / $false. */
+    public static function text(mixed $value, string $true = 't', string $false = 'f'): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (is_resource($value)) {
+            return stream_get_contents($value);
+        }
+        if (is_bool($value)) {
+            return $value ? $true : $false;
+        }
+        return (string) $value;
+    }
+
+    public static function frame(string $type, string $body): string
+    {
+        return $type . pack('N', strlen($body) + 4) . $body;
+    }
+
+    private function send(string $bytes): void
+    {
+        $length = strlen($bytes);
+        for ($offset = 0; $offset < $length; $offset += $written) {
+            $written = @fwrite($this->socket, substr($bytes, $offset)); // a failure is reported below, as the extension reports it
+            if ($written === false || $written === 0) {
+                throw Exception::fromState('08006', 'server closed the connection while the client was sending');
+            }
+        }
+    }
+
+    private function read(int $length): string
+    {
+        while (strlen($this->buffer) < $length) {
+            $chunk = fread($this->socket, max(65536, $length - strlen($this->buffer)));
+            if ($chunk === false || ($chunk === '' && feof($this->socket))) {
+                // An error the server sent before hanging up says why (a FATAL during a query, a terminated backend).
+                if ($this->pending) {
+                    throw $this->pending;
+                }
+                // php-wasm reports a connect as made at once; a refused one ends before the server says anything.
+                throw Exception::fromState('08006', $this->answered ? 'server closed the connection unexpectedly' : 'connection to server at ' . $this->endpoint . ' failed: Connection refused (is the database running?)');
+            }
+            $this->answered = true;
+            $this->buffer .= $chunk;
+        }
+        $out = substr($this->buffer, 0, $length);
+        $this->buffer = (string) substr($this->buffer, $length);
+        return $out;
+    }
+
+    /** @return array{0: string, 1: string} the message type and its body */
+    private function message(): array
+    {
+        $head = $this->read(5);
+        $length = unpack('N', substr($head, 1))[1];
+        return [$head[0], $length > 4 ? $this->read($length - 4) : ''];
+    }
+
+    private function authenticate(string $user, string $password): void
+    {
+        for (;;) {
+            [$type, $body] = $this->message();
+            if ($type === 'E') {
+                throw self::error($body)[0];
+            }
+            if ($type !== 'R') {
+                throw Exception::fromState('08P01', 'unexpected message "' . $type . '" during authentication');
+            }
+            $method = unpack('N', $body)[1];
+            if ($method === 0) {
+                return;
+            } elseif ($method === 3) {
+                $this->send(self::frame('p', $password . "\0"));
+            } elseif ($method === 5) {
+                $this->send(self::frame('p', 'md5' . md5(md5($password . $user) . substr($body, 4, 4)) . "\0"));
+            } else {
+                throw Exception::fromState('28000', 'authentication method ' . $method . ' (SASL/SCRAM, GSS, SSPI …) is not supported by the runtime\'s pgsql client; trust, password and md5 are');
+            }
+        }
+    }
+
+    /**
+     * Messages up to ReadyForQuery; an ErrorResponse among them is thrown after
+     * it — at once when it is FATAL or PANIC (the server hangs up; no
+     * ReadyForQuery follows). COPY is refused rather than left to deadlock:
+     * COPY FROM STDIN is answered with CopyFail, COPY TO STDOUT's data is
+     * drained, and either ends as an error.
+     */
+    private function untilReady(?callable $each = null): void
+    {
+        $this->pending = null;
+        for (;;) {
+            [$type, $body] = $this->message();
+            if ($type === 'Z') {
+                $this->status = $body;
+                $error = $this->pending;
+                $this->pending = null;
+                if ($error) {
+                    throw $error;
+                }
+                return;
+            }
+            if ($type === 'E') {
+                [$exception, $severity] = self::error($body);
+                if ($severity === 'FATAL' || $severity === 'PANIC') {
+                    $this->pending = null;
+                    throw $exception;
+                }
+                $this->pending ??= $exception;
+            } elseif ($type === 'G') {
+                $this->send(self::frame('f', "COPY FROM STDIN is not supported by the runtime's pgsql client\0"));
+                $this->pending ??= Exception::fromState('0A000', 'COPY FROM STDIN is not supported by the runtime\'s pgsql client; use INSERT');
+            } elseif ($type === 'H' || $type === 'W') {
+                $this->pending ??= Exception::fromState('0A000', 'COPY TO STDOUT is not supported by the runtime\'s pgsql client; use SELECT');
+            } elseif ($type === 'd' || $type === 'c') {
+                continue; // COPY TO STDOUT's data, drained
+            } elseif ($type === 'K') {
+                $this->pid = unpack('N', $body)[1];
+            } elseif ($type === 'S') {
+                [$name, $value] = explode("\0", $body);
+                $this->parameters[$name] = $value;
+            } elseif ($each && !$this->pending) {
+                $each($type, $body);
+            }
+        }
+    }
+
+    /** @return array{0: Exception, 1: string} the exception and the severity (ERROR, FATAL, PANIC …) */
+    public static function error(string $body): array
+    {
+        $fields = [];
+        for ($i = 0, $n = strlen($body); $i < $n && $body[$i] !== "\0"; $i = $end + 1) {
+            $end = strpos($body, "\0", $i + 1);
+            if ($end === false) {
+                break; // a truncated field: keep what was read
+            }
+            $fields[$body[$i]] = substr($body, $i + 1, $end - $i - 1);
+        }
+        $severity = $fields['V'] ?? $fields['S'] ?? 'ERROR';
+        $message = ($fields['S'] ?? $severity) . ':  ' . ($fields['M'] ?? 'unknown error') . (isset($fields['D']) ? "\nDETAIL:  " . $fields['D'] : '');
+        return [Exception::fromState($fields['C'] ?? 'XX000', $message), $severity];
+    }
+
+    /**
+     * One statement with $1… parameters (null or text), results as text.
+     * @return array{fields: list<array{name: string, type: int}>, rows: list<list<?string>>, affected: int, command: string}
+     */
+    public function execute(string $sql, array $params): array
+    {
+        $this->send(self::frame('P', "\0" . $sql . "\0" . pack('n', 0)) . self::bind('', $params));
+        return $this->results();
+    }
+
+    /** Parse $sql as the named prepared statement $name (pg_prepare). */
+    public function prepare(string $name, string $sql): array
+    {
+        $this->send(self::frame('P', $name . "\0" . $sql . "\0" . pack('n', 0)) . self::frame('S', ''));
+        return $this->results();
+    }
+
+    /** Run the named prepared statement $name with $params (pg_execute). */
+    public function executePrepared(string $name, array $params): array
+    {
+        $this->send(self::bind($name, $params));
+        return $this->results();
+    }
+
+    /** Bind, Describe, Execute and Sync for $statement ('' is the unnamed one). */
+    private static function bind(string $statement, array $params): string
+    {
+        $bind = "\0" . $statement . "\0" . pack('nn', 0, count($params));
+        foreach ($params as $value) {
+            $bind .= $value === null ? pack('N', -1) : pack('N', strlen($value)) . $value;
+        }
+        $bind .= pack('n', 0);
+        return self::frame('B', $bind) . self::frame('D', "P\0") . self::frame('E', "\0" . pack('N', 0)) . self::frame('S', '');
+    }
+
+    /** Statements as one simple query (several allowed: a migration); the last result's rows. */
+    public function simple(string $sql): array
+    {
+        $this->send(self::frame('Q', $sql . "\0"));
+        return $this->results();
+    }
+
+    private function results(): array
+    {
+        $result = ['fields' => [], 'rows' => [], 'affected' => 0, 'command' => ''];
+        $this->untilReady(function (string $type, string $body) use (&$result) {
+            if ($type === 'T') {
+                $result = ['fields' => self::fields($body), 'rows' => [], 'affected' => 0, 'command' => ''];
+            } elseif ($type === 'D') {
+                $result['rows'][] = self::row($body);
+            } elseif ($type === 'C') {
+                $result['command'] = rtrim($body, "\0");
+                $tag = explode(' ', $result['command']);
+                $result['affected'] = is_numeric(end($tag)) ? (int) end($tag) : 0;
+            }
+        });
+        return $result;
+    }
+
+    private static function fields(string $body): array
+    {
+        $count = unpack('n', $body)[1];
+        $fields = [];
+        for ($i = 0, $at = 2; $i < $count; $i++) {
+            $end = strpos($body, "\0", $at);
+            if ($end === false) {
+                throw Exception::fromState('08P01', 'malformed RowDescription from the server');
+            }
+            $name = substr($body, $at, $end - $at);
+            $meta = unpack('Ntable/ncolumn/Ntype/nsize/Nmod/nformat', substr($body, $end + 1, 18));
+            $fields[] = ['name' => $name, 'type' => $meta['type'], 'table' => $meta['table'], 'size' => $meta['size'] > 32767 ? $meta['size'] - 65536 : $meta['size']];
+            $at = $end + 19;
+        }
+        return $fields;
+    }
+
+    private static function row(string $body): array
+    {
+        $count = unpack('n', $body)[1];
+        $row = [];
+        for ($i = 0, $at = 2; $i < $count; $i++) {
+            $length = unpack('N', substr($body, $at, 4))[1];
+            $at += 4;
+            if ($length === -1 || $length === 4294967295) { // NULL (-1), as 32-bit (php-wasm) and 64-bit PHP unpack it
+                $row[] = null;
+            } else {
+                $row[] = substr($body, $at, $length);
+                $at += $length;
+            }
+        }
+        return $row;
+    }
+
+    public function close(): void
+    {
+        if (is_resource($this->socket)) {
+            @fwrite($this->socket, self::frame('X', ''));
+            fclose($this->socket);
+        }
+    }
+
+    public function __destruct()
+    {
+        $this->close();
+    }
+}
+
+class Exception extends \PDOException
+{
+    public static function fromState(string $state, string $message): self
+    {
+        $exception = new self('SQLSTATE[' . $state . ']: ' . $message);
+        $exception->code = $state;
+        $exception->errorInfo = [$state, 7, $message];
+        return $exception;
+    }
+}
+`;var Te="/bfwc",Lt="/internal/shared/auto_prepend_file.php",Ds=`<?php
+spl_autoload_register(static function (string $class): void {
+    // Class names are case-insensitive: keys are lower-case, and so is the lookup (PDOPgsql finds pdopgsql).
+    static $files = ['bfwc\\pgsql\\wire' => 'wire.php', 'bfwc\\pgsql\\exception' => 'wire.php', 'bfwc\\pgsql\\pdo' => 'pdo.php', 'bfwc\\pgsql\\statement' => 'statement.php', 'bfwc\\pgsql\\rewriter' => 'rewriter.php', 'pdo\\pgsql' => 'pdo-pgsql.php', 'bfwc\\pgsql\\pg' => 'pg.php', 'pgsql\\connection' => 'pg.php', 'pgsql\\result' => 'pg.php'];
+    $file = $files[strtolower($class)] ?? null;
+    if ($file !== null) {
+        require_once '${Te}/pgsql/' . $file;
+    }
+});
+require_once '${Te}/pgsql/includes.php';
+if (!function_exists('pg_connect')) {
+    require_once '${Te}/pgsql/functions.php';
+}
+\\Bfwc\\Pgsql\\Includes::register();
+if (\\Bfwc\\Pgsql\\Includes::rewritesPrimary()) {
+    require \\Bfwc\\Pgsql\\Includes::$primary;
+    exit;
+}
+`,qs={"prepend.php":Ds,"pgsql/wire.php":Yr,"pgsql/pdo.php":Vr,"pgsql/statement.php":Kr,"pgsql/includes.php":Gr,"pgsql/rewriter.php":Qr,"pgsql/functions.php":Br,"pgsql/pg.php":zr,"pgsql/pdo-pgsql.php":Hr};function Zr(e){for(let[n,s]of Object.entries(qs)){let i=`${Te}/${n}`;e.mkdirTree(i.slice(0,i.lastIndexOf("/"))),e.writeFile(i,s)}let t=`
+require_once '${Te}/prepend.php';
+`,r=pe(e,Lt)?new TextDecoder().decode(e.readFile(Lt)):`<?php
+`;r.includes(t)||e.writeFile(Lt,`${r.replace(/\?>\s*$/,"")}${t}`)}var Ms=e=>/^127\./.test(e)||e==="0.0.0.0"||e==="::1"||e==="localhost",Us=/^bfwc-tcp:\/\/\[?([^\]]*)\]?:(\d+)$/;function Fs(e){return class{constructor(r){this.url=r;y(this,"CONNECTING",0);y(this,"OPEN",1);y(this,"CLOSING",2);y(this,"CLOSED",3);y(this,"readyState",0);y(this,"binaryType","arraybuffer");y(this,"onopen",null);y(this,"onmessage",null);y(this,"onclose",null);y(this,"onerror",null);y(this,"listeners",new Map);y(this,"channel");let n=Us.exec(r),s=n?.[1]??"",i=Number(n?.[2]);if(!n||!Ms(s)){queueMicrotask(()=>this.fail());return}e(i).then(o=>{if(!o)return this.fail();if(this.readyState!==0)return o.close();this.channel=o,this.readyState=1,o.onData(l=>this.emit("message",l)),o.onClose(()=>this.ended()),this.emit("open")},()=>this.fail())}send(r){if(this.readyState!==1||!this.channel)return;let n=r instanceof ArrayBuffer?new Uint8Array(r):new Uint8Array(r.buffer,r.byteOffset,r.byteLength);this.channel.send(n.slice())}setSocketOpt(){}close(){this.readyState===2||this.readyState===3||(this.channel?.close(),this.ended())}on(r,n){return this.add(r,n,!1,!1)}once(r,n){return this.add(r,n,!0,!1)}addEventListener(r,n){this.add(r,n,!1,!0)}removeListener(r,n){return this.listeners.set(r,(this.listeners.get(r)??[]).filter(s=>s.listener!==n)),this}off(r,n){return this.removeListener(r,n)}removeEventListener(r,n){this.removeListener(r,n)}add(r,n,s,i){return this.listeners.set(r,[...this.listeners.get(r)??[],{listener:n,once:s,dom:i}]),this}emit(r,n){let s=this.listeners.get(r)??[];this.listeners.set(r,s.filter(a=>!a.once));let i=n?n.slice().buffer:void 0,o={type:r,target:this,data:i};for(let{listener:a,dom:u}of s)u?a(o):n?a(n,!0):a();let l={open:this.onopen,message:this.onmessage,close:this.onclose,error:this.onerror}[r];l?.(o)}ended(){this.readyState!==3&&(this.readyState=3,this.channel=void 0,queueMicrotask(()=>this.emit("close")))}fail(){this.readyState!==3&&(this.emit("error"),this.ended())}}}function Jr(e,t){let r=e.websocket??(e.websocket={});r.url=(s,i,o)=>`bfwc-tcp://${i.includes(":")?`[${i}]`:i}:${o}`,r.subprotocol="binary";let n=Fs(t);r.decorator=()=>n}var js=(e,t)=>`[${new Date().toUTCString()}] Failed to listen on ${e}:${t} (reason: Address already in use)
+`;function Xr(e){let t=e.dial?void 0:rr(e.post),r=e.dial??(s=>t.dial(s)),n="localhost";return ir(e.post,s=>{async function i(l,a){let u=await e.loadPhp({baseUrl:l.php?.baseUrl,phpVersion:Ce(l.php?.phpVersion)});Jr(u.module,r),Zr(u.module.FS),vt(a,u.module.FS);let f=dr(u.module.FS,c=>{s.exited||e.post({type:"fs",ops:c})});return s.mounted({apply:c=>f.quietly(()=>yt(u.module.FS,c)),flush:()=>f.flush()}),u.php.chdir(J(l.cwd)),u}async function o(l,a,u,f){let c=await i(l,u);return f.exited?{kind:"exited",code:0}:Wr(c,a,{cwd:J(l.cwd),env:l.env,io:f.io,composer:l.php?.composer,fetch:e.fetch,platformKnown:d=>e.post({type:"php-platform",phpVersion:d.phpVersion,extensions:[...d.extensions]})})}return{addressInUse:l=>js(n,l),plan(l,a){let u=ur(l.command,l.args,cr(l.env,l.cwd,a));if(!u.ok)return{ok:!1,message:`${l.command}: ${u.reason}
+`,code:1};try{Ce(l.php?.phpVersion)}catch(c){return{ok:!1,message:`${c.message}
+`,code:1}}let f=fr(u.invocation,J);return f.kind==="serve"&&(n=f.server.host),{ok:!0,port:f.kind==="serve"?f.server.port:void 0,run:c=>o(l,f,c,s)}},receive:l=>!!t?.receive(l)}})}var en=globalThis,Ws=Xr({post:e=>en.postMessage(e),loadPhp:e=>Gt(e)});en.addEventListener("message",e=>Ws.receive(e.data));})();

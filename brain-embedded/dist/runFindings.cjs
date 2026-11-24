@@ -1960,10 +1960,9 @@ function shellRunWithStop(ctx, command, cwd) {
 function defaultRepoOf(ctx) {
   return safeRepoArg(ctx.caps.shell?.defaultRepo);
 }
-function pathInRepo(path, repo) {
-  if (!path) return path;
-  const inner = commitPathCandidates(path, repo);
-  return inner.length > 0 ? inner[inner.length - 1] : void 0;
+function pathsInRepo(path, repo) {
+  if (!path) return [];
+  return repo ? commitPathCandidates(path, repo) : [path];
 }
 async function notARepoWithCandidates(action, ctx) {
   const listed = await shellRunWithStop(ctx, buildListCheckoutsCommand());
@@ -1989,16 +1988,16 @@ function scopeAttempts(ctx, path) {
   const fallback = defaultRepoOf(ctx);
   const shell = ctx.caps.shell;
   const attempts = [];
-  if (!(fallback && shell && rootNotARepo.has(shell))) attempts.push({ path });
+  if (!(fallback && shell && rootNotARepo.has(shell))) attempts.push({ paths: pathsInRepo(path) });
   const inferred = inferRepoFromPath(path);
-  if (inferred) attempts.push({ repo: inferred, path: pathInRepo(path, inferred) });
-  if (fallback && fallback !== inferred) attempts.push({ repo: fallback, path: pathInRepo(path, fallback) });
+  if (inferred) attempts.push({ repo: inferred, paths: pathsInRepo(path, inferred) });
+  if (fallback && fallback !== inferred) attempts.push({ repo: fallback, paths: pathsInRepo(path, fallback) });
   return attempts;
 }
 async function runInRepoScope(ctx, scope, run) {
-  if (scope.repo) return { r: await run(scope.repo, pathInRepo(scope.path, scope.repo)), repo: scope.repo };
+  if (scope.repo) return { r: await run(scope.repo, pathsInRepo(scope.path, scope.repo)), repo: scope.repo };
   for (const attempt of scopeAttempts(ctx, scope.path)) {
-    const r = await run(attempt.repo, attempt.path);
+    const r = await run(attempt.repo, attempt.paths);
     if (!isNotARepo(r)) return attempt.repo ? { r, repo: attempt.repo } : { r };
     if (!attempt.repo && ctx.caps.shell) rootNotARepo.add(ctx.caps.shell);
   }
@@ -3043,9 +3042,22 @@ var gitCleanupMergedTool = defineTool({
 });
 
 // ../packages/agent-tools/src/git-tools.ts
+function pathspecArg(opts) {
+  const specs = (opts?.pathspecs ?? [opts?.path]).map((p) => safeGitArg(p)).filter((p) => !!p);
+  return specs.length > 0 ? ` -- ${specs.map((p) => `"${p}"`).join(" ")}` : "";
+}
+function buildUnbornDiffCommands(opts) {
+  const pathArg = pathspecArg(opts);
+  return [`git --no-pager diff --cached${pathArg}`, `git --no-pager diff${pathArg}`];
+}
+var UNBORN_HEAD = /^fatal: .*(bad revision 'HEAD'|ambiguous argument 'HEAD'|unknown revision)/m;
+function isUnbornHead(r) {
+  if (r.ok || r.exitCode !== void 0 && r.exitCode !== 128) return false;
+  return UNBORN_HEAD.test(`${r.stdout ?? ""}
+${r.error ?? ""}`);
+}
 function buildGitCommand(action, opts) {
-  const path = safeGitArg(opts?.path);
-  const pathArg = path ? ` -- "${path}"` : "";
+  const pathArg = pathspecArg(opts);
   const tracked = safeGitArg(opts?.trackedBranch);
   const viaSandbox = opts?.remoteViaSandbox === true;
   const fetchTracked = viaSandbox ? "" : `git fetch origin "${tracked}" 2>/dev/null && `;
@@ -3055,7 +3067,7 @@ function buildGitCommand(action, opts) {
     case "status":
       return buildStatusCommand(opts?.paths, opts?.repo);
     case "diff":
-      return `git --no-pager diff HEAD${pathArg} || git --no-pager diff${pathArg}`;
+      return `git --no-pager diff HEAD${pathArg}`;
     case "history": {
       const limit = Number.isFinite(opts?.limit) && opts.limit > 0 ? Math.min(Math.floor(opts.limit), 200) : 30;
       return `git --no-pager log --oneline -n ${limit}${pathArg}`;
@@ -3117,14 +3129,24 @@ async function runGitTool(action, opts, ctx) {
     baseBranch = synced.baseBranch ?? baseBranch;
   }
   const scope = { repo: opts.repo, path: opts.path ?? opts.paths?.[0] };
-  const ran = await runInRepoScope(ctx, scope, (repo, path) => shellRunWithStop(ctx, buildGitCommand(action, {
-    baseBranch,
-    limit: opts.limit,
-    path,
-    ...opts.paths?.length ? { paths: opts.paths, ...repo ? { repo } : {} } : {},
-    ...trackedBranch ? { trackedBranch } : {},
-    ...remote ? { remoteViaSandbox: true } : {}
-  }), safeRepoArg(repo) ?? void 0));
+  const ran = await runInRepoScope(ctx, scope, async (repo, pathspecs) => {
+    const cwd = safeRepoArg(repo) ?? void 0;
+    const r = await shellRunWithStop(ctx, buildGitCommand(action, {
+      baseBranch,
+      limit: opts.limit,
+      pathspecs,
+      ...opts.paths?.length ? { paths: opts.paths, ...repo ? { repo } : {} } : {},
+      ...trackedBranch ? { trackedBranch } : {},
+      ...remote ? { remoteViaSandbox: true } : {}
+    }), cwd);
+    if (action !== "diff" || !isUnbornHead(r)) return r;
+    const [staged, unstaged] = buildUnbornDiffCommands({ pathspecs });
+    const a = await shellRunWithStop(ctx, staged, cwd);
+    if (!a.ok) return a;
+    const b = await shellRunWithStop(ctx, unstaged, cwd);
+    if (!b.ok) return b;
+    return { ...b, stdout: [a.stdout, b.stdout].map((s) => (s ?? "").trim()).filter(Boolean).join("\n") };
+  });
   if (!ran) return notARepoWithCandidates(action, ctx);
   if (remote && ran.r.ok) {
     const published = await remote.publish({ force: action !== "sync_latest" });
@@ -7426,6 +7448,25 @@ function modelTurnLog(events) {
 
 // src/runStore/gatewayRoutingTrace.ts
 var FAILOVER_SEPARATOR = ", ";
+
+// ../packages/agent-run/src/conformanceTask.ts
+var CONFORMANCE_TRACE = [
+  "run.started",
+  "model.preflight",
+  "turn.started",
+  "context.tools",
+  "model.completed:fake-model",
+  "tool.dispatched:list_files:ok",
+  "turn.finished",
+  "turn.started",
+  "model.completed:fake-model",
+  "run.finished:finished"
+];
+var CONFORMANCE_ENTRY_TRACE = [
+  CONFORMANCE_TRACE[0],
+  "run.routed",
+  ...CONFORMANCE_TRACE.slice(1)
+];
 
 // ../packages/agent-loop/src/runNarration.ts
 var NARRATION_OPENER = new RegExp(

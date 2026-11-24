@@ -14,6 +14,7 @@ import { formatModelScorecard, formatModelTurnLog } from './modelScorecard';
 import { formatRoutingByRole } from './routingByRole';
 import { formatStaffingSummary, workFiledNotStaffedVerdict } from './staffingSummary';
 import { MAX_TOOL_RESULT_CHARS } from './toolResultBudget';
+import { formatWorkflowDiagnostics } from './workflowDiagnostics';
 import { formatBytes } from './runActivity';
 import { providerFailureVerdict } from './providerFailureCause';
 
@@ -224,5 +225,6 @@ export function formatBrainDiagnostics(d: BrainDiagnostics): string[] {
         .join(', '),
     );
   }
+  if (d.workflow) lines.push(...formatWorkflowDiagnostics(d.workflow));
   return lines;
 }

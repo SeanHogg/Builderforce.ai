@@ -72,7 +72,10 @@ export async function runAgent(input: RunAgentInput): Promise<RunOutcome> {
   const state = input.resume ? resumeState(input.resume, policy, task) : freshState(policy, task);
   const resumed = Boolean(input.resume);
   if (state.pipeline === undefined && input.pipeline !== undefined) state.pipeline = input.pipeline;
-  if (!state.work) state.work = measureWorkflowSync(ports.events, workflowScope(input, state.step), 'work', () => planWork(task.assignedWork ?? []), (work) => ({ assigned: work.length, criteria: work.reduce((n, item) => n + item.criteria.length, 0) }));
+  if (!state.work && !resumed) measureWorkflowSync(ports.events, workflowScope(input, state.step), 'work', () => {
+    if (task.assignedWork?.length) state.work = planWork(task.assignedWork);
+    return state.work ?? [];
+  }, (work) => ({ assigned: work.length, criteria: work.reduce((n, item) => n + item.criteria.length, 0) }));
 
   // The run's counters live on its state, so a resumed tick adds to what earlier ticks counted.
   const tally: RunTally = (state.telemetry ??= freshTally());

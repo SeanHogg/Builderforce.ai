@@ -1,4 +1,4 @@
-import { a as BrainTraceEvent, U as UsageSurface, B as BrainMessage, P as PackageDirProbe } from './brainTriage-DY1vGYeP.cjs';
+import { a as BrainTraceEvent, U as UsageSurface, B as BrainMessage, P as PackageDirProbe } from './brainTriage-C2IAKctF.cjs';
 import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-DkPrGnWT.cjs';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
@@ -350,6 +350,92 @@ interface RunKnowledgeLog {
     consolidate(opts?: ConsolidateOptions): ConsolidatedMemory | null;
 }
 
+interface AskUserOption {
+    label: string;
+    description?: string;
+    /** Mark the option the model would advise / the default pick — hosts in
+     *  auto-answer mode pick the first recommended option when the user isn't
+     *  asked. Optional; ignored by readers that don't support it. */
+    recommended?: boolean;
+}
+interface AskUserPayload {
+    question: string;
+    options: AskUserOption[];
+    /** Allow more than one option to be chosen (checkboxes + submit) instead of a
+     *  single click. */
+    multiSelect?: boolean;
+}
+/** The tool name every surface advertises this question under. */
+declare const ASK_USER_TOOL = "ask_user";
+/**
+ * The `ask_user` tool as the model is shown it.
+ *
+ * NOT a platform action — an autonomous cloud agent has no live user to ask — so it
+ * is injected by the CONVERSATIONAL loops only (the api's addressed-agent reply and
+ * the Brain run store the editor/web chat drives) and intercepted as a terminal turn.
+ */
+interface AskUserToolSpec {
+    type: "function";
+    function: {
+        name: string;
+        description: string;
+        /** JSON Schema for the arguments. */
+        parameters: Record<string, unknown>;
+    };
+}
+declare const ASK_USER_TOOL_SPEC: AskUserToolSpec;
+/**
+ * Coerce anything — raw tool arguments, parsed JSON off a fenced block — into a
+ * renderable payload, or null when it isn't one.
+ *
+ * The threshold is deliberate and shared: a card is only meaningful with a prompt
+ * AND at least two choices, so a producer that cannot clear it falls back to prose
+ * (where the question at least still reads) instead of emitting a block the
+ * consumer would decline.
+ */
+declare function coerceAskUserPayload(raw: unknown): AskUserPayload | null;
+/**
+ * Serialize a payload into the canonical fenced block. Shared so the producer and
+ * {@link parseAskUser} can never drift on the format.
+ */
+declare function serializeAskUser(payload: AskUserPayload): string;
+/**
+ * The producer's ONE call: raw `ask_user` tool arguments → the block to reply with,
+ * or null when the arguments don't make a card (the caller then keeps its prose).
+ */
+declare function askUserBlock(args: unknown): string | null;
+/** Extract the payload from an assistant message, or null if none/invalid. */
+declare function parseAskUser(text: string): AskUserPayload | null;
+/** Remove the raw block so the message's prose reads cleanly beside the rendered
+ *  card. Collapses the whitespace the removed block leaves behind. */
+declare function stripAskUser(text: string): string;
+/** The DOM id of a rendered question card. ONE convention, shared by the transcript
+ *  that stamps it and any host that scrolls to it — so the two can never drift. */
+declare function askUserAnchorId(messageId: number): string;
+/** The minimal message shape {@link selectPendingAskUser} needs — structural on
+ *  purpose, so this module stays free of any transcript import. */
+interface AskUserMessageLike {
+    id: number;
+    role: string;
+    content: string;
+}
+/** An unanswered question and the message carrying it. */
+interface PendingAskUser {
+    payload: AskUserPayload;
+    /** The assistant message the question rides in (lets a host reveal its card). */
+    messageId: number;
+}
+/**
+ * The question the conversation is currently BLOCKED on, or null when there is none.
+ * Walks back from the newest turn: the last assistant `ask-user` block wins, but a
+ * user turn after it means the question was already answered (answering posts the
+ * choice as the next user turn), so nothing is pending.
+ *
+ * Shared so a host never re-derives "is there an open question" — the same predicate
+ * drives the pinned banner and any host-side pending affordance.
+ */
+declare function selectPendingAskUser(messages: readonly AskUserMessageLike[]): PendingAskUser | null;
+
 /**
  * Evidence ledger (PRD 45 §4.2) — the pure half of the deterministic run gates.
  *
@@ -525,6 +611,157 @@ interface ShipPolicy {
     source: ShipPolicySource;
     /** Set by {@link narrowByHold}: the chat turn holding every publish. */
     hold?: ShipHold;
+}
+
+interface AssignedWork {
+    id: string;
+    criteria: readonly string[];
+}
+interface WorkEvidence {
+    id: string;
+    status: "done" | "blocked" | "in_review";
+    /** Verification evidence, review handoff, or the declared blocker. */
+    detail: string;
+}
+/** Bound to the authenticated run by its host. */
+type RunWorkPort = {
+    assigned: readonly AssignedWork[];
+} & ({
+    settleAfterRun: true;
+    evidence?: never;
+} | {
+    settleAfterRun?: false;
+    evidence(ids: readonly string[]): Promise<readonly WorkEvidence[]>;
+});
+
+/**
+ * The run-outcome write-back's TELEMETRY half — the PRD 35 §8.2 uniform outcome row.
+ *
+ * Every entry point's run ends in one row (`@builderforce/agent-run`'s `RunOutcomeRow`).
+ * A client posts it to `POST /llm/v1/run-outcome` beside the routing fields, under the
+ * SAME field names, so an adapter spreads the row into the request and nothing is
+ * renamed on the way. {@link parseRunOutcomeTelemetry} validates each field and drops
+ * the ones that do not hold — a malformed counter is a missing fact, never a rejected
+ * report. Pure and dependency-free, like the rest of this package.
+ */
+/** Every entry point a run can be labelled with (PRD 35 §3.2) — the ONE list. A telemetry
+ *  label only: nothing branches on it for behaviour. */
+declare const ALL_ENTRY_POINTS: readonly ["vscode", "web", "rovr", "canvas", "on-prem", "cloud"];
+type EntryPoint = (typeof ALL_ENTRY_POINTS)[number];
+/** The entry points a client may label its run with. `cloud` is scored server-side and
+ *  never accepted off the wire (a client claiming it would double-count). */
+type ClientEntryPoint = Exclude<EntryPoint, 'cloud'>;
+/** The declared verify phase's result. */
+type RunVerifyResult = 'passed' | 'failed' | 'not-run';
+/** The §8.2 fields, as a client sends them and as the scorer records them. */
+interface RunOutcomeTelemetry {
+    entryPoint?: ClientEntryPoint;
+    toolCalls?: number;
+    toolErrors?: number;
+    tokens?: number;
+    cacheReadTokens?: number;
+    compactions?: number;
+    stallRecoveries?: number;
+    escalations?: number;
+    verify?: RunVerifyResult;
+    /** The step the first spawn happened on; `null` = the run spawned nothing. */
+    firstSpawnTurn?: number | null;
+    coveredReadStubs?: number;
+    shellFileReads?: number;
+    repoErrors?: number;
+    contextPackTokens?: number;
+    /** `ok` | `refreshed` | `degraded:<reason>`, at most {@link MODEL_PREFLIGHT_MAX} chars. */
+    modelPreflight?: string;
+    unkeptReadyClaims?: number;
+    /** The A3 progress trips, by signal. */
+    progressTrips?: Record<string, number>;
+    /**
+     * Set on a SUB-AGENT's row: the `clientRunId` its owner's row was reported under, so a child is
+     * one more row of the owner's tree and never a second run of it. The row's OWN run id is the
+     * request's `clientRunId` (the idempotency key), so only the parent needs a field.
+     */
+    parentRunId?: string;
+}
+
+/**
+ * Learned Model Routing (PRD 13) — the RUN-OUTCOME write-back contract.
+ *
+ * `POST /llm/v1/run-outcome` is the door a NON-cloud run (on-prem host, IDE-native,
+ * external SDK) uses to teach the same routing table that cloud runs teach. Both
+ * halves of that door live here so they can never drift:
+ *
+ *   • the CLIENT builds a {@link RunOutcomeRequest} — it is the only place field
+ *     names are spelled, so an on-prem host cannot invent `status` where the route
+ *     reads `terminalStatus`;
+ *   • the ROUTE hands the raw JSON body to {@link parseRunOutcomeRequest}, which
+ *     validates and normalizes it into the {@link NormalizedRunOutcome} the scorer
+ *     records.
+ *
+ * Pure and dependency-free: no env, no fetch, no DB. The transport (base URL,
+ * bearer, retries) belongs to whoever calls it.
+ *
+ * The body also carries the PRD 35 §8.2 uniform outcome row (`runOutcomeTelemetry.ts`),
+ * under the row's own field names.
+ */
+
+/** How a run ended. Non-'completed' scores 0 (see the api's `computeOutcomeScore`). */
+type TerminalStatus = 'completed' | 'failed' | 'cancelled';
+/** Where the run executed. Anything non-'cloud' has no `executions` row. */
+type OutcomeSource = 'cloud' | 'onprem' | 'ide' | 'external' | 'canvas';
+/**
+ * The JSON body a client POSTs. `terminalStatus` wins; `success` is a friendly
+ * boolean alias for callers that only know "did it work".
+ */
+interface RunOutcomeRequest extends RunOutcomeTelemetry {
+    /** Idempotency key — ONE outcome per id. The client's own execution/run id. */
+    clientRunId: string;
+    /** The model the run actually used (what it locked onto, not what it asked for). */
+    model: string;
+    source?: OutcomeSource;
+    terminalStatus?: TerminalStatus;
+    /** Alias for `terminalStatus`: true → completed, false → failed. */
+    success?: boolean;
+    actionType?: string;
+    /** The model ROLE `model` played in this run (plan · code · review · verify · explore · chat ·
+     *  utility) — lets the router rank per role. The route validates it; unknown → dropped. */
+    role?: string;
+    projectId?: number | null;
+    taskId?: number | null;
+    merged?: boolean;
+    ciGreen?: boolean;
+    degraded?: boolean;
+    steps?: number;
+    costMc?: number;
+    approved?: boolean;
+    /** The run died on a provider rate limit — an AVAILABILITY signal that demotes the
+     *  model without teaching the router it is low-quality. */
+    rateLimited?: boolean;
+    /**
+     * Whether this outcome teaches the routing table. Default true. A run that is not
+     * evidence about CODING models (a Creation Canvas turn) reports with `false`: its
+     * telemetry row is recorded, and never folded into — or rebuilt into — the ranking.
+     */
+    routingSignal?: boolean;
+    /**
+     * The run failed because the TENANT ran out of quota/budget. Stored, and never taught to routing: it
+     * says nothing about the model. The reporter that knows says so; absent = it did not.
+     */
+    quotaExhausted?: boolean;
+}
+
+/**
+ * contractModel - the model half of the run contract: the transcript row, what the agent asks of a model, what comes back, and
+ * the transport that answers. Split out of `contract.ts` (PRD 35 §5 rule 4); `contract.ts` re-exports every name, so no import changes.
+ */
+
+/** What a transport's preflight found. Empty `byoUnresolved` ⇒ every connected account resolves. */
+interface ModelPreflightResult {
+    /** `provider:reason` entries, exactly as the gateway's `x-builderforce-byo-unresolved` header spells them. */
+    byoUnresolved: readonly string[];
+    /** Providers whose `expired` token the transport refreshed successfully. */
+    refreshed?: readonly string[];
+    /** The model the run falls back to, when the transport knows it. */
+    fallback?: string;
 }
 
 /**
@@ -1002,207 +1239,6 @@ interface StreamChatResult {
  * final text and any tool calls the model requested.
  */
 declare function streamChatCompletion(opts: StreamChatOptions, handlers?: StreamHandlers): Promise<StreamChatResult>;
-
-interface AskUserOption {
-    label: string;
-    description?: string;
-    /** Mark the option the model would advise / the default pick — hosts in
-     *  auto-answer mode pick the first recommended option when the user isn't
-     *  asked. Optional; ignored by readers that don't support it. */
-    recommended?: boolean;
-}
-interface AskUserPayload {
-    question: string;
-    options: AskUserOption[];
-    /** Allow more than one option to be chosen (checkboxes + submit) instead of a
-     *  single click. */
-    multiSelect?: boolean;
-}
-/** The tool name every surface advertises this question under. */
-declare const ASK_USER_TOOL = "ask_user";
-/**
- * The `ask_user` tool as the model is shown it.
- *
- * NOT a platform action — an autonomous cloud agent has no live user to ask — so it
- * is injected by the CONVERSATIONAL loops only (the api's addressed-agent reply and
- * the Brain run store the editor/web chat drives) and intercepted as a terminal turn.
- */
-interface AskUserToolSpec {
-    type: "function";
-    function: {
-        name: string;
-        description: string;
-        /** JSON Schema for the arguments. */
-        parameters: Record<string, unknown>;
-    };
-}
-declare const ASK_USER_TOOL_SPEC: AskUserToolSpec;
-/**
- * Coerce anything — raw tool arguments, parsed JSON off a fenced block — into a
- * renderable payload, or null when it isn't one.
- *
- * The threshold is deliberate and shared: a card is only meaningful with a prompt
- * AND at least two choices, so a producer that cannot clear it falls back to prose
- * (where the question at least still reads) instead of emitting a block the
- * consumer would decline.
- */
-declare function coerceAskUserPayload(raw: unknown): AskUserPayload | null;
-/**
- * Serialize a payload into the canonical fenced block. Shared so the producer and
- * {@link parseAskUser} can never drift on the format.
- */
-declare function serializeAskUser(payload: AskUserPayload): string;
-/**
- * The producer's ONE call: raw `ask_user` tool arguments → the block to reply with,
- * or null when the arguments don't make a card (the caller then keeps its prose).
- */
-declare function askUserBlock(args: unknown): string | null;
-/** Extract the payload from an assistant message, or null if none/invalid. */
-declare function parseAskUser(text: string): AskUserPayload | null;
-/** Remove the raw block so the message's prose reads cleanly beside the rendered
- *  card. Collapses the whitespace the removed block leaves behind. */
-declare function stripAskUser(text: string): string;
-/** The DOM id of a rendered question card. ONE convention, shared by the transcript
- *  that stamps it and any host that scrolls to it — so the two can never drift. */
-declare function askUserAnchorId(messageId: number): string;
-/** The minimal message shape {@link selectPendingAskUser} needs — structural on
- *  purpose, so this module stays free of any transcript import. */
-interface AskUserMessageLike {
-    id: number;
-    role: string;
-    content: string;
-}
-/** An unanswered question and the message carrying it. */
-interface PendingAskUser {
-    payload: AskUserPayload;
-    /** The assistant message the question rides in (lets a host reveal its card). */
-    messageId: number;
-}
-/**
- * The question the conversation is currently BLOCKED on, or null when there is none.
- * Walks back from the newest turn: the last assistant `ask-user` block wins, but a
- * user turn after it means the question was already answered (answering posts the
- * choice as the next user turn), so nothing is pending.
- *
- * Shared so a host never re-derives "is there an open question" — the same predicate
- * drives the pinned banner and any host-side pending affordance.
- */
-declare function selectPendingAskUser(messages: readonly AskUserMessageLike[]): PendingAskUser | null;
-
-/**
- * The run-outcome write-back's TELEMETRY half — the PRD 35 §8.2 uniform outcome row.
- *
- * Every entry point's run ends in one row (`@builderforce/agent-run`'s `RunOutcomeRow`).
- * A client posts it to `POST /llm/v1/run-outcome` beside the routing fields, under the
- * SAME field names, so an adapter spreads the row into the request and nothing is
- * renamed on the way. {@link parseRunOutcomeTelemetry} validates each field and drops
- * the ones that do not hold — a malformed counter is a missing fact, never a rejected
- * report. Pure and dependency-free, like the rest of this package.
- */
-/** Every entry point a run can be labelled with (PRD 35 §3.2) — the ONE list. A telemetry
- *  label only: nothing branches on it for behaviour. */
-declare const ALL_ENTRY_POINTS: readonly ["vscode", "web", "rovr", "canvas", "on-prem", "cloud"];
-type EntryPoint = (typeof ALL_ENTRY_POINTS)[number];
-/** The entry points a client may label its run with. `cloud` is scored server-side and
- *  never accepted off the wire (a client claiming it would double-count). */
-type ClientEntryPoint = Exclude<EntryPoint, 'cloud'>;
-/** The declared verify phase's result. */
-type RunVerifyResult = 'passed' | 'failed' | 'not-run';
-/** The §8.2 fields, as a client sends them and as the scorer records them. */
-interface RunOutcomeTelemetry {
-    entryPoint?: ClientEntryPoint;
-    toolCalls?: number;
-    toolErrors?: number;
-    tokens?: number;
-    cacheReadTokens?: number;
-    compactions?: number;
-    stallRecoveries?: number;
-    escalations?: number;
-    verify?: RunVerifyResult;
-    /** The step the first spawn happened on; `null` = the run spawned nothing. */
-    firstSpawnTurn?: number | null;
-    coveredReadStubs?: number;
-    shellFileReads?: number;
-    repoErrors?: number;
-    contextPackTokens?: number;
-    /** `ok` | `refreshed` | `degraded:<reason>`, at most {@link MODEL_PREFLIGHT_MAX} chars. */
-    modelPreflight?: string;
-    unkeptReadyClaims?: number;
-    /** The A3 progress trips, by signal. */
-    progressTrips?: Record<string, number>;
-    /**
-     * Set on a SUB-AGENT's row: the `clientRunId` its owner's row was reported under, so a child is
-     * one more row of the owner's tree and never a second run of it. The row's OWN run id is the
-     * request's `clientRunId` (the idempotency key), so only the parent needs a field.
-     */
-    parentRunId?: string;
-}
-
-/**
- * Learned Model Routing (PRD 13) — the RUN-OUTCOME write-back contract.
- *
- * `POST /llm/v1/run-outcome` is the door a NON-cloud run (on-prem host, IDE-native,
- * external SDK) uses to teach the same routing table that cloud runs teach. Both
- * halves of that door live here so they can never drift:
- *
- *   • the CLIENT builds a {@link RunOutcomeRequest} — it is the only place field
- *     names are spelled, so an on-prem host cannot invent `status` where the route
- *     reads `terminalStatus`;
- *   • the ROUTE hands the raw JSON body to {@link parseRunOutcomeRequest}, which
- *     validates and normalizes it into the {@link NormalizedRunOutcome} the scorer
- *     records.
- *
- * Pure and dependency-free: no env, no fetch, no DB. The transport (base URL,
- * bearer, retries) belongs to whoever calls it.
- *
- * The body also carries the PRD 35 §8.2 uniform outcome row (`runOutcomeTelemetry.ts`),
- * under the row's own field names.
- */
-
-/** How a run ended. Non-'completed' scores 0 (see the api's `computeOutcomeScore`). */
-type TerminalStatus = 'completed' | 'failed' | 'cancelled';
-/** Where the run executed. Anything non-'cloud' has no `executions` row. */
-type OutcomeSource = 'cloud' | 'onprem' | 'ide' | 'external' | 'canvas';
-/**
- * The JSON body a client POSTs. `terminalStatus` wins; `success` is a friendly
- * boolean alias for callers that only know "did it work".
- */
-interface RunOutcomeRequest extends RunOutcomeTelemetry {
-    /** Idempotency key — ONE outcome per id. The client's own execution/run id. */
-    clientRunId: string;
-    /** The model the run actually used (what it locked onto, not what it asked for). */
-    model: string;
-    source?: OutcomeSource;
-    terminalStatus?: TerminalStatus;
-    /** Alias for `terminalStatus`: true → completed, false → failed. */
-    success?: boolean;
-    actionType?: string;
-    /** The model ROLE `model` played in this run (plan · code · review · verify · explore · chat ·
-     *  utility) — lets the router rank per role. The route validates it; unknown → dropped. */
-    role?: string;
-    projectId?: number | null;
-    taskId?: number | null;
-    merged?: boolean;
-    ciGreen?: boolean;
-    degraded?: boolean;
-    steps?: number;
-    costMc?: number;
-    approved?: boolean;
-    /** The run died on a provider rate limit — an AVAILABILITY signal that demotes the
-     *  model without teaching the router it is low-quality. */
-    rateLimited?: boolean;
-    /**
-     * Whether this outcome teaches the routing table. Default true. A run that is not
-     * evidence about CODING models (a Creation Canvas turn) reports with `false`: its
-     * telemetry row is recorded, and never folded into — or rebuilt into — the ranking.
-     */
-    routingSignal?: boolean;
-    /**
-     * The run failed because the TENANT ran out of quota/budget. Stored, and never taught to routing: it
-     * says nothing about the model. The reporter that knows says so; absent = it did not.
-     */
-    quotaExhausted?: boolean;
-}
 
 /**
  * What a settled work run reports to learned routing — so a run in the editor teaches
@@ -2407,42 +2443,6 @@ interface BrainRunOpening {
     gates?: readonly PolicyGate[];
     /** Host: the workspace's `.builderforce/rules.md`. */
     rules?: string;
-}
-
-interface AssignedWork {
-    id: string;
-    criteria: readonly string[];
-}
-interface WorkEvidence {
-    id: string;
-    status: "done" | "blocked" | "in_review";
-    /** Verification evidence, review handoff, or the declared blocker. */
-    detail: string;
-}
-/** Bound to the authenticated run by its host. */
-type RunWorkPort = {
-    assigned: readonly AssignedWork[];
-} & ({
-    settleAfterRun: true;
-    evidence?: never;
-} | {
-    settleAfterRun?: false;
-    evidence(ids: readonly string[]): Promise<readonly WorkEvidence[]>;
-});
-
-/**
- * contractModel - the model half of the run contract: the transcript row, what the agent asks of a model, what comes back, and
- * the transport that answers. Split out of `contract.ts` (PRD 35 §5 rule 4); `contract.ts` re-exports every name, so no import changes.
- */
-
-/** What a transport's preflight found. Empty `byoUnresolved` ⇒ every connected account resolves. */
-interface ModelPreflightResult {
-    /** `provider:reason` entries, exactly as the gateway's `x-builderforce-byo-unresolved` header spells them. */
-    byoUnresolved: readonly string[];
-    /** Providers whose `expired` token the transport refreshed successfully. */
-    refreshed?: readonly string[];
-    /** The model the run falls back to, when the transport knows it. */
-    fallback?: string;
 }
 
 /** The verifier port every deterministic run gate reads (PRD 45 §4.4). */

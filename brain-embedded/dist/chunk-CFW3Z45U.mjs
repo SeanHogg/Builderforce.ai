@@ -4736,10 +4736,9 @@ function shellRunWithStop(ctx, command, cwd) {
 function defaultRepoOf(ctx) {
   return safeRepoArg(ctx.caps.shell?.defaultRepo);
 }
-function pathInRepo(path, repo) {
-  if (!path) return path;
-  const inner = commitPathCandidates(path, repo);
-  return inner.length > 0 ? inner[inner.length - 1] : void 0;
+function pathsInRepo(path, repo) {
+  if (!path) return [];
+  return repo ? commitPathCandidates(path, repo) : [path];
 }
 async function notARepoWithCandidates(action, ctx) {
   const listed = await shellRunWithStop(ctx, buildListCheckoutsCommand());
@@ -4765,16 +4764,16 @@ function scopeAttempts(ctx, path) {
   const fallback = defaultRepoOf(ctx);
   const shell = ctx.caps.shell;
   const attempts = [];
-  if (!(fallback && shell && rootNotARepo.has(shell))) attempts.push({ path });
+  if (!(fallback && shell && rootNotARepo.has(shell))) attempts.push({ paths: pathsInRepo(path) });
   const inferred = inferRepoFromPath(path);
-  if (inferred) attempts.push({ repo: inferred, path: pathInRepo(path, inferred) });
-  if (fallback && fallback !== inferred) attempts.push({ repo: fallback, path: pathInRepo(path, fallback) });
+  if (inferred) attempts.push({ repo: inferred, paths: pathsInRepo(path, inferred) });
+  if (fallback && fallback !== inferred) attempts.push({ repo: fallback, paths: pathsInRepo(path, fallback) });
   return attempts;
 }
 async function runInRepoScope(ctx, scope, run) {
-  if (scope.repo) return { r: await run(scope.repo, pathInRepo(scope.path, scope.repo)), repo: scope.repo };
+  if (scope.repo) return { r: await run(scope.repo, pathsInRepo(scope.path, scope.repo)), repo: scope.repo };
   for (const attempt of scopeAttempts(ctx, scope.path)) {
-    const r = await run(attempt.repo, attempt.path);
+    const r = await run(attempt.repo, attempt.paths);
     if (!isNotARepo(r)) return attempt.repo ? { r, repo: attempt.repo } : { r };
     if (!attempt.repo && ctx.caps.shell) rootNotARepo.add(ctx.caps.shell);
   }
@@ -5267,7 +5266,7 @@ function parseGitStatusOutput(stdout, paths) {
   const header = parseHeader(statusLines.find((l) => l.startsWith("##")));
   const entries = parseEntries(statusLines);
   const truncated = Object.values(entries).some((list2) => list2.length > MAX_ENTRIES);
-  const report2 = {
+  const report3 = {
     ...header,
     staged: entries.staged.slice(0, MAX_ENTRIES),
     unstaged: entries.unstaged.slice(0, MAX_ENTRIES),
@@ -5277,8 +5276,8 @@ function parseGitStatusOutput(stdout, paths) {
     ...truncated ? { truncated: true } : {}
   };
   const wanted = statusPaths(paths);
-  if (wanted.length > 0) report2.paths = parsePathSections(sections, wanted, !!header.upstream && !header.upstreamGone);
-  return { output: statusLines.join("\n").trim(), report: report2 };
+  if (wanted.length > 0) report3.paths = parsePathSections(sections, wanted, !!header.upstream && !header.upstreamGone);
+  return { output: statusLines.join("\n").trim(), report: report3 };
 }
 
 // ../packages/agent-tools/src/worktree-path.ts
@@ -5819,9 +5818,22 @@ var gitCleanupMergedTool = defineTool({
 });
 
 // ../packages/agent-tools/src/git-tools.ts
+function pathspecArg(opts) {
+  const specs = (opts?.pathspecs ?? [opts?.path]).map((p) => safeGitArg(p)).filter((p) => !!p);
+  return specs.length > 0 ? ` -- ${specs.map((p) => `"${p}"`).join(" ")}` : "";
+}
+function buildUnbornDiffCommands(opts) {
+  const pathArg = pathspecArg(opts);
+  return [`git --no-pager diff --cached${pathArg}`, `git --no-pager diff${pathArg}`];
+}
+var UNBORN_HEAD = /^fatal: .*(bad revision 'HEAD'|ambiguous argument 'HEAD'|unknown revision)/m;
+function isUnbornHead(r) {
+  if (r.ok || r.exitCode !== void 0 && r.exitCode !== 128) return false;
+  return UNBORN_HEAD.test(`${r.stdout ?? ""}
+${r.error ?? ""}`);
+}
 function buildGitCommand(action, opts) {
-  const path = safeGitArg(opts?.path);
-  const pathArg = path ? ` -- "${path}"` : "";
+  const pathArg = pathspecArg(opts);
   const tracked = safeGitArg(opts?.trackedBranch);
   const viaSandbox = opts?.remoteViaSandbox === true;
   const fetchTracked = viaSandbox ? "" : `git fetch origin "${tracked}" 2>/dev/null && `;
@@ -5831,7 +5843,7 @@ function buildGitCommand(action, opts) {
     case "status":
       return buildStatusCommand(opts?.paths, opts?.repo);
     case "diff":
-      return `git --no-pager diff HEAD${pathArg} || git --no-pager diff${pathArg}`;
+      return `git --no-pager diff HEAD${pathArg}`;
     case "history": {
       const limit = Number.isFinite(opts?.limit) && opts.limit > 0 ? Math.min(Math.floor(opts.limit), 200) : 30;
       return `git --no-pager log --oneline -n ${limit}${pathArg}`;
@@ -5870,8 +5882,8 @@ function buildGitCommand(action, opts) {
 function gitToolResult(action, r, paths) {
   const out = (r.stdout ?? "").trim();
   if (action === "status" && r.ok) {
-    const { output, report: report2 } = parseGitStatusOutput(out, paths);
-    return { data: { ok: true, action, output: output.slice(0, 2e4), ...report2, ...r.error ? { error: r.error } : {} } };
+    const { output, report: report3 } = parseGitStatusOutput(out, paths);
+    return { data: { ok: true, action, output: output.slice(0, 2e4), ...report3, ...r.error ? { error: r.error } : {} } };
   }
   if (r.exitCode === 3 || /MERGE_CONFLICT/.test(out)) {
     return { data: { ok: false, action, error: "merge conflict \u2014 the base branch has changes that conflict with your branch; the merge was aborted (working tree is clean). Resolve by editing the conflicting files, or ask a human.", output: out } };
@@ -5893,14 +5905,24 @@ async function runGitTool(action, opts, ctx) {
     baseBranch = synced.baseBranch ?? baseBranch;
   }
   const scope = { repo: opts.repo, path: opts.path ?? opts.paths?.[0] };
-  const ran = await runInRepoScope(ctx, scope, (repo, path) => shellRunWithStop(ctx, buildGitCommand(action, {
-    baseBranch,
-    limit: opts.limit,
-    path,
-    ...opts.paths?.length ? { paths: opts.paths, ...repo ? { repo } : {} } : {},
-    ...trackedBranch ? { trackedBranch } : {},
-    ...remote ? { remoteViaSandbox: true } : {}
-  }), safeRepoArg(repo) ?? void 0));
+  const ran = await runInRepoScope(ctx, scope, async (repo, pathspecs) => {
+    const cwd = safeRepoArg(repo) ?? void 0;
+    const r = await shellRunWithStop(ctx, buildGitCommand(action, {
+      baseBranch,
+      limit: opts.limit,
+      pathspecs,
+      ...opts.paths?.length ? { paths: opts.paths, ...repo ? { repo } : {} } : {},
+      ...trackedBranch ? { trackedBranch } : {},
+      ...remote ? { remoteViaSandbox: true } : {}
+    }), cwd);
+    if (action !== "diff" || !isUnbornHead(r)) return r;
+    const [staged, unstaged] = buildUnbornDiffCommands({ pathspecs });
+    const a = await shellRunWithStop(ctx, staged, cwd);
+    if (!a.ok) return a;
+    const b = await shellRunWithStop(ctx, unstaged, cwd);
+    if (!b.ok) return b;
+    return { ...b, stdout: [a.stdout, b.stdout].map((s) => (s ?? "").trim()).filter(Boolean).join("\n") };
+  });
   if (!ran) return notARepoWithCandidates(action, ctx);
   if (remote && ran.r.ok) {
     const published = await remote.publish({ force: action !== "sync_latest" });
@@ -9586,8 +9608,8 @@ function pathsOf(files) {
 function delegatedChangedPathsOf(tool, result) {
   return isDelegationTool(tool) ? pathsOf(recordOf2(result)?.changedFiles) : [];
 }
-function reportMovedWork(report2) {
-  const r = recordOf2(report2);
+function reportMovedWork(report3) {
+  const r = recordOf2(report3);
   return !!r && (r.state === "done" || pathsOf(r.changedFiles).length > 0);
 }
 function delegationReportedOf(tool, result) {
@@ -9595,8 +9617,8 @@ function delegationReportedOf(tool, result) {
   const reports = recordOf2(result)?.reports;
   return Array.isArray(reports) && reports.some(reportMovedWork);
 }
-function childReportProgressOf(report2) {
-  return { changedPaths: pathsOf(report2.changedFiles), moved: reportMovedWork(report2) };
+function childReportProgressOf(report3) {
+  return { changedPaths: pathsOf(report3.changedFiles), moved: reportMovedWork(report3) };
 }
 
 // ../packages/run-guards/src/verifiedWork.ts
@@ -10679,8 +10701,8 @@ var ProgressDetector = class {
    * (`childReportText`), the default path. Read like a `wait_agents` result: its files are the
    * run's writes, and a finished report is progress (chat #157440).
    */
-  observeChildReport(report2) {
-    const { changedPaths: changedPaths2, moved } = childReportProgressOf(report2);
+  observeChildReport(report3) {
+    const { changedPaths: changedPaths2, moved } = childReportProgressOf(report3);
     this.creditDelegatedWrites(changedPaths2);
     this.progress.noteChildReport(changedPaths2, moved);
   }
@@ -12586,8 +12608,134 @@ function tapEvents(sink, tap) {
       await sink?.emit(event, meta);
       await tap.after?.(event, sink);
     },
-    ...sink?.outcome ? { outcome: (row) => sink.outcome?.(row) } : {}
+    ...sink?.outcome ? { outcome: (row) => sink.outcome?.(row) } : {},
+    ...sink?.workflow ? { workflow: (metric) => sink.workflow?.(metric) } : {}
   };
+}
+
+// ../packages/agent-run/src/conformanceTask.ts
+var CONFORMANCE_TRACE = [
+  "run.started",
+  "model.preflight",
+  "turn.started",
+  "context.tools",
+  "model.completed:fake-model",
+  "tool.dispatched:list_files:ok",
+  "turn.finished",
+  "turn.started",
+  "model.completed:fake-model",
+  "run.finished:finished"
+];
+var CONFORMANCE_ENTRY_TRACE = [
+  CONFORMANCE_TRACE[0],
+  "run.routed",
+  ...CONFORMANCE_TRACE.slice(1)
+];
+
+// ../packages/agent-run/src/telemetry/workflowMetrics.ts
+var WORKFLOW_STAGES = ["surface", "start", "route", "work", "opening", "compose", "kernel", "dispatch", "spawn", "ledger", "finish", "settle", "grade", "outcome"];
+function workflowScope(input, step = 0) {
+  return { runId: input.task.runId, entryPoint: input.policy?.entryPoint ?? "unknown", step };
+}
+var sequence = 0;
+function report(sink, metric) {
+  try {
+    void Promise.resolve(sink?.workflow?.(metric)).catch(() => {
+    });
+  } catch {
+  }
+}
+function beginWorkflowStage(sink, scope, stage, now = Date.now) {
+  if (!sink?.workflow) return (_status, _counters) => {
+  };
+  const startedAt = now();
+  const metric = { schemaVersion: 1, id: `${startedAt}:${++sequence}`, ...scope, stage, status: "running", startedAt };
+  report(sink, metric);
+  let ended = false;
+  return (status = "completed", counters) => {
+    if (ended) return;
+    ended = true;
+    const endedAt = now();
+    report(sink, { ...metric, status, endedAt, durationMs: Math.max(0, endedAt - startedAt), ...counters ? { counters } : {} });
+  };
+}
+function finishMeasurement(done, value, verdict, counters) {
+  try {
+    done(verdict?.(value) ?? "completed", counters?.(value));
+  } catch {
+    done("completed");
+  }
+}
+async function measureWorkflow(sink, scope, stage, action, verdict, signal, counters) {
+  if (!sink?.workflow) return action();
+  const done = beginWorkflowStage(sink, scope, stage);
+  try {
+    const value = await action();
+    finishMeasurement(done, value, verdict, counters);
+    return value;
+  } catch (error) {
+    done(signal?.aborted ? "cancelled" : "failed");
+    throw error;
+  }
+}
+function measureWorkflowSync(sink, scope, stage, action, counters, verdict) {
+  if (!sink?.workflow) return action();
+  const done = beginWorkflowStage(sink, scope, stage);
+  try {
+    const value = action();
+    finishMeasurement(done, value, verdict, counters);
+    return value;
+  } catch (error) {
+    done("failed");
+    throw error;
+  }
+}
+function workflowMetricOf(value) {
+  if (!value || typeof value !== "object") return null;
+  const m = value;
+  if (m.schemaVersion !== 1 || typeof m.id !== "string" || !m.id || m.id.length > 200 || !WORKFLOW_STAGES.includes(m.stage) || !["running", "completed", "failed", "blocked", "cancelled"].includes(m.status) || typeof m.entryPoint !== "string" || !Number.isInteger(m.step) || m.step < 0 || !Number.isFinite(m.startedAt) || m.runId !== void 0 && typeof m.runId !== "string") return null;
+  if (m.status !== "running" && (!Number.isFinite(m.endedAt) || !Number.isFinite(m.durationMs) || m.durationMs < 0)) return null;
+  const counters = m.counters && typeof m.counters === "object" ? Object.fromEntries(Object.entries(m.counters).filter(([key, value2]) => /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(key) && typeof value2 === "number" && Number.isFinite(value2)).slice(0, 32)) : void 0;
+  return {
+    schemaVersion: 1,
+    id: m.id,
+    stage: m.stage,
+    status: m.status,
+    step: m.step,
+    entryPoint: m.entryPoint,
+    startedAt: m.startedAt,
+    ...m.runId !== void 0 ? { runId: m.runId } : {},
+    ...m.status !== "running" ? { endedAt: m.endedAt, durationMs: m.durationMs } : {},
+    ...counters ? { counters } : {}
+  };
+}
+function summarizeWorkflow(metrics) {
+  const attempts = /* @__PURE__ */ new Map();
+  for (const metric of metrics) {
+    const key = `${metric.runId ?? ""}:${metric.entryPoint}:${metric.id}`;
+    const prior = attempts.get(key);
+    if (!prior || prior.status === "running") attempts.set(key, metric);
+  }
+  const stages2 = WORKFLOW_STAGES.map((stage) => {
+    const observed = [...attempts.values()].filter((m) => m.stage === stage);
+    const durations = observed.flatMap((m) => m.durationMs === void 0 ? [] : [m.durationMs]);
+    const count2 = (status) => observed.filter((m) => m.status === status).length;
+    const latest = observed.reduce((a, b) => !a || b.startedAt >= a.startedAt ? b : a, void 0);
+    return {
+      stage,
+      status: !observed.length ? "not_observed" : count2("running") ? "incomplete" : latest.status,
+      attempts: observed.length,
+      completed: count2("completed"),
+      failed: count2("failed"),
+      blocked: count2("blocked"),
+      cancelled: count2("cancelled"),
+      running: count2("running"),
+      totalMs: durations.length ? durations.reduce((sum, ms) => sum + ms, 0) : null,
+      maxMs: durations.length ? Math.max(...durations) : null,
+      ...latest?.counters ? { latestCounters: latest.counters } : {}
+    };
+  });
+  return { schemaVersion: 1, observedStages: stages2.filter((s) => s.attempts > 0).length, totalStages: stages2.length, runIds: [...new Set(metrics.flatMap((m) => m.runId ? [m.runId] : []))], stages: stages2 };
 }
 
 // ../packages/agent-run/src/policy/compaction/history.ts
@@ -14828,7 +14976,7 @@ var DEFERRED_ENDS_PLANNING = "The run kept reading through its progress checks w
 var DEFERRED_ENDS_PLANNING_STEERED = "The run kept reading through its progress checks without handing off \u2014 analysis ends here and the coding role takes the next turn.";
 
 // ../packages/agent-run/src/policy/guards/forced/turns.ts
-function report(env, event) {
+function report2(env, event) {
   env.ctx.state.model = reduceRunPolicy(env.ctx.state.model, event);
 }
 function specOf(env, name) {
@@ -14837,7 +14985,7 @@ function specOf(env, name) {
 var budgeted = (env) => env.bind.facts.budgeted();
 var askToolIf = (env, allowed) => allowed ? env.opts.askTool : null;
 function endPlanning(env, step, why) {
-  report(env, { type: "plan_budget_spent" });
+  report2(env, { type: "plan_budget_spent" });
   env.note("loop.plan_budget_spent", { step, planTurns: env.ctx.state.model.planTurns }, why);
 }
 function changeToolsOf(env, selected, canAsk) {
@@ -14854,7 +15002,7 @@ function planBudgetTurn(env, step) {
     endPlanning(env, step, canAsk ? "The forced hand-off turn did not hand off \u2014 analysis ends here and the coding role takes the next turn." : "Analysis budget spent where hand_off cannot be offered \u2014 analysis ends here and the coding role takes the next turn.");
     return null;
   }
-  report(env, { type: "hand_off_forced" });
+  report2(env, { type: "hand_off_forced" });
   env.note("loop.hand_off_due", { step, planTurns: model.planTurns }, `${model.planTurns} analysis turn(s) with no change and no hand-off \u2014 this turn offers hand_off alone and requires the call.`);
   return { tools: [handOff2], toolChoice: "required", brief: handOffDueBrief(env.opts.handOffTool) };
 }
@@ -14862,7 +15010,7 @@ function forcedProgressTurn(env, selected, reason, opts = {}) {
   const model = env.ctx.state.model;
   const handOff2 = specOf(env, env.opts.handOffTool);
   if (!opts.changeOnly && handOff2 && offersHandOff(model) && env.bind.facts.canAskUser() && !model.handOffForced) {
-    report(env, { type: "hand_off_forced" });
+    report2(env, { type: "hand_off_forced" });
     return { forced: "hand_off", turn: { tools: [handOff2], toolChoice: "required", brief: handOffBrief(reason, env.opts.handOffTool) } };
   }
   if (env.bind.facts.codeChanged()) return null;
@@ -14871,9 +15019,9 @@ function forcedProgressTurn(env, selected, reason, opts = {}) {
   if (!tools) return null;
   if (offersHandOff(model)) {
     if (opts.endsPlanning) endPlanning(env, opts.endsPlanning.step, opts.endsPlanning.why);
-    else report(env, { type: "plan_budget_spent" });
+    else report2(env, { type: "plan_budget_spent" });
   }
-  report(env, { type: "change_forced" });
+  report2(env, { type: "change_forced" });
   return { forced: "change", turn: { tools, toolChoice: "required", brief: changeBrief(reason, askToolIf(env, canAsk)) } };
 }
 function changeBudgetTurn(env, step, selected) {
@@ -14883,7 +15031,7 @@ function changeBudgetTurn(env, step, selected) {
   const canAsk = env.bind.facts.canAskUser();
   const tools = changeToolsOf(env, selected, canAsk);
   if (!tools) return null;
-  report(env, { type: "change_forced" });
+  report2(env, { type: "change_forced" });
   env.note("loop.change_due", { step, codeTurns: model.codeTurns }, `${model.codeTurns} coding turn(s) with no change and no hand-off \u2014 this turn offers the change tools alone and requires a call.`);
   return { tools, toolChoice: "required", brief: changeDueBrief(model.codeTurns, askToolIf(env, canAsk)) };
 }
@@ -15170,7 +15318,7 @@ var RunGuards = class {
       await this.judge("code_edit", verdict, step, ports);
     }
     this.cascade.endTurn();
-    for (const report2 of this.bind?.childReports?.() ?? []) this.progress?.observeChildReport(report2);
+    for (const report3 of this.bind?.childReports?.() ?? []) this.progress?.observeChildReport(report3);
     const action = this.progress?.endTurn();
     if (action) await this.onTrip(action, ports, step);
   }
@@ -16917,6 +17065,11 @@ async function synthesizeFinal(input, state, hooks, transcript, pack, tally, why
   return output;
 }
 async function dispatchCall(input, state, call, watch, facts = { refused: false }, step = state.step) {
+  const invoke = () => dispatchCallCore(input, state, call, watch, facts, step);
+  const verdict = (result) => result.isError ? "failed" : "completed";
+  return measureWorkflow(input.ports.events, workflowScope(input, step), "dispatch", () => isSpawnTool(call.name) ? measureWorkflow(input.ports.events, workflowScope(input, step), "spawn", invoke, verdict, input.signal) : invoke(), verdict, input.signal);
+}
+async function dispatchCallCore(input, state, call, watch, facts, step) {
   const { ports, signal } = input;
   if (call.malformed) return declineMalformedCall(ports, call, facts, step);
   const platform = ports.platform;
@@ -17039,6 +17192,9 @@ function contextPackTokens(state) {
 
 // ../packages/agent-run/src/runSettle.ts
 async function settle(input, hooks, state, transcript, kind, extra) {
+  return measureWorkflow(input.ports.events, workflowScope(input, state.step), "settle", () => settleCore(input, hooks, state, transcript, kind, extra), (result) => result.kind === "failed" ? result.reason === RUN_CANCELLED_REASON ? "cancelled" : "failed" : result.kind === "paused" ? "blocked" : "completed");
+}
+async function settleCore(input, hooks, state, transcript, kind, extra) {
   state.messages = transcript;
   const unfinished = kind === "finished" ? hooks.finish.unfinishedWork(state) : null;
   if (unfinished) {
@@ -17070,9 +17226,9 @@ async function settle(input, hooks, state, transcript, kind, extra) {
     return kind === "failed" || cause !== void 0 ? { kind: "failed", reason: extra.reason ?? (cause instanceof Error ? cause.message : "failed"), state, cause } : { kind: "yielded", state };
   }
   if (kind === "finished" || kind === "failed") {
-    const row = buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, parentRunId: input.task.dispatch.parentRunId, kind, ...extra.reason !== void 0 ? { reason: extra.reason } : {}, state });
+    const row = measureWorkflowSync(input.ports.events, workflowScope(input, state.step), "grade", () => buildOutcomeRow({ entryPoint: input.policy.entryPoint, runId: input.task.runId, parentRunId: input.task.dispatch.parentRunId, kind, ...extra.reason !== void 0 ? { reason: extra.reason } : {}, state }), (row2) => ({ ...row2.work ?? { assigned: 0, done: 0, blocked: 0, inReview: 0, open: 0 } }));
     try {
-      await input.ports.events.outcome?.(row);
+      if (input.ports.events.outcome) await measureWorkflow(input.ports.events, workflowScope(input, state.step), "outcome", () => input.ports.events.outcome(row));
     } catch {
     }
     await emit(input.ports.events, { kind: "run.finished", step: state.step, outcome: kind });
@@ -17494,6 +17650,18 @@ function readOnlyPort(run) {
   return (call) => guards.isReadOnly?.(policyContext(run.input, run.state, currentView(run.transcript, run.offered), run.state.step, 0), call.name) ?? false;
 }
 
+// ../packages/agent-run/src/telemetry/workflowHooks.ts
+function workflowHooks(hooks, input) {
+  const finish = hooks.finish;
+  return { ...hooks, finish: {
+    ...finish,
+    settleBlock: (ctx) => measureWorkflowSync(input.ports.events, workflowScope(input, ctx.step), "finish", () => finish.settleBlock(ctx), void 0, (block) => block ? "blocked" : "completed"),
+    gate: (ctx) => measureWorkflow(input.ports.events, workflowScope(input, ctx.step), "finish", () => finish.gate(ctx), (block) => block ? "blocked" : "completed"),
+    ...finish.openWork ? { openWork: (ctx) => measureWorkflow(input.ports.events, workflowScope(input, ctx.step), "ledger", () => finish.openWork(ctx), (block) => block ? "blocked" : "completed", input.signal, () => ({ ...evaluateRunWork(ctx.state) ?? { assigned: 0, done: 0, blocked: 0, inReview: 0, open: 0 } })) } : {},
+    ...finish.liveChildren ? { liveChildren: (ctx) => measureWorkflow(input.ports.events, workflowScope(input, ctx.step), "finish", () => finish.liveChildren(ctx), (block) => block ? "blocked" : "completed") } : {}
+  } };
+}
+
 // ../packages/agent-run/src/policy/budget/usd.ts
 var usd = (millicents) => `$${(millicents / MILLICENTS_PER_USD).toFixed(2)}`;
 function runBudgetCapMillicents(maxRunBudgetUsd) {
@@ -17598,17 +17766,21 @@ var CacheServedStreak = class {
 // ../packages/agent-run/src/runAgent.ts
 async function runAgent(input) {
   const { task, policy, ports, signal } = input;
-  const hooks = composePolicyHooks(input.modules);
+  const hooks = workflowHooks(composePolicyHooks(input.modules), input);
   const state = input.resume ? resumeState(input.resume, policy, task) : freshState(policy, task);
   const resumed = Boolean(input.resume);
   if (state.pipeline === void 0 && input.pipeline !== void 0) state.pipeline = input.pipeline;
-  if (!state.work && task.assignedWork?.length) state.work = planWork(task.assignedWork);
+  if (!state.work && !resumed) measureWorkflowSync(ports.events, workflowScope(input, state.step), "work", () => {
+    if (task.assignedWork?.length) state.work = planWork(task.assignedWork);
+    return state.work ?? [];
+  }, (work) => ({ assigned: work.length, criteria: work.reduce((n, item) => n + item.criteria.length, 0) }));
   const tally = state.telemetry ??= freshTally();
   const offered = offeredSchemas(ports, { rungs: state.stall?.rungs ?? {} });
   const transcript = asMessages(state.messages);
   let pack = state.context ?? EMPTY_PACK2;
   if (!resumed) {
-    transcript.splice(0, transcript.length, ...openingRows(task, policy.approvalGates));
+    const opening = measureWorkflowSync(ports.events, workflowScope(input, state.step), "opening", () => openingRows(task, policy.approvalGates), (rows) => ({ messages: rows.length }));
+    transcript.splice(0, transcript.length, ...opening);
     state.messages = transcript;
     pack = await buildContextPack(input, hooks, state, offered);
     state.context = pack;
@@ -17647,6 +17819,7 @@ async function runAgent(input) {
   };
   const isReadOnly = readOnlyPort(run);
   let loopResult;
+  const kernelDone = beginWorkflowStage(ports.events, workflowScope(input, state.step), "kernel");
   try {
     loopResult = await runAgentLoop({
       messages: transcript,
@@ -17671,7 +17844,9 @@ async function runAgent(input) {
       budget: { startStep: state.step, ...input.maxSteps !== void 0 ? { maxSteps: input.maxSteps } : {}, ...policy.budgets.steps !== void 0 ? { stepCap: policy.budgets.steps } : {} },
       ...signal ? { signal } : {}
     });
+    kernelDone(loopResult.cancelled || signal?.aborted ? "cancelled" : loopResult.finished && !loopResult.ok ? "failed" : "completed", { steps: loopResult.step - state.step, toolCalls: tally.toolCalls, toolErrors: tally.toolErrors, tokens: tally.tokens });
   } catch (err) {
+    kernelDone(signal?.aborted ? "cancelled" : "failed");
     const reason = err instanceof Error ? err.message : String(err);
     return settle(input, hooks, state, transcript, "failed", { reason, ...signal?.aborted || !isResumable(input, err) ? {} : { cause: err } });
   }
@@ -18047,11 +18222,13 @@ function routedPolicy(policy, route, decision) {
   };
 }
 async function openRun(input) {
-  if (!input.policy?.entryPoint) throw new Error("openRun: policy.entryPoint is required");
-  if (!ALL_ENTRY_POINTS.includes(input.policy.entryPoint)) throw new Error("openRun: policy.entryPoint must be registered");
-  if (!input.ports.capabilities && !input.ports.platform?.closed) {
-    throw new Error("openRun: a registry provider or a closed native catalog is required");
-  }
+  measureWorkflowSync(input.ports.events, workflowScope(input), "start", () => {
+    if (!input.policy?.entryPoint) throw new Error("openRun: policy.entryPoint is required");
+    if (!ALL_ENTRY_POINTS.includes(input.policy.entryPoint)) throw new Error("openRun: policy.entryPoint must be registered");
+    if (!input.ports.capabilities && !input.ports.platform?.closed) {
+      throw new Error("openRun: a registry provider or a closed native catalog is required");
+    }
+  });
   const { surface = {}, route: requested, ...rest } = input;
   const route = requested && "decided" in requested ? requested : {
     request: rest.task.request ?? rest.task.prompt,
@@ -18061,12 +18238,12 @@ async function openRun(input) {
     routing: requested?.routing ?? defaultPipelineRouting()
   };
   const closeOutRan = { value: false };
-  let run = { ...rest, modules: composeModules(surface, closeOutRan) };
+  let run = { ...rest, modules: measureWorkflowSync(rest.ports.events, workflowScope(input), "compose", () => composeModules(surface, closeOutRan)) };
   if (run.resume?.pipeline !== void 0) {
     if (run.resume.pipeline?.route === "quick") run = { ...run, policy: { ...run.policy, skipVerifyStage: true } };
   } else {
     const input2 = "decided" in route ? route.input : route;
-    const decision = "decided" in route ? route.decided : routeRun(route);
+    const decision = "decided" in route ? route.decided : measureWorkflowSync(run.ports.events, workflowScope(run), "route", () => routeRun(route), (r) => ({ quick: Number(r.pipeline?.route === "quick"), full: Number(r.pipeline?.route === "full") }));
     run = { ...run, policy: routedPolicy(run.policy, input2, decision) };
     const { pipeline } = decision;
     run.pipeline = pipeline ? { route: pipeline.route, score: pipeline.score } : null;
@@ -18717,6 +18894,27 @@ function hasEditIntent(messages) {
 }
 function asksForWorkItemsIn(messages) {
   return messages.some((m) => m.role === "user" && asksForWorkItems(m.content));
+}
+
+// src/workflowDiagnostics.ts
+function workflowDiagnostics(events) {
+  return summarizeWorkflow(events.flatMap((event) => {
+    if (event.label !== "workflow.stage" && !event.label.startsWith("workflow.stage.")) return [];
+    const metric = workflowMetricOf(event.args);
+    return metric ? [metric] : [];
+  }));
+}
+function formatWorkflowDiagnostics(workflow) {
+  return [
+    "",
+    "### `workflow.metrics`",
+    "",
+    `\`observedStages=${workflow.observedStages}/${workflow.totalStages}\``,
+    "",
+    "| stage | status | attempts | completed | failed | blocked | cancelled | running | totalMs | maxMs | latestCounters |",
+    "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    ...workflow.stages.map((s) => `| ${s.stage} | ${s.status} | ${s.attempts} | ${s.completed} | ${s.failed} | ${s.blocked} | ${s.cancelled} | ${s.running} | ${s.totalMs ?? "null"} | ${s.maxMs ?? "null"} | ${s.latestCounters ? JSON.stringify(s.latestCounters) : ""} |`)
+  ];
 }
 
 // src/runSlices.ts
@@ -20217,6 +20415,7 @@ function formatBrainDiagnostics(d) {
       `Answered from memory (LLM skipped): ${d.memoryAnswers.length} turn(s) \u2014 ` + d.memoryAnswers.map((m) => m.source === "evermind" ? `Evermind SSM${m.projectId != null ? ` (project #${m.projectId}` : ""}${m.version != null ? `${m.projectId != null ? ", " : " ("}v${m.version}` : ""}${m.projectId != null || m.version != null ? ")" : ""}` : m.source === "symbol-index" ? "symbol index" : m.source === "deterministic" ? `workspace action ${m.actionId ?? ""}`.trim() : "Q&A cache").join(", ")
     );
   }
+  if (d.workflow) lines.push(...formatWorkflowDiagnostics(d.workflow));
   return lines;
 }
 
@@ -20642,6 +20841,7 @@ function computeBrainDiagnostics(events, requestedModel, messages = [], ctx = {}
   });
   return {
     ...outcome ? { outcome } : {},
+    workflow: workflowDiagnostics(events),
     findingKinds,
     turns: llm.length,
     toolCalls: toolEvents.length,
@@ -20942,6 +21142,8 @@ export {
   chatWorkObligationTools,
   chatWorkLinkingDirective,
   RUN_CANCELLED_REASON,
+  measureWorkflow,
+  measureWorkflowSync,
   planModelWarning,
   downgradeDecision,
   newSteerKey,
@@ -21085,4 +21287,4 @@ export {
   onBaseBranch,
   shippedToBaseBranch
 };
-//# sourceMappingURL=chunk-RPJ7SAFZ.mjs.map
+//# sourceMappingURL=chunk-CFW3Z45U.mjs.map

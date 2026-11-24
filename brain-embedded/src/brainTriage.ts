@@ -10,6 +10,8 @@
  */
 
 import { announcesUntakenAction } from '@builderforce/agent-stall';
+import { workflowDiagnostics } from './workflowDiagnostics';
+import type { WorkflowSummary } from '@builderforce/agent-run';
 import { turnInterruption } from './finishReason';
 import type { StreamFailureDetail } from './streamFailureDetail';
 import type { BrainMessage } from './types';
@@ -538,6 +540,7 @@ export function parseRoleGateRefusal(message: string | null | undefined): {
 }
 
 export interface BrainDiagnostics {
+  workflow?: WorkflowSummary;
   turns: number;
   toolCalls: number;
   errors: number;
@@ -1057,6 +1060,7 @@ export function computeBrainDiagnostics(
 
   return {
     ...(outcome ? { outcome } : {}),
+    workflow: workflowDiagnostics(events),
     findingKinds,
     turns: llm.length,
     toolCalls: toolEvents.length,

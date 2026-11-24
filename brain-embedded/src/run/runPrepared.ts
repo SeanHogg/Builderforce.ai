@@ -76,7 +76,7 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
   const ports = buildBrainRunPorts(binding);
   const signal = c.abort?.signal;
   const outcome = await openRun({
-    task: { ...brainRunTask(binding), persona: run.systemPrompt, transcript },
+    task: { ...brainRunTask(binding), runId: c.runId, persona: run.systemPrompt, transcript },
     policy: brainRunPolicy(binding),
     ports: { ...ports, model: withoutUncallableTurns(ports.model, req) },
     // The run's route, decided ONCE in the preamble (`runStore/runRoute.ts`): handed over as decided, so `openRun` folds it and never routes again.

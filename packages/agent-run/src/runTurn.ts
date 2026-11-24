@@ -25,6 +25,8 @@ import { assignedWorkSection } from "./workPlan.js";
 import { appendRows, currentView, emit, policyContext, type RunAgentInput, type TurnFacts } from "./runContext.js";
 import { tallyTurn, type RunTally } from "./telemetry/runTally.js";
 import { measureTurnTail } from "./turnTail.js";
+import { measureWorkflow, workflowScope } from "./telemetry/workflowMetrics.js";
+import { isSpawnTool } from "./policy/subagents/delegationRequest.js";
 import { withVolatileTail } from "./turnContext.js";
 
 /**
@@ -319,6 +321,14 @@ export async function synthesizeFinal(
  * coverage records.
  */
 export async function dispatchCall(input: RunAgentInput, state: RunState, call: ParsedToolCall, watch: InterruptWatch, facts: TurnFacts = { refused: false }, step: number = state.step): Promise<LoopDispatchResult> {
+  const invoke = () => dispatchCallCore(input, state, call, watch, facts, step);
+  const verdict = (result: LoopDispatchResult) => result.isError ? 'failed' as const : 'completed' as const;
+  return measureWorkflow(input.ports.events, workflowScope(input, step), 'dispatch', () => isSpawnTool(call.name)
+    ? measureWorkflow(input.ports.events, workflowScope(input, step), 'spawn', invoke, verdict, input.signal)
+    : invoke(), verdict, input.signal);
+}
+
+async function dispatchCallCore(input: RunAgentInput, state: RunState, call: ParsedToolCall, watch: InterruptWatch, facts: TurnFacts, step: number): Promise<LoopDispatchResult> {
   const { ports, signal } = input;
   if (call.malformed) return declineMalformedCall(ports, call, facts, step);
   const platform = ports.platform;

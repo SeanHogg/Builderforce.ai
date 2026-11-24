@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.213] — Workflow metrics in diagnostics
+
+- Copy diagnostics includes measured attempts, outcomes, timings and available counters for the 14 stages in the implemented workflow. The JSON capture carries the same facts under `run.workflow`.
+- Missing measurements remain unknown; incomplete captures and resumed runs are distinguished from completed work. Workflow metrics persist with chat history without adding tool calls to the visible conversation.
+
 ## [2026.10.212] — Your @builderforce messages are kept, and the agent sees its own changes
 
 - **Fixed: messages sent to `@builderforce` in VS Code's chat disappeared from the conversation history.** Your words are now saved with the chat like a panel message, so reopening the chat shows the whole exchange. Stopping a turn while it starts now really stops it.
