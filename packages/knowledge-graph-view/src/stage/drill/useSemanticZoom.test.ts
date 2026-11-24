@@ -48,6 +48,15 @@ describe('the code band keeps a trail of drilled methods', () => {
         expect(names(result)).toEqual(['place']);
     });
 
+    it('leaving the code from deep on the trail leaves it altogether (the pane closed, the level\'s crumb)', () => {
+        const { result } = setup();
+        act(() => { result.current.enterCode(place); });
+        act(() => { result.current.enterCode(reserve); });
+        act(() => { result.current.leaveCode(); });
+        expect(result.current.trail).toEqual([]);
+        expect(result.current.code).toBeNull();
+    });
+
     it('a new drilled level clears it', () => {
         const { result, rerender } = setup();
         act(() => { result.current.enterCode(place); });

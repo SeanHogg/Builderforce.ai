@@ -253,7 +253,7 @@ legend: {
     catSource: 'Source', catTest: 'Tests', catDoc: 'Docs', catConfig: 'Config', catStyle: 'Styles',
     catData: 'Data', catOther: 'Other',
     shapesTitle: 'Shapes',
-    typeClass: 'Class or type', typeFunction: 'Function or method', typeSource: 'Source file', typeTest: 'Test',
+    typeClass: 'Class or type', typeFunction: 'Method / function', typeSource: 'Source file', typeTest: 'Test',
     typeStyle: 'Styles', typeConfig: 'Config', typeData: 'Data or schema', typeDoc: 'Document', typeSection: 'Section',
     typeEntity: 'Entity', typeClaim: 'Claim or fact', typeExternal: 'Missing or external', typeSystem: 'System or package',
     typeUnit: 'Deployable unit',

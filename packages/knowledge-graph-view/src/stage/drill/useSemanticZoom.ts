@@ -41,6 +41,8 @@ export interface SemanticZoom {
     code: { key: string; target: CodeTarget } | null;
     /** Leave the code band: back one method on the trail, else fly back out to the method band. */
     closeCode(): void;
+    /** Leave the code band from anywhere on the trail: fly back out to the method band. */
+    leaveCode(): void;
     /** Open the code band on method `ref` (from the method or code band, a loaded record with a slot); false when it cannot.
      *  From the code band it goes onto the trail (cut back to it when it is already there). */
     enterCode(ref: string): boolean;
@@ -165,15 +167,18 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         flyToCode(key);
     }, [flyToCode]);
 
-    const closeCode = useCallback(() => {
-        const s = state.current;
-        if (s.trail.length > 1) { codeBack(s.trail.length - 2); return; }
-        const key = s.codeKey, p = bus.placement, rig = rigOf(bus);
+    const leaveCode = useCallback(() => {
+        const s = state.current, key = s.codeKey, p = bus.placement, rig = rigOf(bus);
         const slot = bus.slotOf(key), scale = p && slot >= 0 ? p.scale[slot] ?? 0 : 0;
         if (!rig || !p || !(scale > 0)) { s.codeKey = null; s.trail = []; setTrail([]); return; }
-        // Back under the code band's exit: the crossing closes it, and the method band is not re-entered from there.
+        // Back under the code band's exit: the crossing closes it (the whole trail), and the method band is not re-entered from there.
         rig.flyTo(p.position[slot * 3]!, p.position[slot * 3 + 2]!, (ZOOM_BANDS[CODE]!.exitPx * 0.85) / (2 * scale), now(), ms);
-    }, [bus, ms, codeBack]);
+    }, [bus, ms]);
+
+    const closeCode = useCallback(() => {
+        const s = state.current;
+        if (s.trail.length > 1) codeBack(s.trail.length - 2); else leaveCode();
+    }, [codeBack, leaveCode]);
 
     // A drill from the code: at the code band the method goes onto the trail (cut back to it when it is already there),
     // from the method band it starts one; the rig flies to its threshold.
@@ -208,7 +213,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
     }), [trail, drill.symbols]);
 
     return {
-        band: bandOf(band), sequenceLod: sequenceLodOf(seqBand), nest, zoomInto, zoomToBand, code, closeCode, enterCode,
+        band: bandOf(band), sequenceLod: sequenceLodOf(seqBand), nest, zoomInto, zoomToBand, code, closeCode, leaveCode, enterCode,
         trail: crumbs, codeBack,
     };
 }

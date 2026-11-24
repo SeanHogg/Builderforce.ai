@@ -1,21 +1,25 @@
 /**
- * The stage's overlay (PRD 43 B3 Overlay, B7 Selection): the selection ring, the hover ring and the highlighted lines —
- * the path through its stops and the selected slot's incident edges, sliced on the main thread from the ranked incident
- * index. Three meshes in all, drawn OVER the marks and moved to the placement's positions; a selection or hover change
- * rewrites them and never touches a mark's attributes (no per-mark state rebuild). Hidden while a tween runs (the marks
- * are between placements); shown again where the target placement put them.
+ * The stage's overlay (PRD 43 B3 Overlay, B7 Selection): the selection ring (the text colour: a white edge on the dark
+ * theme), the hover ring, the reading ring (the symbol on the code panel's reading line, a thick accent glow) and the
+ * current-call ring (the code band's current callee, in the partner amber), and the highlighted lines — the path through
+ * its stops, the selected slot's incident edges, sliced on the main thread from the ranked incident index, and the open
+ * method's numbered calls as arcs (`callArcs.ts`; the current one amber and wider). Five meshes in all, drawn OVER the
+ * marks and moved to the placement's positions; a selection, hover, reading or step change rewrites them and never
+ * touches a mark's attributes (no per-mark state rebuild). Hidden while a tween runs (the marks are between placements);
+ * shown again where the target placement put them.
  *
  * The lines go through the stage's ONE line shader (`links/LinkLayer`), as one `edge` batch in screen pixels.
  */
 
 import { Color, DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry, SRGBColorSpace } from 'three';
-import { linkBatch, type LinkPath } from '../../compute/tasks/placement/links';
+import { polylineBatch, roundedPoints, type WorldPath } from '../../compute/tasks/placement/links';
 import { LinkLayer } from '../links/LinkLayer';
 import { slotHalfPx } from '../markSize';
 import type { LinkUniforms } from '../links/shader';
 import type { StageStats } from '../stats';
 import { toneIndex } from '../tones';
 import type { LinkBatch, Placement } from '../types';
+import { callArc, nthCallTo, type CallTrack, type GroundPt } from './callArcs';
 
 export interface OverlayState {
     /** Slots; -1 = none. */
@@ -25,29 +29,39 @@ export interface OverlayState {
     path: ArrayLike<number>;
     /** The selected slot's neighbours (ranked, already capped). */
     incident: ArrayLike<number>;
+    /** The slot on the code panel's reading line; -1 or absent = none. */
+    reading?: number;
+    /** The open method's numbered calls; absent or null = none. */
+    calls?: CallTrack | null;
 }
 
 export const NO_OVERLAY: OverlayState = { selected: -1, hover: -1, path: [], incident: [] };
 
 const PATH_PX = 3;
 const INCIDENT_PX = 1.5;
+/** A call's arc, and the current call's (wider, so it reads over the others). */
+const CALL_PX = 1.5, CURRENT_CALL_PX = 3;
 /** A ring sits this much wider than its mark, and never smaller than this many world units. */
 const RING_GROW = 1.35, RING_MIN = 6;
-const LIFT = 0.5;
+/** World units the overlay floats over the ground (`CallBadges` projects the call numbers at the same height). */
+export const OVERLAY_LIFT = 0.5;
 
 const shown = (p: Placement, s: number): boolean => s >= 0 && s < p.scale.length && p.scale[s]! > 0;
 const at = (p: Placement, s: number) => ({ x: p.position[s * 3]!, y: p.position[s * 3 + 2]! });
+/** Ground points lifted to the overlay's height (a call's arc is already smooth: only the path's stops get rounded corners). */
+const lifted = (pts: readonly GroundPt[]) => pts.map((q): [number, number, number] => [q.x, OVERLAY_LIFT, q.y]);
 
 /**
  * The overlay's lines for `state` over placement `p`: the path's consecutive shown stops, then one segment from the
- * selection to each neighbour that is somewhere else (a hidden neighbour sits at its anchor). Null when there are none.
+ * selection to each neighbour that is somewhere else (a hidden neighbour sits at its anchor), then one arc per call of
+ * the open method to a shown callee, the current call last (drawn on top). Null when there are none.
  */
 export function overlayLinks(p: Placement, state: OverlayState): LinkBatch | null {
     const tone = toneIndex('accent');
-    const paths: LinkPath[] = [];
-    const stops: { x: number; y: number }[] = [];
+    const paths: WorldPath[] = [];
+    const stops: GroundPt[] = [];
     for (let i = 0; i < state.path.length; i++) { const s = state.path[i]!; if (shown(p, s)) stops.push(at(p, s)); }
-    if (stops.length >= 2) paths.push({ pts: stops, tone, width: PATH_PX, dash: 0, flags: 0 });
+    if (stops.length >= 2) paths.push({ pts: lifted(roundedPoints(stops)), tone, width: PATH_PX, dash: 0, flags: 0 });
     if (shown(p, state.selected)) {
         const from = at(p, state.selected);
         for (let i = 0; i < state.incident.length; i++) {
@@ -55,11 +69,24 @@ export function overlayLinks(p: Placement, state: OverlayState): LinkBatch | nul
             if (s < 0 || s >= p.scale.length) continue;
             const to = at(p, s);
             if (to.x === from.x && to.y === from.y) continue;
-            paths.push({ pts: [from, to], tone, width: INCIDENT_PX, dash: 0, flags: 0 });
+            paths.push({ pts: lifted([from, to]), tone, width: INCIDENT_PX, dash: 0, flags: 0 });
         }
     }
+    const calls = state.calls;
+    if (calls && shown(p, calls.from)) {
+        const from = at(p, calls.from);
+        let current: WorldPath | null = null;
+        for (let i = 0; i < calls.to.length; i++) {
+            const s = calls.to[i]!;
+            if (!shown(p, s) || s === calls.from) continue;
+            const pts = lifted(callArc(from, at(p, s), nthCallTo(calls.to, i)));
+            if (i === calls.current) current = { pts, tone: toneIndex('partner'), width: CURRENT_CALL_PX, dash: 0, flags: 0 };
+            else paths.push({ pts, tone, width: CALL_PX, dash: 0, flags: 0 });
+        }
+        if (current) paths.push(current);
+    }
     if (paths.length === 0) return null;
-    return { ...linkBatch('edge', paths, LIFT), widthUnit: 'px' };
+    return polylineBatch('edge', paths, 'px');
 }
 
 const PRIMED_SEGMENTS = 256;
@@ -72,8 +99,11 @@ function emptyBatch(segments: number): LinkBatch {
     };
 }
 
-function ring(order: number, opacity: number): Mesh {
-    const geometry = new RingGeometry(0.82, 1, 48);
+/** A ring's inner radius (its outer is 1); the reading ring's is thicker: a glow around the mark rather than an edge. */
+const RING_INNER = 0.82, READING_INNER = 0.66;
+
+function ring(order: number, opacity: number, inner = RING_INNER): Mesh {
+    const geometry = new RingGeometry(inner, 1, 48);
     geometry.rotateX(-Math.PI / 2);
     const mesh = new Mesh(geometry, new MeshBasicMaterial({ transparent: true, opacity, depthTest: false, side: DoubleSide }));
     mesh.renderOrder = order;
@@ -86,6 +116,8 @@ export class OverlayLayer {
     readonly group = new Group();
     private readonly selectRing = ring(6, 1);
     private readonly hoverRing = ring(5, 0.55);
+    private readonly readingRing = ring(5, 0.85, READING_INNER);
+    private readonly callRing = ring(6, 1);
     private readonly lines: LinkLayer;
     private state: OverlayState = NO_OVERLAY;
     private placement: Placement | null = null;
@@ -108,18 +140,28 @@ export class OverlayLayer {
         this.lines = new LinkLayer(stats, uniforms, ['edge']);
         this.selectRing.name = 'overlay:selection';
         this.hoverRing.name = 'overlay:hover';
-        this.group.add(this.lines.group, this.hoverRing, this.selectRing);
+        this.readingRing.name = 'overlay:reading';
+        this.callRing.name = 'overlay:call';
+        this.group.add(this.lines.group, this.readingRing, this.hoverRing, this.callRing, this.selectRing);
         this.group.renderOrder = 5;
         // The line mesh exists from the start (sized for a long path and a full incident fan), so a selection creates none.
         this.lines.set([emptyBatch(PRIMED_SEGMENTS)]);
         this.lines.set([]);
     }
 
-    /** The accent the rings are drawn in (sRGB, written as-is like the palette). */
-    setAccent(css: string): void {
+    /**
+     * The rings' colours (CSS, written as sRGB as-is like the palette): hover and reading in the accent, the selection in
+     * `selection` (the theme's text colour) and the current call in `call` (the partner amber).
+     */
+    setColors(colors: { accent: string; selection: string; call: string }): void {
         const c = new Color(), rgb = { r: 0, g: 0, b: 0 };
-        c.setStyle(css).getRGB(rgb, SRGBColorSpace);
-        for (const m of [this.selectRing, this.hoverRing]) (m.material as MeshBasicMaterial).color.setRGB(rgb.r, rgb.g, rgb.b);
+        const paint = (meshes: readonly Mesh[], css: string) => {
+            c.setStyle(css).getRGB(rgb, SRGBColorSpace);
+            for (const m of meshes) (m.material as MeshBasicMaterial).color.setRGB(rgb.r, rgb.g, rgb.b);
+        };
+        paint([this.hoverRing, this.readingRing], colors.accent);
+        paint([this.selectRing], colors.selection);
+        paint([this.callRing], colors.call);
     }
 
     set(state: OverlayState): void { this.state = state; this.draw(); }
@@ -127,7 +169,9 @@ export class OverlayLayer {
     /** The placement the overlay follows (null hides it: a tween is running). */
     follow(p: Placement | null): void { this.placement = p; this.draw(); }
 
-    get meshes(): readonly Mesh[] { return [this.selectRing, this.hoverRing, ...this.lines.meshes]; }
+    private get rings(): readonly Mesh[] { return [this.selectRing, this.hoverRing, this.readingRing, this.callRing]; }
+
+    get meshes(): readonly Mesh[] { return [...this.rings, ...this.lines.meshes]; }
 
     private draw(): void {
         const p = this.placement, s = this.state;
@@ -143,10 +187,12 @@ export class OverlayLayer {
         if (!p) return;
         place(this.selectRing, p, s.selected, this.depth, this.pxPerWorld);
         place(this.hoverRing, p, s.hover === s.selected ? -1 : s.hover, this.depth, this.pxPerWorld);
+        place(this.readingRing, p, s.reading ?? -1, this.depth, this.pxPerWorld);
+        place(this.callRing, p, s.calls && s.calls.current >= 0 ? s.calls.to[s.calls.current] ?? -1 : -1, this.depth, this.pxPerWorld);
     }
 
     dispose(): void {
-        for (const m of [this.selectRing, this.hoverRing]) { m.geometry.dispose(); (m.material as MeshBasicMaterial).dispose(); }
+        for (const m of this.rings) { m.geometry.dispose(); (m.material as MeshBasicMaterial).dispose(); }
         this.lines.dispose();
     }
 }
@@ -155,6 +201,6 @@ function place(m: Mesh, p: Placement, s: number, depth: number, pxPerWorld: numb
     m.visible = shown(p, s);
     if (!m.visible) return;
     const r = Math.max(RING_MIN, (slotHalfPx(p, s, pxPerWorld) / Math.max(pxPerWorld, 1e-6)) * RING_GROW);
-    m.position.set(p.position[s * 3]!, p.position[s * 3 + 1]! + (p.extrude[s] ?? 0) * depth + LIFT, p.position[s * 3 + 2]!);
+    m.position.set(p.position[s * 3]!, p.position[s * 3 + 1]! + (p.extrude[s] ?? 0) * depth + OVERLAY_LIFT, p.position[s * 3 + 2]!);
     m.scale.set(r, 1, r);
 }

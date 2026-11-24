@@ -13,6 +13,7 @@
 
 import { createContext, useContext } from 'react';
 import { PickIndex, type PickOptions, type Projector, type StageHit } from '../pick';
+import type { CallTrack } from '../overlay/callArcs';
 import type { SlotIncident } from '../overlay/incident';
 import type { StageRenderer } from '../renderer';
 import type { Placement } from '../types';
@@ -54,6 +55,10 @@ export class StageBus {
     private stored: readonly string[] = [];
     /** The slot under the pointer (-1 none). */
     hover = -1;
+    /** The slot of the symbol on the code panel's reading line (-1 none): ringed apart from the hover. */
+    reading = -1;
+    /** The open method's numbered calls (the code band), null when none is open. */
+    calls: CallTrack | null = null;
     /** True once a real camera pushed a projection: the fitted-frame fallback stops being used. */
     private camera = false;
     private index: PickIndex | null = null;
@@ -66,6 +71,8 @@ export class StageBus {
     private readonly settleFns = new Set<Fn>();
     private readonly revealFns = new Set<Fn<[number]>>();
     private readonly hoverFns = new Set<Fn<[number]>>();
+    private readonly readingFns = new Set<Fn<[number]>>();
+    private readonly callsFns = new Set<Fn<[CallTrack | null]>>();
     private readonly tweenFns = new Set<Fn<[boolean]>>();
     private readonly placementFns = new Set<Fn<[Placement]>>();
 
@@ -163,6 +170,18 @@ export class StageBus {
         for (const fn of this.hoverFns) fn(slot);
     }
 
+    setReading(slot: number): void {
+        if (slot === this.reading) return;
+        this.reading = slot;
+        for (const fn of this.readingFns) fn(slot);
+    }
+
+    setCalls(track: CallTrack | null): void {
+        if (track === this.calls) return;
+        this.calls = track;
+        for (const fn of this.callsFns) fn(track);
+    }
+
     /** Asks the rig to bring slot `s` into view (a focused off-screen proxy). */
     reveal(slot: number): void { for (const fn of this.revealFns) fn(slot); }
 
@@ -177,6 +196,8 @@ export class StageBus {
     onSettle(fn: Fn): () => void { this.settleFns.add(fn); return () => this.settleFns.delete(fn); }
     onReveal(fn: Fn<[number]>): () => void { this.revealFns.add(fn); return () => this.revealFns.delete(fn); }
     onHover(fn: Fn<[number]>): () => void { this.hoverFns.add(fn); return () => this.hoverFns.delete(fn); }
+    onReading(fn: Fn<[number]>): () => void { this.readingFns.add(fn); return () => this.readingFns.delete(fn); }
+    onCalls(fn: Fn<[CallTrack | null]>): () => void { this.callsFns.add(fn); return () => this.callsFns.delete(fn); }
     /** Another placement is on show (a camera switch, a band crossed, a drill, a new MarkSet): what was about the old one closes. */
     onPlacement(fn: Fn<[Placement]>): () => void { this.placementFns.add(fn); return () => this.placementFns.delete(fn); }
     /** A tween started (true) or landed (false): cards hide for its length (they would be over where the marks were). */
@@ -185,7 +206,7 @@ export class StageBus {
     dispose(): void {
         if (this.timer !== null) clearTimeout(this.timer);
         this.timer = null;
-        this.frameFns.clear(); this.settleFns.clear(); this.revealFns.clear(); this.hoverFns.clear(); this.optionFns.clear(); this.tweenFns.clear(); this.placementFns.clear();
+        this.frameFns.clear(); this.settleFns.clear(); this.revealFns.clear(); this.hoverFns.clear(); this.readingFns.clear(); this.callsFns.clear(); this.optionFns.clear(); this.tweenFns.clear(); this.placementFns.clear();
     }
 
     /** The grid is stale (camera, placement or tween changed): kept as the next settle's buffers, never queried again. */

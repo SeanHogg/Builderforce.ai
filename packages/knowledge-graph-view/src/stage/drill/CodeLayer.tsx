@@ -1,33 +1,29 @@
 /**
- * The code band's panel (PRD 43 B1a rule 9, deepest zoom): a method's source, read through the host's `readSource` port
- * (range by symbol span, `codeTargetOf`) and anchored to the method's SLOT with `useSlotAnchor`, so it moves with the
- * zoom and pan with no React commit. Read-only here (editing is the editing PRD's). Monospace and syntax-light
- * (`syntaxLight`, no highlighter dependency), coloured by theme tokens, virtualized past `VIRTUAL_AFTER` lines, and as
- * wide as the stage allows down to a 360 px box. "Open at line" hands over to the host's editor (`onOpenSource`).
+ * The code pane's source (PRD 43 B1a rule 9, deepest zoom): a file's source, read through the host's `readSource` port
+ * (range by symbol span, `codeTargetOf`), filling the code pane (`CodeDock`). Read-only here (editing is the editing
+ * PRD's). Monospace and syntax-light (`syntaxLight`, no highlighter dependency), coloured by theme tokens, virtualized
+ * past `VIRTUAL_AFTER` lines. "Open at line" hands over to the host's editor (`onOpenSource`); Escape in the lines is Out.
  *
  * No port (the web has no file contents) or a refused read: the panel shows `path:line`, says the code is not
  * available here, and still offers "Open at line" when the host can open one.
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
 import { CONTROL } from '../../styles';
 import { TYPE } from '../../surface/ui/type';
 import type { SourceLocation, SourceReader, SourceText, SymbolRecord } from '../../types';
-import { useSlotAnchor } from '../anchor/useSlotAnchor';
 import { drillRefForName, readingLineAt, scrollTopForLine, syntaxLight, visibleWindow, VIRTUAL_AFTER, type CallStep, type CodeTarget, type TokenKind } from './codeText';
 
 export interface CodeLayerProps {
-    /** The method's slot key (`node:<ref>`). */
-    slotKey: string;
     target: CodeTarget;
     reader?: SourceReader | undefined;
     labels: KnowledgeGraphLabels;
     onOpenSource?: ((location: SourceLocation) => void) | undefined;
     onClose(): void;
-    /** Fills its parent instead of anchoring to a slot (the docked code panel). */
-    docked?: boolean;
+    /** Escape in the lines: out of the code level (or the drilled level). */
+    onOut?: (() => void) | undefined;
     /** Scroll this source line into view (`scrollTopForLine`: the reading line when following, else the top). Selection and the journey step drive it. */
     scrollLine?: number | undefined;
     /** Loaded symbols: a method name in the text drills to one (`drillRefForName`). */
@@ -48,7 +44,7 @@ export interface CodeLayerProps {
     marked?: { startLine: number; endLine: number } | null | undefined;
 }
 
-/** One code row's height (px) and how many rows the panel shows before it scrolls. */
+/** One code row's height (px), and the rows a virtualized panel renders before it has measured itself. */
 export const ROW_PX = 18;
 const VIEW_ROWS = 16;
 
@@ -68,9 +64,9 @@ function CodeToken({ tok, path, records, onDrill, drillAria }: { tok: { text: st
     );
 }
 
-/** A call's number in the gutter; the current call is filled with the accent. A button that goes to the call when `onClick` is given. */
+/** A call's number in the gutter, on the accent; the current call's on the partner amber (as on the stage). A button that goes to the call when `onClick` is given. */
 function StepBadge({ n, count, current, aria, onClick }: { n: number; count: number; current: boolean; aria: string; onClick?: (() => void) | undefined }) {
-    const style: CSSProperties = { display: 'inline-block', minWidth: '2ch', borderRadius: 4, ...TYPE.meta, lineHeight: `${ROW_PX - 4}px`, background: current ? cssVar('accent') : 'transparent', color: current ? cssVar('onAccent') : cssVar('muted') };
+    const style: CSSProperties = { display: 'inline-block', minWidth: '2ch', borderRadius: 8, ...TYPE.meta, fontWeight: 700, lineHeight: `${ROW_PX - 4}px`, background: cssVar(current ? 'partner' : 'accent'), color: cssVar('onAccent') };
     const props = { 'data-code-step': n, 'data-current': current ? '' : undefined, 'aria-label': fillTemplate(aria, { n, count }) };
     if (!onClick) return <span {...props} style={style}>{n}</span>;
     return <button type="button" {...props} onClick={onClick} style={{ ...style, border: 0, padding: 0, font: 'inherit', cursor: 'pointer' }}>{n}</button>;
@@ -99,11 +95,9 @@ const button: CSSProperties = {
     border: `1px solid ${cssVar('accent')}`, background: cssVar('accent'), color: cssVar('onAccent'),
 };
 
-export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClose, docked = false, scrollLine, records = [], onDrill, onReadingLine, steps, currentStep = -1, span, onStep, marked }: CodeLayerProps) {
+export function CodeLayer({ target, reader, labels, onOpenSource, onClose, onOut, scrollLine, records = [], onDrill, onReadingLine, steps, currentStep = -1, span, onStep, marked }: CodeLayerProps) {
     const t = labels.surface.code, card = labels.surface.map.card;
-    const ref = useRef<HTMLDivElement | null>(null);
     const linesRef = useRef<HTMLDivElement | null>(null);
-    useSlotAnchor(docked ? null : slotKey, ref);
     const read = useSourceLines(reader, target);
     const lines = read.state === 'ready' ? read.text.lines : [];
     const first = read.state === 'ready' ? read.text.startLine : target.startLine;
@@ -129,7 +123,7 @@ export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClo
         return m;
     }, [steps]);
     const stepCount = steps?.length ?? 0;
-    const { from, to } = visibleWindow(lines.length, scrollTop, ROW_PX, VIEW_ROWS);
+    const { from, to } = visibleWindow(lines.length, scrollTop, ROW_PX, viewPx > 0 ? Math.ceil(viewPx / ROW_PX) : VIEW_ROWS);
     const virtual = lines.length > VIRTUAL_AFTER;
     const last = first + Math.max(lines.length, 1) - 1;
     const openLine = scrollLine ?? target.startLine;
@@ -138,13 +132,11 @@ export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClo
 
     return (
         <div
-            ref={ref as MutableRefObject<HTMLDivElement | null>} role="region" data-code-layer
+            role="region" data-code-layer
             aria-label={fillTemplate(t.aria, { name: target.name, from: target.startLine, to: read.state === 'ready' ? last : target.endLine })}
-            data-code-docked={docked ? '' : undefined}
             style={{
-                position: docked ? 'relative' : 'absolute', left: docked ? undefined : 0, top: docked ? undefined : 0, zIndex: docked ? undefined : 3,
-                width: docked ? '100%' : 'min(560px, calc(100% - 16px))', flex: docked ? '1 1 0' : undefined, boxSizing: 'border-box',
-                display: 'grid', gridTemplateRows: docked ? 'auto auto 1fr auto auto' : undefined, gap: 6, padding: 10, borderRadius: 10, background: cssVar('bg'), color: cssVar('text'),
+                position: 'relative', width: '100%', flex: '1 1 0', boxSizing: 'border-box',
+                display: 'grid', gridTemplateRows: 'auto auto 1fr auto auto', gap: 6, padding: 10, borderRadius: 10, background: cssVar('bg'), color: cssVar('text'),
                 border: `1px solid ${cssVar('border')}`, boxShadow: '0 8px 28px color-mix(in srgb, currentColor 18%, transparent)', minHeight: 0,
             }}
         >
@@ -157,7 +149,8 @@ export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClo
             {read.state === 'ready' && (
                 <div
                     ref={linesRef} data-code-lines tabIndex={0} onScroll={(e) => { setScrollTop(e.currentTarget.scrollTop); setViewPx(e.currentTarget.clientHeight); }}
-                    style={{ ...TYPE.mono, maxHeight: docked ? undefined : VIEW_ROWS * ROW_PX, minHeight: 0, overflow: 'auto', background: cssVar('panel'), borderRadius: 6, padding: '4px 0' }}
+                    onKeyDown={onOut ? (e) => { if (e.key === 'Escape') { e.stopPropagation(); onOut(); } } : undefined}
+                    style={{ ...TYPE.mono, minHeight: 0, overflow: 'auto', background: cssVar('panel'), borderRadius: 6, padding: '4px 0' }}
                 >
                     <div style={{ position: 'relative', height: virtual ? lines.length * ROW_PX : undefined, minWidth: 'max-content' }}>
                         {tokens.slice(from, to).map((row, i) => {
@@ -166,18 +159,20 @@ export function CodeLayer({ slotKey, target, reader, labels, onOpenSource, onClo
                             const outside = !!span && (n1 < span.startLine || n1 > span.endLine);
                             const isMarked = !!marked && n1 >= marked.startLine && n1 <= marked.endLine;
                             const step = stepByLine.get(n1);
+                            const isCall = steps?.[currentStep]?.line === n1;
                             return (
                                 <div
-                                    key={n} data-code-line={n1} data-reading={isReading ? '' : undefined} data-marked={isMarked ? '' : undefined}
+                                    key={n} data-code-line={n1} data-reading={isReading ? '' : undefined} data-marked={isMarked ? '' : undefined} data-call-site={isCall ? '' : undefined}
                                     style={{
                                         display: 'flex', height: ROW_PX, lineHeight: `${ROW_PX}px`, whiteSpace: 'pre', ...(virtual ? { position: 'absolute', top: n * ROW_PX, left: 0, right: 0 } : {}),
-                                        background: isReading ? `color-mix(in srgb, ${cssVar('accent')} 14%, transparent)` : isMarked ? `color-mix(in srgb, ${cssVar('accent')} 7%, transparent)` : undefined, opacity: outside ? 0.45 : undefined,
+                                        background: isCall ? `color-mix(in srgb, ${cssVar('partner')} 16%, transparent)` : isReading ? `color-mix(in srgb, ${cssVar('accent')} 14%, transparent)` : isMarked ? `color-mix(in srgb, ${cssVar('accent')} 7%, transparent)` : undefined,
+                                        boxShadow: isCall ? `inset 2px 0 0 ${cssVar('partner')}` : undefined, opacity: outside ? 0.45 : undefined,
                                     }}
                                 >
                                     <span aria-hidden="true" style={{ flex: `0 0 ${gutter}`, textAlign: 'right', paddingRight: 8, color: cssVar('muted') }}>{n1}</span>
                                     {stepCount > 0 && (
                                         <span style={{ flex: '0 0 3ch', textAlign: 'center' }}>
-                                            {step != null && <StepBadge n={step + 1} count={stepCount} current={steps?.[currentStep]?.line === n1} aria={t.stepAria} onClick={onStep ? () => onStep(step) : undefined} />}
+                                            {step != null && <StepBadge n={step + 1} count={stepCount} current={isCall} aria={t.stepAria} onClick={onStep ? () => onStep(step) : undefined} />}
                                         </span>
                                     )}
                                     <span>{row.map((tok, k) => <CodeToken key={k} tok={tok} path={target.path} records={records} onDrill={onDrill} drillAria={t.drillAria} />)}</span>

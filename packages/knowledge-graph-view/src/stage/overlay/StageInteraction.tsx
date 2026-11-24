@@ -1,8 +1,8 @@
 /**
  * The stage's interaction layer (PRD 43 B5, B7 Selection), the DOM side over the ONE canvas. It picks on the main thread
  * (hover and select never wait on the worker) and drives the overlay — the selection ring with the selection's best
- * incident edges sliced from the ranked index, the hover ring and the path highlight — as overlay meshes, never as a
- * mark rebuild. The a11y proxies mount here.
+ * incident edges sliced from the ranked index, the hover ring, the path highlight, and the code panel's reading ring and
+ * numbered call arcs (`bus.reading`, `bus.calls`) — as overlay meshes, never as a mark rebuild. The a11y proxies mount here.
  *
  * Pointer events are read on the stage's own box (they bubble up from the canvas), so the rig's gestures on the canvas
  * keep working; a press that did not move is a click and selects what is under it. Picking is off during a tween.
@@ -59,19 +59,26 @@ export function StageInteraction({ bus, renderer, keys, placement, tweening, sel
         if (!tweening && bus.projector) bus.settle();
     }, [bus, placement, keys, tweening]);
 
-    // The overlay: selection + its incident slice + the path; hover rides along without a React commit.
-    const overlayOf = (hover: number): OverlayState => {
+    // The overlay: selection + its incident slice + the path; hover, the code's reading line and its calls ride along
+    // without a React commit.
+    const overlayOf = (): OverlayState => {
         const slot = bus.slotOf(selected);
         const path = (options.path ?? []).map((k) => bus.slotOf(k)).filter((s) => s >= 0);
-        return { selected: slot, hover, path, incident: options.incident?.of(slot, INCIDENT_SHOWN) ?? [] };
+        return { selected: slot, hover: bus.hover, reading: bus.reading, calls: bus.calls, path, incident: options.incident?.of(slot, INCIDENT_SHOWN) ?? [] };
     };
     const latest = useRef(overlayOf);
     latest.current = overlayOf;
     useEffect(() => {
-        renderer.setOverlay(latest.current(bus.hover));
+        renderer.setOverlay(latest.current());
         bus.invalidate();
     }, [renderer, bus, selected, placement, options.path, options.incident]);
-    useEffect(() => bus.onHover((hover) => { renderer.setOverlay({ ...renderer.overlay, hover }); bus.invalidate(); }), [bus, renderer]);
+    useEffect(() => {
+        const patch = (next: Partial<OverlayState>) => { renderer.setOverlay({ ...renderer.overlay, ...next }); bus.invalidate(); };
+        const offHover = bus.onHover((hover) => patch({ hover }));
+        const offReading = bus.onReading((reading) => patch({ reading }));
+        const offCalls = bus.onCalls((calls) => patch({ calls }));
+        return () => { offHover(); offReading(); offCalls(); };
+    }, [bus, renderer]);
 
     // Pointer picking on the stage's box: hover on move, select on a click that did not drag.
     useEffect(() => {

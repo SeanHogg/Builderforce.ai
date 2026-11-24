@@ -66,7 +66,7 @@ export interface StageRenderer {
      * `Placement.append`) adds them into the headroom first — ranged, no mesh — and only an overflow rebuilds the marks.
      */
     setPlacement(p: Placement, now: number, tweenMs: number): void;
-    /** The selection ring, hover ring and highlighted lines (B3 Overlay): overlay meshes only, never a mark attribute. */
+    /** The selection, hover, reading and current-call rings, the highlighted lines and the call arcs (B3 Overlay): overlay meshes only, never a mark attribute. */
     setOverlay(state: OverlayState): void;
     readonly overlay: OverlayState;
     /** The depth last set (the extrude multiplier picking and card anchors scale a mark's height by). */
@@ -166,7 +166,7 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
             bg.setStyle(next.bg ?? '#ffffff').getRGB(rgb, SRGBColorSpace);
             uniforms.uBg.value.set(rgb.r, rgb.g, rgb.b);
             labels.setPalette(next);
-            overlay.setAccent(next.accent ?? '#2563eb');
+            overlay.setColors({ accent: next.accent ?? '#2563eb', selection: next.text ?? '#ffffff', call: next.partner ?? '#f5b53d' });
         },
         setPlacement(next, now, tweenMs) {
             // A placement arriving mid-tween continues from where the marks ARE (baked at the current eased t).

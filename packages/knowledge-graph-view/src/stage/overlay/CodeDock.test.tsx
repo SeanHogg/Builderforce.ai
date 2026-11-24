@@ -1,12 +1,13 @@
-import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../../labels';
 import type { SourceReader, SymbolRecord } from '../../types';
-import { StageBus, StageBusContext } from '../anchor/stageBus';
 import { ROW_PX } from '../drill/CodeLayer';
 import { codeTargetOf, fileTargetOf } from '../drill/codeText';
-import { CodeDock } from './CodeDock';
+import { useCodeReading } from '../drill/useCodeReading';
+import { CodeDock, codePaneWidth, SPLIT_MIN_PX, type CodeDockProps } from './CodeDock';
+import { CodeTrail } from './CodeTrail';
+import { StepCard } from './StepCard';
 
 const records: SymbolRecord[] = [
     { ref: 'src:sys::order.ts#Order', name: 'Order', kind: 'class', parent: 'src:sys::order.ts', line: 1, exported: true },
@@ -20,24 +21,32 @@ const withCalls: SymbolRecord[] = records.map((r) => r.name !== 'place' ? r : {
     ...r, relations: [{ kind: 'calls', to: 'src:stock.ts#reserve', sites: [site(12, 0)] }, { kind: 'calls', to: 'src:pay.ts#charge', sites: [site(13, 1)] }],
 });
 
-/** The docked panel still mounts `useSlotAnchor` (with no slot), which needs a bus. */
-const bus = new StageBus();
-const wrapper = ({ children }: { children: ReactNode }) => <StageBusContext.Provider value={bus}>{children}</StageBusContext.Provider>;
+type PaneProps = Partial<Omit<CodeDockProps, 'reading'>> & { method?: string | null; pick?: string | null; onFocusSymbol?: (ref: string) => void };
 
-/** Scroll the docked lines so `rows` rows are above the top (jsdom: the reading line is then line `rows + 1`). */
+/** The code pane, the map's bar and the step card on one reading model, as the wiring composes them. */
+function Pane({ method = null, pick = null, onFocusSymbol, records: recs = records, onDrill = vi.fn(), onOut, ...rest }: PaneProps) {
+    const reading = useCodeReading({ path: target.path, records: recs, method, scrollLine: rest.scrollLine, pick, onFocusSymbol });
+    const open = method ? codeTargetOf(method, recs) : null;
+    return (
+        <>
+            <CodeTrail stack={[]} onClimb={vi.fn()} methods={[]} onMethod={vi.fn()} onLeaveCode={vi.fn()} across={null} follow={reading.follow} onFollow={reading.toggleFollow} onOut={onOut} labels={L} />
+            <CodeDock target={target} name="place" reader={reader} labels={L} records={recs} reading={reading} onDrill={onDrill} onClose={vi.fn()} onOut={onOut} {...rest} />
+            {open && <StepCard method={open} reading={reading} records={recs} labels={L} onDrill={onDrill} onOut={onOut} side="right" />}
+        </>
+    );
+}
+
+/** Scroll the lines so `rows` rows are above the top (jsdom: the reading line is then line `rows + 1`). */
 function scrollTo(container: HTMLElement, rows: number) {
     const lines = container.querySelector('[data-code-lines]') as HTMLDivElement;
     lines.scrollTop = rows * ROW_PX;
     fireEvent.scroll(lines);
 }
 
-describe('scrolling the docked code moves the stage', () => {
+describe('scrolling the code moves the stage', () => {
     it('names the symbol on the reading line once per symbol boundary', async () => {
         const onFocusSymbol = vi.fn();
-        const { container } = render(
-            <CodeDock target={target} name="place" reader={reader} labels={L} records={records} onDrill={vi.fn()} onClose={vi.fn()} onFocusSymbol={onFocusSymbol} />,
-            { wrapper },
-        );
+        const { container } = render(<Pane onFocusSymbol={onFocusSymbol} />);
         await screen.findByText('// line 1');
         // jsdom has no layout: the reading line is the top line, and opening lights the symbol there.
         expect(onFocusSymbol).toHaveBeenLastCalledWith('src:sys::order.ts#Order');
@@ -50,14 +59,11 @@ describe('scrolling the docked code moves the stage', () => {
         expect(container.querySelector('[data-reading]')?.getAttribute('data-code-line')).toBe('14');
     });
 
-    it('Follow off: scrolling no longer moves the stage', async () => {
+    it('Follow off (on the map bar): scrolling no longer moves the stage', async () => {
         const onFocusSymbol = vi.fn();
-        const { container } = render(
-            <CodeDock target={target} name="place" reader={reader} labels={L} records={records} onDrill={vi.fn()} onClose={vi.fn()} onFocusSymbol={onFocusSymbol} />,
-            { wrapper },
-        );
+        const { container } = render(<Pane onFocusSymbol={onFocusSymbol} />);
         await screen.findByText('// line 1');
-        const follow = container.querySelector('[data-action="follow"]') as HTMLButtonElement;
+        const follow = container.querySelector('[data-code-trail] [data-action="follow"]') as HTMLButtonElement;
         fireEvent.click(follow);
         expect(follow.getAttribute('aria-pressed')).toBe('false');
         onFocusSymbol.mockClear();
@@ -67,26 +73,22 @@ describe('scrolling the docked code moves the stage', () => {
         expect(onFocusSymbol).toHaveBeenCalledWith('src:sys::order.ts#place');
     });
 
-    it('with a method open, numbers its calls and follows the current call', async () => {
+    it('with a method open, numbers its calls; the reading line keeps the method lit and makes its call current', async () => {
         const onFocusSymbol = vi.fn();
-        const { container } = render(
-            <CodeDock target={target} name="place" reader={reader} labels={L} records={withCalls} method="src:sys::order.ts#place" onDrill={vi.fn()} onClose={vi.fn()} onFocusSymbol={onFocusSymbol} />,
-            { wrapper },
-        );
+        const { container } = render(<Pane records={withCalls} method="src:sys::order.ts#place" onFocusSymbol={onFocusSymbol} />);
         await screen.findByText('// line 1');
         expect([...container.querySelectorAll('[data-code-step]')].map((b) => b.getAttribute('data-code-step'))).toEqual(['1', '2']);
         expect((container.querySelector('[data-code-line="5"]') as HTMLElement).style.opacity).toBe('0.45');
         scrollTo(container, 13);
         expect(container.querySelector('[data-code-step="2"]')?.hasAttribute('data-current')).toBe(true);
-        expect(onFocusSymbol).toHaveBeenLastCalledWith('src:pay.ts#charge');
-        expect(container.querySelector('[data-code-step-status]')?.textContent).toContain('charge');
+        expect(container.querySelector('[data-code-line="13"]')?.hasAttribute('data-call-site')).toBe(true);
+        // The method keeps the reading ring; its current callee is the step card's (and the stage's amber call).
+        expect(onFocusSymbol).toHaveBeenLastCalledWith('src:sys::order.ts#place');
+        expect(container.querySelector('[data-step-callee]')?.textContent).toBe('charge');
     });
 
-    it('the trail names where you read, and a crumb scrolls to its symbol', async () => {
-        const { container } = render(
-            <CodeDock target={target} name="place" reader={reader} labels={L} records={records} onDrill={vi.fn()} onClose={vi.fn()} />,
-            { wrapper },
-        );
+    it('the crumbs name where you read, and a crumb scrolls to its symbol', async () => {
+        const { container } = render(<Pane />);
         await screen.findByText('// line 1');
         scrollTo(container, 21);
         const crumbs = [...container.querySelectorAll('[data-code-crumbs] button')];
@@ -96,32 +98,34 @@ describe('scrolling the docked code moves the stage', () => {
         expect((container.querySelector('[data-code-lines]') as HTMLDivElement).scrollTop).toBe(0);
     });
 
-    it('Out leaves the level, and shows only when there is one to leave', async () => {
+    it('Out (on the map bar, or Escape in the code) leaves the level, and shows only when there is one to leave', async () => {
         const onOut = vi.fn();
-        const { container, rerender } = render(
-            <CodeDock target={target} name="place" reader={reader} labels={L} records={records} onDrill={vi.fn()} onClose={vi.fn()} onOut={onOut} />,
-            { wrapper },
-        );
+        const { container, rerender } = render(<Pane onOut={onOut} />);
         await screen.findByText('// line 1');
-        fireEvent.click(container.querySelector('[data-action="out"]') as HTMLButtonElement);
-        expect(onOut).toHaveBeenCalledTimes(1);
-        rerender(<CodeDock target={target} name="place" reader={reader} labels={L} records={records} onDrill={vi.fn()} onClose={vi.fn()} />);
+        fireEvent.click(container.querySelector('[data-code-trail] [data-action="out"]') as HTMLButtonElement);
+        fireEvent.keyDown(container.querySelector('[data-code-lines]') as HTMLElement, { key: 'Escape' });
+        expect(onOut).toHaveBeenCalledTimes(2);
+        rerender(<Pane />);
         expect(container.querySelector('[data-action="out"]')).toBeNull();
     });
 
     it('"Open at line" opens at the line on show', async () => {
         const onOpenSource = vi.fn();
-        const { container } = render(
-            <CodeDock target={target} name="place" reader={reader} labels={L} records={records} scrollLine={10} onDrill={vi.fn()} onClose={vi.fn()} onOpenSource={onOpenSource} />,
-            { wrapper },
-        );
+        const { container } = render(<Pane scrollLine={10} onOpenSource={onOpenSource} />);
         await screen.findByText('// line 1');
         fireEvent.click(container.querySelector('[data-action="open-at-line"]') as HTMLButtonElement);
         expect(onOpenSource).toHaveBeenCalledWith(expect.objectContaining({ path: target.path, startLine: 10 }));
     });
+
+    it('a stage hover tints that symbol in the code', async () => {
+        const { container } = render(<Pane hover="src:sys::order.ts#cancel" />);
+        await screen.findByText('// line 1');
+        expect(container.querySelector('[data-code-line="20"]')?.hasAttribute('data-marked')).toBe(true);
+        expect(container.querySelector('[data-code-line="5"]')?.hasAttribute('data-marked')).toBe(false);
+    });
 });
 
-describe('stepping the calls of the open method', () => {
+describe('the step card steps the calls of the open method', () => {
     const method = 'src:sys::order.ts#place';
     /** Three calls, two on one line; only `cancel` has a loaded record, so only it gets "Into". */
     const stepped: SymbolRecord[] = records.map((r) => r.name !== 'place' ? r : {
@@ -131,68 +135,67 @@ describe('stepping the calls of the open method', () => {
             { kind: 'calls', to: 'src:stock.ts#reserve', sites: [site(15, 2)] },
         ],
     });
-    const status = (c: HTMLElement) => c.querySelector('[data-code-step-status]')?.textContent ?? '';
+    const status = (c: HTMLElement) => c.querySelector('[data-step-of]')?.textContent ?? '';
     const click = (c: HTMLElement, sel: string) => fireEvent.click(c.querySelector(sel) as HTMLElement);
-    const dockFor = (extra: Partial<Parameters<typeof CodeDock>[0]> = {}) => (
-        <CodeDock target={target} name="place" reader={reader} labels={L} records={stepped} method={method} onDrill={vi.fn()} onClose={vi.fn()} {...extra} />
-    );
+    const pane = (extra: PaneProps = {}) => <Pane records={stepped} method={method} {...extra} />;
 
-    it('Next reaches both calls on one line and wraps around; Previous wraps back', async () => {
-        const { container } = render(dockFor(), { wrapper });
+    it('names the method and its calls until one is current; Step through starts at the first', async () => {
+        const { container } = render(pane());
         await screen.findByText('// line 1');
-        click(container, '[data-action="next-step"]');
-        expect(status(container)).toContain('Call 1 of 3');
-        click(container, '[data-action="next-step"]');
-        expect(status(container)).toContain('Call 2 of 3');
-        click(container, '[data-action="next-step"]');
-        click(container, '[data-action="next-step"]');
-        expect(status(container)).toContain('Call 1 of 3');
-        click(container, '[data-action="prev-step"]');
-        expect(status(container)).toContain('Call 3 of 3');
+        const card = container.querySelector('[data-step-card]') as HTMLElement;
+        expect(card.textContent).toContain(L.surface.code.codeLevel);
+        expect(card.textContent).toContain('Calls in order: 3');
+        click(container, '[data-action="step-through"]');
+        expect(status(container)).toBe('Call 1 of 3');
+        expect(container.querySelector('[data-step-card]')?.textContent).toContain('line 12');
     });
 
-    it('a step number scrolls to its call and makes it current', async () => {
-        const { container } = render(dockFor(), { wrapper });
+    it('Next reaches both calls on one line and wraps around; Previous wraps back', async () => {
+        const { container } = render(pane());
+        await screen.findByText('// line 1');
+        click(container, '[data-action="step-through"]');
+        click(container, '[data-action="next-step"]');
+        expect(status(container)).toBe('Call 2 of 3');
+        click(container, '[data-action="next-step"]');
+        click(container, '[data-action="next-step"]');
+        expect(status(container)).toBe('Call 1 of 3');
+        click(container, '[data-action="prev-step"]');
+        expect(status(container)).toBe('Call 3 of 3');
+    });
+
+    it('a gutter number goes to its call and makes it current', async () => {
+        const { container } = render(pane());
         await screen.findByText('// line 1');
         click(container, '[data-code-step="3"]');
-        expect(status(container)).toContain('Call 3 of 3');
+        expect(status(container)).toBe('Call 3 of 3');
         expect(container.querySelector('[data-code-step="3"]')?.hasAttribute('data-current')).toBe(true);
     });
 
-    it('a callee picked on the stage scrolls to its call', async () => {
-        const { container, rerender } = render(dockFor(), { wrapper });
+    it('a callee picked on the stage goes to its call', async () => {
+        const { container, rerender } = render(pane());
         await screen.findByText('// line 1');
-        rerender(dockFor({ pick: 'src:stock.ts#reserve' }));
-        expect(status(container)).toContain('Call 3 of 3');
+        rerender(pane({ pick: 'src:stock.ts#reserve' }));
+        expect(status(container)).toBe('Call 3 of 3');
     });
 
-    it('"Into" drills to the current callee when it is loaded', async () => {
+    it('"Into" drills to the current callee when it is loaded, and says whether it is in this file', async () => {
         const onDrill = vi.fn();
-        const { container } = render(dockFor({ onDrill }), { wrapper });
+        const { container } = render(pane({ onDrill }));
         await screen.findByText('// line 1');
-        click(container, '[data-action="next-step"]');
+        click(container, '[data-action="step-through"]');
+        expect(container.querySelector('[data-step-card]')?.textContent).toContain(L.surface.code.sameFile);
         click(container, '[data-action="drill-callee"]');
         expect(onDrill).toHaveBeenCalledWith('src:sys::order.ts#cancel');
         click(container, '[data-action="next-step"]');
         expect(container.querySelector('[data-action="drill-callee"]')).toBeNull();
+        expect(container.querySelector('[data-step-card]')?.textContent).toContain(L.surface.code.otherFile);
     });
+});
 
-    it('a stage hover tints that symbol in the code', async () => {
-        const { container } = render(dockFor({ method: null, hover: 'src:sys::order.ts#cancel' }), { wrapper });
-        await screen.findByText('// line 1');
-        expect(container.querySelector('[data-code-line="20"]')?.hasAttribute('data-marked')).toBe(true);
-        expect(container.querySelector('[data-code-line="5"]')?.hasAttribute('data-marked')).toBe(false);
-    });
-
-    it('the method trail replaces the crumbs and goes back to a method', async () => {
-        const onTrail = vi.fn();
-        const trail = [{ ref: method, name: 'place' }, { ref: 'src:sys::order.ts#cancel', name: 'cancel' }];
-        const { container } = render(dockFor({ trail, onTrail }), { wrapper });
-        await screen.findByText('// line 1');
-        const crumbs = [...container.querySelectorAll('[data-trail]')];
-        expect(crumbs.map((b) => b.textContent)).toEqual(['place', 'cancel']);
-        expect(crumbs[1]!.getAttribute('aria-current')).toBe('location');
-        fireEvent.click(crumbs[0]!);
-        expect(onTrail).toHaveBeenCalledWith(0);
+describe('the split layout', () => {
+    it('gives the code 42% of a box wide enough for both sides, and floats it over a narrower one', () => {
+        expect(codePaneWidth(1000)).toBe(420);
+        expect(codePaneWidth(SPLIT_MIN_PX)).toBe(Math.round(SPLIT_MIN_PX * 0.42));
+        expect(codePaneWidth(SPLIT_MIN_PX - 1)).toBe(0);
     });
 });
