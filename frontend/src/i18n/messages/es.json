@@ -32484,6 +32484,122 @@
           }
         ]
       },
+      "webContainers": {
+        "title": "Web Containers",
+        "tagline": "Un entorno de ejecución para cada host",
+        "hero": "Crea y ejecuta aplicaciones reales en un entorno portátil y aislado",
+        "description": "Runtimes de Node, Python, PHP, .NET y Rust tras un único contrato de ejecución, descritos por un manifiesto builderforce.json y ejecutados en el navegador, el IDE, el escritorio o la nube.",
+        "features": [
+          {
+            "title": "Runtimes multilenguaje",
+            "description": "Node, Python, PHP, .NET y Rust en el mismo modelo de entorno."
+          },
+          {
+            "title": "Manifiesto de aplicación",
+            "description": "builderforce.json declara la app, sus servicios y capacidades, y se valida antes del lanzamiento."
+          },
+          {
+            "title": "Lanzamiento desde el chat",
+            "description": "/starter-kit y /launch generan e inician una app sin salir de la conversación."
+          },
+          {
+            "title": "Local primero",
+            "description": "Se ejecuta primero en tu máquina y pasa a la nube cuando la persistencia o la capacidad lo exigen."
+          }
+        ]
+      },
+      "agentEnvironment": {
+        "title": "Entorno de agentes",
+        "tagline": "Agentes que viven donde corre el trabajo",
+        "hero": "Define una plantilla de agentes y ejecútala dentro del entorno",
+        "description": "Los agentes se declaran en el manifiesto con sus capacidades, se ejecutan en el mismo entorno que la aplicación y entran en la Sala 3D para que veas quién hace qué.",
+        "features": [
+          {
+            "title": "Declarados en el manifiesto",
+            "description": "Cada agente y sus capacidades se describen junto a la aplicación en la que trabaja."
+          },
+          {
+            "title": "Se ejecutan en el entorno",
+            "description": "Los agentes corren en el mismo entorno que la app, con el mismo aislamiento."
+          },
+          {
+            "title": "Entran en la Sala",
+            "description": "Cada agente en ejecución aparece en la Sala 3D para que el trabajo sea visible."
+          },
+          {
+            "title": "Interfaz para definir agentes",
+            "description": "Crea y edita la plantilla desde el producto en lugar de escribir configuración a mano."
+          }
+        ]
+      },
+      "autonomousExecution": {
+        "title": "Ejecución autónoma",
+        "tagline": "Trabajo que termina, con evidencia",
+        "hero": "Del ticket al cambio entregado, bajo un único motor de ejecución",
+        "description": "Un solo motor admite, trabaja y cierra los tickets. Una ejecución no puede terminar sin la evidencia de verificación que prueba el trabajo, y se entrega por política en lugar de detenerse a preguntar.",
+        "features": [
+          {
+            "title": "Admisión de tickets",
+            "description": "El trabajo entra al motor por una única puerta de admisión, sin pipelines que compitan."
+          },
+          {
+            "title": "Evidencia antes de completar",
+            "description": "Una ejecución no se marca como terminada hasta adjuntar su evidencia de verificación."
+          },
+          {
+            "title": "Política de entrega",
+            "description": "El trabajo aprobado se entrega por política, sin esperar una aprobación manual cada vez."
+          },
+          {
+            "title": "Traspasos verificados",
+            "description": "Se siguen los traspasos entre subagentes y las afirmaciones sin verificar se señalan al responsable."
+          }
+        ]
+      },
+      "securityShield": {
+        "title": "Security Shield",
+        "tagline": "Seguro por defecto, dentro de cada ejecución",
+        "hero": "Cada entorno se ejecuta aislado, vigilado y auditado",
+        "description": "Política de entrada y salida, aislamiento y auditoría para el nivel de ejecución del navegador, con el rastro de seguridad exportado a tu propio colector SIEM.",
+        "features": [
+          {
+            "title": "Aislamiento",
+            "description": "Cada ejecución está aislada del host y de otros entornos."
+          },
+          {
+            "title": "Política de entrada y salida",
+            "description": "Decide qué puede llegar a una ejecución y qué puede alcanzar ella."
+          },
+          {
+            "title": "Rastro de auditoría",
+            "description": "Los eventos relevantes para la seguridad se registran en cada ejecución."
+          },
+          {
+            "title": "Exportación a SIEM",
+            "description": "Envía el rastro a tu propio colector para retención y alertas."
+          }
+        ]
+      },
+      "knowledgeMap": {
+        "title": "Mapa de conocimiento",
+        "tagline": "Mira cómo encaja tu sistema",
+        "hero": "Un mapa vivo de tu código, servicios y decisiones",
+        "description": "El Visualizer construye un mapa en streaming de un proyecto, lo revisa y detecta patrones de resiliencia, para que las ideas partan de lo que ya existe.",
+        "features": [
+          {
+            "title": "Construcción del mapa en streaming",
+            "description": "Mira cómo toma forma el mapa mientras se analiza el proyecto."
+          },
+          {
+            "title": "Revisión visual",
+            "description": "Inspecciona el resultado y corrígelo antes de que alguien dependa de él."
+          },
+          {
+            "title": "Detección de patrones de resiliencia",
+            "description": "Detecta los patrones que mantienen un sistema en marcha y dónde faltan."
+          }
+        ]
+      },
       "integrations": {
         "title": "Integraciones y migraciones",
         "tagline": "Conecta las herramientas que conservas",

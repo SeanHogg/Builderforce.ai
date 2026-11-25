@@ -46,10 +46,11 @@ source: PRD-37
 dependencies: []
 objective: Re-baseline autonomous execution metrics.
 acceptance:
-  - Meets the program definition of done in this file.
+  - "`measure-autonomy-baseline.mjs` reports fully-autonomous % and trigger success for a 30-day window."
+  - BASELINES.md rows re-measured with date and commit.
 evidence:
-  - CI acceptance results
-blocker: Needs read access to production run data to recompute the autonomous delivery and failure rates.
+  - Output of `node api/scripts/measure-autonomy-baseline.mjs --days 30`
+blocker: Operator runs the script with a manager token for the production tenant.
 ```
 
 ### AE-02 — Converge `SwimlaneCoordinator` and `ticket_runs`
@@ -103,7 +104,9 @@ dependencies:
   - AE-01
 objective: Fix autonomous trigger errors.
 acceptance:
-  - Meets the program definition of done in this file.
+  - Every `auto_run_error` carries an `errorClass`.
+  - The top 3 classes by count have a fix and a regression test.
+  - Trigger success is at least 99% over 30 days.
 evidence:
   - CI acceptance results
 blocker: null

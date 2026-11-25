@@ -20,6 +20,9 @@ import { AUTO_RUN_REASON_TEXT, type AutoRunReason } from '../swimlane/evaluateAu
 /** The tool names the ledger writes: a decision not to run, and a trigger that threw. */
 export const AUTO_RUN_SKIPPED_TOOL = 'auto_run_skipped';
 export const AUTO_RUN_ERROR_TOOL = 'auto_run_error';
+/** The positive decision, and the hold for manager sign-off. */
+export const AUTO_RUN_DISPATCHED_TOOL = 'auto_run_dispatched';
+export const AUTO_RUN_AWAITING_APPROVAL_TOOL = 'auto_run_awaiting_approval';
 
 /**
  * Upper bound on how far back the query looks. The PRIMARY staleness rule is the ticket's
@@ -43,6 +46,7 @@ export interface RecordedRefusal {
  */
 export function refusalFromRow(row: { toolName: string; args: string | null; ts: Date }): RecordedRefusal | null {
   if (row.toolName === AUTO_RUN_ERROR_TOOL) return { reason: 'trigger_error', at: row.ts };
+  if (row.toolName === AUTO_RUN_AWAITING_APPROVAL_TOOL) return { reason: 'pending_approval', at: row.ts };
   if (row.toolName !== AUTO_RUN_SKIPPED_TOOL || !row.args) return null;
   try {
     const parsed: unknown = JSON.parse(row.args);

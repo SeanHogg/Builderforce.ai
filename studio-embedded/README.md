@@ -4,6 +4,9 @@
 
 This is the **React layer** on top of the headless [`@seanhogg/builderforce-studio`](https://www.npmjs.com/package/@seanhogg/builderforce-studio) engine. If you only need the engine (custom UI, non-React, or headless workflows), install that package directly instead.
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../docs/specs/README.md)). This package serves **Make**: the React layer for embedding Studio in a host app.
+
 ```bash
 npm install @seanhogg/builderforce-studio-embedded \
   @seanhogg/builderforce-studio \

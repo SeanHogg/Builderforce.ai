@@ -3,6 +3,9 @@
 The one home for written specs, design docs and reference material. New documents go here,
 not in a new top-level folder.
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../docs/specs/README.md)). This package serves **every stage**: the specs and reference material behind all of them. Strategy: [docs/roadmap/00-STRATEGY.md](../docs/roadmap/00-STRATEGY.md).
+
 | Folder | What lives there |
 |---|---|
 | [`specs/`](specs/) | Product PRDs and implementation notes, numbered (`NN-prd-*.md`; `NNa-*` is the build hand-off for `NN`). [`specs/README.md`](specs/README.md) is the index; `specs/data-model/` is the consolidation coverage map the `check:burnrate-parity` / model-coverage guards read. `specs/tasks/` holds per-ticket PRDs (`task-<id>.md`) committed by the platform (`commitPrdToRepo.ts`). |

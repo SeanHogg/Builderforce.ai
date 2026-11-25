@@ -2,6 +2,9 @@
 
 Re-embed BuilderForce surfaces — Product Management, Agile, and Governance — into any React host (e.g. BurnRateOS) with **one** component.
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../docs/specs/README.md)). This package serves **Reach**: embeds BuilderForce surfaces in a host product so the work reaches the people who use that product.
+
 ```tsx
 import { BuilderForceEmbed } from '@seanhogg/builderforce-embedded';
 

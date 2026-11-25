@@ -15,6 +15,7 @@ import {
   listPublishedSkillSlugs,
 } from '@/lib/marketplaceSeo';
 import { detailRoutes, indexableTeaserRoutes, marketedRoutes } from '@/lib/routeMarketing';
+import { REFERENCE_FOUNDATIONS } from '@/lib/publicDestinations';
 import { getSalaryDirectory } from '@/lib/salary';
 import { legalDocHref } from '@/lib/legalDocs';
 import { OPEN_SOURCE_PACKAGES, openSourcePath } from '@/lib/openSourcePackages';
@@ -114,6 +115,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: 'monthly' as const,
     priority: detailed.has(route) ? 0.7 : 0.6,
   }));
+
+  // Foundation explainers (`/features/<slug>`) come from the public destination
+  // registry that renders them, so a new feature page is indexed the moment it
+  // is registered. Anything already submitted above is skipped.
+  const listedUrls = new Set([...staticUrls, ...teaserRoutes.map((route) => `${BASE}${route}`)]);
+  const foundationPages: MetadataRoute.Sitemap = REFERENCE_FOUNDATIONS
+    .filter((entry) => !listedUrls.has(`${BASE}${entry.marketingHref}`))
+    .map((entry) => ({
+      url: `${BASE}${entry.marketingHref}`,
+      lastModified: now,
+      changeFrequency: 'monthly' as const,
+      priority: 0.7,
+    }));
 
   // The catalog INDEX pages (`/skills`, `/personas`, `/prompts`) are listed exactly
   // once, from whichever source already carries them: the static list, the marketed
@@ -277,7 +291,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   return [
-    ...staticPages, ...teaserPages, ...catalogIndexPages, ...blogPages, ...comparePages, ...openSourcePages,
+    ...staticPages, ...teaserPages, ...foundationPages, ...catalogIndexPages, ...blogPages, ...comparePages, ...openSourcePages,
     ...integrationPages, ...marketplacePages, ...catalogPages, ...talentPages,
     ...startupPages, ...salaryPages,
   ];

@@ -3,6 +3,9 @@
 Session replay for Builderforce.ai Insights (PRD 33). One loader, one recorder,
 one public API.
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../docs/specs/README.md)). This package serves **Measure**: records sessions for Insights so you can see how people actually use what you shipped.
+
 ## Install
 
 Paste into `<head>`:

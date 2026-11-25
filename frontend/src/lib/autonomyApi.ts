@@ -85,6 +85,16 @@ export interface AutonomySummary {
    *  surfaced — the figures are then a sample, not full coverage. */
   truncated: boolean;
   ticketsScanned: number;
+  /** Optional: a response cached before the trigger stats shipped will not carry it. */
+  triggers?: AutonomyTriggerStats;
+}
+
+export interface AutonomyTriggerStats {
+  dispatched: number;
+  /** Distinct error STATES, not attempts — so `successRate` is an upper bound. */
+  errorStates: number;
+  successRate: number | null;
+  byErrorClass: Array<{ errorClass: string; count: number }>;
 }
 
 /** The five funnel stages, in order. Shared by the chart and the table view. */

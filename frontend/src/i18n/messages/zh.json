@@ -32484,6 +32484,122 @@
           }
         ]
       },
+      "webContainers": {
+        "title": "Web Containers",
+        "tagline": "一个执行环境，适配每个宿主",
+        "hero": "在可移植的隔离环境中构建并运行真实应用",
+        "description": "Node、Python、PHP、.NET 和 Rust 运行时共用一份执行契约，由 builderforce.json 清单描述，可在浏览器、IDE、桌面或云端运行。",
+        "features": [
+          {
+            "title": "多语言运行时",
+            "description": "Node、Python、PHP、.NET 和 Rust 使用同一套环境模型。"
+          },
+          {
+            "title": "应用清单",
+            "description": "builderforce.json 声明应用、服务和能力，并在启动前校验。"
+          },
+          {
+            "title": "在聊天中启动",
+            "description": "/starter-kit 和 /launch 无需离开对话即可生成并启动应用。"
+          },
+          {
+            "title": "本地优先",
+            "description": "优先在你的机器上运行，在需要持久化或容量时迁移到云端。"
+          }
+        ]
+      },
+      "agentEnvironment": {
+        "title": "智能体环境",
+        "tagline": "智能体就生活在工作运行的地方",
+        "hero": "定义智能体团队，并在环境内运行",
+        "description": "智能体连同其能力在清单中声明，与应用在同一环境中执行，并加入 3D 房间，让你看到谁在做什么。",
+        "features": [
+          {
+            "title": "在清单中声明",
+            "description": "每个智能体及其能力都与它所处理的应用一同描述。"
+          },
+          {
+            "title": "在环境内运行",
+            "description": "智能体与应用在同一环境中执行，拥有相同的隔离。"
+          },
+          {
+            "title": "加入房间",
+            "description": "每个运行中的智能体都会出现在 3D 房间中，工作一目了然。"
+          },
+          {
+            "title": "智能体定义界面",
+            "description": "在产品中创建和编辑团队，无需手写配置。"
+          }
+        ]
+      },
+      "autonomousExecution": {
+        "title": "自主执行",
+        "tagline": "有证据的完成",
+        "hero": "从工单到交付的变更，由同一个执行引擎负责",
+        "description": "工单由同一个引擎受理、处理并关闭。没有证明工作的验证证据，运行就无法结束，并且按策略交付，而不是停下来询问。",
+        "features": [
+          {
+            "title": "工单受理",
+            "description": "工作通过唯一的受理入口进入引擎，而不是多条相互竞争的流水线。"
+          },
+          {
+            "title": "先有证据再完成",
+            "description": "只有附上验证证据，运行才能标记为完成。"
+          },
+          {
+            "title": "交付策略",
+            "description": "已批准的工作按策略交付，无需每次等待人工放行。"
+          },
+          {
+            "title": "经过验证的交接",
+            "description": "子智能体之间的交接会被跟踪，未经验证的结论会提示给负责人。"
+          }
+        ]
+      },
+      "securityShield": {
+        "title": "安全盾",
+        "tagline": "默认安全，贯穿每次运行",
+        "hero": "每个环境都在隔离、受管控并可审计的状态下运行",
+        "description": "为浏览器运行层提供入站与出站策略、隔离和审计，并把安全记录导出到你自己的 SIEM 收集器。",
+        "features": [
+          {
+            "title": "隔离",
+            "description": "每次运行都与宿主及其他环境隔离。"
+          },
+          {
+            "title": "入站与出站策略",
+            "description": "决定什么可以到达一次运行，以及它可以访问什么。"
+          },
+          {
+            "title": "审计记录",
+            "description": "每次运行中与安全相关的事件都会被记录。"
+          },
+          {
+            "title": "SIEM 导出",
+            "description": "把记录发送到你自己的收集器，用于留存和告警。"
+          }
+        ]
+      },
+      "knowledgeMap": {
+        "title": "知识地图",
+        "tagline": "看清你的系统如何拼合",
+        "hero": "代码、服务与决策的动态地图",
+        "description": "Visualizer 以流式方式构建项目地图，对其进行审阅并检测韧性模式，让创意从已有的基础出发。",
+        "features": [
+          {
+            "title": "流式构建地图",
+            "description": "在分析项目的同时，看着地图逐步成形。"
+          },
+          {
+            "title": "可视化审阅",
+            "description": "在有人依赖结果之前先检查并修正。"
+          },
+          {
+            "title": "韧性模式检测",
+            "description": "找出让系统持续运行的模式，以及缺少这些模式的地方。"
+          }
+        ]
+      },
       "integrations": {
         "title": "集成与迁移",
         "tagline": "连接你保留的工具",

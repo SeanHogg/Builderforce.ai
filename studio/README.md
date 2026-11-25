@@ -4,6 +4,9 @@
 
 This package is the **engine**. For a ready-made React `<StudioPanel>` component, install [`@seanhogg/builderforce-studio-embedded`](https://www.npmjs.com/package/@seanhogg/builderforce-studio-embedded), which builds on this.
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../docs/specs/README.md)). This package serves **Make**: the headless client-side media engine behind Studio.
+
 ```bash
 npm install @seanhogg/builderforce-studio \
   onnxruntime-web @huggingface/transformers @seanhogg/builderforce-sdk

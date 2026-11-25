@@ -15,6 +15,11 @@ describe('refusalFromRow', () => {
     expect(refusalFromRow({ toolName: 'auto_run_error', args: null, ts })?.reason).toBe('trigger_error');
   });
 
+  it('maps an awaiting-approval row to pending_approval', () => {
+    expect(refusalFromRow({ toolName: 'auto_run_awaiting_approval', args: null, ts }))
+      .toEqual({ reason: 'pending_approval', at: ts });
+  });
+
   it('drops off-vocabulary, will_run, unparseable and unrelated rows', () => {
     expect(refusalFromRow({ toolName: 'auto_run_skipped', args: JSON.stringify({ reason: 'made_up' }), ts })).toBeNull();
     expect(refusalFromRow({ toolName: 'auto_run_skipped', args: JSON.stringify({ reason: 'will_run' }), ts })).toBeNull();

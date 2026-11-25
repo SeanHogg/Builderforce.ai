@@ -6,9 +6,9 @@ Autonomous completion is measured against a fixed, representative workload, and 
 
 | Metric | Historical value | As of | Source | Reproduce | Re-measured |
 |---|---|---|---|---|---|
-| Fully autonomous ticket completion | 0.78% (6 of 767 tickets) | 2026-07-26 | Previous `ROADMAP.md` | Not yet scripted: needs a query over `ticket_runs` joined to ticket outcomes (`AE-01`) | — |
+| Fully autonomous ticket completion | 0.78% (6 of 767 tickets) | 2026-07-26 | Previous `ROADMAP.md` | `node api/scripts/measure-autonomy-baseline.mjs --days 30` | — |
 | Run failure rate | 69% across 6,195 runs | 2026-07-26 | Previous `ROADMAP.md` | Not yet scripted: same query, failed share of all runs (`AE-01`) | — |
-| Autonomous trigger errors | 282 in 30 days | 2026-10-25 | Previous `ROADMAP.md` | Not yet scripted: trigger error count from production logs (`AE-04`) | — |
+| Autonomous trigger success / error states | 282 `auto_run_error` in 30 days (historical) | 2026-10-25 | Previous `ROADMAP.md` | `node api/scripts/measure-autonomy-baseline.mjs --days 30` (error states are deduplicated per ticket, lane and message, so the success rate is an upper bound) | — |
 | Frontend Worker bundle | 10.82 MiB vs 10.00 MiB limit (108.2%) | Release 42525421978 | `GAP-REGISTER.md` `REL-G005` | `cd frontend && pnpm run cf-build` (ends with `scripts/check-worker-size.mjs`) | — |
 | Frontend unit tests | 19 failing in 12 files | Previous roadmap | `GAP-REGISTER.md` `REL-G006` | `cd frontend && pnpm exec vitest run` | — |
 | Traffic: VS Code runs / Web calls / cloud tickets | 452 / about 230 / 4 in 30 days | 2026-10-25 | Previous `ROADMAP.md` | Production telemetry | — |

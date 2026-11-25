@@ -32484,6 +32484,122 @@
           }
         ]
       },
+      "webContainers": {
+        "title": "Web Containers",
+        "tagline": "Un seul environnement d'exécution, pour chaque hôte",
+        "hero": "Construisez et exécutez de vraies applications dans un environnement portable et isolé",
+        "description": "Des runtimes Node, Python, PHP, .NET et Rust derrière un contrat d'exécution unique, décrits par un manifeste builderforce.json et exécutés dans le navigateur, l'IDE, le bureau ou le cloud.",
+        "features": [
+          {
+            "title": "Runtimes multilangages",
+            "description": "Node, Python, PHP, .NET et Rust dans le même modèle d’environnement."
+          },
+          {
+            "title": "Manifeste d'application",
+            "description": "builderforce.json déclare l'application, ses services et ses capacités, et est validé avant le lancement."
+          },
+          {
+            "title": "Lancement depuis le chat",
+            "description": "/starter-kit et /launch génèrent et démarrent une application sans quitter la conversation."
+          },
+          {
+            "title": "Local d'abord",
+            "description": "S'exécute d'abord sur votre machine et passe dans le cloud quand la persistance ou la capacité l'exigent."
+          }
+        ]
+      },
+      "agentEnvironment": {
+        "title": "Environnement des agents",
+        "tagline": "Des agents qui vivent là où le travail s’exécute",
+        "hero": "Définissez une équipe d’agents et exécutez-la dans l’environnement",
+        "description": "Les agents sont déclarés dans le manifeste avec leurs capacités, s’exécutent dans le même environnement que l’application et rejoignent la Salle 3D pour que vous voyiez qui fait quoi.",
+        "features": [
+          {
+            "title": "Déclarés dans le manifeste",
+            "description": "Chaque agent et ses capacités sont décrits à côté de l’application sur laquelle il travaille."
+          },
+          {
+            "title": "Exécutés dans l’environnement",
+            "description": "Les agents tournent dans le même environnement que l’application, avec la même isolation."
+          },
+          {
+            "title": "Rejoignent la Salle",
+            "description": "Chaque agent en cours d’exécution apparaît dans la Salle 3D pour rendre le travail visible."
+          },
+          {
+            "title": "Interface de définition",
+            "description": "Créez et modifiez l’équipe depuis le produit au lieu d’écrire la configuration à la main."
+          }
+        ]
+      },
+      "autonomousExecution": {
+        "title": "Exécution autonome",
+        "tagline": "Un travail qui aboutit, preuves à l’appui",
+        "hero": "Du ticket au changement livré, sous un seul moteur d’exécution",
+        "description": "Un seul moteur admet, traite et clôture les tickets. Une exécution ne peut pas se terminer sans la preuve de vérification qui atteste le travail, et elle est livrée par politique au lieu de s’arrêter pour demander.",
+        "features": [
+          {
+            "title": "Admission des tickets",
+            "description": "Le travail entre dans le moteur par une seule porte d’admission, sans pipelines concurrents."
+          },
+          {
+            "title": "Preuve avant achèvement",
+            "description": "Une exécution ne peut pas être marquée terminée tant que sa preuve de vérification n’est pas jointe."
+          },
+          {
+            "title": "Politique de livraison",
+            "description": "Le travail approuvé est livré par politique, sans attendre une validation manuelle à chaque fois."
+          },
+          {
+            "title": "Transmissions vérifiées",
+            "description": "Les transmissions entre sous-agents sont suivies et les affirmations non vérifiées sont signalées au responsable."
+          }
+        ]
+      },
+      "securityShield": {
+        "title": "Security Shield",
+        "tagline": "Sécurisé par défaut, dans chaque exécution",
+        "hero": "Chaque environnement s’exécute isolé, encadré et audité",
+        "description": "Politique d’entrée et de sortie, isolation et audit pour le niveau d’exécution du navigateur, avec la piste de sécurité exportée vers votre propre collecteur SIEM.",
+        "features": [
+          {
+            "title": "Isolation",
+            "description": "Chaque exécution est isolée de l’hôte et des autres environnements."
+          },
+          {
+            "title": "Politique d’entrée et de sortie",
+            "description": "Décidez ce qui peut atteindre une exécution et ce qu’elle peut atteindre."
+          },
+          {
+            "title": "Piste d’audit",
+            "description": "Les événements liés à la sécurité sont enregistrés pour chaque exécution."
+          },
+          {
+            "title": "Export SIEM",
+            "description": "Envoyez la piste vers votre propre collecteur pour la conservation et les alertes."
+          }
+        ]
+      },
+      "knowledgeMap": {
+        "title": "Carte des connaissances",
+        "tagline": "Voyez comment votre système s’assemble",
+        "hero": "Une carte vivante de votre code, de vos services et de vos décisions",
+        "description": "Le Visualizer construit une carte en streaming d’un projet, la révise et détecte des motifs de résilience, pour que les idées partent de l’existant.",
+        "features": [
+          {
+            "title": "Construction de carte en streaming",
+            "description": "Regardez la carte se former pendant l’analyse du projet."
+          },
+          {
+            "title": "Revue visuelle",
+            "description": "Inspectez le résultat et corrigez-le avant que quiconque ne s’y fie."
+          },
+          {
+            "title": "Détection de motifs de résilience",
+            "description": "Repérez les motifs qui font tenir un système, et les endroits où ils manquent."
+          }
+        ]
+      },
       "integrations": {
         "title": "Intégrations et migrations",
         "tagline": "Connectez les outils que vous gardez",

@@ -6,6 +6,9 @@ streaming chat core with an **MCP-style action registry**. The same core powers
 app-specific (auth, persistence, system prompts) is **injected**, so the package
 itself ships no app coupling.
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../docs/specs/README.md)). This package serves **Idea** and **Make**: embeds the Brain assistant that turns a question into a plan and then into action.
+
 ```bash
 npm install @seanhogg/builderforce-brain-embedded
 ```

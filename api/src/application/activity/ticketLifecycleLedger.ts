@@ -58,6 +58,10 @@ import {
   autoRunReasonEvaluationText, EVALUATED_AUTO_RUN_REASONS,
   type AutoRunEvaluation, type AutoRunReason, type TenantTokenVerdict,
 } from '../swimlane/evaluateAutoRun';
+import {
+  AUTO_RUN_AWAITING_APPROVAL_TOOL, AUTO_RUN_DISPATCHED_TOOL, AUTO_RUN_ERROR_TOOL, AUTO_RUN_SKIPPED_TOOL,
+  refusalFromRow,
+} from '../runtime/autoRunSkipReader';
 import { normalizeErrorMessage } from '../quality/errorSpec';
 import { activityLogVersionKey } from './activityLog';
 import { isParticipantSatisfied } from '../kanban/participantStates';
@@ -1096,6 +1100,51 @@ export interface AutonomySummary {
   /** True when the ticket set hit {@link MAX_AUDIT_TICKETS} and was truncated. */
   truncated: boolean;
   ticketsScanned: number;
+  /**
+   * Autonomous-trigger outcomes. Counted by EVENT time inside the window (trigger success
+   * is per attempt), not by ticket creation — so it is independent of `totals`.
+   */
+  triggers: AutonomyTriggerStats;
+}
+
+export interface AutonomyTriggerStats {
+  dispatched: number;
+  /** Distinct error STATES (the writer is state-gated per ticket+lane+message), not attempts — so `successRate` is an upper bound. */
+  errorStates: number;
+  /** dispatched / (dispatched + errorStates); null when both are 0. */
+  successRate: number | null;
+  /** Error states grouped by `errorClass`, sorted descending. Rows written before classification count as `unrecorded`. */
+  byErrorClass: Array<{ errorClass: string; count: number }>;
+}
+
+export interface TriggerRow { tool_name: string; error_class: string | null; n: number }
+
+const UNRECORDED_ERROR_CLASS = 'unrecorded';
+
+/** Fold the grouped `auto_run_dispatched` / `auto_run_error` counts into {@link AutonomyTriggerStats}. PURE. */
+export function foldTriggerRows(rows: TriggerRow[]): AutonomyTriggerStats {
+  let dispatched = 0;
+  let errorStates = 0;
+  const byClass = new Map<string, number>();
+  for (const r of rows) {
+    const n = Number(r.n);
+    if (r.tool_name === AUTO_RUN_DISPATCHED_TOOL) {
+      dispatched += n;
+    } else if (r.tool_name === AUTO_RUN_ERROR_TOOL) {
+      errorStates += n;
+      const cls = r.error_class ?? UNRECORDED_ERROR_CLASS;
+      byClass.set(cls, (byClass.get(cls) ?? 0) + n);
+    }
+  }
+  const total = dispatched + errorStates;
+  return {
+    dispatched,
+    errorStates,
+    successRate: total === 0 ? null : dispatched / total,
+    byErrorClass: [...byClass.entries()]
+      .map(([errorClass, count]) => ({ errorClass, count }))
+      .sort((a, b) => b.count - a.count),
+  };
 }
 
 /**
@@ -1141,8 +1190,10 @@ export async function summarizeAutonomy(
   const windowDays = Math.min(365, Math.max(1, args.windowDays ?? 30));
   const since = new Date(Date.now() - windowDays * DAY_MS);
 
-  // Tickets opened in the window, tenant-scoped through their project.
-  const ticketRows = await db
+  // Tickets opened in the window, tenant-scoped through their project. Read alongside the
+  // trigger counts: trigger success is per ATTEMPT in the window, independent of which
+  // tickets were opened in it, so it is carried by `empty` too.
+  const [ticketRows, triggerRows] = await Promise.all([db
     .select({
       id: tasks.id,
       status: tasks.status,
@@ -1157,11 +1208,20 @@ export async function summarizeAutonomy(
       ...(args.projectId != null ? [eq(tasks.projectId, args.projectId)] : []),
     ))
     .orderBy(sql`${tasks.id} DESC`)
-    .limit(MAX_AUDIT_TICKETS + 1);
+    .limit(MAX_AUDIT_TICKETS + 1),
+  runTelemetryDatabase(db).execute(sql`
+    SELECT tool_name, substring(args from '"errorClass":"([a-z_]+)"') AS error_class, count(*)::int AS n
+    FROM tool_audit_events
+    WHERE tenant_id = ${args.tenantId}
+      AND tool_name IN (${AUTO_RUN_DISPATCHED_TOOL}, ${AUTO_RUN_ERROR_TOOL})
+      AND ts >= ${since.toISOString()}
+      ${args.projectId != null ? sql`AND session_key IN (SELECT 'task:' || id FROM tasks WHERE project_id = ${args.projectId})` : sql``}
+    GROUP BY 1, 2`)]);
 
   const truncated = ticketRows.length > MAX_AUDIT_TICKETS;
   const scoped = truncated ? ticketRows.slice(0, MAX_AUDIT_TICKETS) : ticketRows;
   const ids = scoped.map((t) => Number(t.id));
+  const triggers = foldTriggerRows(triggerRows.rows as unknown as TriggerRow[]);
 
   const empty: AutonomySummary = {
     windowDays,
@@ -1171,6 +1231,7 @@ export async function summarizeAutonomy(
     stallReasons: [],
     truncated: false,
     ticketsScanned: 0,
+    triggers,
   };
   if (ids.length === 0) return empty;
 
@@ -1221,7 +1282,7 @@ export async function summarizeAutonomy(
       SELECT DISTINCT ON (session_key) session_key, tool_name, args
       FROM tool_audit_events
       WHERE tenant_id = ${args.tenantId}
-        AND tool_name IN ('auto_run_skipped', 'auto_run_error', 'auto_run_awaiting_approval')
+        AND tool_name IN (${AUTO_RUN_SKIPPED_TOOL}, ${AUTO_RUN_ERROR_TOOL}, ${AUTO_RUN_AWAITING_APPROVAL_TOOL})
         AND session_key IN ${sql.raw(`(${sessionKeyList})`)}
       ORDER BY session_key, ts DESC
     `),
@@ -1259,8 +1320,9 @@ export async function summarizeAutonomy(
   const skips = new Map<number, AutoRunReason>();
   for (const r of (skipRows.rows as unknown as Array<{ session_key: string; tool_name: string; args: string | null }>)) {
     const id = Number(r.session_key.replace('task:', ''));
-    const parsed = parseDecisionArgs(r.args);
-    const reason = parsed.reason ?? (r.tool_name === 'auto_run_awaiting_approval' ? 'pending_approval' : null);
+    // One source of truth for row → reason: an `auto_run_error` row carries no `reason`
+    // field, so parsing the args alone reported a ticket held by a trigger error as `unrecorded`.
+    const reason = refusalFromRow({ toolName: r.tool_name, args: r.args, ts: new Date(0) })?.reason ?? null;
     if (reason) skips.set(id, reason);
   }
 
@@ -1316,6 +1378,7 @@ export async function summarizeAutonomy(
       .sort((a, b) => b.tickets - a.tickets),
     truncated,
     ticketsScanned: scoped.length,
+    triggers,
   };
 }
 

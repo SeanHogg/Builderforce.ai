@@ -5,6 +5,9 @@ Capture browser and Node errors and ship them to your keyed ingest endpoint in
 the canonical format — they appear, grouped by fingerprint, in your Quality
 dashboard, ready for a one-click agent fix.
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../docs/specs/README.md)). This package serves **Measure**: captures browser and Node errors into the Product Quality dashboard.
+
 Create a source under **Quality → Sources** in Builderforce to mint an ingest key
 (`bfq_…`) and get your endpoint.
 

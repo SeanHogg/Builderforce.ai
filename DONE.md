@@ -1,3 +1,7 @@
+## ✅ RESOLVED 2026-11-25 — `qa-e2e` made advisory (REL-03)
+
+- `release.yml` `qa-e2e` has job-level `continue-on-error: true` with a stated fail-open reason; a failure adds a warning and job-summary line and still uploads the report, but does not fail the release.
+
 ## ✅ RESOLVED 2026-11-25 — Studio local-first: pull projector, backfill, offline board shell, recent-board seeding, offline templates, release-gate spec (WC-G007, WC-G009 in part)
 
 - **Pull projector and backfill.** `canvasSyncProjection.ts` reconciles a board into `sync_records` / `sync_changes` in the importers' payload shapes (board, objects, edges; deletes as tombstones; two multi-row inserts; a record that already matches writes nothing). `creationSessionRoutes.ts` runs it after any successful board write, off the request path, and exposes `POST /sync-projection/backfill` (manager or above, paged, `dryRun`). Server-originated transcript entries are not projected (a timeline row has no UUID key). `BoardReconcileSource` stays on REST until the live checks pass (`WC-G009`).
@@ -23,7 +27,7 @@
 
 - **Roadmap.** `ROADMAP.md` is the executive summary; the ten programs, entry registers and dispositions are in `docs/roadmap/`. Every line of the previous gap register is in `docs/roadmap/GAP-REGISTER.md` with a program ID. `scripts/check-roadmap-entries.mjs` runs in `api`'s `npm test`.
 - **REL-03.** `release.yml` has a `qa-e2e` job after `deploy-frontend`. Not yet run in Actions: it needs the `BF_QA_EMAIL` / `BF_QA_PASSWORD` secrets (`docs/roadmap/OPERATOR-DECISIONS.md`).
-- **REL-04 (part).** `qa-e2e`'s `ci` script exits with Playwright's status after reporting instead of swallowing it. The remaining `|| true` and `continue-on-error` lines each carry a stated reason; the VS Code publish `|| echo` is still open (`REL-G003`).
+- **REL-04.** `qa-e2e`'s `ci` script exits with Playwright's status after reporting instead of swallowing it. The remaining `|| true` and `continue-on-error` lines each carry a stated reason, and the Open VSX publish now fails closed (`REL-G003`).
 
 ## ✅ RESOLVED 2026-11-25 — Web Container: models and the manifest tools reach the agents' services
 

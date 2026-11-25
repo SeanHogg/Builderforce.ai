@@ -2,6 +2,9 @@
 
 Voice-clip provenance primitives: the signed manifest shape (canonical JSON), PCM helpers and an inaudible audio watermark.
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../../docs/specs/README.md)). This package serves **Make**: signed provenance and detection watermarking for generated voice clips.
+
 ## The watermark is a DETECTION mark, not authentication
 
 - The embedding key is public: this package ships to clients, so anyone can embed any id into any audio (forge) and anyone holding the audio can degrade or strip the mark (remove).

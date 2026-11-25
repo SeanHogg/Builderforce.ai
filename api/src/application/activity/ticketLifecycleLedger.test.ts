@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   classifyTicketAutonomy,
   classifyTicketOrigin,
+  foldTriggerRows,
   groupRunFailures,
   summarizeDispatchers,
   toGateSnapshot,
@@ -417,5 +418,31 @@ describe('toGateSnapshot', () => {
     });
     expect(g.tenantTokens).toMatchObject({ hasTokens: false, reason: 'monthly_exhausted', usageMonth: 1_050_000 });
     expect(g.reasonText).toContain('EVERY ticket');
+  });
+});
+
+describe('foldTriggerRows', () => {
+  it('reports a null rate when nothing was dispatched or errored', () => {
+    expect(foldTriggerRows([])).toEqual({ dispatched: 0, errorStates: 0, successRate: null, byErrorClass: [] });
+  });
+
+  it('computes the rate and sorts error classes by count', () => {
+    const stats = foldTriggerRows([
+      { tool_name: 'auto_run_dispatched', error_class: null, n: 90 },
+      { tool_name: 'auto_run_error', error_class: 'db_transient', n: 2 },
+      { tool_name: 'auto_run_error', error_class: 'cross_request_io', n: 8 },
+    ]);
+    expect(stats.dispatched).toBe(90);
+    expect(stats.errorStates).toBe(10);
+    expect(stats.successRate).toBeCloseTo(0.9);
+    expect(stats.byErrorClass).toEqual([
+      { errorClass: 'cross_request_io', count: 8 },
+      { errorClass: 'db_transient', count: 2 },
+    ]);
+  });
+
+  it('counts an error row with no class as unrecorded', () => {
+    expect(foldTriggerRows([{ tool_name: 'auto_run_error', error_class: null, n: 3 }]).byErrorClass)
+      .toEqual([{ errorClass: 'unrecorded', count: 3 }]);
   });
 });

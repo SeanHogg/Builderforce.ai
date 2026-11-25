@@ -2,6 +2,9 @@
 
 Astro Starlight site that serves all product documentation under `https://builderforce.ai/docs/*`.
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../docs/specs/README.md)). This package serves **every stage**: the published product documentation, which is reference material for all of them. Strategy: [docs/roadmap/00-STRATEGY.md](../docs/roadmap/00-STRATEGY.md).
+
 ## Local dev
 
 ```sh

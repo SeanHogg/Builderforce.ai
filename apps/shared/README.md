@@ -3,6 +3,9 @@
 `apps/shared/BuilderforceKit` is the Swift package shared by the iOS app (`apps/ios`) and the
 macOS app (`apps/macos`).
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../../docs/specs/README.md)). This package serves **every stage**: the Swift code shared by the iOS and macOS apps that carry the platform to mobile and desktop.
+
 ## Package `BuilderforceKit`
 
 | Product / target | Sources | What it holds |

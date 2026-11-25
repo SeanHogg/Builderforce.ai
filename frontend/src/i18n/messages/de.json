@@ -32484,6 +32484,122 @@
           }
         ]
       },
+      "webContainers": {
+        "title": "Web Containers",
+        "tagline": "Eine Ausführungsumgebung für jeden Host",
+        "hero": "Echte Anwendungen in einer portablen, isolierten Umgebung bauen und ausführen",
+        "description": "Node-, Python-, PHP-, .NET- und Rust-Laufzeiten hinter einem Ausführungsvertrag, beschrieben durch ein builderforce.json-Manifest und ausgeführt im Browser, in der IDE, auf dem Desktop oder in der Cloud.",
+        "features": [
+          {
+            "title": "Mehrsprachige Laufzeiten",
+            "description": "Node, Python, PHP, .NET und Rust im selben Umgebungsmodell."
+          },
+          {
+            "title": "Anwendungsmanifest",
+            "description": "builderforce.json beschreibt App, Dienste und Fähigkeiten und wird vor dem Start geprüft."
+          },
+          {
+            "title": "Start aus dem Chat",
+            "description": "/starter-kit und /launch erzeugen und starten eine App, ohne das Gespräch zu verlassen."
+          },
+          {
+            "title": "Local-first",
+            "description": "Läuft zuerst auf deinem Rechner und wechselt in die Cloud, wenn Persistenz oder Kapazität es verlangen."
+          }
+        ]
+      },
+      "agentEnvironment": {
+        "title": "Agentenumgebung",
+        "tagline": "Agenten, die dort leben, wo die Arbeit läuft",
+        "hero": "Eine Agenten-Belegschaft definieren und in der Umgebung ausführen",
+        "description": "Agenten werden mit ihren Fähigkeiten im Manifest deklariert, laufen in derselben Umgebung wie die Anwendung und betreten den 3D-Raum, damit du siehst, wer was tut.",
+        "features": [
+          {
+            "title": "Im Manifest deklariert",
+            "description": "Jeder Agent und seine Fähigkeiten stehen neben der Anwendung, an der er arbeitet."
+          },
+          {
+            "title": "Läuft in der Umgebung",
+            "description": "Agenten laufen in derselben Umgebung wie die App, mit derselben Isolation."
+          },
+          {
+            "title": "Betritt den Raum",
+            "description": "Jeder laufende Agent erscheint im 3D-Raum, damit die Arbeit sichtbar ist."
+          },
+          {
+            "title": "Oberfläche zum Definieren",
+            "description": "Die Belegschaft im Produkt anlegen und bearbeiten, statt Konfiguration von Hand zu schreiben."
+          }
+        ]
+      },
+      "autonomousExecution": {
+        "title": "Autonome Ausführung",
+        "tagline": "Arbeit, die mit Nachweis abgeschlossen wird",
+        "hero": "Vom Ticket zur ausgelieferten Änderung, mit einer Ausführungs-Engine",
+        "description": "Tickets werden von einer Engine aufgenommen, bearbeitet und abgeschlossen. Ein Lauf endet nicht ohne den Prüfnachweis, der die Arbeit belegt, und wird per Richtlinie ausgeliefert, ohne nachzufragen.",
+        "features": [
+          {
+            "title": "Ticket-Aufnahme",
+            "description": "Arbeit gelangt über ein einziges Aufnahmetor in die Engine statt über konkurrierende Pipelines."
+          },
+          {
+            "title": "Nachweis vor Abschluss",
+            "description": "Ein Lauf gilt erst als beendet, wenn sein Prüfnachweis vorliegt."
+          },
+          {
+            "title": "Auslieferungsrichtlinie",
+            "description": "Freigegebene Arbeit wird per Richtlinie ausgeliefert, ohne jedes Mal auf eine manuelle Freigabe zu warten."
+          },
+          {
+            "title": "Geprüfte Übergaben",
+            "description": "Übergaben an Sub-Agenten werden verfolgt, ungeprüfte Aussagen werden an die verantwortliche Person gemeldet."
+          }
+        ]
+      },
+      "securityShield": {
+        "title": "Security Shield",
+        "tagline": "Standardmäßig sicher, in jedem Lauf",
+        "hero": "Jede Umgebung läuft isoliert, überwacht und protokolliert",
+        "description": "Ingress- und Egress-Richtlinien, Isolation und Audit für die Browser-Laufebene, mit Export der Sicherheitsspur an deinen eigenen SIEM-Collector.",
+        "features": [
+          {
+            "title": "Isolation",
+            "description": "Jeder Lauf ist vom Host und von anderen Umgebungen abgeschottet."
+          },
+          {
+            "title": "Ingress- und Egress-Richtlinie",
+            "description": "Lege fest, was einen Lauf erreichen darf und was ein Lauf erreichen darf."
+          },
+          {
+            "title": "Audit-Spur",
+            "description": "Sicherheitsrelevante Ereignisse werden für jeden Lauf aufgezeichnet."
+          },
+          {
+            "title": "SIEM-Export",
+            "description": "Die Spur an deinen eigenen Collector für Aufbewahrung und Alarmierung senden."
+          }
+        ]
+      },
+      "knowledgeMap": {
+        "title": "Wissenskarte",
+        "tagline": "Sieh, wie dein System zusammenpasst",
+        "hero": "Eine lebendige Karte deines Codes, deiner Dienste und Entscheidungen",
+        "description": "Der Visualizer baut eine gestreamte Karte eines Projekts, prüft sie und erkennt Resilienzmuster, damit Ideen vom Bestehenden ausgehen.",
+        "features": [
+          {
+            "title": "Gestreamter Kartenaufbau",
+            "description": "Sieh zu, wie die Karte entsteht, während das Projekt analysiert wird."
+          },
+          {
+            "title": "Visuelle Prüfung",
+            "description": "Das Ergebnis prüfen und korrigieren, bevor sich jemand darauf verlässt."
+          },
+          {
+            "title": "Erkennung von Resilienzmustern",
+            "description": "Muster erkennen, die ein System am Laufen halten, und die Stellen, an denen sie fehlen."
+          }
+        ]
+      },
       "integrations": {
         "title": "Integrationen und Migrationen",
         "tagline": "Behalte deine Werkzeuge verbunden",

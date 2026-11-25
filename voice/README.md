@@ -5,6 +5,9 @@ Voice-cloning + LLM-narration client for **Builderforce.ai Studio**. One seam �
 (a `studio_voice_clones.id`) plus text into audio, choosing the best available
 backend and degrading **honestly**:
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../docs/specs/README.md)). This package serves **Make**: voice cloning and narration for Studio output.
+
 1. **On-device clone** (`clone-client`) — the `@seanhogg/builderforce-studio` SSM
    clone engine on WebGPU. $0 marginal infra, runs on the user's GPU, nothing is
    billed. Preferred when available.

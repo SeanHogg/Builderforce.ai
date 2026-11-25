@@ -435,13 +435,21 @@ jobs:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: |
           if [ -z "$OVSX_PAT" ]; then
-            echo "::warning::OVSX_PAT is not set — skipping Open VSX publish."
+            echo "::error::OVSX_PAT is not set. Add it as a repository secret (docs/roadmap/OPERATOR-DECISIONS.md)."
+            exit 1
+          fi
+          version=$(unzip -p builderforce.vsix extension/package.json | jq -er .version)
+          # Only "this version is already on Open VSX" is a no-op; any other publish failure fails the job (REL-G003).
+          code=$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' "https://open-vsx.org/api/builderforce/builderforce-ai/$version")
+          if [ "$code" = "200" ]; then
+            echo "Open VSX already has $version."
             exit 0
           fi
-          # ovsx exits non-zero when the version already exists; that is the
-          # expected outcome of a re-run, not a release failure.
-          npx --yes ovsx publish builderforce.vsix -p "$OVSX_PAT" \
-            || echo "::warning::Open VSX publish did not apply (most likely this version is already published)."
+          if [ "$code" != "404" ]; then
+            echo "::error::Open VSX version lookup answered $code; cannot tell whether $version is published."
+            exit 1
+          fi
+          npx --yes ovsx@0.10.12 publish builderforce.vsix -p "$OVSX_PAT"
 
   # ── GitHub Action → GitHub Marketplace ───────────────────────────────────
   # The action is usable from this repo today
@@ -988,6 +996,7 @@ jobs:
           DEMO_RESEED_SECRET: ${{ secrets.DEMO_RESEED_SECRET }}
         run: |
           if [ -n "$DEMO_RESEED_SECRET" ]; then
+            # fail-open by design: demo-account freshness is cosmetic and must not fail an API deploy that already shipped; the warning keeps it visible.
             curl -fsS -X POST "https://api.builderforce.ai/api/demo/reseed" \
               -H "x-demo-reseed-secret: $DEMO_RESEED_SECRET" \
               --max-time 300 \
@@ -1192,13 +1201,15 @@ jobs:
         # GIT_SHA → the frontend's GET /health `commit` (see deploy-api).
         run: wrangler deploy --no-bundle --var "GIT_SHA:${{ github.sha }}"
 
-  # REL-03: the authenticated Playwright suite against what deploy-frontend just shipped. Fail closed: no
-  # continue-on-error, and qa-e2e's `ci` script now exits with Playwright's own status after it has reported.
-  # Needs the BF_QA_EMAIL / BF_QA_PASSWORD repository secrets (docs/roadmap/OPERATOR-DECISIONS.md); without them this job fails by design.
+  # REL-03: the authenticated Playwright suite against what deploy-frontend just shipped. Advisory, not a gate.
+  # fail-open by design: the deploy has already shipped, so a red suite must not fail the release. The job still
+  # shows red, writes a job-summary warning and uploads its report. qa-e2e's `ci` script keeps Playwright's exit status.
+  # Needs the BF_QA_EMAIL / BF_QA_PASSWORD repository secrets (set 2026-11-25).
   qa-e2e:
     name: QA end-to-end
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    continue-on-error: true
     needs: [plan, deploy-frontend]
     if: >-
       ${{ !cancelled() && needs.plan.outputs.frontend == 'true' && github.event_name != 'pull_request'
@@ -1219,6 +1230,13 @@ jobs:
         with:
           node-version: 24
 
+      - name: Require QA credentials
+        run: |
+          if [ -z "$BF_QA_EMAIL" ] || [ -z "$BF_QA_PASSWORD" ]; then
+            echo "::error::BF_QA_EMAIL / BF_QA_PASSWORD repository secrets are empty (docs/roadmap/OPERATOR-DECISIONS.md)."
+            exit 1
+          fi
+
       - name: Install qa-e2e
         working-directory: qa-e2e
         run: |
@@ -1228,6 +1246,12 @@ jobs:
       - name: Run the suite
         working-directory: qa-e2e
         run: pnpm run ci
+
+      - name: Report advisory failure
+        if: failure()
+        run: |
+          echo "::warning::qa-e2e failed; the release is not blocked (advisory, REL-03). See the qa-e2e-report artifact."
+          echo "⚠️ qa-e2e failed (advisory, does not block the release). See the \`qa-e2e-report\` artifact." >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: always()

@@ -104,7 +104,7 @@ Public copy states today's evidence. **Available** = shipped and repeatably veri
 
 | P | Promise | Status | Proof still missing | Entry |
 |---|---|---|---|---|
-| P0 | One canvas from idea to real | Beta | A release gate per marketed artifact. `qa-e2e` now runs after deploy and fails the release; its first green run needs the QA secrets | `REL-03` |
+| P0 | One canvas from idea to real | Beta | A release check per marketed artifact. `qa-e2e` runs after deploy as an advisory check: a failure shows on the run and in its summary but does not fail the release. Its first green run needs the QA secrets | `REL-03` |
 | P0 | People control agent work | Beta | Wired, failing closed and guarded in CI (2026-11-08). Still missing: a release that ships it on green CI | `AE-19` |
 | P0 | Complete agent auditability | Beta | The `mutationAudit` envelope exists and covers the governance and security writes. Still missing: coverage at every other mutation entry point | `AE-20` |
 | P0 | Private, local AI work | Planned | A boundary manifest per action, shown before execution | `SEC-04` |

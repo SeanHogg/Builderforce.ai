@@ -2,6 +2,9 @@
 
 File a Builderforce ticket from CI and hand it to a cloud coding agent.
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../../docs/specs/README.md)). This package serves **Run**: hands a CI-filed ticket to a cloud coding agent so work starts without a person.
+
 ```yaml
 - uses: SeanHogg/Builderforce.ai/actions/dispatch-agent@main
   with:

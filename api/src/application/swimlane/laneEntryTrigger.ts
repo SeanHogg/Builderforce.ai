@@ -37,6 +37,10 @@ import { recordCloudToolEvent } from '../runtime/cloudAgentEngine';
 import {
   autoRunSkipState, claimAutoRunSkipState, clearAutoRunSkip, emitAutoRunSkip, recordAutoRunSkip,
 } from '../runtime/autoRunSkipLedger';
+import {
+  AUTO_RUN_AWAITING_APPROVAL_TOOL, AUTO_RUN_DISPATCHED_TOOL, AUTO_RUN_ERROR_TOOL,
+} from '../runtime/autoRunSkipReader';
+import { classifyTriggerError } from './triggerErrorClass';
 import { evaluateExecutionApprovalGate } from '../runtime/executionApprovalGate';
 import { evaluateTaskAutoRun, type TenantTokenVerdict } from './evaluateAutoRun';
 import { enforceLaneRequirements } from './laneRequirementGate';
@@ -330,7 +334,10 @@ export async function maybeAutoRunOnLaneEntry(
     // lane this run serves so a completion that re-enters the SAME lane (a loop) is
     // suppressed by the same-lane guard above on the next hop.
     const payloadObj: { cloudAgentRef?: string; model?: string; laneKey?: string; runtime?: string } = { laneKey: lane };
-    if (evaln.decision.agentRef) payloadObj.cloudAgentRef = evaln.decision.agentRef;
+    // Same fallback chain as the skip row above: a lane whose decision carries no agent
+    // still dispatches as its candidate / the ticket owner, and the run must say so.
+    const dispatchAgentRef = evaln.decision.agentRef ?? evaln.candidate?.agentRef ?? evaln.assignedAgentRef ?? undefined;
+    if (dispatchAgentRef) payloadObj.cloudAgentRef = dispatchAgentRef;
     if (evaln.decision.model) payloadObj.model = evaln.decision.model;
     if (evaln.decision.runtime) payloadObj.runtime = evaln.decision.runtime;
 
@@ -415,7 +422,7 @@ export async function maybeAutoRunOnLaneEntry(
           cloudAgentRef: evaln.decision.agentRef ?? args.submittedBy,
           executionId:   null,
           sessionKey:    `task:${args.taskId}`,
-          toolName:      'auto_run_awaiting_approval',
+          toolName:      AUTO_RUN_AWAITING_APPROVAL_TOOL,
           category:      'planning',
           detail:        { taskId: args.taskId, lane, approvalId: gate.approvalId, reason: gate.reason },
           result:        `Auto-run held for approval (${gate.reason}) on task ${args.taskId}, lane '${lane}'.`.slice(0, 300),
@@ -459,14 +466,14 @@ export async function maybeAutoRunOnLaneEntry(
     // Best-effort — telemetry must never turn a dispatched run into a reported failure.
     await recordCloudToolEvent(db, {
       tenantId:      args.tenantId,
-      cloudAgentRef: evaln.decision.agentRef ?? args.submittedBy,
+      cloudAgentRef: dispatchAgentRef ?? args.submittedBy,
       executionId:   null,
       sessionKey:    `task:${args.taskId}`,
-      toolName:      'auto_run_dispatched',
+      toolName:      AUTO_RUN_DISPATCHED_TOOL,
       category:      'planning',
       detail:        {
         taskId: args.taskId, lane, reason: 'will_run',
-        agentRef: evaln.decision.agentRef ?? null, submittedBy: args.submittedBy,
+        agentRef: dispatchAgentRef ?? null, submittedBy: args.submittedBy,
         // Which backplane actually took the run — without it the ledger cannot tell an
         // on-prem lane dispatch from a cloud one.
         runtime: evaln.decision.runtime ?? 'cloud', agentHostId: laneAgentHostId,
@@ -475,7 +482,7 @@ export async function maybeAutoRunOnLaneEntry(
         ...(evaln.managedRole ? { roleKey: evaln.managedRole.roleKey, roleSource: evaln.managedRole.source } : {}),
       },
       result:        (`Auto-run dispatched for task ${args.taskId} on lane '${lane}'`
-        + `${evaln.decision.agentRef ? ` as ${evaln.decision.agentRef}` : ''}`
+        + `${dispatchAgentRef ? ` as ${dispatchAgentRef}` : ''}`
         + `${evaln.managedRole ? ` acting as '${evaln.managedRole.roleKey}'` : ''}.`).slice(0, 300),
     }).catch((error) => { /* best-effort telemetry — never block the trigger */ 
       reportCaughtError(error, { source: "application/swimlane/laneEntryTrigger.ts", operation: "maybeAutoRunOnLaneEntry" });
@@ -492,6 +499,9 @@ export async function maybeAutoRunOnLaneEntry(
     // original dropped-dispatch bug, so the error gets its own distinct event.
     const message = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack ?? null : null;
+    // Recorded so the autonomy summary can group trigger errors by cause (AE-04).
+    const errorClass = classifyTriggerError(err);
+    const errorName = err instanceof Error ? err.name : typeof err;
     reportCaughtError(err, { source: "application/swimlane/laneEntryTrigger.ts", operation: "maybeAutoRunOnLaneEntry", context: { logMessage: `[auto_run_error] task ${args.taskId} lane '${args.status}':`, details: err } });
     // STATE-GATED, like every skip beside it. An error is not exempt from the write
     // amplification rule: the sweep re-evaluates a broken ticket every few minutes, and
@@ -506,9 +516,9 @@ export async function maybeAutoRunOnLaneEntry(
         cloudAgentRef: args.submittedBy,
         executionId:   null,
         sessionKey:    `task:${args.taskId}`,
-        toolName:      'auto_run_error',
+        toolName:      AUTO_RUN_ERROR_TOOL,
         category:      'error',
-        detail:        { taskId: args.taskId, lane: args.status, error: message, stack },
+        detail:        { taskId: args.taskId, lane: args.status, error: message, errorClass, errorName, stack },
         result:        `Auto-run failed with an error for task ${args.taskId} on lane '${args.status}': ${message}`.slice(0, 300),
       }).catch((error) => { /* telemetry is best-effort — never rethrow out of the trigger */ 
         reportCaughtError(error, { source: "application/swimlane/laneEntryTrigger.ts", operation: "maybeAutoRunOnLaneEntry" });

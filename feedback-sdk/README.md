@@ -2,6 +2,9 @@
 
 Embeddable product-feedback widget for [Builderforce.ai](https://builderforce.ai).
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../docs/specs/README.md)). This package serves **Measure**: turns on-page feedback into backlog items so you can tell whether the product is working.
+
 Drops a small tab onto the edge of any page. Clicking it slides out a panel that files a
 feature request, bug report or idea straight into a Builderforce project's backlog.
 

@@ -4,6 +4,9 @@ WebDiT: in-browser diffusion-transformer text-to-video (CogVideoX-2b, Wan2.5,
 Mochi-1, LTX2-distilled), running over `onnxruntime-web`/WebGPU via a custom
 bundle format.
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../docs/specs/README.md)). This package serves **Make**: in-browser diffusion-transformer video generation for Studio.
+
 ## Packages
 
 - **`shared`** — the bundle manifest format (`WebDiTManifest`, `BundleFiles`),

@@ -2,6 +2,9 @@
 
 Typed TypeScript SDK for the [Builderforce.ai](https://builderforce.ai) LLM gateway. OpenAI-compatible chat completions with tool calling and structured output, embeddings, image generation (Together → FluxAPI cascade), model registry, and usage analytics — all behind a single tenant API key. Vendor failover (OpenRouter / Cerebras / Ollama / Claude / GPT / Gemini / Grok / Flux) is handled server-side so your code only knows about Builderforce. Every call returns a **trace ID** for one-step server-side diagnostics — see [Diagnostics — trace IDs](#diagnostics--trace-ids).
 
+## Where this fits
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../docs/specs/README.md)). This package serves **Make** and **Run**: the typed client for the BuilderForce LLM gateway that agents and apps call at build and run time.
+
 - **Vanilla `fetch` / `AbortController` / `ReadableStream` / `TextDecoder`** — runs on Node 18+, Cloudflare Workers, browsers, edge runtimes.
 - **Zero runtime dependencies.** ~34 kB compressed, ~154 kB unpacked.
 - **Dual ESM + CJS + `.d.ts`** out of the box.

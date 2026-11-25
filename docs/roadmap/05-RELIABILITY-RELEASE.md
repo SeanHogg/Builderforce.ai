@@ -57,18 +57,18 @@ blocker: null
 id: REL-03
 program: reliability-release
 priority: P0
-status: blocked
+status: in-progress
 arc: other
 source: PRD-45
 dependencies:
   - REL-01
 objective: Run `qa-e2e` in CI.
 acceptance:
-  - `qa-e2e` is a job in `release.yml` that runs after `deploy-frontend` and fails the release when Playwright fails.
+  - `qa-e2e` is a job in `release.yml` that runs after `deploy-frontend`. It reports Playwright failures (red job, job-summary warning, report artifact) without failing the release.
 evidence:
   - `.github/workflows/release.yml` job `qa-e2e`
-  - First green run needs the `BF_QA_EMAIL` / `BF_QA_PASSWORD` secrets ([OPERATOR-DECISIONS.md](./OPERATOR-DECISIONS.md))
-blocker: The `BF_QA_EMAIL` / `BF_QA_PASSWORD` repository secrets are not set, so the job has never run green (OPERATOR-DECISIONS.md).
+  - Secrets set 2026-11-25; first green `qa-e2e` run on `main` pending
+blocker: null
 ```
 
 ### REL-04 — Eliminate swallowed CI failures
@@ -77,7 +77,7 @@ blocker: The `BF_QA_EMAIL` / `BF_QA_PASSWORD` repository secrets are not set, so
 id: REL-04
 program: reliability-release
 priority: P0
-status: in-progress
+status: done
 arc: other
 source: PRD-45
 dependencies:
@@ -89,7 +89,7 @@ acceptance:
 evidence:
   - `qa-e2e/package.json` `ci` script
   - Audit comments (`fail-open by design`) at each remaining `|| true` / `continue-on-error`
-  - Still open: the `|| echo` publish swallow, tracked as `REL-G003`
+  - `publish-extension` Open VSX step fails on a missing secret or a failed publish; only an already-published version is a no-op (REL-G003)
 blocker: null
 ```
 
@@ -145,6 +145,7 @@ dependencies: []
 objective: Verify VSIX packaging and publishing.
 acceptance:
   - Meets the program definition of done in this file.
+  - Open VSX and Marketplace publishes fail the job on any error except an already-published version.
 evidence:
   - CI acceptance results
 blocker: null

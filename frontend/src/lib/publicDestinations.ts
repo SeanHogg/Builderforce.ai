@@ -110,9 +110,13 @@ export const PUBLIC_DESTINATIONS: PublicDestination[] = [
   // over; it is the thing everything else opens over.
   { id: 'canvas', seat: 'Brain', icon: '✦', marketingHref: '/create/new', appHref: '/create', kind: 'link', placement: 'idea', panel: false, groupId: 'create' },
   { id: 'ref.aiCoach', copyId: 'aiCoach', seat: 'Brain', icon: '✨', marketingHref: '/features/ai-coach', appHref: '/create', kind: 'foundation', placement: 'idea', panel: true },
+  { id: 'ref.knowledgeMap', copyId: 'knowledgeMap', seat: 'Brain', icon: '🗺', marketingHref: '/features/knowledge-map', appHref: '/knowledge', kind: 'foundation', placement: 'idea', panel: true },
   // ── Product ▾ · MAKE ─────────────────────────────────────────────────────
   { id: 'ref.productManagement', copyId: 'productManagement', seat: 'CPO', icon: '📦', marketingHref: '/product-management', appHref: '/projects?tab=pm', kind: 'domain', placement: 'make', panel: true, groupId: 'projects' },
   { id: 'ref.agileSurvival', copyId: 'agileSurvival', seat: 'CTO', icon: '⚡', marketingHref: '/survival-focused-agile', appHref: '/projects?tab=ceremonies', kind: 'domain', placement: 'make', panel: true },
+  { id: 'ref.webContainers', copyId: 'webContainers', seat: 'CTO', icon: '⬡', marketingHref: '/features/web-containers', appHref: '/studio', kind: 'foundation', placement: 'make', panel: true },
+  { id: 'ref.agentEnvironment', copyId: 'agentEnvironment', seat: 'Brain', icon: '🧬', marketingHref: '/features/agent-environment', appHref: '/workforce', kind: 'foundation', placement: 'make', panel: true },
+  { id: 'ref.autonomousExecution', copyId: 'autonomousExecution', seat: 'CTO', icon: '🤖', marketingHref: '/features/autonomous-execution', appHref: '/projects', kind: 'foundation', placement: 'make', panel: true },
   // ── Product ▾ · RUN — one row per business seat ──────────────────────────
   { id: 'ref.businessIntelligence', copyId: 'businessIntelligence', seat: 'CFO', icon: '📊', marketingHref: '/business-intelligence', appHref: '/finance', kind: 'domain', placement: 'run', panel: true, groupId: 'finance' },
   { id: 'ref.salesRevenue', copyId: 'salesRevenue', seat: 'CRO', icon: '📈', marketingHref: '/sales-revenue', appHref: '/seat/revenue', kind: 'domain', placement: 'run', panel: true, groupId: 'revenue' },
@@ -122,6 +126,7 @@ export const PUBLIC_DESTINATIONS: PublicDestination[] = [
   { id: 'ref.governanceSecurity', copyId: 'governanceSecurity', seat: 'Security', icon: '🛡', marketingHref: '/governance-security', appHref: '/seat/governance', kind: 'domain', placement: 'run', panel: true, groupId: 'governance' },
   { id: 'ref.customerEngagement', copyId: 'customerEngagement', seat: 'Support', icon: '💬', marketingHref: '/customer-engagement', appHref: '/seat/support', kind: 'domain', placement: 'run', panel: true, groupId: 'support' },
   { id: 'ref.companiesContacts', copyId: 'companiesContacts', seat: 'CMO', icon: '🏢', marketingHref: '/companies-contacts', appHref: '/seat/revenue', kind: 'foundation', placement: 'run', panel: true },
+  { id: 'ref.securityShield', copyId: 'securityShield', seat: 'Security', icon: '🛡', marketingHref: '/features/security-shield', appHref: '/seat/governance', kind: 'foundation', placement: 'run', panel: true },
   // ── Learn ▾ · READ — long-form, and deliberately NOT panels: an article
   //    wants the whole screen, and nobody reads a tutorial over their own board.
   { id: 'blog', seat: 'CMO', icon: '📝', marketingHref: '/blog', appHref: '/blog', kind: 'link', placement: 'read', panel: false },

@@ -31742,6 +31742,122 @@
           }
         ]
       },
+      "webContainers": {
+        "title": "Web Containers",
+        "tagline": "One execution environment, every host",
+        "hero": "Build and run real applications in a portable, isolated environment",
+        "description": "Node, Python, PHP, .NET and Rust runtimes behind one execution contract, described by a builderforce.json manifest and run in the browser, IDE, desktop or cloud.",
+        "features": [
+          {
+            "title": "Multi-language runtimes",
+            "description": "Node, Python, PHP, .NET and Rust in the same environment model."
+          },
+          {
+            "title": "Application manifest",
+            "description": "builderforce.json declares the app, its services and capabilities, and is validated before launch."
+          },
+          {
+            "title": "Launch from chat",
+            "description": "/starter-kit and /launch scaffold and start an app without leaving the conversation."
+          },
+          {
+            "title": "Local-first",
+            "description": "Runs on your machine first and moves to the cloud when persistence or capacity needs it."
+          }
+        ]
+      },
+      "agentEnvironment": {
+        "title": "Agent Environment",
+        "tagline": "Agents that live where the work runs",
+        "hero": "Define an agent workforce and run it inside the environment",
+        "description": "Agents are declared on the manifest with their capabilities, execute inside the same environment as the application, and join the 3D Room so you can see who is doing what.",
+        "features": [
+          {
+            "title": "Declared on the manifest",
+            "description": "Each agent and its capabilities are described next to the application it works on."
+          },
+          {
+            "title": "Runs inside the environment",
+            "description": "Agents execute in the same environment as the app, with the same isolation."
+          },
+          {
+            "title": "Joins the Room",
+            "description": "Every running agent appears in the 3D Room so the work is visible."
+          },
+          {
+            "title": "Define-agents UI",
+            "description": "Create and edit the workforce from the product instead of hand-writing configuration."
+          }
+        ]
+      },
+      "autonomousExecution": {
+        "title": "Autonomous Execution",
+        "tagline": "Work that finishes, with evidence",
+        "hero": "From ticket to shipped change, under one execution engine",
+        "description": "Tickets are admitted, worked and closed by one engine. A run cannot finish without the verification evidence that proves the work, and it ships by policy instead of stopping to ask.",
+        "features": [
+          {
+            "title": "Ticket admission",
+            "description": "Work enters the engine through one admission gate instead of competing pipelines."
+          },
+          {
+            "title": "Evidence before completion",
+            "description": "A run cannot be marked finished until its verification evidence is attached."
+          },
+          {
+            "title": "Ship policy",
+            "description": "Approved work ships by policy, without pausing for a manual go-ahead each time."
+          },
+          {
+            "title": "Verified hand-offs",
+            "description": "Sub-agent hand-offs are tracked, and unverified claims are flagged to the owner."
+          }
+        ]
+      },
+      "securityShield": {
+        "title": "Security Shield",
+        "tagline": "Secure by default, inside every run",
+        "hero": "Every environment runs isolated, policed and audited",
+        "description": "Ingress and egress policy, isolation and audit for the browser run tier, with the security trail exported to your own SIEM collector.",
+        "features": [
+          {
+            "title": "Isolation",
+            "description": "Each run is sandboxed from the host and from other environments."
+          },
+          {
+            "title": "Ingress and egress policy",
+            "description": "Decide what may reach a run and what a run may reach."
+          },
+          {
+            "title": "Audit trail",
+            "description": "Security-relevant events are recorded for every run."
+          },
+          {
+            "title": "SIEM export",
+            "description": "Send the trail to your own collector for retention and alerting."
+          }
+        ]
+      },
+      "knowledgeMap": {
+        "title": "Knowledge Map",
+        "tagline": "See how your system fits together",
+        "hero": "A living map of your code, services and decisions",
+        "description": "The Visualizer builds a streamed map of a project, reviews it, and detects resilience patterns, so ideas start from what already exists.",
+        "features": [
+          {
+            "title": "Streamed map builds",
+            "description": "Watch the map take shape as the project is analyzed."
+          },
+          {
+            "title": "Visual review",
+            "description": "Inspect the result and correct it before anyone relies on it."
+          },
+          {
+            "title": "Resilience pattern detection",
+            "description": "Spot the patterns that keep a system running, and the places they are missing."
+          }
+        ]
+      },
       "integrations": {
         "title": "Integrations & Migrations",
         "tagline": "Connect the tools you keep",
