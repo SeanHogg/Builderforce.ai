@@ -112,7 +112,7 @@ export function buildComposerCommands(context: ComposerCommandContext): Composer
     },
     {
       id: LAUNCH_COMMAND_ID,
-      syntax: "/launch [environment | <file or folder path> | external | stop | trust]",
+      syntax: "/launch [environment | <file or folder path> | external | stop | trust] [<path>]",
       args: [{
         name: "environment",
         required: false,
@@ -129,6 +129,10 @@ export function buildComposerCommands(context: ComposerCommandContext): Composer
               ],
             }
           : {}),
+      }, {
+        // `/launch stop <path>`: the subcommands take the page or folder they act on (`launch.ts`).
+        name: "target",
+        required: false,
       }],
       example: environments[0] ? `/launch ${environments[0].value}` : "/launch",
       availability: launchAvailability,

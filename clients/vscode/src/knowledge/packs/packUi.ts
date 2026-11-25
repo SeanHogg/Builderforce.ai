@@ -11,8 +11,6 @@ import { linkedKnowledgeClient } from "../knowledgeService";
 // `gz` admits the gzipped library form (`.bfpack.gz`); parsePack still refuses anything that is not a pack.
 export const PACK_FILTER: Record<string, string[]> = { [vscode.l10n.t("Knowledge Pack")]: ["bfpack", "gz"] };
 
-export const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
 /** The linked client and project, or a localized warning and undefined when the editor is not signed in with a project selected. */
 export function linkedProjectClient(context: vscode.ExtensionContext): { client: KnowledgeClient; project: SelectedProject } | undefined {
   const project = getSelectedProject();

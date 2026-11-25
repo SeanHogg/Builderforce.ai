@@ -12,6 +12,7 @@
 import { RUN_DELTA_OPEN_REFUSED, RUN_DELTA_RELEASE_REFUSED } from "@builderforce/run-delta/contract";
 import type { Prediction } from "@builderforce/run-delta/predict";
 import type { BrainRunHost } from "../brainRunHost";
+import { messageOf } from "../messageOf";
 
 /** The request types this module answers. */
 export const RUN_DELTA_SURFACE_REQUESTS = ["run-delta/open", "run-delta/release", "run-delta/get", "run-delta/prediction-shown"] as const;
@@ -26,8 +27,6 @@ export interface RunDeltaSurfaceDeps {
   openFile(file: string, line?: number): Promise<void>;
   respond(ok: boolean, result?: unknown, error?: string): void;
 }
-
-const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /** Answers one run-delta request. */
 export async function handleRunDeltaRequest(type: RunDeltaSurfaceRequest, msg: Record<string, unknown>, deps: RunDeltaSurfaceDeps): Promise<void> {

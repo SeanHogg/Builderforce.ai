@@ -21,6 +21,7 @@ import {
 } from "../pageEngineBridgeProtocol";
 import type { LocalDeviceSupport } from "@builderforce/local-inference";
 import type { FileModelStore } from "./modelFiles";
+import { messageOf } from "../messageOf";
 
 export interface ModelFileIo {
   respond(id: string | undefined, ok: boolean, result?: unknown, error?: string): void;
@@ -39,8 +40,6 @@ export interface ModelFileServer {
   /** Close every open read and cancel every download (the extension deactivates). */
   dispose(): void;
 }
-
-const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 export function createModelFileServer(
   store: FileModelStore,
@@ -89,7 +88,7 @@ export function createModelFileServer(
           .download(request.ref, (fraction) => io.post({ type: "modelFile.progress", handle, fraction }), controller.signal)
           .then(
             () => io.post({ type: "modelFile.downloaded", handle, ok: true }),
-            (e: unknown) => io.post({ type: "modelFile.downloaded", handle, ok: false, error: errorText(e) }),
+            (e: unknown) => io.post({ type: "modelFile.downloaded", handle, ok: false, error: messageOf(e) }),
           )
           .finally(() => {
             downloads.delete(handle);
@@ -117,7 +116,7 @@ export function createModelFileServer(
           if (id) io.respond(id, true, result);
         },
         (e: unknown) => {
-          if (id) io.respond(id, false, undefined, errorText(e));
+          if (id) io.respond(id, false, undefined, messageOf(e));
         },
       );
       return true;

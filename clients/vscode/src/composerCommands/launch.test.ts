@@ -10,20 +10,27 @@ import { FolderLaunchers, type RunningLauncher } from "./folderLaunchers";
 import { composerCommandText } from "./labels";
 import { launchExecutor, type LaunchRequest } from "./launch";
 import type { TrustOutcome } from "./launcherTrust";
-import { fakeWorkspacePort, folderRef } from "./testWorkspacePort";
+import type { DetectedManifest } from "./manifestInit";
+import { FS_ROOT, fakeWorkspacePort, folderRef } from "./testWorkspacePort";
+import type { WorkspaceFolderRef } from "./workspacePort";
 
 const app = folderRef("app");
+const at = (...parts: string[]) => path.join(app.path, ...parts);
 
 interface EditorSetup {
   /** This VS Code has the integrated browser (default: yes). */
   available?: boolean;
   /** The certificate step's outcome (default: no trust step). */
   trust?: TrustOutcome;
+  /** The manifest environments known (default: none readable). */
+  environments?: string[] | ((folder?: WorkspaceFolderRef) => string[]);
+  /** The user's home directory. */
+  home?: string;
 }
 
 function setup(files: Record<string, string> = {}, folders = [app], editor: EditorSetup = {}) {
   const port = fakeWorkspacePort(folders, files);
-  const launchers = new FolderLaunchers();
+  const launchers = new FolderLaunchers(port.realPath);
   const started: Array<{ request: LaunchRequest; launcher: RunningLauncher & { close: ReturnType<typeof vi.fn> } }> = [];
   const start = vi.fn(async (request: LaunchRequest) => {
     const launcher = { url: `http://localhost:${4000 + started.length}/#token=secret`, close: vi.fn(async () => undefined) };
@@ -32,13 +39,20 @@ function setup(files: Record<string, string> = {}, folders = [app], editor: Edit
   });
   const openExternal = vi.fn(async (_url: string) => undefined);
   const openInEditor = vi.fn(async (_url: string) => undefined);
-  const detect = vi.fn(() => ({ text: "{\"detected\":true}", services: ["web"], resources: [] as string[], notes: [] as DetectionNote[] }));
+  const detect = vi.fn((): DetectedManifest => ({ text: "{\"detected\":true}", services: ["web"], resources: [] as string[], notes: [] as DetectionNote[] }));
   const readFiles = vi.fn(async () => new Map<string, string>());
   const available = vi.fn(async () => editor.available ?? true);
   const editorBrowser = { available, open: openInEditor };
   const trust = editor.trust ? { trust: async () => editor.trust! } : {};
-  const execute = launchExecutor({ port, text: composerCommandText(), launchers, start, openExternal, editorBrowser, readFiles, detect, ...trust });
-  return { port, launchers, start, started, openExternal, openInEditor, detect, launch: (environment?: string) => execute(environment ? { environment } : {}) };
+  const known = editor.environments;
+  const environments = known ? { environments: async (folder?: WorkspaceFolderRef) => (typeof known === "function" ? known(folder) : known) } : {};
+  const execute = launchExecutor({
+    port, text: composerCommandText(), launchers, start, openExternal, editorBrowser, readFiles, detect, homeDir: editor.home ?? path.join(FS_ROOT, "home", "me"), ...environments, ...trust,
+  });
+  return {
+    port, launchers, start, started, openExternal, openInEditor, detect,
+    launch: (environment?: string, target?: string) => execute({ ...(environment ? { environment } : {}), ...(target ? { target } : {}) }),
+  };
 }
 
 const linesOf = (reply: Awaited<ReturnType<ReturnType<typeof setup>["launch"]>>) => (reply.kind === "text" ? reply.lines : []);
@@ -233,7 +247,14 @@ describe("/launch", () => {
     expect(JSON.parse(request.manifestText!).services.web.command).toBe("vite");
     expect(detect).not.toHaveBeenCalled();
     expect(linesOf(reply)[0]).toBe(text.launchStarted("mock up.html", false));
-    expect(reply).toMatchObject({ actions: [{ label: text.launchOpenInEditor, command: `/launch "${file}"` }] });
+    // Every action carries the path, so none of them acts on the workspace folder's launcher.
+    expect(reply).toMatchObject({
+      actions: [
+        { label: text.launchOpenInEditor, command: `/launch "${file}"` },
+        { label: text.launchOpenExternal, command: `/launch external "${file}"` },
+        { label: text.launchStopChoice, command: `/launch stop "${file}"` },
+      ],
+    });
     const again = await launch(file);
     expect(start).toHaveBeenCalledOnce();
     expect(linesOf(again)[0]).toBe(text.launchReopened("mock up.html", false));
@@ -295,6 +316,205 @@ describe("/launch", () => {
     expect(start).not.toHaveBeenCalled();
   });
 
+  it("launches a directory outside the workspace only on approval, naming the directory that will be served", async () => {
+    const outside = path.join(FS_ROOT, "elsewhere", "site");
+    const approved = setup({ [path.join(outside, "index.html")]: "" });
+    await approved.launch(outside);
+    expect(approved.port.asked).toEqual([{ message: composerCommandText().launchOutsideQuestion(outside), approve: composerCommandText().launchOutsideApprove }]);
+    expect(approved.start).toHaveBeenCalledOnce();
+
+    const declined = setup({ [path.join(outside, "index.html")]: "" });
+    declined.port.approve = false;
+    const reply = await declined.launch(outside);
+    expect(linesOf(reply)).toEqual([composerCommandText().launchOutsideDeclined(outside)]);
+    expect(declined.start).not.toHaveBeenCalled();
+  });
+
+  it("launches a directory inside a workspace folder without asking", async () => {
+    const { port, start, launch } = setup({ [at("site", "index.html")]: "" });
+    await launch(at("site"));
+    expect(port.asked).toEqual([]);
+    expect(start).toHaveBeenCalledOnce();
+  });
+
+  it("never launches a drive root or the home folder, and never asks about them", async () => {
+    const home = path.join(FS_ROOT, "home", "me");
+    const { port, start, launch } = setup({ [path.join(home, "readme.md")]: "x" }, [app], { home });
+    const text = composerCommandText();
+    expect(linesOf(await launch(FS_ROOT))).toEqual([text.launchRootRefused(FS_ROOT)]);
+    expect(linesOf(await launch(home))).toEqual([text.launchHomeRefused(home)]);
+    expect(port.asked).toEqual([]);
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("/launch stop <path> and /launch external <path> act on that page's launcher, not the workspace folder's", async () => {
+    const file = at("a.html");
+    const { start, started, openExternal, launch } = setup({ [file]: "" });
+    await launch(file);
+    await launch();
+    expect(start).toHaveBeenCalledTimes(2);
+    const reopened = await launch("external", file);
+    expect(openExternal).toHaveBeenLastCalledWith(started[0]!.launcher.url);
+    expect(linesOf(reopened)[0]).toBe(composerCommandText().launchReopened("a.html", true));
+    expect(linesOf(await launch("stop", file))).toEqual([composerCommandText().launchStopped("a.html")]);
+    expect(started[0]!.launcher.close).toHaveBeenCalledOnce();
+    expect(started[1]!.launcher.close).not.toHaveBeenCalled();
+  });
+
+  it("refuses a name that is no declared environment (the parser's bad-choice wording) and starts nothing; a declared one runs", async () => {
+    const { start, launch } = setup({}, [app], { environments: ["staging", "prod.eu"] });
+    const text = composerCommandText();
+    const reply = await launch("stagign");
+    expect(linesOf(reply)).toEqual([
+      text.invalid("launch"),
+      text.problem({ code: "bad-choice", name: "environment", value: "stagign", choices: ["staging", "prod.eu", "external", "stop", "trust"] }),
+    ]);
+    expect(start).not.toHaveBeenCalled();
+    await launch("prod.eu");
+    expect(start).toHaveBeenCalledWith({ projectDir: app.path, environment: "prod.eu", manifestText: "{\"detected\":true}" });
+  });
+
+  it("words the launcher's own refusal of a page", async () => {
+    const file = at("a.html");
+    const { start, launch } = setup({ [file]: "" });
+    start.mockRejectedValueOnce(Object.assign(new Error("The page does not exist"), { name: "LaunchPageError", code: "missing", page: "/a.html" }));
+    expect(await launch(file)).toMatchObject({ tone: "error", lines: [composerCommandText().launchPageProblem("missing", "/a.html")] });
+  });
+
+  it("carries a path with a double quote in single quotes, and offers no action for one that cannot be quoted", async () => {
+    const quoted = at("say \"hi\".html");
+    const both = at("a\"b'c.html");
+    const { launch } = setup({ [quoted]: "", [both]: "" });
+    expect(await launch(quoted)).toMatchObject({ actions: [{ command: `/launch '${quoted}'` }, { command: `/launch external '${quoted}'` }, { command: `/launch stop '${quoted}'` }] });
+    expect(await launch(both)).toMatchObject({ actions: [] });
+  });
+
+  it("two quick /launch calls of the same path start ONE launcher, and both get it", async () => {
+    const file = at("a.html");
+    const { start, started, launch } = setup({ [file]: "" });
+    const [first, second] = await Promise.all([launch(file), launch(file)]);
+    expect(start).toHaveBeenCalledOnce();
+    expect(started).toHaveLength(1);
+    expect(first).toMatchObject({ link: started[0]!.launcher.url });
+    expect(second).toMatchObject({ link: started[0]!.launcher.url });
+  });
+
+  it("/launch stop <typo> stops nothing — never the workspace folder's launcher", async () => {
+    const { started, launch } = setup();
+    await launch();
+    const reply = await launch("stop", "typo");
+    expect(linesOf(reply)).toEqual([composerCommandText().launchNoSuchPath("typo")]);
+    expect(started[0]!.launcher.close).not.toHaveBeenCalled();
+  });
+
+  it("/launch stop <page> still finds the launcher after the page was deleted", async () => {
+    const file = at("gone.html");
+    const { port, started, launch } = setup({ [file]: "" });
+    await launch(file);
+    port.files.delete(file);
+    expect(linesOf(await launch("stop", file))).toEqual([composerCommandText().launchStopped("gone.html")]);
+    expect(started[0]!.launcher.close).toHaveBeenCalledOnce();
+  });
+
+  it("/launch stop <dir> still finds a folder launched before its index page appeared", async () => {
+    const dir = at("site");
+    const { port, started, launch } = setup({ [path.join(dir, "readme.md")]: "x" });
+    await launch(dir);
+    expect(started).toHaveLength(1);
+    port.files.set(path.join(dir, "index.html"), "");
+    expect(linesOf(await launch("stop", dir))).toEqual([composerCommandText().launchStopped("site")]);
+    expect(started[0]!.launcher.close).toHaveBeenCalledOnce();
+  });
+
+  it("/launch stop <dir> still finds a launcher started through its index page after that page was deleted", async () => {
+    const dir = at("site");
+    const index = path.join(dir, "index.html");
+    const { port, started, launch } = setup({ [index]: "" });
+    await launch(dir);
+    port.files.delete(index);
+    port.files.set(path.join(dir, "readme.md"), "x");
+    expect(linesOf(await launch("stop", dir))).toEqual([composerCommandText().launchStopped("index.html")]);
+    expect(started[0]!.launcher.close).toHaveBeenCalledOnce();
+  });
+
+  it("names the REAL directory it asks to serve, whatever link was typed", async () => {
+    const real = path.join(FS_ROOT, "elsewhere", "site");
+    const alias = path.join(FS_ROOT, "alias");
+    const { port, launch } = setup({ [path.join(real, "index.html")]: "" });
+    port.links.set(alias, real);
+    await launch(alias);
+    expect(port.asked[0]!.message).toBe(composerCommandText().launchOutsideQuestion(real));
+  });
+
+  it("judges an environment name by the CHOSEN folder's environments, before stopping or starting anything", async () => {
+    const other = folderRef("other");
+    const perFolder = (folder?: WorkspaceFolderRef) => (folder?.name === "other" ? ["only-in-other"] : folder ? ["staging"] : ["staging", "only-in-other"]);
+    const { port, start, launch } = setup({}, [app, other], { environments: perFolder });
+    port.picked = app;
+    const reply = await launch("only-in-other");
+    expect(linesOf(reply)[0]).toBe(composerCommandText().invalid("launch"));
+    expect(start).not.toHaveBeenCalled();
+    port.picked = other;
+    await launch("only-in-other");
+    expect(start).toHaveBeenCalledOnce();
+  });
+
+  it("a folder that declares no environments refuses an unknown name before stopping its running launcher; detected folders accept the detected one", async () => {
+    const { start, started, detect, launch } = setup({}, [app], { environments: [] });
+    detect.mockReturnValue({ text: JSON.stringify({ version: 1, environments: { local: {} } }), services: ["web"], resources: [], notes: [] });
+    await launch(); // running, on the detected manifest
+    const refused = await launch("bogus");
+    expect(linesOf(refused)[0]).toBe(composerCommandText().invalid("launch"));
+    expect(started[0]!.launcher.close).not.toHaveBeenCalled();
+    expect(start).toHaveBeenCalledOnce();
+    await launch("local");
+    expect(start).toHaveBeenCalledTimes(2); // `local` is the detected manifest's own environment: it runs (replacing the default)
+
+    const withManifest = setup({ [at(".builderforce", "builderforce.json")]: "{\"version\":1}" }, [app], { environments: [] });
+    await withManifest.launch();
+    expect(linesOf(await withManifest.launch("staging"))[0]).toBe(composerCommandText().invalid("launch"));
+    expect(withManifest.started[0]!.launcher.close).not.toHaveBeenCalled();
+  });
+
+  it("a dotted name that is no path, with environments known, gets the bad-environment wording; a drive-relative path asks for a full one", async () => {
+    const { start, launch } = setup({}, [app], { environments: ["prod.eu"] });
+    const text = composerCommandText();
+    expect(linesOf(await launch("prod.eau"))[0]).toBe(text.invalid("launch"));
+    if (process.platform === "win32") expect(linesOf(await launch("C:foo.html"))).toEqual([text.launchNeedsFullPath("C:foo.html")]);
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("a second /launch that waits on a start which then fails gets the failure as a reply, not a throw", async () => {
+    const text = composerCommandText();
+    const pending = (start: ReturnType<typeof setup>["start"]) => {
+      let fail!: (error: Error) => void;
+      start.mockImplementationOnce(() => new Promise((_, reject) => { fail = reject; }));
+      return (error: Error) => fail(error);
+    };
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+    const workspace = setup();
+    const failWorkspace = pending(workspace.start);
+    const first = workspace.launch();
+    await settle();
+    const second = workspace.launch(); // reopens the launcher that is still starting
+    await settle();
+    failWorkspace(new Error("dist missing"));
+    for (const reply of await Promise.all([first, second])) expect(reply).toMatchObject({ tone: "error", lines: [text.launchFailed("dist missing")] });
+
+    const file = at("a.html");
+    const page = setup({ [file]: "" });
+    const failPage = pending(page.start);
+    const firstPage = page.launch(file);
+    await settle();
+    const secondPage = page.launch("external", file); // acts on the held, still-starting launcher
+    await settle();
+    failPage(Object.assign(new Error("x"), { name: "LaunchPageError", code: "missing", page: "/a.html" }));
+    for (const reply of await Promise.all([firstPage, secondPage])) {
+      expect(reply).toMatchObject({ tone: "error", lines: [text.launchPageProblem("missing", "/a.html")] });
+    }
+  });
+
   it("closes every launcher on deactivate", async () => {
     const other = folderRef("other");
     const { port, launchers, started, launch } = setup({}, [app, other]);
@@ -312,6 +532,6 @@ describe("/launch", () => {
     start.mockRejectedValueOnce(new Error("dist missing"));
     const reply = await launch();
     expect(reply).toMatchObject({ kind: "text", tone: "error", lines: ["The launcher could not start: dist missing"] });
-    expect(launchers.running(app.path)).toBeUndefined();
+    expect(await launchers.running(app.path)).toBeUndefined();
   });
 });

@@ -8,7 +8,8 @@
 import * as vscode from "vscode";
 import { KnowledgeApiError } from "@builderforce/knowledge-client";
 import { provenanceDetail } from "./packProvenanceDetail";
-import { linkedProjectClient, messageOf } from "./packUi";
+import { linkedProjectClient } from "./packUi";
+import { messageOf } from "../../messageOf";
 import { registerPackUploadCommand } from "./packUpload";
 
 async function removeUploadedPack(context: vscode.ExtensionContext): Promise<void> {

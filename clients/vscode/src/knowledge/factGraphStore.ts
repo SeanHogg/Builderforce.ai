@@ -14,13 +14,13 @@
 import {
   emptyFactGraph, loadFactGraph, saveFactGraph, sweepFactStore, type FactGraph, type FactStorePort, type FactStoreVersion, type StoredFactGraph,
 } from "@seanhogg/builderforce-memory/knowledge";
+import { messageOf } from "../messageOf";
 
 /** How many times one save resolves a conflict before it gives up (the next change saves again). */
 export const SAVE_ATTEMPTS = 3;
 
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
-export const isStoreConflict = (error: unknown): boolean => /^fact_store_generation_conflict\b/.test(message(error));
-export const isStoreCorrupt = (error: unknown): boolean => /^fact_store_(object_missing|object_corrupt|manifest_corrupt|derived_corrupt)\b/.test(message(error));
+export const isStoreConflict = (error: unknown): boolean => /^fact_store_generation_conflict\b/.test(messageOf(error));
+export const isStoreCorrupt = (error: unknown): boolean => /^fact_store_(object_missing|object_corrupt|manifest_corrupt|derived_corrupt)\b/.test(messageOf(error));
 
 /** One save's view of its index: the graph now, how to re-apply the unsaved changes on a loaded graph, what was saved. */
 export interface SaveSource {

@@ -2,6 +2,14 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.217] — Launch a page or a folder with `/launch <path>`
+
+- `/launch` takes a file or folder path. An `.html`/`.htm` page runs in the in-browser runtime. A folder runs its `builderforce.json` when it has one, otherwise its top-level `index.html` (else `index.htm`), otherwise what app detection finds. Quoted paths with spaces work, and relative paths resolve against each workspace folder.
+- A path outside every workspace folder asks first and names the folder that will be served. A drive root and your home folder are refused.
+- `/launch stop | external | trust <path>` act on a launcher started from a path, including after its page is deleted. A second `/launch` of the same path reopens its launcher.
+- An environment name that contains a dot (`prod.eu`) still runs that environment. A mistyped environment is refused before the running launcher is stopped.
+- Updated BuilderForce WebContainers to 2026.11.26: a bare `vite`, `react-scripts`, `craco` or `ng` starts the instant preview, and programs that read input with `stdin.once('data')` now receive it.
+
 ## [2026.10.216] — Stable identities for named applications
 
 - Updated BuilderForce WebContainers to 2026.11.25. Named applications get stable IDs from their project and manifest name, even when they have identical services. Unnamed apps keep their existing IDs.

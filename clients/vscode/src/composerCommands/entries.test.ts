@@ -9,6 +9,7 @@ vi.mock("vscode", () => ({
 
 import { buildComposerCommands, starterKitChoices, starterKitExtraChoices } from "./entries";
 import { composerCommandText } from "./labels";
+import { quoteCommandArg } from "./launchTarget";
 
 const context = {
   hasWorkspace: true, noWorkspaceReason: "open a folder", stopLabel: "stop it", trustLabel: "trust it", externalLabel: "open outside", manifestMoveLabel: "move it",
@@ -54,6 +55,15 @@ describe("composer command entries", () => {
     expect(parse("/launch C:\\code\\agentic\\design\\mock.html")).toMatchObject({ kind: "command", args: { environment: "C:\\code\\agentic\\design\\mock.html" } });
     expect(parse("/launch \"C:\\My Docs\\mock up.html\"")).toMatchObject({ kind: "command", args: { environment: "C:\\My Docs\\mock up.html" } });
     expect(parse("/launch ../design")).toMatchObject({ kind: "command", args: { environment: "../design" } });
+  });
+
+  it("takes a path after a subcommand, and reads back every path launchTarget's quoting produces", () => {
+    const registry = createComposerCommandRegistry(buildComposerCommands(context), composerCommandText());
+    const parse = (line: string) => parseComposerInput(line, registry);
+    expect(parse("/launch stop \"C:\\a b\\mock.html\"")).toMatchObject({ kind: "command", args: { environment: "stop", target: "C:\\a b\\mock.html" } });
+    for (const file of ["C:\\My Docs\\a.html", "/tmp/say \"hi\".html", "/plain/a.html"]) {
+      expect(parse(`/launch external ${quoteCommandArg(file)}`)).toMatchObject({ kind: "command", args: { target: file } });
+    }
   });
 
   it("never lists an environment named like a /launch subcommand: the subcommand is listed once", () => {

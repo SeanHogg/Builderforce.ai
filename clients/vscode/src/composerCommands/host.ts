@@ -28,10 +28,11 @@ import { manifestMoveExecutor } from "./manifestMove";
 import { integratedBrowser, openUrlVerbatim } from "./openExternal";
 import type { ComposerCommandsInit, ComposerInputResult } from "./reply";
 import { folderManifestWatchers } from "./folderManifestWatchers";
+import { messageOf } from "../messageOf";
 import { starterKitExecutor } from "./starterKit";
 import { registerManifestPreview, vscodeWorkspacePort } from "./vscodeWorkspacePort";
 import { readWorkspaceFiles } from "./workspaceFiles";
-import { workspaceRegistry } from "./workspaceRegistry";
+import { folderEnvironments, launchEnvironmentChoices, workspaceRegistry } from "./workspaceRegistry";
 
 export interface ComposerCommandHost {
   /** The `/help` model for the `/` menu's Actions tab. */
@@ -58,8 +59,6 @@ const LAUNCHER_CA_DIR = "launcher-ca";
 const CA_TRUST_STATE_KEY = "builderforce.launcher.caTrusted";
 
 const execFileAsync = promisify(execFile);
-
-const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 function launcherTrustDeps(ctx: vscode.ExtensionContext, text: ComposerCommandText): LauncherTrustDeps {
   return {
@@ -113,7 +112,7 @@ export function composerCommandHost(ctx: vscode.ExtensionContext): ComposerComma
   const existing = hosts.get(ctx);
   if (existing) return existing;
   const port = vscodeWorkspacePort();
-  const launchers = new FolderLaunchers();
+  const launchers = new FolderLaunchers(port.realPath);
   allLaunchers.add(launchers);
   const show = registerManifestPreview(ctx.subscriptions);
   const distDir = vscode.Uri.joinPath(ctx.extensionUri, ...LAUNCHER_DIST_DIR).fsPath;
@@ -165,6 +164,10 @@ export function composerCommandHost(ctx: vscode.ExtensionContext): ComposerComma
             editorBrowser,
             readFiles: readFolderFiles,
             detect: detectWorkspaceManifest,
+            // One folder's own environments judge a name for that folder; with none given, every open folder's.
+            environments: async (folder) => (folder
+              ? folderEnvironments(port, folder, logLine)
+              : (await launchEnvironmentChoices(port, text, logLine)).map((choice) => choice.value)),
           }),
         },
       });

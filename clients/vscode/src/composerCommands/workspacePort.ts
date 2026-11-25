@@ -36,6 +36,8 @@ export interface ComposerWorkspacePort {
   exists(file: string): Promise<boolean>;
   /** What is at this path, a symbolic link followed: a file, a directory, or undefined when there is nothing (or nothing else) there. */
   stat(file: string): Promise<PathKind | undefined>;
+  /** The path with every link resolved (`realpath`), or as given when nothing is there. Compare paths through it. */
+  realPath(file: string): Promise<string>;
   /** The file's text, or undefined when it does not exist. */
   readText(file: string): Promise<string | undefined>;
   /** The files among these that may NOT be written (`writeContainment.ts`), so a command can refuse before writing any. */

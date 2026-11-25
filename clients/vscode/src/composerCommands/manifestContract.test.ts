@@ -10,7 +10,7 @@ import { composeKit, NAMED_KITS } from "@builderforce/ide-templates/kits";
 import {
   LEGACY_MANIFEST_PATHS, MANIFEST_DIR, MANIFEST_FILE_NAME, MANIFEST_PATH as KIT_MANIFEST_PATH, MANIFEST_READ_PATHS,
 } from "@builderforce/app-detect/manifest";
-import { emitStaticSiteManifest } from "@builderforce/app-detect";
+import { emitStaticSiteManifest, STATIC_SITE_COMMAND } from "@builderforce/app-detect";
 import { detectWorkspaceManifest } from "./detectManifest";
 import { LEGACY_MANIFEST_FILES, MANIFEST_FILE, MANIFEST_PATH, MANIFEST_READ_ORDER, WORKSPACE_DIR } from "./manifestLocation";
 
@@ -116,9 +116,14 @@ describe("manifests the extension writes parse cleanly in the runtime", () => {
   });
 
   it("the static-site manifest a page launch runs: parse + validate with zero issues", () => {
-    const { manifest, issues } = runtimeIssues(emitStaticSiteManifest("mockup").text);
+    const emitted = emitStaticSiteManifest("mockup");
+    const { manifest, issues } = runtimeIssues(emitted.text);
     expect(manifest).not.toBeNull();
     expect(issues).toEqual([]);
+    // One frontend on the dev-server command, no install step, nothing detection could not express.
+    expect(emitted.manifest.name).toBe("mockup");
+    expect(emitted.manifest.services).toEqual({ web: { runtime: "node", root: "/", command: STATIC_SITE_COMMAND, port: 5173, role: "frontend" } });
+    expect(emitted.notes).toEqual([]);
   });
 
   it.each([...NAMED_KITS])("starter kit %s, re-detected from its own files: zero issues", (kitId) => {

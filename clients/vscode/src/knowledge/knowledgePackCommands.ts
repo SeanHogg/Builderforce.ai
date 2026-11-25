@@ -32,7 +32,8 @@ import { packWritePath } from "./packs/packCompress";
 import { provenanceDetail } from "./packs/packProvenanceDetail";
 import { packOfRoot, reviewForPack } from "./packs/packReview";
 import { registerPackPlatformCommands } from "./packs/packRemove";
-import { PACK_FILTER, messageOf } from "./packs/packUi";
+import { PACK_FILTER } from "./packs/packUi";
+import { messageOf } from "../messageOf";
 
 const countOf = (pack: PortableKnowledgePack) => ({
   sources: Object.values(pack.snapshot.extracted).reduce((n, list) => n + list.length, 0),

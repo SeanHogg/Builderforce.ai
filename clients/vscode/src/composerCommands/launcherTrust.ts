@@ -18,6 +18,7 @@
  */
 import { createHash } from "node:crypto";
 import type { LocalCa, TrustCommand, TrustPlan } from "@seanhogg/builderforce-webcontainers/launcher/server";
+import { messageOf } from "../messageOf";
 import type { ComposerCommandText } from "./labels";
 
 /** The CA fields the trust step reads (`LocalLauncher.ca`, less its private key). */
@@ -189,7 +190,7 @@ export async function ensureLauncherTrust(ca: LauncherCa | null | undefined, dep
     await deps.decision.set({ fingerprint, trusted: false });
     const line = error instanceof TrustCommandTimeoutError
       ? text.trustTimedOut(Math.round(error.timeoutMs / 1000))
-      : text.trustFailed(error instanceof Error ? error.message : String(error));
+      : text.trustFailed(messageOf(error));
     return untrusted([line], true);
   }
   await deps.decision.set({ fingerprint, trusted: true });

@@ -18,6 +18,7 @@ import {
 } from "@seanhogg/builderforce-brain-embedded/composerCommands";
 import type { ComposerCommandText } from "./labels";
 import type { ComposerInputResult, ComposerReply } from "./reply";
+import { messageOf } from "../messageOf";
 import { WriteRefusedError, writeRefusedReply } from "./writeContainment";
 
 /** Runs one parsed command. `args` are the parser's canonical values. */
@@ -76,7 +77,7 @@ export async function handleComposerInput(text: string, deps: ComposerDispatchDe
       } catch (error) {
         // A write the containment check refused at write time: named, in the person's language.
         if (error instanceof WriteRefusedError) return { handled: true, reply: writeRefusedReply(copy, error.refusals) };
-        return { handled: true, reply: errorReply([copy.failed(input.id, error instanceof Error ? error.message : String(error))]) };
+        return { handled: true, reply: errorReply([copy.failed(input.id, messageOf(error))]) };
       }
     }
   }

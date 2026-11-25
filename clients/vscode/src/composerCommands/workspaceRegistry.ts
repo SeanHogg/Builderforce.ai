@@ -12,18 +12,17 @@ import {
 import { buildComposerCommands } from "./entries";
 import type { ComposerCommandText } from "./labels";
 import { findFolderManifest } from "./manifestLocation";
+import { messageOf } from "../messageOf";
 import type { ComposerWorkspacePort, WorkspaceFolderRef } from "./workspacePort";
 
 /** Where a failure the registry survives goes (the output channel, `logLine`). */
 export type RegistryReport = (message: string) => void;
 
-const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
-
 /**
  * The environment names one folder's manifest declares (`.builderforce/builderforce.json`, else
  * a legacy root file); empty when it has none or it cannot be read (reported).
  */
-async function folderEnvironments(port: ComposerWorkspacePort, folder: WorkspaceFolderRef, report: RegistryReport): Promise<string[]> {
+export async function folderEnvironments(port: ComposerWorkspacePort, folder: WorkspaceFolderRef, report: RegistryReport): Promise<string[]> {
   let file = folder.path;
   let text: string | undefined;
   try {

@@ -8,6 +8,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import type { ShowManifest } from "./manifestInit";
 import { MANIFEST_FILE } from "./manifestLocation";
+import { realPathOrSelf } from "./realPath";
 import { isMissingPath, refusedWrites, WriteRefusedError } from "./writeContainment";
 import { TargetExistsError, type ComposerWorkspacePort, type WorkspaceFolderRef } from "./workspacePort";
 
@@ -54,6 +55,7 @@ export function vscodeWorkspacePort(): ComposerWorkspacePort {
         throw error;
       }
     },
+    realPath: realPathOrSelf,
     readText: async (file) => {
       try {
         return new TextDecoder().decode(await fs.readFile(vscode.Uri.file(file)));

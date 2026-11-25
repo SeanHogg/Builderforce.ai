@@ -13,6 +13,7 @@ import {
   type MethodologyRole,
   type WriteScopeEntry,
 } from "@builderforce/agent-tools";
+import { messageOf } from "../messageOf";
 
 /** The composer send a passed gate's button replays: the role rides as an argument, never a text prefix. */
 export interface PersonaSend {
@@ -56,10 +57,6 @@ export interface PersonaRunOutcome {
   state: ChatPersonaState;
 }
 
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /** Every gated role's missing artifacts. Throws when `exists` does (the caller keeps the old hints). */
 function hintsOf(roles: readonly MethodologyRole[], methodologyDir: string, exists: (path: string) => boolean): Record<string, ArtifactId[]> {
   const hints: Record<string, ArtifactId[]> = {};
@@ -92,7 +89,7 @@ export function startPersonaRun(
     state.hints = hintsOf(roles, methodologyDir, deps.exists);
     result = checkGate(role, methodologyDir, deps.exists, roles);
   } catch (error) {
-    deps.post({ kind: "error", text: errorText(error) });
+    deps.post({ kind: "error", text: messageOf(error) });
     return { started: false, state: { ...state, hints: current.hints } };
   }
   if (!result.passed) {
@@ -102,7 +99,7 @@ export function startPersonaRun(
   const next = role.methodology?.next;
   if (next) deps.post({ kind: "gate-passed", role: next, text: deps.labels.gatePassed(next), send: { text: request, role: next } });
   deps.invokeModel(request, { roleName, scope: role.methodology?.writeScope }).catch((error: unknown) =>
-    deps.post({ kind: "error", role: roleName, text: errorText(error) }),
+    deps.post({ kind: "error", role: roleName, text: messageOf(error) }),
   );
   return { started: true, state };
 }
