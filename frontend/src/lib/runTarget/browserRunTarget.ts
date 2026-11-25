@@ -29,6 +29,7 @@ import { loadWebcontainers } from '@/lib/browserRuntime/webcontainersPackage';
 import { recordedFailure } from '@/lib/reportError';
 import { PREVIEW_CAPTURE_SCRIPT } from '@/lib/previewCapture/captureScript';
 import { acceptBlueprintInBrowser } from './browserAcceptance';
+import { webHostRelay } from './webHostRelay';
 import { browserRunSession, type BrowserRunHandle } from './browserRunSession';
 import type { Acceptance, RunContext, RunStart, RunTarget } from './runTarget';
 
@@ -102,6 +103,8 @@ async function startSerialised(blueprint: AppBlueprint | null, context: RunConte
     // The runtime the services spawn on: its port policy puts the app's `dependsOn`
     // graph in force while it runs, and its attributed processes end when it stops.
     runtime,
+    // Models for the services that declare an `ai` resource: through the signed-in session, never an env key.
+    hostRelay: webHostRelay(app),
     providers: [
       app.createNodeProvider(runtime),
       app.createPgliteProvider(runtime),

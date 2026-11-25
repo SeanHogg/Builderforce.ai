@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-11-25 — Web Container: models and the manifest tools reach the agents' services
+
+- **A (`ai` resource in manifest v1).** The `ai` resource (`{ type: "ai", models?: string[] }`) is in the schema, validator, `toApplicationSpec` and the capability matrix; an agent service stays `role: "backend"` with `uses`. No role `agent`.
+- **B (model access from a browser-run service).** WebContainers `2026.11.27`: `startApplicationRuntime` serves one owner-only gateway port per backend `ai` use through a `hostRelay` and sets `AI_BASE_URL` (`<ID>_AI_BASE_URL` for several). The port is exclusive (`PortRegistry.listenExclusive`, `PreviewRuntime.listenHttp`): a dependent, a preview origin and the platform cannot reach it. A model outside the manifest allowlist is refused before the relay is called, a relay failing on its first chunk answers 502, and the port closes on `dispose()`. `PREVIEW_DEFAULT_EGRESS` and the worker and document `connect-src` are unchanged, and no token or key enters a process.
+  - **Launcher:** `createLocalLauncher({ forwardAi })` serves a token-gated `POST /__bf/ai` on the page origin only; `launch.json` reports `aiRelay`; the page builds the `HostRelay`.
+  - **VSIX:** `composerCommands/aiRelay.ts` attaches the signed-in session through `fetchAuthed` and streams `/llm/v1/chat/completions`. **Web IDE:** `lib/runTarget/webHostRelay.ts` does the same through `apiRequestStream`. Metering is the route's existing `logUsage`.
+- **C (the agent can find and check the manifest format).** `app_manifest.schema` and `.validate` were already registered; now the VSIX `write_file` and `git_commit` refuse a manifest the runtime's `parseManifest` rejects and name every error (`composerCommands/manifestGate.ts`), `builderforce.json` and "service schema" appear in the tool descriptions, and `docs-site/src/content/docs/reference/app-manifest.md` is generated from `APP_MANIFEST_SCHEMA_V1` (`pnpm gen:app-manifest` in `docs-site/`).
+- **Launcher integrator options (webcontainers ROADMAP item 29).** `frameAncestors` (exact https or `vscode-webview` origins, no wildcard) and `ignoredDirs` (single directory names) are done; `assetsDir` already existed.
+- Covered by: core 614 and browser 1012 tests (`release:check`), api 24, frontend 289, VSIX 51; typechecks clean apart from four VSIX errors that predate this change.
+
 ## ✅ RESOLVED 2026-11-25: VS Code error wording has one owner (`messageOf`)
 
 - All 95 inline `X instanceof Error ? X.message : String(X)` expressions in `clients/vscode/src` (61 files) now call `src/messageOf.ts`. Variants with different semantics (stack traces, rewrapped errors, `.message ?? String(e)`) stay as they are. Typecheck green; composerCommands + knowledge/packs tests 275/275.

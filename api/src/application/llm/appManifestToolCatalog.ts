@@ -184,7 +184,7 @@ const READ_TOOLS: BuiltinTool[] = [
     tool: 'app_manifest.schema',
     mutates: false,
     description:
-      'Get the app manifest v1 (builderforce.json) JSON schema, a short field guide, and the resource ' +
+      'Get the app manifest v1 (builderforce.json) JSON schema (the service schema), a short field guide, and the resource ' +
       'capability matrix for a deployment target (browser, cloudflare, aws, azure, gcp; default browser) — ' +
       'which resources, including the ai resource, that target can host. Read this before writing a manifest.',
     parameters: obj({ target: { ...S, enum: [...TARGETS] } }),

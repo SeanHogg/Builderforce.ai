@@ -29,6 +29,7 @@ import {
   isScratchScriptPath,
   ownsBaselineRaise,
 } from "@builderforce/run-guards";
+import { isManifestPath, manifestRefusal } from "./composerCommands/manifestGate";
 import { runGitRaw } from "./gitCli";
 import { messageOf } from "./messageOf";
 
@@ -89,6 +90,16 @@ export function scratchScriptRefusal(files: readonly string[]): string {
   );
 }
 
+/** The first named app manifest the runtime's parser rejects (a deleted file passes), or null. */
+async function invalidManifestRefusal(repoRoot: string, named: readonly string[], deps: GateDeps): Promise<string | null> {
+  for (const file of named.filter(isManifestPath)) {
+    const content = await deps.readFile(path.join(repoRoot, file));
+    const refusal = content === undefined ? null : manifestRefusal(file, content);
+    if (refusal) return refusal;
+  }
+  return null;
+}
+
 /** What the gate says about a `git_commit` of `paths` with `message` — a refusal, or null to let it run. */
 export async function commitGateRefusal(git: GitRunner, cwd: string, args: { message: string; paths: readonly string[] }, deps: GateDeps): Promise<string | null> {
   const repoRoot = (await git("rev-parse --show-toplevel"))?.trim();
@@ -98,6 +109,8 @@ export async function commitGateRefusal(git: GitRunner, cwd: string, args: { mes
   }
   const named = args.paths.filter(quotable).map((p) => repoRelative(repoRoot, cwd, p));
   if (named.length === 0) return null;
+  const invalidManifest = await invalidManifestRefusal(repoRoot, named, deps);
+  if (invalidManifest) return invalidManifest;
   const untracked = lines(await git(`ls-files --full-name --others --exclude-standard -- ${topSpecs(named)}`));
   const swept = sweptScratchScripts(untracked, named);
   if (swept.length > 0) return scratchScriptRefusal(swept);

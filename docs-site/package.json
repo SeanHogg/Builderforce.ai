@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "gen:app-manifest": "node scripts/generate-app-manifest-doc.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.42.10",

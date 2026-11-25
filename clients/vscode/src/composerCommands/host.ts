@@ -12,6 +12,7 @@ import * as vscode from "vscode";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { caTrustCheckCommand, caTrustCommand, createLocalLauncher } from "@seanhogg/builderforce-webcontainers/launcher/server";
+import { vsixForwardAi } from "./aiRelay";
 import { watchComposerHelp } from "./helpRefresh";
 import { ensureLauncherTrust, trustCommandRunner, type CaTrustDecision, type LauncherTrustDeps } from "./launcherTrust";
 import { logLine } from "../errorReporter";
@@ -158,7 +159,7 @@ export function composerCommandHost(ctx: vscode.ExtensionContext): ComposerComma
             text,
             launchers,
             // The page's own strings in the editor's language, worded when the launcher starts.
-            start: (request) => createLocalLauncher({ ...request, distDir, tls: { storeDir: caDir }, labels: launcherPageLabels() }),
+            start: (request) => createLocalLauncher({ ...request, distDir, tls: { storeDir: caDir }, labels: launcherPageLabels(), forwardAi: vsixForwardAi(ctx.secrets) }),
             trust: (ca, force) => ensureLauncherTrust(ca, launcherTrustDeps(ctx, text), force),
             openExternal: openUrlVerbatim((target) => vscode.env.openExternal(target)),
             editorBrowser,

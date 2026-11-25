@@ -111,3 +111,19 @@ describe("pushGateRefusal", () => {
     expect(d.warn).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("commitGateRefusal: app manifests", () => {
+  const MANIFEST = ".builderforce/builderforce.json";
+  const files = (text: string) => ({ [path.resolve(ROOT, MANIFEST)]: text });
+
+  it("refuses a staged manifest the runtime's parser rejects, naming it", async () => {
+    const refusal = await commitGateRefusal(repo({}), ROOT, { message: "Add manifest", paths: [MANIFEST] }, deps(files("{ nope")));
+    expect(refusal).toContain(`Refused: ${MANIFEST} is not a valid app manifest`);
+  });
+
+  it("lets a valid manifest, and a deleted one, through", async () => {
+    const valid = JSON.stringify({ version: 1, name: "demo", services: { web: { runtime: "node", command: "node server.js", port: 3000, role: "frontend", readiness: { http: "/" } } } });
+    expect(await commitGateRefusal(repo({ "diff --name-only": "" }), ROOT, { message: "Add manifest", paths: [MANIFEST] }, deps(files(valid)))).toBeNull();
+    expect(await commitGateRefusal(repo({ "diff --name-only": "" }), ROOT, { message: "Remove manifest", paths: [MANIFEST] }, deps())).toBeNull();
+  });
+});

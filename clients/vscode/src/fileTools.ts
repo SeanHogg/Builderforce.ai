@@ -18,6 +18,8 @@ import { hostCostLeverOn } from "./hostCostLevers";
 import { outlineFirstReadsOn } from "./outlineFirstReads";
 import { resolveLocalSemantic } from "./localSemantic";
 import { editorResearchCapability } from "./localResearch/researchCapability";
+import { isFolderManifest } from "./composerCommands/manifestLocation";
+import { manifestRefusal } from "./composerCommands/manifestGate";
 import { publishGateFor } from "./publishGate";
 import { SCRATCH_DIR_NOTE } from "./scratchDir";
 
@@ -94,6 +96,9 @@ export const TOOL_DEFS: ToolDef[] = registry
       // What a commit may not carry (a raised ratchet baseline, a swept scratch script) is refused before the script runs.
       const refused = def.name === "git_commit" || def.name === "git_push" ? await publishGate(def.name, args, root, run) : null;
       if (refused) return JSON.stringify({ ok: false, action: def.name === "git_push" ? "push" : "commit", error: refused });
+      // A manifest the runtime would reject is never written (`edit_file` is judged at commit, where its result is known).
+      const invalidManifest = def.name === "write_file" ? manifestWriteRefusal(args, root) : null;
+      if (invalidManifest) return JSON.stringify({ ok: false, action: "write", error: invalidManifest });
       const research = editorResearchCapability(root);
       const compressLargeOutputs = hostCostLeverOn("c8_token_compression");
       const semantic = callUsesSemantic(def.requires, compressLargeOutputs) ? await resolveLocalSemantic(root) : undefined;
@@ -121,6 +126,13 @@ export const TOOL_DEFS: ToolDef[] = registry
       return JSON.stringify(result.data);
     },
   }));
+
+/** A refusal when `write_file` would put an invalid app manifest in the workspace folder, else null. */
+function manifestWriteRefusal(args: Record<string, unknown>, root: string): string | null {
+  if (typeof args.path !== "string" || typeof args.content !== "string") return null;
+  const target = path.resolve(root, args.path);
+  return isFolderManifest(target, [root]) ? manifestRefusal(path.relative(root, target).split(path.sep).join("/"), args.content) : null;
+}
 
 /** The publish gate (`publishGate.ts`) for a call, run in its repository (`repo`, else the run's default checkout). */
 function publishGate(name: string, args: Record<string, unknown>, root: string, run?: ToolRunOptions): Promise<string | null> {
