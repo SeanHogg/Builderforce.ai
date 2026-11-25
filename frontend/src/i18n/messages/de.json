@@ -24392,6 +24392,7 @@
     "accessLabel": "Zugriff: {access}",
     "privateOnDevice": "Privat auf diesem Gerät",
     "closeTemplates": "Vorlagen schließen",
+    "templateNeedsConnection": "Zum Installieren ist eine Verbindung nötig",
     "sharedWithTenant": "Mit dem Tenant geteilt",
     "privateCustomFrame": "Privater eigener Rahmen",
     "thisDevice": "dieses Gerät",
@@ -37026,6 +37027,9 @@
       "retrying": "Wird in Kürze erneut versucht",
       "quotaFull": "Auf diesem Gerät ist kein Platz mehr für die Medien dieses Arbeitsbereichs. Entferne Medien oder schaffe Speicherplatz und versuche es erneut.",
       "tooLarge": "Diese Datei ist größer als der Arbeitsbereich erlaubt (10 MB; 100 MB für Video)."
+    },
+    "deviceBoard": {
+      "notFound": "Dieser Board-Link ist ungültig."
     },
     "library": {
       "availableOffline": "Offline verfügbar",

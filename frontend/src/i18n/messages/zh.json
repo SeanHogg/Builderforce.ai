@@ -24392,6 +24392,7 @@
     "accessLabel": "访问权限：{access}",
     "privateOnDevice": "仅存于本设备",
     "closeTemplates": "关闭模板",
+    "templateNeedsConnection": "安装需要网络连接",
     "sharedWithTenant": "已与租户共享",
     "privateCustomFrame": "私有自定义框架",
     "thisDevice": "本设备",
@@ -37026,6 +37027,9 @@
       "retrying": "稍后将重试",
       "quotaFull": "此设备没有足够空间存放该工作区的媒体。请删除部分媒体或释放空间后重试。",
       "tooLarge": "该文件超过工作区允许的大小（10 MB；视频 100 MB）。"
+    },
+    "deviceBoard": {
+      "notFound": "此画布链接无效。"
     },
     "library": {
       "availableOffline": "可离线使用",

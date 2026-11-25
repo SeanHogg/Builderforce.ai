@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
+import { useBrowserOnline } from '@/hooks/useBrowserOnline';
 import { CREATION_TEMPLATES, type CreationTemplate } from '@/lib/templates/creationTemplates';
 import { applyTemplateEntry } from '@/lib/templates/apply';
 import { useTemplateCatalog } from '@/lib/templates/useTemplateCatalog';
@@ -50,6 +51,8 @@ export interface CanvasTemplateMenuProps {
 export function CanvasTemplateMenu({ open, onClose, browser, onPrompt, onPack, serverTemplates, onServerTemplate, framePresets, onFramePreset }: CanvasTemplateMenuProps) {
   const t = useTranslations('creationCanvas');
   const router = useRouter();
+  // Installing a workspace template is server work (setup and install stay online-only); prompts and packs apply from this device.
+  const online = useBrowserOnline();
   if (!open) return null;
   const { search, setSearch, kind, setKind, category, setCategory, entries } = browser;
   return <div className={commandBarStyles.templateMenu}>
@@ -69,7 +72,7 @@ export function CanvasTemplateMenu({ open, onClose, browser, onPrompt, onPack, s
                 || (category === 'prompt' && (entry.source === 'canvas' || entry.source === 'executive')))
               .filter((entry) => kind === 'all' || (entry.action.kind === 'pack' && entry.action.template.objects.some((object) => object.kind === kind)))
               .filter((entry) => matchesTemplateQuery(entry, search))
-              .map((entry) => <button key={entry.id} onClick={() => { applyTemplateEntry(entry, { onPrompt: (nextPrompt) => { onPrompt(nextPrompt); onClose(); }, onPack: (template) => onPack(template), onInstall: (key) => router.push(`/templates?open=${encodeURIComponent(key)}`) }); }}><b>{entry.name}</b><small>{entry.action.kind === 'pack' ? t('templateMeta', { category: entry.categoryLabel, count: entry.action.template.objects.length }) : entry.categoryLabel}</small><span>{entry.summary}</span><i>{entry.keywords.slice(0, 6).join(' · ')}</i></button>)}
+              .map((entry) => <button key={entry.id} disabled={!online && entry.source === 'workspace'} title={!online && entry.source === 'workspace' ? t('templateNeedsConnection') : undefined} onClick={() => { applyTemplateEntry(entry, { onPrompt: (nextPrompt) => { onPrompt(nextPrompt); onClose(); }, onPack: (template) => onPack(template), onInstall: (key) => router.push(`/templates?open=${encodeURIComponent(key)}`) }); }}><b>{entry.name}</b><small>{entry.action.kind === 'pack' ? t('templateMeta', { category: entry.categoryLabel, count: entry.action.template.objects.length }) : entry.categoryLabel}</small><span>{entry.summary}</span><i>{entry.keywords.slice(0, 6).join(' · ')}</i></button>)}
             {!!serverTemplates.length && <><h4>{t('savedAccount')}</h4>{serverTemplates.map((template) => <button key={template.id} onClick={() => onServerTemplate(template)}><b>{template.name}</b><small>{template.visibility === 'tenant' ? t('sharedWithTenant') : t('private')} · {template.category}</small><span>{template.description}</span></button>)}</>}
             {!!framePresets.length && <><h4>{t('reusableFrames')}</h4>{framePresets.map((preset) => <button key={preset.id} onClick={() => onFramePreset(preset)}><b>{preset.name}</b><small><span>{t('privateCustomFrame')}</span> · {t('thisDevice')}</small></button>)}</>}
           </div>;

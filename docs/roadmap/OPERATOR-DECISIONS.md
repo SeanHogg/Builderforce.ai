@@ -4,7 +4,7 @@ Work only an operator can do: repository settings, secrets, provider accounts an
 
 | Action | Unblocks | Needed |
 |---|---|---|
-| Add `BF_QA_EMAIL` and `BF_QA_PASSWORD` repository secrets, and confirm `https://builderforce.ai` as the frontend host for `qa-e2e` | `REL-03` (the `qa-e2e` job fails without them, by design) | Secrets and one confirmation |
+| Add `BF_QA_EMAIL` and `BF_QA_PASSWORD` as **repository** secrets (Settings → Secrets and variables → Actions; `qa-e2e` has no `environment:`, so environment secrets are not visible to it), using a dedicated least-privilege QA account. Host confirmed: `https://builderforce.ai` (operator, 2026-11-25) | `REL-03` (the `qa-e2e` job fails without them, by design) | Secrets only |
 | Enable branch protection on `main` and require the release checks, including `qa-e2e` | `REL-10`, `REL-G002` | GitHub repository settings |
 | Grant read access to production run data for the autonomous baseline | `AE-01`, `AE-04` | Read-only credentials or an exported query result |
 | Register the Stripe webhook and set `STRIPE_SECRET_KEY` and related secrets | `COM-01` (`COM-G001`) | Stripe account actions; can proceed in parallel with delivery |

@@ -24367,6 +24367,7 @@
     "accessLabel": "Access: {access}",
     "privateOnDevice": "Private on this device",
     "closeTemplates": "Close templates",
+    "templateNeedsConnection": "Needs a connection to install",
     "sharedWithTenant": "Shared with tenant",
     "privateCustomFrame": "Private custom frame",
     "thisDevice": "this device",
@@ -36284,6 +36285,9 @@
       "retrying": "Will retry shortly",
       "quotaFull": "This device has no room left for this workspace's media. Remove some media or free space, then try again.",
       "tooLarge": "That file is larger than the workspace allows (10 MB; 100 MB for video)."
+    },
+    "deviceBoard": {
+      "notFound": "This board link is not valid."
     },
     "library": {
       "availableOffline": "Available offline",

@@ -75,6 +75,16 @@ function sessionPortOver(source: BoardReconcileSource, captured: { snapshot?: Se
   };
 }
 
+/** Read a board this device does not hold from its server source and put it in the replica. Throws when the read fails. */
+export async function seedBoardFromSource(
+  options: Pick<BoardOpenOptions, 'store' | 'destination' | 'now'> & { source: BoardReconcileSource },
+  boardId: string,
+): Promise<BoardReplica | undefined> {
+  const snapshot = await options.source.read(boardId);
+  await seedFromServer(options.store, snapshot, options.destination, { now: options.now });
+  return readBoard(options.store, boardId);
+}
+
 export async function reconcileBoard(options: BoardOpenOptions, boardId: string, replica?: BoardReplica): Promise<ReconcileOutcome> {
   const { source } = options;
   if (!source || options.isOnline?.() === false) return { kind: 'offline' };
@@ -83,9 +93,7 @@ export async function reconcileBoard(options: BoardOpenOptions, boardId: string,
   const port = sessionPortOver(source, captured);
   try {
     if (!replica) {
-      const snapshot = await source.read(boardId);
-      await seedFromServer(options.store, snapshot, options.destination, { now: options.now });
-      const seeded = await readBoard(options.store, boardId);
+      const seeded = await seedBoardFromSource({ ...options, source }, boardId);
       return seeded ? { kind: 'seeded', replica: seeded, rejected: seeded.rejected } : { kind: 'offline', error: 'seed_not_readable' };
     }
     // Unsent edits are not "unsaved": the journal holds them, so they never block adoption — they rebase.

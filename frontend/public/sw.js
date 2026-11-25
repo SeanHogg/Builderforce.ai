@@ -33,8 +33,9 @@ const RSC_CACHE = CACHE_PREFIX + 'rsc-' + BUILD_VERSION;
 const CURRENT_CACHES = [SHELL_CACHE, STATIC_CACHE, PAGES_CACHE, RSC_CACHE];
 
 // THE allow-list of routes that keep working offline once visited. A route opts
-// in by being listed here (`/studio` covers `/studio` and `/studio/*`). Nothing
-// is precached: the contract is runtime caching after a first online visit.
+// in by being listed here (`/studio` covers `/studio` and `/studio/*`). Only the
+// device-board shell below is precached: the contract is runtime caching after a
+// first online visit.
 const OFFLINE_CAPABLE_ROUTES = ['/studio'];
 
 function isOfflineCapable(pathname) {

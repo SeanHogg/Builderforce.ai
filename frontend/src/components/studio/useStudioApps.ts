@@ -1,12 +1,13 @@
 // No `'use client'`: this module exports a hook, not a component, so a directive marks no boundary (the `domainExtras.tsx` rule).
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useBrowserOnline } from '@/hooks/useBrowserOnline';
 import { useAuth } from '@/lib/AuthContext';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { listLocalCreationSessions, listWorkspaceBoards, readLocalCreationSession } from '@/lib/pendingWork';
 import { sessionHasApp } from '@/lib/canvasSessionApp';
 import { reportBackgroundFailure } from '@/lib/reportError';
-import { studioSessionPath } from '@/lib/studio/studioHost';
+import { studioBoardHref, studioSessionPath } from '@/lib/studio/studioHost';
 import type { StudioCard } from './StudioCardList';
 
 /** One page of the visitor's boards is plenty to find a dozen apps in. */
@@ -28,7 +29,7 @@ async function localStudioCards(): Promise<StudioCard[]> {
   for (const entry of entries) {
     const snapshot = await readLocalCreationSession(entry.sessionId);
     if (snapshot && sessionHasApp(snapshot.nodes)) {
-      cards.push({ key: entry.sessionId, href: studioSessionPath(entry.sessionId), title: entry.title, updatedAt: entry.updatedAt });
+      cards.push({ key: entry.sessionId, href: studioSessionPath(entry.sessionId), title: entry.title, updatedAt: entry.updatedAt, availableOffline: true });
     }
   }
   return cards;
@@ -45,6 +46,7 @@ async function localStudioCards(): Promise<StudioCard[]> {
 export function useStudioApps(): StudioCard[] {
   const { authReady, hasTenant } = useAuth();
   const [cards, setCards] = useState<StudioCard[]>([]);
+  const online = useBrowserOnline();
 
   useEffect(() => {
     if (!authReady) return undefined;
@@ -75,5 +77,6 @@ export function useStudioApps(): StudioCard[] {
     return () => { cancelled = true; };
   }, [authReady, hasTenant]);
 
-  return cards;
+  // A board held on this device opens from its replica while offline (the device shell), its server page otherwise.
+  return useMemo(() => cards.map((card) => (card.availableOffline ? { ...card, href: studioBoardHref(card.key, online) } : card)), [cards, online]);
 }

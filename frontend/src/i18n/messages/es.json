@@ -24392,6 +24392,7 @@
     "accessLabel": "Acceso: {access}",
     "privateOnDevice": "Privado en este dispositivo",
     "closeTemplates": "Cerrar plantillas",
+    "templateNeedsConnection": "Se necesita conexión para instalar",
     "sharedWithTenant": "Compartido con el tenant",
     "privateCustomFrame": "Marco personalizado privado",
     "thisDevice": "este dispositivo",
@@ -37026,6 +37027,9 @@
       "retrying": "Se reintentará en breve",
       "quotaFull": "Este dispositivo no tiene espacio para los archivos multimedia de este espacio de trabajo. Elimina archivos o libera espacio e inténtalo de nuevo.",
       "tooLarge": "Ese archivo supera el tamaño que permite el espacio de trabajo (10 MB; 100 MB para vídeo)."
+    },
+    "deviceBoard": {
+      "notFound": "Este enlace de tablero no es válido."
     },
     "library": {
       "availableOffline": "Disponible sin conexión",

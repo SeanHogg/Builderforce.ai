@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { claimPendingDrafts, type ClaimedDraft } from '@/lib/pendingWork';
+import { claimPendingDrafts, studioDestination, type ClaimedDraft } from '@/lib/pendingWork';
+import { seedRecentWorkspaceBoards } from '@/lib/localFirst/recentBoardSeed';
+import { isBrowserOnline } from '@/lib/studio/studioHost';
 import { AppToast, AppToastDismissButton, AppToastPrimaryButton, AppToastText } from '@/components/AppToast';
 import { useAppToastSlot } from '@/components/appToastStack';
 import { CANVAS_LENSES, canvasLensSessionPath } from '@/lib/canvasLens';
@@ -32,6 +34,8 @@ export function ResumeWorkBridge() {
   const pathname = usePathname() || '';
   const { isAuthenticated, hasTenant } = useAuth();
   const ran = useRef(false);
+  /** The workspace whose recent boards were seeded: once per workspace per page session. */
+  const seededFor = useRef<string | null>(null);
   const [claimed, setClaimed] = useState<ClaimedDraft[]>([]);
   const [dismissed, setDismissed] = useState(false);
 
@@ -39,6 +43,16 @@ export function ResumeWorkBridge() {
     if (!isAuthenticated || !hasTenant || ran.current) return;
     ran.current = true;
     void claimPendingDrafts().then((result) => setClaimed(result.claimed));
+  }, [isAuthenticated, hasTenant]);
+
+  // Put the workspace's recent boards on the device so they open offline (never while offline, once per workspace).
+  useEffect(() => {
+    if (!isAuthenticated || !hasTenant || !isBrowserOnline()) return;
+    const destination = studioDestination();
+    const tenantKey = destination.kind === 'bound' ? destination.tenantId : undefined;
+    if (!tenantKey || seededFor.current === tenantKey) return;
+    seededFor.current = tenantKey;
+    void seedRecentWorkspaceBoards();
   }, [isAuthenticated, hasTenant]);
 
   const newest = claimed[0];

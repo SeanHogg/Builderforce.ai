@@ -1194,7 +1194,7 @@ jobs:
 
   # REL-03: the authenticated Playwright suite against what deploy-frontend just shipped. Fail closed: no
   # continue-on-error, and qa-e2e's `ci` script now exits with Playwright's own status after it has reported.
-  # Needs the BF_QA_EMAIL / BF_QA_PASSWORD secrets (docs/roadmap/OPERATOR-DECISIONS.md); without them this job fails by design.
+  # Needs the BF_QA_EMAIL / BF_QA_PASSWORD repository secrets (docs/roadmap/OPERATOR-DECISIONS.md); without them this job fails by design.
   qa-e2e:
     name: QA end-to-end
     runs-on: ubuntu-latest

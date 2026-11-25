@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { useTranslations } from 'next-intl';
 import { useFormat } from '@/i18n/useFormat';
 
 export interface StudioCard {
@@ -10,6 +11,8 @@ export interface StudioCard {
   title: string;
   /** ISO time it last changed, or null. */
   updatedAt: string | null;
+  /** The board is held on this device, so it opens with no network. */
+  availableOffline?: boolean;
 }
 
 /** How many cards a list shows. */
@@ -29,6 +32,7 @@ export function newestStudioCards(cards: readonly StudioCard[]): StudioCard[] {
  */
 export function StudioCardList({ id, title, cards, action }: { id: string; title: string; cards: readonly StudioCard[]; action?: ReactNode }) {
   const fmt = useFormat();
+  const t = useTranslations('studio.library');
   if (cards.length === 0) return null;
   const shown = newestStudioCards(cards);
   return (
@@ -46,6 +50,7 @@ export function StudioCardList({ id, title, cards, action }: { id: string; title
             >
               <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{card.title}</span>
               {card.updatedAt && <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{fmt.dateTime(card.updatedAt)}</span>}
+              {card.availableOffline && <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>{t('availableOffline')}</span>}
             </Link>
           </li>
         ))}

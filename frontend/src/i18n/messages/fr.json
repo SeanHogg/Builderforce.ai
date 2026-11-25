@@ -24392,6 +24392,7 @@
     "accessLabel": "Accès : {access}",
     "privateOnDevice": "Privé sur cet appareil",
     "closeTemplates": "Fermer les modèles",
+    "templateNeedsConnection": "Une connexion est nécessaire pour installer",
     "sharedWithTenant": "Partagé avec le tenant",
     "privateCustomFrame": "Cadre personnalisé privé",
     "thisDevice": "cet appareil",
@@ -37026,6 +37027,9 @@
       "retrying": "Nouvelle tentative sous peu",
       "quotaFull": "Cet appareil n'a plus de place pour les médias de cet espace de travail. Supprimez des médias ou libérez de l'espace, puis réessayez.",
       "tooLarge": "Ce fichier dépasse la taille autorisée par l'espace de travail (10 Mo ; 100 Mo pour la vidéo)."
+    },
+    "deviceBoard": {
+      "notFound": "Ce lien de tableau n’est pas valide."
     },
     "library": {
       "availableOffline": "Disponible hors ligne",

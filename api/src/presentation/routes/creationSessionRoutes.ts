@@ -424,16 +424,22 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.use('*', async (c, next) => {
     await next();
     if (!BOARD_WRITE_METHODS.has(c.req.method) || c.res.status >= 400) return;
+    // `executionCtx` throws in some test harnesses; with none there is nothing to run the projection under.
+    let ctx: Parameters<Hono<HonoEnv>['fetch']>[2];
+    // error-logging: a missing execution context is expected outside the Workers runtime, not a failure.
+    try { ctx = c.executionCtx; } catch { ctx = undefined; }
+    if (!ctx) return;
     const tenantId = c.get('tenantId') as number;
     const answer = c.res.headers.get('content-type')?.includes('application/json') ? c.res.clone() : null;
-    c.executionCtx.waitUntil((async () => {
+    ctx.waitUntil((async () => {
+      // error-logging: an unreadable body only means no id in it; the path id still reconciles.
       const body = await answer?.json().catch(() => null);
       await reconcileCanvasBoards(db, canvasProjectionScope(tenantId), touchedBoardIds(c.req.path, body));
     })());
   });
 
-  /** Admin: backfill the tenant's boards into the pull projection, one page per call (`afterId` pages; `dryRun` only counts). */
-  router.post('/sync-projection/backfill', requireRole(TenantRole.ADMIN), async (c) => {
+  /** Workspace manager or above: backfill the tenant's boards into the pull projection, one page per call (`afterId` pages; `dryRun` only counts). */
+  router.post('/sync-projection/backfill', requireRole(TenantRole.MANAGER), async (c) => {
     const body = await parseOptionalBody(c, BackfillProjectionBody);
     if (body.afterId && !UUID_RE.test(body.afterId)) return c.json({ error: 'Invalid afterId' }, 400);
     const page = await backfillCanvasSyncPage(db, canvasProjectionScope(c.get('tenantId') as number), {
