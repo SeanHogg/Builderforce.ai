@@ -18,6 +18,9 @@ import { ORBIT_DEG_PER_PX, ORBIT_KEY_DEG, type RigController } from './rig';
 const DRAG_SLOP = 4;
 const WHEEL_SETTLE_MS = 150;
 const WHEEL_ZOOM = 0.0015;
+/** A stepped wheel (the Map's one-level-at-a-time zoom): the travel that makes one step, and the pause after it. */
+export const WHEEL_STEP_PX = 80;
+export const WHEEL_LOCK_MS = 550;
 
 /**
  * Arrow keys orbit an orbit view — only while the CANVAS itself has focus (`e.target === canvas`), so they never
@@ -55,9 +58,13 @@ export function wheelIntent(e: Pick<WheelEvent, 'ctrlKey' | 'metaKey' | 'shiftKe
 
 export const touchActionFor =(frame: CameraRig['frame']): string => (frame === 'fill' ? 'none' : 'pan-x pan-y');
 
-export function bindGestures(el: HTMLElement, rig: RigController, frame: () => CameraRig['frame'], onSettle: () => void): () => void {
+/** The stepped wheel's handler, read at each event (null: the wheel zooms continuously); `dir` 1 goes a level in, -1 a level out. */
+export type WheelStep = () => ((dir: 1 | -1) => void) | undefined;
+
+export function bindGestures(el: HTMLElement, rig: RigController, frame: () => CameraRig['frame'], onSettle: () => void, step?: WheelStep): () => void {
     const pointers = new Map<number, { x: number; y: number; type: string }>();
     let dragging = false, swallowClick = false, pinchDist = 0, wheelTimer: ReturnType<typeof setTimeout> | null = null;
+    let travel = 0, lockUntil = 0;
     const local = (e: { clientX: number; clientY: number }): [number, number] => {
         const r = el.getBoundingClientRect();
         return [e.clientX - r.left, e.clientY - r.top];
@@ -117,6 +124,14 @@ export function bindGestures(el: HTMLElement, rig: RigController, frame: () => C
             // Shift + wheel: some systems turn the vertical wheel into deltaX; either way it is the slide's y.
             const dy = e.shiftKey && e.deltaY === 0 ? e.deltaX : e.deltaY, dx = e.shiftKey ? 0 : e.deltaX;
             rig.slideBy(-dx, -dy);
+        } else if (step?.()) {
+            // One level per gesture: the travel adds up to a step, then the wheel rests while the camera flies.
+            const go = step();
+            if (e.timeStamp >= lockUntil) {
+                travel += e.deltaY;
+                if (go && Math.abs(travel) > WHEEL_STEP_PX) { go(travel < 0 ? 1 : -1); travel = 0; lockUntil = e.timeStamp + WHEEL_LOCK_MS; }
+            }
+            return;
         } else {
             const [sx, sy] = local(e);
             rig.zoomBy(Math.exp(-e.deltaY * WHEEL_ZOOM), sx, sy);

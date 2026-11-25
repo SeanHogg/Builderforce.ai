@@ -27,27 +27,27 @@ vi.mock("@builderforce/local-inference", () => ({
   localRuntime: () => ({ onDevice: false, gatewayVendor: undefined, label: "Local" }),
   formatLocalModelRef: (p: string, m: string) => `local/${p}/${m}`,
 }));
-vi.mock("./gateway", () => ({
+vi.mock("./gateway/gateway", () => ({
   complete: h.complete,
   getApiKey: vi.fn(async () => "key"),
   getBaseUrl: () => "https://api.example",
   getLocalModelsConfig: () => ({ enabled: false, localFirst: false, endpoints: {} }),
 }));
-vi.mock("./localEndpointAuth", () => ({ authorizeLocalEndpoint: async () => ({ ok: true }) }));
-vi.mock("./providerConnect", () => ({ editorAccounts: () => ({ hybridAccounts: async () => ({ accounts: [] }) }) }));
+vi.mock("./auth/localEndpointAuth", () => ({ authorizeLocalEndpoint: async () => ({ ok: true }) }));
+vi.mock("./auth/providerConnect", () => ({ editorAccounts: () => ({ hybridAccounts: async () => ({ accounts: [] }) }) }));
 vi.mock("./errorReporter", () => ({ logLine: vi.fn() }));
-vi.mock("./localModels", () => ({ probeLocalFirstRuntimes: async () => [], probeOnDeviceRuntimes: async () => [] }));
-vi.mock("./modelState", () => ({ resolveEffectiveModelChoice: async () => ({ model: "auto" }) }));
-vi.mock("./nativeGatewayStream", () => ({ createNativeStream: vi.fn() }));
+vi.mock("./models/localModels", () => ({ probeLocalFirstRuntimes: async () => [], probeOnDeviceRuntimes: async () => [] }));
+vi.mock("./models/modelState", () => ({ resolveEffectiveModelChoice: async () => ({ model: "auto" }) }));
+vi.mock("./native/nativeGatewayStream", () => ({ createNativeStream: vi.fn() }));
 vi.mock("./hostBfi/provision", () => ({ hostModelProvisioner: { ensure: vi.fn() } }));
-vi.mock("./pageEngineBridge", () => ({ hostPageEngines: { connected: () => false, fetch: () => fetch } }));
-vi.mock("./localSuccessStorage", () => ({ localSuccessFederation: {}, localSuccessStore: {}, localSuccessTuning: {} }));
-vi.mock("./platformPolicy", () => ({ assertPlatformCapability: vi.fn(), platformPolicy: () => ({ allows: () => true }) }));
-vi.mock("./inferenceModeSetting", () => ({ currentInferenceMode: () => "hybrid" }));
+vi.mock("./panels/pageEngineBridge", () => ({ hostPageEngines: { connected: () => false, fetch: () => fetch } }));
+vi.mock("./localFirst/localSuccessStorage", () => ({ localSuccessFederation: {}, localSuccessStore: {}, localSuccessTuning: {} }));
+vi.mock("./platform/platformPolicy", () => ({ assertPlatformCapability: vi.fn(), platformPolicy: () => ({ allows: () => true }) }));
+vi.mock("./models/inferenceModeSetting", () => ({ currentInferenceMode: () => "hybrid" }));
 
 import { routeComplete, type ModelRoute } from "./modelRouting";
-import { IMAGE_NEEDS_GATEWAY, hasImageParts, textOnly } from "./chatContent";
-import type { ChatMessage } from "./gateway";
+import { IMAGE_NEEDS_GATEWAY, hasImageParts, textOnly } from "./chat/chatContent";
+import type { ChatMessage } from "./gateway/gateway";
 
 const secrets = {} as never;
 const cloud: ModelRoute = { model: "auto", inferenceMode: "hybrid" };

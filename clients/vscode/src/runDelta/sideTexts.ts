@@ -20,7 +20,7 @@ import * as path from "node:path";
 import type { ChangedFileInput, SideText, UnresolvedFile } from "@builderforce/run-delta";
 import { isBinaryBytes } from "@seanhogg/builderforce-memory/knowledge";
 import { nodeContentHash } from "../knowledge/nodeSha256";
-import { fingerprintHash, type ChangeSetRepoBaseline } from "../runChangeBaseline";
+import { fingerprintHash, type ChangeSetRepoBaseline } from "../run/runChangeBaseline";
 import type { RepoGit } from "./gitSide";
 
 export interface ChangeSetFileView {

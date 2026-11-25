@@ -12,8 +12,8 @@ const src = (...parts: string[]) => readFileSync(join(__dirname, ...parts), "utf
 
 describe("post-login auth surface sync", () => {
   const extension = src("extension.ts");
-  const evermind = src("evermindView.ts");
-  const shared = src("webviewShared.ts");
+  const evermind = src("panels/evermindView.ts");
+  const shared = src("panels/webviewShared.ts");
   const app = src("..", "webview", "src", "WorkspaceApp.tsx");
 
   it("awaits the signed-in context flip before refreshing Evermind", () => {
@@ -51,7 +51,7 @@ describe("post-login auth surface sync", () => {
   });
 
   it("registers the agent-chat-area view's listener before setting html", () => {
-    const chatView = src("chatView.ts");
+    const chatView = src("panels/chatView.ts");
     const resolve = chatView.slice(chatView.indexOf("resolveWebviewView"), chatView.indexOf("export function registerChatView"));
     expect(resolve.indexOf("onDidReceiveMessage")).toBeGreaterThan(-1);
     expect(resolve.indexOf("onDidReceiveMessage")).toBeLessThan(resolve.indexOf("webview.html"));
@@ -64,7 +64,7 @@ describe("post-login auth surface sync", () => {
   });
 
   it("does not auto-open the Visualization on sign-in or view resolve", () => {
-    const chatView = src("chatView.ts");
+    const chatView = src("panels/chatView.ts");
     expect(chatView).not.toContain("openVisualizationOnce");
     expect(chatView).not.toContain("secrets.onDidChange");
   });
@@ -135,7 +135,7 @@ describe("post-login auth surface sync", () => {
   });
 
   it("ships the shared auth labels to every auth-gated surface", () => {
-    for (const file of ["workspaceInit.ts", "evermindView.ts", "project360Panel.ts", "projectPagePanel.ts"]) {
+    for (const file of ["workspace/workspaceInit.ts", "panels/evermindView.ts", "panels/project360Panel.ts", "panels/projectPagePanel.ts"]) {
       expect(src(file)).toContain("...authLabels()");
     }
   });

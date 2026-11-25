@@ -13,10 +13,10 @@ vi.mock("./bfApi", () => ({
 
 // policyGates reads the stored editor key (signed in vs out) through gateway.ts, which needs the vscode host.
 const getApiKey = vi.fn(async (): Promise<string | undefined> => undefined);
-vi.mock("./gateway", () => ({ getApiKey: () => getApiKey() }));
+vi.mock("./gateway/gateway", () => ({ getApiKey: () => getApiKey() }));
 
 import { POLICY_GATES_FRESH_MS, POLICY_GATES_STALE_MS, configurePolicyGatesPersistence, resetPolicyGatesCache, resolveRunPolicyGates, resolveRunShipPolicy } from "./policyGates";
-import { createPolicyGatesPersistence, loadPolicySnapshot } from "./policySnapshots";
+import { createPolicyGatesPersistence, loadPolicySnapshot } from "./platform/policySnapshots";
 
 const secrets = {} as never;
 const PR = shipPolicyOf("pull_request", "project_settings");

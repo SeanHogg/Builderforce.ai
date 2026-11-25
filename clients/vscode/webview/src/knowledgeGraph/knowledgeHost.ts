@@ -4,12 +4,12 @@
  * Open in graph chips, `/graph`), taken once on mount and then followed live.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import type { KnowledgeGraphSource } from '@builderforce/knowledge-graph-view';
+import type { EditorView, KnowledgeGraphSource, SourceLocation } from '@builderforce/knowledge-graph-view';
 import { onHostMessage, request } from '../vscodeBridge';
 import {
-  KNOWLEDGE_CALL, KNOWLEDGE_EVENT, KNOWLEDGE_FOCUS, type KnowledgeEventFrame, type KnowledgeFocusFrame,
+  KNOWLEDGE_CALL, KNOWLEDGE_EDITOR, KNOWLEDGE_EVENT, KNOWLEDGE_FOCUS, type KnowledgeEditorFrame, type KnowledgeEventFrame, type KnowledgeFocusFrame,
 } from '../../../src/knowledge/knowledgeProtocol';
 import { composeThrough, createHostKnowledgeGraphSource, reviewCount, type KnowledgeTransport } from './hostKnowledgeGraphSource';
 
@@ -28,6 +28,19 @@ export interface KnowledgeHost {
   compose(text: string): void;
   /** A review is in flight (planning, confirm or running): the panel holds its view still. */
   reviewing: boolean;
+  /** "Open at line": the extension opens the file of the loaded root with the lines selected. */
+  openSource(location: SourceLocation): void;
+  /** What the editor shows of a file of the loaded root (the code band follows it); null until the editor says. */
+  editor: EditorView | null;
+}
+
+/** The editor's latest `knowledge.editor` frame, as the view's `EditorView` (the host posts frames of the loaded root only). */
+export function useEditorView(): EditorView | null {
+  const [view, setView] = useState<EditorView | null>(null);
+  useEffect(() => onHostMessage<KnowledgeEditorFrame>(KNOWLEDGE_EDITOR, (frame) => {
+    setView({ path: frame.path, firstLine: frame.firstLine, lastLine: frame.lastLine, cursorLine: frame.cursorLine });
+  }), []);
+  return view;
 }
 
 export function useKnowledgeHost(overlay: (graph: KnowledgeGraph, changed: readonly string[]) => KnowledgeGraph): KnowledgeHost {
@@ -35,7 +48,19 @@ export function useKnowledgeHost(overlay: (graph: KnowledgeGraph, changed: reado
   const [liveReviews, setLiveReviews] = useState(0);
   const reviewing = liveReviews > 0;
   const onReviewActive = useCallback((active: boolean) => setLiveReviews((n) => reviewCount(n, active)), []);
-  const source = useMemo(() => createHostKnowledgeGraphSource(bridgeKnowledgeTransport, { overlay, onReviewActive }), [overlay, onReviewActive]);
+  // The root the view last loaded: a SourceLocation names a path, the extension also needs its root.
+  const loadedRoot = useRef<string | null>(null);
+  const onLoad = useCallback((rootId: string) => { loadedRoot.current = rootId; }, []);
+  const source = useMemo(() => createHostKnowledgeGraphSource(bridgeKnowledgeTransport, { overlay, onReviewActive, onLoad }), [overlay, onReviewActive, onLoad]);
+  const editor = useEditorView();
+  const openSource = useCallback((location: SourceLocation) => {
+    const rootId = loadedRoot.current;
+    if (!rootId) return;
+    bridgeKnowledgeTransport.call({
+      op: 'openSource', rootId, path: location.path, startLine: location.startLine, endLine: location.endLine,
+    // error-logging: a click handler has no caller to rethrow to; the editor simply does not open, the view stays as it was.
+    }).catch((error: unknown) => console.error('[builderforce] open at line failed', error));
+  }, []);
   const [focus, setFocus] = useState<KnowledgeFocusFrame | null>(null);
   const [focusRequests, setFocusRequests] = useState(0);
 
@@ -61,5 +86,7 @@ export function useKnowledgeHost(overlay: (graph: KnowledgeGraph, changed: reado
     focusRequests,
     reviewing,
     compose: composeThrough(bridgeKnowledgeTransport),
+    openSource,
+    editor,
   };
 }

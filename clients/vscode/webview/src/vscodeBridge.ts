@@ -31,7 +31,7 @@ import { post } from './bridgeTransport';
 
 export type { LabelBundle, BrainIntent, InitData } from './bridgeTypes';
 export type { EditorContext } from '@seanhogg/builderforce-brain-embedded';
-export type { PendingChangeSet } from '../../src/gitChangeModel';
+export type { PendingChangeSet } from '../../src/git/gitChangeModel';
 export { post, request, onHostMessage } from './bridgeTransport';
 export { hostFetch } from './hostFetch';
 export {

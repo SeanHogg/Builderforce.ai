@@ -31,7 +31,7 @@ import { Worker } from "node:worker_threads";
 import { HOST_FALLBACK_RUNTIMES, localCatalogFor, type LocalDeviceSupport } from "@builderforce/local-inference";
 import { createEngineWorker, type EngineWorkerHandle } from "@seanhogg/builderforce-brain-embedded";
 import { bfiSupportWithoutWasm, type BfiModule } from "@seanhogg/builderforce-brain-embedded/bfi";
-import type { HostPageEngineBridge, PageEnginePort } from "../pageEngineBridge";
+import type { HostPageEngineBridge, PageEnginePort } from "../panels/pageEngineBridge";
 import { createModelFileServer, type ModelFileServer } from "./modelFileServer";
 import { createFileModelStore, type FileModelStore } from "./modelFiles";
 import { loadNativeBfi, nativeAddonPath } from "./nativeEngine";

@@ -13,7 +13,7 @@ import type { LocalFirstStore } from "@builderforce/local-first";
 import type { PresentedSyncStatus } from "../syncStatusPresenter";
 import { createLocalWorkModel, type LocalWorkFacts, type LocalWorkModel, type LocalWorkNode } from "./localWorkModel";
 import type { LocalWorkRepository } from "../localWorkRepository";
-import { TASK_LANES } from "../taskLanes";
+import { TASK_LANES } from "../tickets/taskLanes";
 
 const REFRESH_DELAY_MS = 150;
 

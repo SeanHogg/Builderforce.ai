@@ -15,7 +15,7 @@ const h = vi.hoisted(() => ({
     toResult: () => undefined,
   },
 }));
-vi.mock("../localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
+vi.mock("../tools/localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
 vi.mock("@builderforce/repo-map", () => ({ repoMapPort: {} }));
 vi.mock("@builderforce/agent-tools/node-git-history", () => ({ recentCommits: async () => [{ sha: "aaa", paths: [] }] }));
 vi.mock("./knowledgeSyncStatus", () => ({ hostMemento: () => undefined }));

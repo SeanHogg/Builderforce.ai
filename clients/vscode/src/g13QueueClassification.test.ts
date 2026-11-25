@@ -8,7 +8,7 @@ import {
   bindOutboxStorage,
   createDurableOutbox,
   setOutboxScope,
-} from "./outboxStorage";
+} from "./sync/outboxStorage";
 
 /**
  * G13 — every queue that carries USER WORK is durable, every telemetry-class queue is
@@ -163,11 +163,11 @@ describe("G13 — no VS Code constructor builds an unclassified queue", () => {
   const source = (name: string): string => readFileSync(path.join(here, name), "utf8");
 
   const NAMED_BY_G13 = [
-    "outboxStorage.ts",
-    "localAuditStore.ts",
+    "sync/outboxStorage.ts",
+    "audit/localAuditStore.ts",
     "runRecovery.ts",
-    "sessionsSnapshotStore.ts",
-    "auditExecution.ts",
+    "sessions/sessionsSnapshotStore.ts",
+    "audit/auditExecution.ts",
   ];
 
   /** `createOutbox(` / `createDurableOutbox(` — the only two ways a queue is built here. */
@@ -190,7 +190,7 @@ describe("G13 — no VS Code constructor builds an unclassified queue", () => {
   it("resolves the named user-work queues through classifyQueue inside createDurableOutbox", () => {
     // The stamp lives in the single shared constructor, so a caller that omits `work`
     // still inherits the right retention from its queue NAME.
-    const text = source("outboxStorage.ts");
+    const text = source("sync/outboxStorage.ts");
     expect(text).toContain("classifyQueue(name)");
     expect(text).toContain("rest.work ??");
   });
@@ -199,7 +199,7 @@ describe("G13 — no VS Code constructor builds an unclassified queue", () => {
     // `durableStepHost` builds an `OutboxStore`, not an `Outbox`: retention is stamped by
     // whoever constructs the queue around it. Asserting the shape here keeps a future
     // edit from moving queue construction into the store layer by accident.
-    const storage = source("outboxStorage.ts");
+    const storage = source("sync/outboxStorage.ts");
     const durableStepHost = storage.slice(storage.indexOf("export function durableStepHost"));
     expect(durableStepHost).toContain("storeFor");
     expect(durableStepHost).not.toMatch(/\bcreate(?:Durable)?Outbox\s*\(/);

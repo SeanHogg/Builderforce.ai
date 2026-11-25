@@ -6,13 +6,13 @@ import { createMemoryLocalFirstStore } from "@builderforce/local-first";
 import { freezeRunFeatures } from "@builderforce/run-delta/predict";
 
 vi.mock("vscode", () => ({ workspace: { workspaceFolders: [] }, l10n: { t: (m: string) => m } }));
-vi.mock("../gitChanges", () => ({ refreshPendingChanges: () => undefined, detectPendingChanges: async () => ({ repos: [] }) }));
-vi.mock("../gitApi", () => ({ getGitApi: async () => undefined, watchGitRepositories: () => ({ dispose() {} }), runGit: async () => undefined }));
+vi.mock("../git/gitChanges", () => ({ refreshPendingChanges: () => undefined, detectPendingChanges: async () => ({ repos: [] }) }));
+vi.mock("../git/gitApi", () => ({ getGitApi: async () => undefined, watchGitRepositories: () => ({ dispose() {} }), runGit: async () => undefined }));
 // Git always fails here: the labels pass must rotate past the failing batch.
 vi.mock("./outcomeGit", async (importOriginal) => ({ ...(await importOriginal<typeof import("./outcomeGit")>()), laterHistory: vi.fn(async () => undefined) }));
 
 import { nodeContentHash } from "../knowledge/nodeSha256";
-import type { LocalChangeSetValue } from "../runChangeSets";
+import type { LocalChangeSetValue } from "../run/runChangeSets";
 import { syncedRepository } from "../runDelta/runDeltaRecords";
 import { labelBatch, labelBatchOffThread } from "./labelBatch";
 import { batchAt, labelRepository, MAX_RUNS_PER_PASS } from "./localLabels";

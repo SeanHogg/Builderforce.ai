@@ -10,7 +10,7 @@ import {
   type PlatformPolicySnapshot,
   type PlatformRequestRecord,
 } from '@builderforce/local-first';
-import type { CapabilityInputs } from '../../src/capabilityStates';
+import type { CapabilityInputs } from '../../src/tools/capabilityStates';
 import { handleFrame } from './bridgeTransport';
 import { onInit } from './bridgeState';
 

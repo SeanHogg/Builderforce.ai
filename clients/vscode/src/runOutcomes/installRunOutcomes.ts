@@ -16,7 +16,7 @@ export function installRunOutcomes(deps: { store: LocalFirstStore; deviceId(): s
   const onError = (error: unknown): void => deps.log(`[run outcomes] ${messageOf(error)}`);
   let disposed = false;
   const stops: Array<() => void> = [];
-  void Promise.all([import("./commitAttribution"), import("./localLabels"), import("../gitApi")]).then(([attribution, labels, git]) => {
+  void Promise.all([import("./commitAttribution"), import("./localLabels"), import("../git/gitApi")]).then(([attribution, labels, git]) => {
     if (disposed) return;
     const watch = attribution.watchCommitAttribution({ store: deps.store, deviceId: deps.deviceId, onError });
     stops.push(() => watch.dispose());

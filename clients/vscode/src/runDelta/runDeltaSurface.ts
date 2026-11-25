@@ -11,7 +11,7 @@
 
 import { RUN_DELTA_OPEN_REFUSED, RUN_DELTA_RELEASE_REFUSED } from "@builderforce/run-delta/contract";
 import type { Prediction } from "@builderforce/run-delta/predict";
-import type { BrainRunHost } from "../brainRunHost";
+import type { BrainRunHost } from "../brain/brainRunHost";
 import { messageOf } from "../messageOf";
 
 /** The request types this module answers. */

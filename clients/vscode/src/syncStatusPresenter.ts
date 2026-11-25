@@ -20,7 +20,7 @@ import {
   type SyncStatus,
   type SyncStatusInput,
 } from "@builderforce/local-first";
-import type { LocalFirstView } from "./localFirstView";
+import type { LocalFirstView } from "./localFirst/localFirstView";
 
 export const PRESENTED_SYNC_STATUSES = ["pending", "syncing", "synced", "conflict", "dead-letter"] as const;
 

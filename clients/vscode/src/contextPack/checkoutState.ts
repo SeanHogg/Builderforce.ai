@@ -9,9 +9,9 @@
  */
 
 import * as vscode from "vscode";
-import { getGitApi } from "../gitApi";
-import { collectRepoChanges, contains, repoName } from "../gitChangeModel";
-import { detectPendingChanges } from "../gitChanges";
+import { getGitApi } from "../git/gitApi";
+import { collectRepoChanges, contains, repoName } from "../git/gitChangeModel";
+import { detectPendingChanges } from "../git/gitChanges";
 import { DIRTY_FILES_SHOWN, type ContextPackRepo } from "./renderContextPack";
 
 function workspaceFolders(): string[] {

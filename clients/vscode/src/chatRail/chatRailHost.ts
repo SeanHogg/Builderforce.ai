@@ -9,9 +9,9 @@
 
 import type * as vscode from "vscode";
 import { authed } from "../bfApi";
-import { activeEntityScope } from "../chatAccount";
-import { localBrainApplication } from "../localFirstStore";
-import { platformCapabilityAllows } from "../platformPolicy";
+import { activeEntityScope } from "../auth/chatAccount";
+import { localBrainApplication } from "../localFirst/localFirstStore";
+import { platformCapabilityAllows } from "../platform/platformPolicy";
 import { hostSyncSummaryPorts } from "../sync/hostSyncSummary";
 import { readSyncSummary } from "../sync/syncSummary";
 import { parseChatRailRequest } from "./railRequest";

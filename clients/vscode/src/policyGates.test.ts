@@ -14,10 +14,10 @@ vi.mock("./bfApi", () => ({
 }));
 // "Signed in" = an editor key is stored. Default: signed out (no key).
 const getApiKey = vi.fn(async (): Promise<string | undefined> => undefined);
-vi.mock("./gateway", () => ({ getApiKey: () => getApiKey() }));
+vi.mock("./gateway/gateway", () => ({ getApiKey: () => getApiKey() }));
 
 import { POLICY_GATES_FRESH_MS, POLICY_GATES_STALE_MS, PolicyGatesUnavailableError, configurePolicyGatesPersistence, resetPolicyGatesCache, resolveRunPolicyGates } from "./policyGates";
-import { createPolicyGatesPersistence, loadPolicySnapshot, snapshotPermitsOfflineRun } from "./policySnapshots";
+import { createPolicyGatesPersistence, loadPolicySnapshot, snapshotPermitsOfflineRun } from "./platform/policySnapshots";
 
 const secrets = {} as never;
 

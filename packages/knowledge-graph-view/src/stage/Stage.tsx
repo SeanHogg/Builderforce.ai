@@ -68,6 +68,12 @@ export interface StageProps {
      * not already on that side of flat, so the person's own drag is never snapped back.
      */
     tilt?: number;
+    /** Bumped to put the view back: the camera fitted and the tilt up, whatever the person dragged it to. */
+    resetTilt?: number;
+    /** A plain mouse wheel moved one level (the Map's stepped zoom); absent ⇒ the wheel zooms continuously. */
+    onWheelStep?: (dir: 1 | -1) => void;
+    /** A click on empty space (not a drag, not a mark or a link). */
+    onClear?: () => void;
     /** The depth control moved (the person's drag). */
     onTilt?: (depth: number) => void;
     /** The WebGL context was lost and did not come back: the host falls back to the List. */
@@ -204,7 +210,7 @@ export function Stage(p: StageProps) {
         bus.settle();
         bus.invalidate();
     }, [renderer, bus, dpr]);
-    const rig = useRig(placement, width, height, p.reducedMotion, box, settle);
+    const rig = useRig(placement, width, height, p.reducedMotion, box, settle, p.onWheelStep);
     rigRef.current = rig;
     const panZoom = useMemo(() => panZoomOf(rig, p.reducedMotion, settle), [rig, p.reducedMotion, settle]);
     // The semantic zoom (outside this component) flies and reads the same rig through the bus.
@@ -217,6 +223,15 @@ export function Stage(p: StageProps) {
         if (t === undefined || !ready) return;
         if (t > 0 ? rig.depth === 0 : rig.depth > 0) setDepth(t);
     }, [p.tilt, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Reset view: the camera fitted, and the tilt put back up.
+    const resets = useRef(p.resetTilt ?? 0);
+    useEffect(() => {
+        if (!ready || (p.resetTilt ?? 0) === resets.current) return;
+        resets.current = p.resetTilt ?? 0;
+        setDepth(1);
+        rig.fit(now(), p.reducedMotion ? 0 : TWEEN_MS);
+        settle();
+    }, [p.resetTilt, ready]); // eslint-disable-line react-hooks/exhaustive-deps
     const onTilt = p.onTilt;
     const dragDepth = useCallback((d: number) => { setDepth(d); onTilt?.(d); }, [setDepth, onTilt]);
 
@@ -255,7 +270,7 @@ export function Stage(p: StageProps) {
                     )
                     : <NoCanvas {...scene} bus={bus} />}
                 {placement && <CaptionLayer ref={captions} captions={placement.captions} names={names} hidden={tweening} />}
-                {placement && <StageInteraction bus={bus} renderer={renderer} keys={keys} placement={placement} tweening={tweening} selected={p.selected} description={p.description} onSelect={p.onSelect} onOut={p.onOut} onDrill={p.onDrill} />}
+                {placement && <StageInteraction bus={bus} renderer={renderer} keys={keys} placement={placement} tweening={tweening} selected={p.selected} description={p.description} onSelect={p.onSelect} onOut={p.onOut} onDrill={p.onDrill} onClear={p.onClear} />}
                 {placement && (
                     <StageCorner boxHeight={height} legend={legend}>
                         {p.nav && <NavControl rig={rig} panZoom={panZoom} labels={p.nav} onSettle={settle} />}

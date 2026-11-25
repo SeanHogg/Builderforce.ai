@@ -5,7 +5,10 @@
  *     next definition in the same file (records name only where a definition starts), at most {@link MAX_SPAN} lines;
  *   - {@link syntaxLight}: a syntax-LIGHT tokenizer (comments, strings, numbers, keywords; no grammar, no dependency),
  *     carrying a block comment across lines;
- *   - {@link visibleWindow}: the rows a virtualized panel renders for a scroll offset.
+ *   - {@link visibleWindow}: the rows a virtualized panel renders for a scroll offset;
+ *   - the editor chrome read off the records: {@link callerIndex}, {@link lensRows} and {@link codeRows} (lens lines
+ *     between source rows, one row height), {@link railKinds} (the gutter's type rail), {@link stickyChain} and
+ *     {@link refsInView} (what Follow keeps lit on the stage).
  */
 
 import type { CallSite } from '@seanhogg/builderforce-memory/knowledge';
@@ -35,17 +38,189 @@ export function readingLineAt(scrollTop: number, viewPx: number, firstLine: numb
     return rowPx > 0 ? firstLine + Math.floor((scrollTop + viewPx * READING_AT) / rowPx) : firstLine;
 }
 
-/** One numbered call in a method's code: the line it is on and the ref it calls. */
-export interface CallStep { line: number; to: string }
+/** What a numbered step does to its target: a call, a read (memory's `uses`), or a call up to the class it extends. */
+export type StepKind = 'calls' | 'reads' | 'extends';
 
-/** `ref`'s call sites in call order (its record's `calls` relations, `compareCallSites`), one step per site with a line. */
+/** One numbered step in a method's code: the line it is on, the ref it reaches and how. */
+export interface CallStep { line: number; to: string; kind: StepKind }
+
+/** The relation kinds that number a step, by the step kind they make (memory names a read `uses`). */
+const STEP_KIND: Readonly<Record<string, StepKind>> = { calls: 'calls', reads: 'reads', uses: 'reads', extends: 'extends' };
+
+/** `ref`'s sites in call order (its record's `calls`, `reads` / `uses` and `extends` relations, `compareCallSites`), one step per site with a line. */
 export function callStepsOf(ref: string, records: readonly SymbolRecord[]): CallStep[] {
     const r = records.find((x) => x.ref === ref);
     if (!r?.relations) return [];
-    const sites: { site: CallSite; to: string }[] = [];
-    for (const rel of r.relations) if (rel.kind === 'calls') for (const site of rel.sites ?? []) sites.push({ site, to: rel.to });
-    return sites.sort((a, b) => compareCallSites(a.site, b.site)).filter((s) => s.site.line > 0).map((s) => ({ line: s.site.line, to: s.to }));
+    const sites: { site: CallSite; to: string; kind: StepKind }[] = [];
+    for (const rel of r.relations) {
+        const kind = STEP_KIND[rel.kind];
+        if (kind) for (const site of rel.sites ?? []) sites.push({ site, to: rel.to, kind });
+    }
+    return sites.sort((a, b) => compareCallSites(a.site, b.site)).filter((s) => s.site.line > 0).map((s) => ({ line: s.site.line, to: s.to, kind: s.kind }));
 }
+
+const CALLERS = new WeakMap<readonly SymbolRecord[], ReadonlyMap<string, readonly string[]>>();
+
+/** Each ref's callers (the `calls` relations inverted), in record order, once each. Built once per `records` array. */
+export function callerIndex(records: readonly SymbolRecord[]): ReadonlyMap<string, readonly string[]> {
+    const hit = CALLERS.get(records);
+    if (hit) return hit;
+    const out = new Map<string, string[]>();
+    for (const r of records) {
+        for (const rel of r.relations ?? []) {
+            if (rel.kind !== 'calls') continue;
+            const list = out.get(rel.to);
+            if (!list) out.set(rel.to, [r.ref]);
+            else if (!list.includes(r.ref)) list.push(r.ref);
+        }
+    }
+    CALLERS.set(records, out);
+    return out;
+}
+
+/** How the code pane sorts a symbol: a type, a callable, or anything else a class holds (a field, a constant). */
+export type RailKind = 'class' | 'method' | 'field';
+
+const CLASS_KINDS: ReadonlySet<string> = new Set(['class', 'interface', 'struct', 'trait', 'enum', 'type', 'module']);
+const METHOD_KINDS: ReadonlySet<string> = new Set(['method', 'function']);
+
+/** A record kind's {@link RailKind}. */
+export function railKindOf(kind: string): RailKind {
+    return CLASS_KINDS.has(kind) ? 'class' : METHOD_KINDS.has(kind) ? 'method' : 'field';
+}
+
+/** A path's last segment. */
+export const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
+
+export interface SymbolCounts { methods: number; fields: number; calls: number; callers: number }
+
+/** What the symbol card says about `ref`: its methods and fields (the records whose `parent` it is), its calls and its callers. */
+export function symbolCounts(ref: string, records: readonly SymbolRecord[]): SymbolCounts {
+    let methods = 0, fields = 0;
+    for (const r of records) {
+        if (r.parent !== ref) continue;
+        const kind = railKindOf(r.kind);
+        if (kind === 'method') methods++; else if (kind === 'field') fields++;
+    }
+    return { methods, fields, calls: callStepsOf(ref, records).length, callers: callerIndex(records).get(ref)?.length ?? 0 };
+}
+
+const SPANS = new WeakMap<readonly SymbolRecord[], ReadonlyMap<string, CodeTarget>>();
+
+/** Each of a file's symbols with its lines (`codeTargetOf`), computed once per `fileSymbols` array (`symbolsOfFile`). */
+function spansOf(fileSymbols: readonly SymbolRecord[], records: readonly SymbolRecord[]): ReadonlyMap<string, CodeTarget> {
+    const hit = SPANS.get(fileSymbols);
+    if (hit) return hit;
+    const out = new Map<string, CodeTarget>();
+    for (const r of fileSymbols) { const t = codeTargetOf(r.ref, records); if (t) out.set(r.ref, t); }
+    SPANS.set(fileSymbols, out);
+    return out;
+}
+
+/** A lens line above a definition: the class or method it is for and its count (a class's references, a method's callers). */
+export interface Lens { ref: string; kind: 'class' | 'method'; count: number }
+
+/**
+ * The lens per definition line of `fileSymbols` (classes and methods only; the first definition on a line wins): a
+ * method counts its callers (`callers`, {@link callerIndex}), a class the symbols outside it with a relation to it or to
+ * one of its members.
+ */
+export function lensRows(fileSymbols: readonly SymbolRecord[], records: readonly SymbolRecord[], callers: ReadonlyMap<string, readonly string[]>): Map<number, Lens> {
+    const out = new Map<number, Lens>();
+    for (const r of fileSymbols) {
+        const kind = railKindOf(r.kind);
+        if (kind === 'field' || out.has(r.line)) continue;
+        out.set(r.line, { ref: r.ref, kind, count: kind === 'method' ? callers.get(r.ref)?.length ?? 0 : referencesOf(r.ref, records) });
+    }
+    return out;
+}
+
+/** The records outside class `ref` (not it, not its members) with a relation to it or to one of its members. */
+function referencesOf(ref: string, records: readonly SymbolRecord[]): number {
+    const inside = new Set<string>([ref]);
+    for (const r of records) if (r.parent === ref) inside.add(r.ref);
+    let n = 0;
+    for (const r of records) if (!inside.has(r.ref) && r.relations?.some((rel) => inside.has(rel.to))) n++;
+    return n;
+}
+
+/** A code row: a source line, or the lens line above the definition of `lens`. */
+export type Row = { line: number } | { lens: string };
+
+export interface CodeRows {
+    rows: Row[];
+    /** The row index of source `line`: its lens row when it has one (a jump to a definition shows its lens), else its own; clamped to the rows. */
+    rowOfLine(line: number): number;
+    /** The source line of row `row` (a lens row: the definition below it); clamped to the rows. */
+    lineAtRow(row: number): number;
+}
+
+/** The rows of `count` source lines from `first`, a lens row above each line in `lens`. Every row is one height, so a row index is an offset. */
+export function codeRows(count: number, first: number, lens: ReadonlyMap<number, { ref: string }> | null | undefined): CodeRows {
+    const rows: Row[] = [];
+    const rowOf = new Int32Array(Math.max(count, 0));
+    for (let n = 0; n < count; n++) {
+        const line = first + n, l = lens?.get(line);
+        rowOf[n] = rows.length;
+        if (l) rows.push({ lens: l.ref });
+        rows.push({ line });
+    }
+    const lineAt = (row: number): number => {
+        const i = Math.min(Math.max(row, 0), rows.length - 1);
+        const at = rows[i];
+        if (!at) return first;
+        return 'line' in at ? at.line : (rows[i + 1] as { line: number }).line;
+    };
+    return {
+        rows,
+        rowOfLine: (line) => count > 0 ? rowOf[Math.min(Math.max(line - first, 0), count - 1)]! : 0,
+        lineAtRow: lineAt,
+    };
+}
+
+/** The innermost symbol kind on each line (the shortest `codeTargetOf` span covering it): the gutter's type rail. */
+export function railKinds(fileSymbols: readonly SymbolRecord[], records: readonly SymbolRecord[]): Map<number, RailKind> {
+    const spans = spansOf(fileSymbols, records);
+    const out = new Map<number, RailKind>(), width = new Map<number, number>();
+    for (const r of fileSymbols) {
+        const t = spans.get(r.ref);
+        if (!t) continue;
+        const kind = railKindOf(r.kind), w = t.endLine - t.startLine;
+        for (let l = t.startLine; l <= t.endLine; l++) {
+            if ((width.get(l) ?? Number.POSITIVE_INFINITY) <= w) continue;
+            width.set(l, w);
+            out.set(l, kind);
+        }
+    }
+    return out;
+}
+
+/** At most this many enclosing symbols stay pinned above the code. */
+export const STICKY_MAX = 2;
+
+/** The sticky header at `firstLine` (the top visible line): the enclosing classes and methods that start above it, innermost {@link STICKY_MAX}, outermost first. */
+export function stickyChain(fileSymbols: readonly SymbolRecord[], byRef: ReadonlyMap<string, SymbolRecord>, firstLine: number): SymbolRecord[] {
+    return symbolChain(symbolAtLine(fileSymbols, firstLine), byRef)
+        .filter((r) => r.line < firstLine && railKindOf(r.kind) !== 'field')
+        .slice(-STICKY_MAX);
+}
+
+/** The symbols whose lines meet `[first, last]` (the code on screen), each followed by its file's ref the first time. */
+export function refsInView(fileSymbols: readonly SymbolRecord[], records: readonly SymbolRecord[], first: number, last: number): string[] {
+    const spans = spansOf(fileSymbols, records);
+    const out: string[] = [], seen = new Set<string>();
+    const add = (ref: string) => { if (!seen.has(ref)) { seen.add(ref); out.push(ref); } };
+    for (const r of fileSymbols) {
+        const t = spans.get(r.ref);
+        if (!t || t.endLine < first || t.startLine > last) continue;
+        add(r.ref);
+        add(fileRefOf(r.ref));
+    }
+    return out;
+}
+
+/** A call on a line that awaits (the step card's awaited / sync chip). */
+export const isAwaited = (text: string): boolean => /\bawait\b/.test(text);
 
 /** The step on the reading line: the nearest step at or above it inside `span`; -1 outside the span or before the first call. Calls sharing a line: the first wins. */
 export function stepAt(steps: readonly CallStep[], line: number, span: { startLine: number; endLine: number } | null): number {

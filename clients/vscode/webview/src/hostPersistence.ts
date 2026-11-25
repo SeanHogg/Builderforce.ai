@@ -1,5 +1,5 @@
 import type { BrainPersistenceAdapter, InlinedAttachments } from '@seanhogg/builderforce-brain-embedded';
-import type { LocalPersistenceMethod } from '../../src/bridgeProtocol';
+import type { LocalPersistenceMethod } from '../../src/panels/bridgeProtocol';
 import { request } from './bridgeTransport';
 import { keepLocalThroughHost, newAttachmentUploadState, signThroughHost, uploadThroughHost, type AttachmentUploadPorts, type SavedAttachment } from './attachmentUpload';
 

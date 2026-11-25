@@ -13,8 +13,8 @@
  */
 
 import type { SideText, UnresolvedFile } from "@builderforce/run-delta";
-import { fingerprintHash } from "../runChangeBaseline";
-import type { LocalChangeSetValue } from "../runChangeSets";
+import { fingerprintHash } from "../run/runChangeBaseline";
+import type { LocalChangeSetValue } from "../run/runChangeSets";
 import { isCommitId, repoGit } from "./gitSide";
 import { SideTexts, type PreimageReader } from "./sideTexts";
 

@@ -1,5 +1,5 @@
 import type * as vscode from "vscode";
-import { getApiKey, getBaseUrl } from "../gateway";
+import { getApiKey, getBaseUrl } from "../gateway/gateway";
 import { authed } from "./transport";
 
 /**

@@ -26,11 +26,11 @@ vi.mock("vscode", () => ({
 vi.mock("../bfApi", () => ({
   fetchAuthed: async (_secrets: unknown, requested: string): Promise<undefined> => { mocks.requests.push(requested); return undefined; },
 }));
-vi.mock("../projectState", () => ({ getSelectedProject: () => ({ id: 7, name: "persisted-while-signed-out" }) }));
-vi.mock("../capabilityContext", () => ({ currentCapabilityInputs: () => mocks.inputs }));
+vi.mock("../project/projectState", () => ({ getSelectedProject: () => ({ id: 7, name: "persisted-while-signed-out" }) }));
+vi.mock("../tools/capabilityContext", () => ({ currentCapabilityInputs: () => mocks.inputs }));
 vi.mock("../errorReporter", () => ({ logLine: vi.fn() }));
-vi.mock("../localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
-vi.mock("../workspaceSymbols", () => ({ workspaceSymbolIndex: () => ({ filesUnder: async () => [] }) }));
+vi.mock("../tools/localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
+vi.mock("../workspace/workspaceSymbols", () => ({ workspaceSymbolIndex: () => ({ filesUnder: async () => [] }) }));
 vi.mock("./index/hostKnowledgeIndex", () => ({ getHostKnowledgeIndex: async () => undefined }));
 vi.mock("./knowledgeFs", () => ({
   vscodeKnowledgeFs: () => ({ readDirectory: async () => { throw new Error("ENOENT"); }, stat: async () => { throw new Error("ENOENT"); }, readFile: async () => new Uint8Array() }),

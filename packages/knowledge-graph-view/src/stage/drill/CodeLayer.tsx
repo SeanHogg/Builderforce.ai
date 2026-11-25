@@ -2,19 +2,27 @@
  * The code pane's source (PRD 43 B1a rule 9, deepest zoom): a file's source, read through the host's `readSource` port
  * (range by symbol span, `codeTargetOf`), filling the code pane (`CodeDock`). Read-only here (editing is the editing
  * PRD's). Monospace and syntax-light (`syntaxLight`, no highlighter dependency), coloured by theme tokens, virtualized
- * past `VIRTUAL_AFTER` lines. "Open at line" hands over to the host's editor (`onOpenSource`); Escape in the lines is Out.
+ * past `VIRTUAL_AFTER` rows. "Open at line" hands over to the host's editor (`onOpenSource`); Escape in the lines is Out.
+ *
+ * The docked pane adds an editor's chrome, all optional: a type rail in the gutter (`rails`), a lens line above each
+ * class and method (`lens`, one row tall like every row, so the virtualized panel stays fixed-height and a row index
+ * stays an offset: `codeRows`), a sticky header naming the enclosing symbols (`sticky`), and a clicked line read
+ * instead of the reading line (`onPickLine` / `cursorLine`).
  *
  * No port (the web has no file contents) or a refused read: the panel shows `path:line`, says the code is not
  * available here, and still offers "Open at line" when the host can open one.
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
 import { CONTROL } from '../../styles';
 import { TYPE } from '../../surface/ui/type';
 import type { SourceLocation, SourceReader, SourceText, SymbolRecord } from '../../types';
-import { drillRefForName, readingLineAt, scrollTopForLine, syntaxLight, visibleWindow, VIRTUAL_AFTER, type CallStep, type CodeTarget, type TokenKind } from './codeText';
+import {
+    codeRows, drillRefForName, readingLineAt, scrollTopForLine, syntaxLight, visibleWindow, VIRTUAL_AFTER,
+    type CallStep, type CodeTarget, type Lens, type RailKind, type TokenKind,
+} from './codeText';
 
 export interface CodeLayerProps {
     target: CodeTarget;
@@ -42,7 +50,30 @@ export interface CodeLayerProps {
     onStep?: ((index: number) => void) | undefined;
     /** The lines of the symbol hovered on the stage; those rows are tinted. */
     marked?: { startLine: number; endLine: number } | null | undefined;
+    /** The source lines on screen whenever they change (after a scroll or a measure). */
+    onViewport?: ((first: number, last: number) => void) | undefined;
+    /** The text read, once per read. */
+    onText?: ((text: SourceText) => void) | undefined;
+    /** A row was clicked: read that line (`useCodeReading.pickLine`). */
+    onPickLine?: ((line: number) => void) | undefined;
+    /** A clicked line: it is the reading row until the code scrolls. */
+    cursorLine?: number | null | undefined;
+    /** The innermost symbol kind per line (`railKinds`): a type rail before the line number. */
+    rails?: ReadonlyMap<number, RailKind> | null | undefined;
+    /** The lines of the symbol being read: their rail is the accent. */
+    railSpan?: { startLine: number; endLine: number } | null | undefined;
+    /** A lens line above each class and method (`lensRows`). */
+    lens?: ReadonlyMap<number, Lens> | null | undefined;
+    /** A lens link was clicked. */
+    onLens?: ((action: LensAction, lens: Lens) => void) | undefined;
+    /** The enclosing symbols pinned above the code for its top line (`stickyChain`). */
+    sticky?: ((firstLine: number) => readonly SymbolRecord[]) | undefined;
+    /** A sticky row was clicked: go to its line. */
+    onJump?: ((line: number) => void) | undefined;
 }
+
+/** A lens link: a class's references, Show in map; a method's callers, Drill in. */
+export type LensAction = 'references' | 'show' | 'callers' | 'drill';
 
 /** One code row's height (px), and the rows a virtualized panel renders before it has measured itself. */
 export const ROW_PX = 18;
@@ -51,6 +82,11 @@ const VIEW_ROWS = 16;
 const READING_TINT = `color-mix(in srgb, ${cssVar('text')} 5%, transparent)`;
 const MARKED_TINT = `color-mix(in srgb, ${cssVar('accent')} 14%, transparent)`;
 const OUTSIDE_OPACITY = 0.3;
+const RAIL_PX = 3;
+const STICKY_SHADOW = '0 2px 6px color-mix(in srgb, currentColor 18%, transparent)';
+
+/** The gutter rail's tone per symbol kind (the rows of the symbol being read take the accent instead). */
+export const RAIL_TONE: Readonly<Record<RailKind, ThemeTone>> = { class: 'line3', method: 'nodeSymbol', field: 'nodeEntity' };
 
 /** A name in running text that acts (a drillable method, a trail crumb): underlined, otherwise the text. */
 export const LINK_BUTTON: CSSProperties = { border: 0, padding: 0, font: 'inherit', color: 'inherit', background: 'transparent', cursor: 'pointer', textDecoration: 'underline' };
@@ -62,7 +98,7 @@ function CodeToken({ tok, path, records, onDrill, drillAria }: { tok: { text: st
     const ref = tok.kind === 'plain' && onDrill ? drillRefForName(tok.text, records, path) : null;
     if (!ref || !onDrill) return <span style={tok.kind === 'plain' ? undefined : { color: cssVar(TOKEN_TONE[tok.kind]) }}>{tok.text}</span>;
     return (
-        <button type="button" data-code-drill={ref} aria-label={fillTemplate(drillAria, { name: tok.text })} onClick={() => onDrill(ref)} style={LINK_BUTTON}>
+        <button type="button" data-code-drill={ref} aria-label={fillTemplate(drillAria, { name: tok.text })} onClick={(e) => { e.stopPropagation(); onDrill(ref); }} style={LINK_BUTTON}>
             {tok.text}
         </button>
     );
@@ -73,7 +109,7 @@ function StepBadge({ n, count, current, aria, onClick }: { n: number; count: num
     const style: CSSProperties = { display: 'inline-block', minWidth: '2ch', borderRadius: 8, ...TYPE.meta, fontWeight: 700, lineHeight: `${ROW_PX - 4}px`, background: cssVar(current ? 'partner' : 'accent'), color: cssVar('onAccent') };
     const props = { 'data-code-step': n, 'data-current': current ? '' : undefined, 'aria-label': fillTemplate(aria, { n, count }) };
     if (!onClick) return <span {...props} style={style}>{n}</span>;
-    return <button type="button" {...props} onClick={onClick} style={{ ...style, border: 0, padding: 0, font: 'inherit', cursor: 'pointer' }}>{n}</button>;
+    return <button type="button" {...props} onClick={(e) => { e.stopPropagation(); onClick(); }} style={{ ...style, border: 0, padding: 0, font: 'inherit', cursor: 'pointer' }}>{n}</button>;
 }
 
 type Read = { state: 'loading' } | { state: 'ready'; text: SourceText } | { state: 'none' };
@@ -99,27 +135,58 @@ const button: CSSProperties = {
     border: `1px solid ${cssVar('accent')}`, background: cssVar('accent'), color: cssVar('onAccent'),
 };
 
-export function CodeLayer({ target, reader, labels, onOpenSource, onClose, onOut, scrollLine, records = [], onDrill, onReadingLine, steps, currentStep = -1, span, onStep, marked }: CodeLayerProps) {
+/** A lens link: muted, the acting one (Show in map, Drill in) on the accent; plain text when nothing handles it. */
+function LensLink({ text, go = false, onClick }: { text: string; go?: boolean; onClick?: (() => void) | undefined }) {
+    const style: CSSProperties = { color: cssVar(go ? 'accent' : 'muted') };
+    if (!onClick) return <span style={style}>{text}</span>;
+    return <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} style={{ ...LINK_BUTTON, ...style, textDecoration: 'none' }}>{text}</button>;
+}
+
+/** The lens line above a definition: a class's references and Show in map, a method's callers and Drill in. */
+function LensLine({ lens, labels, onLens }: { lens: Lens; labels: KnowledgeGraphLabels; onLens?: ((action: LensAction, lens: Lens) => void) | undefined }) {
+    const t = labels.surface.code;
+    const act = (action: LensAction) => onLens ? () => onLens(action, lens) : undefined;
+    if (lens.kind === 'class') {
+        return <><LensLink text={fillTemplate(t.lensReferences, { count: lens.count })} onClick={act('references')} />{' · '}<LensLink go text={t.showInMap} onClick={act('show')} /></>;
+    }
+    const callers = fillTemplate(lens.count === 1 ? t.lensCaller : t.lensCallers, { count: lens.count });
+    return <><LensLink text={callers} onClick={act('callers')} />{' · '}<LensLink go text={t.drillIn} onClick={act('drill')} /></>;
+}
+
+export function CodeLayer({
+    target, reader, labels, onOpenSource, onClose, onOut, scrollLine, records = [], onDrill, onReadingLine, steps, currentStep = -1, span, onStep, marked,
+    onViewport, onText, onPickLine, cursorLine, rails, railSpan, lens, onLens, sticky, onJump,
+}: CodeLayerProps) {
     const t = labels.surface.code, card = labels.surface.map.card;
     const linesRef = useRef<HTMLDivElement | null>(null);
     const read = useSourceLines(reader, target);
     const lines = read.state === 'ready' ? read.text.lines : [];
     const first = read.state === 'ready' ? read.text.startLine : target.startLine;
     const tokens = useMemo(() => syntaxLight(lines), [lines]);
+    // Source rows with a lens row above each lens line; every row is ROW_PX, so scrolling works in rows and maps to lines.
+    const layout = useMemo(() => codeRows(lines.length, first, lens), [lines.length, first, lens]);
     const [scrollTop, setScrollTop] = useState(0);
     const [viewPx, setViewPx] = useState(0);
     useLayoutEffect(() => { setViewPx(linesRef.current?.clientHeight ?? 0); }, [read.state]);
+    useEffect(() => { if (read.state === 'ready') onText?.(read.text); }, [read, onText]);
     // Only a following panel has a reading line below the top; the anchored layer keeps scrolling lines to the top.
     const lead = onReadingLine ? viewPx : 0;
     // Selection and the journey step both hand a source line; the panel scrolls so that line is the one on show.
     useEffect(() => {
         if (scrollLine == null) return;
-        const top = scrollTopForLine(scrollLine, first, ROW_PX, lead);
+        const top = scrollTopForLine(layout.rowOfLine(scrollLine), 0, ROW_PX, lead);
         setScrollTop(top);
         if (linesRef.current && linesRef.current.scrollTop !== top) linesRef.current.scrollTop = top;
-    }, [scrollLine, first, lead]);
-    const reading = readingLineAt(scrollTop, lead, first, ROW_PX);
-    useEffect(() => { if (read.state === 'ready') onReadingLine?.(reading); }, [reading, read.state, onReadingLine]);
+    }, [scrollLine, layout, lead]);
+    const reading = layout.lineAtRow(readingLineAt(scrollTop, lead, 0, ROW_PX));
+    // Reported when the line moves, not when a handler is new (a re-run would drop a clicked line or a pinned step).
+    const reported = useRef<number | null>(null);
+    useEffect(() => {
+        if (read.state !== 'ready') { reported.current = null; return; }
+        if (reported.current === reading) return;
+        reported.current = reading;
+        onReadingLine?.(reading);
+    }, [reading, read.state, onReadingLine]);
     // The first call on a line owns its badge.
     const stepByLine = useMemo(() => {
         const m = new Map<number, number>();
@@ -127,12 +194,40 @@ export function CodeLayer({ target, reader, labels, onOpenSource, onClose, onOut
         return m;
     }, [steps]);
     const stepCount = steps?.length ?? 0;
-    const { from, to } = visibleWindow(lines.length, scrollTop, ROW_PX, viewPx > 0 ? Math.ceil(viewPx / ROW_PX) : VIEW_ROWS);
-    const virtual = lines.length > VIRTUAL_AFTER;
+    const total = layout.rows.length;
+    const { from, to } = visibleWindow(total, scrollTop, ROW_PX, viewPx > 0 ? Math.ceil(viewPx / ROW_PX) : VIEW_ROWS);
+    const virtual = total > VIRTUAL_AFTER;
+    // The lines on screen: the rows the panel's height shows (before it has measured, the rows it renders).
+    const viewFirst = layout.lineAtRow(Math.floor(scrollTop / ROW_PX));
+    const viewLast = layout.lineAtRow(viewPx > 0 ? Math.ceil((scrollTop + viewPx) / ROW_PX) - 1 : to - 1);
+    const viewed = useRef('');
+    useEffect(() => {
+        if (read.state !== 'ready') { viewed.current = ''; return; }
+        const key = `${viewFirst}:${viewLast}`;
+        if (viewed.current === key) return;
+        viewed.current = key;
+        onViewport?.(viewFirst, viewLast);
+    }, [viewFirst, viewLast, read.state, onViewport]);
+    const stuck = useMemo(() => read.state === 'ready' && sticky ? sticky(viewFirst) : [], [read.state, sticky, viewFirst]);
     const last = first + Math.max(lines.length, 1) - 1;
     const openLine = scrollLine ?? target.startLine;
     const where = `${target.path}:${openLine}`;
     const gutter = `${String(last).length + 1}ch`;
+    const readRow = cursorLine ?? reading;
+    const railOf = (n1: number) => {
+        if (!rails) return null;
+        const kind = rails.get(n1);
+        const on = inSpan(railSpan, n1);
+        const tone = on ? cssVar('accent') : kind ? cssVar(RAIL_TONE[kind]) : 'transparent';
+        return <span aria-hidden="true" data-rail={kind} data-rail-on={on ? '' : undefined} style={{ flex: `0 0 ${RAIL_PX}px`, background: tone }} />;
+    };
+    const numberOf = (n1: number | null) => <span aria-hidden="true" style={{ flex: `0 0 ${gutter}`, textAlign: 'right', paddingRight: 8, color: cssVar('muted') }}>{n1}</span>;
+    const textOf = (n1: number, drill: boolean) => (
+        <span>{(tokens[n1 - first] ?? []).map((tok, k) => <CodeToken key={k} tok={tok} path={target.path} records={records} onDrill={drill ? onDrill : undefined} drillAria={t.drillAria} />)}</span>
+    );
+    const stepColumn = (content?: ReactNode) => stepCount > 0 && <span style={{ flex: '0 0 3ch', textAlign: 'center' }}>{content}</span>;
+    const placed = (r: number): CSSProperties => virtual ? { position: 'absolute', top: r * ROW_PX, left: 0, right: 0 } : {};
+    const rowBox: CSSProperties = { display: 'flex', height: ROW_PX, lineHeight: `${ROW_PX}px`, whiteSpace: 'pre' };
 
     return (
         <div
@@ -156,30 +251,58 @@ export function CodeLayer({ target, reader, labels, onOpenSource, onClose, onOut
                     onKeyDown={onOut ? (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onOut(); } } : undefined}
                     style={{ ...TYPE.mono, minHeight: 0, overflow: 'auto', background: cssVar('panel'), borderRadius: 6, padding: '4px 0' }}
                 >
-                    <div style={{ position: 'relative', height: virtual ? lines.length * ROW_PX : undefined, minWidth: 'max-content' }}>
-                        {tokens.slice(from, to).map((row, i) => {
-                            const n = from + i, n1 = first + n;
-                            const isReading = !!onReadingLine && n1 === reading;
-                            const outside = !!span && (n1 < span.startLine || n1 > span.endLine);
-                            const isMarked = !!marked && n1 >= marked.startLine && n1 <= marked.endLine;
+                    {/* No height of its own, so the rows below keep their offsets: the header draws over the top rows. */}
+                    {stuck.length > 0 && (
+                        <div role="group" data-code-sticky aria-label={t.stickyAria} style={{ position: 'sticky', top: 0, zIndex: 1, height: 0, overflow: 'visible' }}>
+                            <div style={{ background: cssVar('bg'), boxShadow: STICKY_SHADOW, minWidth: 'max-content' }}>
+                                {stuck.map((r) => (
+                                    <button
+                                        key={r.ref} type="button" data-sticky-line={r.line} onClick={onJump ? () => onJump(r.line) : undefined}
+                                        style={{ ...rowBox, width: '100%', border: 0, padding: 0, font: 'inherit', color: 'inherit', background: 'transparent', cursor: onJump ? 'pointer' : 'default', textAlign: 'left' }}
+                                    >
+                                        {railOf(r.line)}{numberOf(r.line)}{stepColumn()}{textOf(r.line, false)}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    <div style={{ position: 'relative', height: virtual ? total * ROW_PX : undefined, minWidth: 'max-content' }}>
+                        {layout.rows.slice(from, to).map((row, i) => {
+                            const r = from + i;
+                            if ('lens' in row) {
+                                const at = layout.lineAtRow(r), l = lens?.get(at);
+                                if (!l) return null;
+                                // The lens sits at the definition's indent, as in an editor.
+                                const indent = /^\s*/.exec(lines[at - first] ?? '')?.[0] ?? '';
+                                return (
+                                    <div key={`lens:${row.lens}`} data-code-lens={row.lens} data-lens-kind={l.kind} style={{ ...rowBox, ...TYPE.meta, lineHeight: `${ROW_PX}px`, ...placed(r), opacity: span && !inSpan(span, at) ? OUTSIDE_OPACITY : undefined }}>
+                                        {rails && <span aria-hidden="true" style={{ flex: `0 0 ${RAIL_PX}px` }} />}
+                                        {numberOf(null)}
+                                        {stepColumn()}
+                                        <span>{indent}<LensLine lens={l} labels={labels} onLens={onLens} /></span>
+                                    </div>
+                                );
+                            }
+                            const n1 = row.line;
+                            const isReading = !!onReadingLine && n1 === readRow;
+                            const outside = !!span && !inSpan(span, n1);
+                            const isMarked = inSpan(marked, n1);
                             const step = stepByLine.get(n1);
                             const isCall = steps?.[currentStep]?.line === n1;
                             return (
                                 <div
-                                    key={n} data-code-line={n1} data-reading={isReading ? '' : undefined} data-marked={isMarked ? '' : undefined} data-call-site={isCall ? '' : undefined}
+                                    key={n1} data-code-line={n1} data-reading={isReading ? '' : undefined} data-marked={isMarked ? '' : undefined} data-call-site={isCall ? '' : undefined}
+                                    onClick={onPickLine ? () => onPickLine(n1) : undefined}
                                     style={{
-                                        display: 'flex', height: ROW_PX, lineHeight: `${ROW_PX}px`, whiteSpace: 'pre', ...(virtual ? { position: 'absolute', top: n * ROW_PX, left: 0, right: 0 } : {}),
+                                        ...rowBox, ...placed(r),
                                         background: isCall ? `color-mix(in srgb, ${cssVar('partner')} 16%, transparent)` : isReading ? READING_TINT : isMarked ? MARKED_TINT : undefined,
                                         boxShadow: isCall ? `inset 2px 0 0 ${cssVar('partner')}` : undefined, opacity: outside ? OUTSIDE_OPACITY : undefined,
                                     }}
                                 >
-                                    <span aria-hidden="true" style={{ flex: `0 0 ${gutter}`, textAlign: 'right', paddingRight: 8, color: cssVar('muted') }}>{n1}</span>
-                                    {stepCount > 0 && (
-                                        <span style={{ flex: '0 0 3ch', textAlign: 'center' }}>
-                                            {step != null && <StepBadge n={step + 1} count={stepCount} current={isCall} aria={t.stepAria} onClick={onStep ? () => onStep(step) : undefined} />}
-                                        </span>
-                                    )}
-                                    <span>{row.map((tok, k) => <CodeToken key={k} tok={tok} path={target.path} records={records} onDrill={onDrill} drillAria={t.drillAria} />)}</span>
+                                    {railOf(n1)}
+                                    {numberOf(n1)}
+                                    {stepColumn(step != null && <StepBadge n={step + 1} count={stepCount} current={isCall} aria={t.stepAria} onClick={onStep ? () => onStep(step) : undefined} />)}
+                                    {textOf(n1, true)}
                                 </div>
                             );
                         })}
@@ -194,4 +317,9 @@ export function CodeLayer({ target, reader, labels, onOpenSource, onClose, onOut
             )}
         </div>
     );
+}
+
+/** Whether `line` is inside `span`. */
+function inSpan(span: { startLine: number; endLine: number } | null | undefined, line: number): boolean {
+    return !!span && line >= span.startLine && line <= span.endLine;
 }

@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
-import { getApiKey, getBaseUrl } from "../gateway";
-import { setOutboxScope, trackReachability } from "../outboxStorage";
-import { setCurrentWorkspace } from "../workspaceSelection";
+import { getApiKey, getBaseUrl } from "../gateway/gateway";
+import { setOutboxScope, trackReachability } from "../sync/outboxStorage";
+import { setCurrentWorkspace } from "../workspace/workspaceSelection";
 import { classifyWorkspaceRefusal, reportWorkspaceRefusal } from "../gatewayAuth";
 
 /**

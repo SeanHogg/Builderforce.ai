@@ -29,11 +29,11 @@ vi.mock("vscode", () => ({
   l10n: { t: (m: string) => m },
 }));
 vi.mock("../bfApi", () => ({ fetchAuthed: async () => { throw new Error("offline"); } }));
-vi.mock("../projectState", () => ({ getSelectedProject: () => undefined }));
-vi.mock("../capabilityContext", () => ({ currentCapabilityInputs: () => ({ signedIn: false, synchronize: false, gatewayInference: false, connectedFeatures: false }) }));
+vi.mock("../project/projectState", () => ({ getSelectedProject: () => undefined }));
+vi.mock("../tools/capabilityContext", () => ({ currentCapabilityInputs: () => ({ signedIn: false, synchronize: false, gatewayInference: false, connectedFeatures: false }) }));
 vi.mock("../errorReporter", () => ({ logLine: vi.fn() }));
-vi.mock("../localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
-vi.mock("../workspaceSymbols", () => ({ workspaceSymbolIndex: () => ({ filesUnder: async () => [] }), symbolGrammarOptions: () => ({}) }));
+vi.mock("../tools/localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
+vi.mock("../workspace/workspaceSymbols", () => ({ workspaceSymbolIndex: () => ({ filesUnder: async () => [] }), symbolGrammarOptions: () => ({}) }));
 vi.mock("./index/hostKnowledgeIndex", () => ({
   getHostKnowledgeIndex: async () => ({ nearDuplicates: () => [] }),
   ownsKnowledgeRoot: () => false,

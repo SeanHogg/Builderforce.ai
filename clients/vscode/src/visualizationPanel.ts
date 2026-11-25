@@ -1,11 +1,15 @@
 import * as vscode from "vscode";
-import { WebviewPanelBase } from "./webviewShared";
-import { workspaceCanvasSession, type WorkspaceCanvasSession } from "./workspaceSession";
+import { WebviewPanelBase } from "./panels/webviewShared";
+import { workspaceCanvasSession, type WorkspaceCanvasSession } from "./workspace/workspaceSession";
 import { WorkspaceSurface, type BrainInbound } from "./workspaceSurface";
 import { asVisualizationFrame } from "./visualizationInitFrame";
 import { KnowledgeBridge, setPendingKnowledgeFocus } from "./knowledge/knowledgeBridge";
-import { KNOWLEDGE_CALL, KNOWLEDGE_FOCUS, type KnowledgeCall, type KnowledgeFocusFrame } from "./knowledge/knowledgeProtocol";
+import { KNOWLEDGE_CALL, KNOWLEDGE_EDITOR, KNOWLEDGE_FOCUS, type KnowledgeCall, type KnowledgeEditorFrame, type KnowledgeFocusFrame } from "./knowledge/knowledgeProtocol";
+import { editorFrameOf, sameFrame } from "./knowledge/knowledgeEditorFrame";
 import { messageOf } from "./messageOf";
+
+/** At most one `knowledge.editor` post per this window (ms): the LAST editor state in it, posted when it ends. */
+export const EDITOR_FEED_MS = 100;
 
 /**
  * The RIGHT-HAND half of the chat split: the same Creation Canvas beside the live run's
@@ -59,6 +63,49 @@ export class VisualizationPanel extends WebviewPanelBase<BrainInbound> {
     // The CAPTURED webview (via `post`): a knowledge review run can finish after the
     // panel closed, and re-reading `panel.webview` then throws "Webview is disposed".
     this.knowledge = new KnowledgeBridge({ ctx, post: (msg) => this.post(msg) });
+    // The code band follows the editor only while the panel shows: hidden, it listens to nothing.
+    this.followEditor(this.panel.visible);
+    this.panel.onDidChangeViewState((e) => this.followEditor(e.webviewPanel.visible), undefined, this.disposables);
+  }
+
+  /** The editor listeners while the panel is visible (empty when hidden). */
+  private editorFeed: vscode.Disposable[] = [];
+  /** The trailing post pending in the current {@link EDITOR_FEED_MS} window. */
+  private editorTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The text editor last scrolled, selected in or focused: the panel itself taking focus leaves no active text editor. */
+  private editorSeen: vscode.TextEditor | undefined;
+  private lastEditorFrame: KnowledgeEditorFrame | null = null;
+
+  private followEditor(visible: boolean): void {
+    if (!visible) { this.stopEditorFeed(); return; }
+    if (this.editorFeed.length > 0) return;
+    const seen = (editor: vscode.TextEditor | undefined): void => {
+      if (editor) this.editorSeen = editor;
+      this.editorTimer ??= setTimeout(() => { this.editorTimer = undefined; this.postEditor(); }, EDITOR_FEED_MS);
+    };
+    this.editorFeed = [
+      vscode.window.onDidChangeTextEditorVisibleRanges((e) => seen(e.textEditor)),
+      vscode.window.onDidChangeTextEditorSelection((e) => seen(e.textEditor)),
+      vscode.window.onDidChangeActiveTextEditor((editor) => seen(editor)),
+    ];
+    // Shown again: say where the editor is now, the view may have missed every change while hidden.
+    this.lastEditorFrame = null;
+    seen(vscode.window.activeTextEditor ?? vscode.window.visibleTextEditors[0]);
+  }
+
+  private stopEditorFeed(): void {
+    for (const d of this.editorFeed) d.dispose();
+    this.editorFeed = [];
+    if (this.editorTimer !== undefined) clearTimeout(this.editorTimer);
+    this.editorTimer = undefined;
+  }
+
+  /** Posts the last-seen editor's view when it shows a file of the loaded root and differs from the last post. */
+  private postEditor(): void {
+    const frame = editorFrameOf(this.editorSeen, this.knowledge.loadedRoot());
+    if (!frame || sameFrame(frame, this.lastEditorFrame)) return;
+    this.lastEditorFrame = frame;
+    this.post({ type: KNOWLEDGE_EDITOR, ...frame });
   }
 
   /**
@@ -101,6 +148,7 @@ export class VisualizationPanel extends WebviewPanelBase<BrainInbound> {
   }
 
   protected onDispose(): void {
+    this.stopEditorFeed();
     this.surface.dispose();
     this.knowledge.dispose();
     if (VisualizationPanel.current === this) VisualizationPanel.current = undefined;

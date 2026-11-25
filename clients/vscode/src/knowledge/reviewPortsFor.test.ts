@@ -16,8 +16,8 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("vscode", () => ({ workspace: {}, window: {}, l10n: { t: (m: string) => m } }));
-vi.mock("../localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
-vi.mock("../workspaceSymbols", () => ({ workspaceSymbolIndex: () => ({ filesUnder: () => h.symbols() }) }));
+vi.mock("../tools/localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
+vi.mock("../workspace/workspaceSymbols", () => ({ workspaceSymbolIndex: () => ({ filesUnder: () => h.symbols() }) }));
 vi.mock("./index/hostKnowledgeIndex", () => ({ getHostKnowledgeIndex: () => h.index() }));
 vi.mock("./knowledgeFs", () => ({ vscodeKnowledgeFs: () => ({}) }));
 vi.mock("./knowledgeReplica", () => ({ replicaQueueFor: () => ({}) }));

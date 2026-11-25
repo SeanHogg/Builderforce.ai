@@ -16,7 +16,7 @@ import {
   type PendingChangeRepo,
   type PendingChangeSet,
   type PendingChangeStatus,
-} from '../../../src/gitChangeModel';
+} from '../../../src/git/gitChangeModel';
 import { keyOf, toPosix, type FileDiff } from './diffModel';
 
 /** One node of the change graph: a file the run touched. */

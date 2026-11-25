@@ -46,7 +46,7 @@ describe("reviewModelPin", () => {
   });
 
   it("is the review stage's pin in the editor's stage models", () => {
-    const modelState = fs.readFileSync(path.join(SRC, "modelState.ts"), "utf8");
+    const modelState = fs.readFileSync(path.join(SRC, "models/modelState.ts"), "utf8");
     expect(modelState).toContain("review: reviewModelPin()");
   });
 });
@@ -85,9 +85,9 @@ describe("modelForChildRun", () => {
 
 describe("native Brain run wiring", () => {
   it("applies the coding-role pin in model policy, and per-role overlay at child spawn", () => {
-    const modelState = fs.readFileSync(path.join(SRC, "modelState.ts"), "utf8");
+    const modelState = fs.readFileSync(path.join(SRC, "models/modelState.ts"), "utf8");
     expect(modelState).toContain("roleModelPin(NATIVE_RUN_ROLE)");
-    const child = fs.readFileSync(path.join(SRC, "childRunHost.ts"), "utf8");
+    const child = fs.readFileSync(path.join(SRC, "child/childRunHost.ts"), "utf8");
     expect(child).toContain("modelForChildRun(parent, req.role)");
   });
 });

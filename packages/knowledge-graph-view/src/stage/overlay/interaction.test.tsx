@@ -149,6 +149,29 @@ describe('picking on the stage bus (PRD 43 B5)', () => {
     });
 });
 
+describe('an empty click', () => {
+    it('clears the selection; a click on a mark, or a drag, does not', async () => {
+        const onClear = vi.fn(), onSelect = vi.fn();
+        render(<Stage renderer={createNoopStage()} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={onSelect} onClear={onClear} depthLabel="Depth" />);
+        await screen.findAllByRole('button', { name: map.a11y[0]!.label });
+        const box = document.querySelector<HTMLElement>('[data-stage]')!;
+        const proxy = document.querySelector<HTMLElement>(`[data-slot="${map.a11y[0]!.slot}"]`)!;
+        const x = parseFloat(proxy.style.left) + 20, y = parseFloat(proxy.style.top) + 20;
+        fireEvent.pointerDown(box, { clientX: x, clientY: y });
+        fireEvent.pointerUp(box, { clientX: x, clientY: y });
+        expect(onSelect).toHaveBeenCalledTimes(1);
+        expect(onClear).not.toHaveBeenCalled();
+        // Far from every mark: empty space.
+        fireEvent.pointerDown(box, { clientX: 799, clientY: 499 });
+        fireEvent.pointerUp(box, { clientX: 799, clientY: 499 });
+        expect(onClear).toHaveBeenCalledTimes(1);
+        // A drag that ends on empty space is the rig's pan.
+        fireEvent.pointerDown(box, { clientX: 799, clientY: 499 });
+        fireEvent.pointerUp(box, { clientX: 760, clientY: 499 });
+        expect(onClear).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe('the overlay (B7 Selection: overlay + incident slice on the main thread)', () => {
     it('a selection hands the renderer the slot, its best incident neighbours (sliced, capped) and the path', async () => {
         const renderer = createNoopStage();

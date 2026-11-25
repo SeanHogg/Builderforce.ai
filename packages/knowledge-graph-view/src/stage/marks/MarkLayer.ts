@@ -14,7 +14,7 @@ import { DynamicDrawUsage, Group, InstancedBufferAttribute, InstancedMesh, type 
 import { DASHED_SHAPES, MARK_TYPE_ORDER, SHAPE_OUTLINES, TYPE_SHAPE } from '../../shapes';
 import { SlotTable } from '../slots';
 import { uploadRange, type StageStats } from '../stats';
-import type { MarkPaint, MarkSet, Placement, SlotAppend } from '../types';
+import { FLAG, type MarkPaint, type MarkSet, type Placement, type SlotAppend } from '../types';
 import { markGeometry } from './geometry';
 import { markMaterial, type SharedMarkUniforms } from './shader';
 
@@ -82,7 +82,18 @@ export class MarkLayer {
         return this.appendedParent.get(s) ?? -1;
     }
 
+    /** The slots lit while the rest fade (the code on screen); null: no fade. Checked against the slot itself, appended ones included. */
+    private fade: ReadonlySet<number> | null = null;
+    private lastPaint: MarkPaint | null = null;
+
+    /** Fades every mark outside `lit` (the paint's DIM flag on top of its own); null puts the paint back as it was. */
+    setFade(lit: ReadonlySet<number> | null): void {
+        this.fade = lit;
+        if (this.lastPaint) this.setPaint(this.lastPaint);
+    }
+
     setPaint(paint: MarkPaint): void {
+        this.lastPaint = paint;
         const table = this.table;
         if (!table) return;
         this.batches.forEach((b, bi) => {
@@ -90,6 +101,7 @@ export class MarkLayer {
             const out = b.paint.array as Float32Array;
             for (let i = 0; i < count; i++) {
                 let s = slots[i]!;
+                const faded = this.fade !== null && !this.fade.has(s);
                 // An appended slot (a drilled symbol) the paint predates is painted like its station (else folder);
                 // one with neither, held since an append, keeps what it has.
                 if (s >= paint.tone.length) {
@@ -97,7 +109,7 @@ export class MarkLayer {
                     if (parent < 0 || parent >= paint.tone.length) continue;
                     s = parent;
                 }
-                out[i * 4] = paint.tone[s] ?? 0; out[i * 4 + 1] = paint.tone2[s] ?? 0; out[i * 4 + 2] = paint.fill[s] ?? 0; out[i * 4 + 3] = paint.flags[s] ?? 0;
+                out[i * 4] = paint.tone[s] ?? 0; out[i * 4 + 1] = paint.tone2[s] ?? 0; out[i * 4 + 2] = paint.fill[s] ?? 0; out[i * 4 + 3] = (paint.flags[s] ?? 0) | (faded ? FLAG.DIM : 0);
             }
             uploadRange(this.stats, b.paint, 0, count, bi);
         });

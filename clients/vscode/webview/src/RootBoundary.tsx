@@ -1,5 +1,5 @@
 import { Component, type CSSProperties, type ErrorInfo, type ReactNode } from 'react';
-import { BOOT_STRINGS_ELEMENT_ID, type RootFallbackStrings } from '../../src/webviewBundleShell';
+import { BOOT_STRINGS_ELEMENT_ID, type RootFallbackStrings } from '../../src/panels/webviewBundleShell';
 import { errorReport, type WebviewErrorReport } from './uncaughtErrorRelay';
 import { post } from './vscodeBridge';
 

@@ -1,5 +1,5 @@
 /**
- * The panel's half of an attachment's way to the model (`../../src/attachmentIngress.ts`
+ * The panel's half of an attachment's way to the model (`../../src/attachments/attachmentIngress.ts`
  * is the host's). A webview `blob:` URL is a preview the model cannot open, so:
  *
  *   • a TEXT file ("Add context" included) is recorded in the local store as before AND

@@ -11,7 +11,7 @@
 
 import type { EntityDestination, LocalFirstStore } from "@builderforce/local-first";
 import { DAY_MS, freezeRunFeatures, lineDelta, type RunFeatureInputs } from "@builderforce/run-delta/predict";
-import type { LocalChangeSetValue } from "../runChangeSets";
+import type { LocalChangeSetValue } from "../run/runChangeSets";
 import type { StoredRunDelta } from "../runDelta/runDeltaRecords";
 import { provenRunTexts, runFiles, textOf } from "../runDelta/runTexts";
 import type { PreimageReader } from "../runDelta/sideTexts";

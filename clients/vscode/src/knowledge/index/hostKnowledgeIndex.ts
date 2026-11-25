@@ -31,7 +31,7 @@ import {
 import { rootRelOf } from "@builderforce/agent-tools/knowledge";
 import type { EmbedderPort } from "@seanhogg/builderforce-memory/knowledge";
 import { knowledgeRootId } from "../knowledgeRoots";
-import { workspaceSymbolIndex } from "../../workspaceSymbols";
+import { workspaceSymbolIndex } from "../../workspace/workspaceSymbols";
 import { editorEmbedder } from "./embedderPort";
 import { messageOf } from "../../messageOf";
 

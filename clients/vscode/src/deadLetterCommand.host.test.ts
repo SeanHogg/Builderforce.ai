@@ -16,7 +16,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { EXPORT_DEAD_LETTERS_COMMAND } from "./deadLetterCommand";
 
-const HOST_FILE = "./deadLetterExport.ts";
+const HOST_FILE = "./sync/deadLetterExport.ts";
 const ACTIVATION_FILE = "./extension.ts";
 const MANIFEST_FILE = "../package.json";
 const NLS_FILES = [
@@ -82,7 +82,7 @@ describe("a person can reach the dead-letter export command", () => {
   it("imports the command from the landed module rather than redeclaring it", () => {
     const source = read(HOST_FILE);
     expect(source).toMatch(
-      /import\s*\{[^}]*EXPORT_DEAD_LETTERS_COMMAND[^}]*\}\s*from\s*"\.\/deadLetterCommand"/,
+      /import\s*\{[^}]*EXPORT_DEAD_LETTERS_COMMAND[^}]*\}\s*from\s*"\.\.\/deadLetterCommand"/,
     );
     expect(source).not.toMatch(/registerCommand\(\s*"builderforce\.exportDeadLetters"/);
   });

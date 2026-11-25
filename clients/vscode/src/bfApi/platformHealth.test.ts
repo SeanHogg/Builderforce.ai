@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createOutbox } from "@builderforce/write-outbox";
-import { apiConnectivity, trackReachability } from "../outboxStorage";
+import { apiConnectivity, trackReachability } from "../sync/outboxStorage";
 import { BAD_SUSTAINED_MS, RECOVERY_MS, classifyPlatformStatus, createPlatformHealth, platformHealth } from "./platformHealth";
 
 const respond = (status: number, body = ""): Response => new Response(body, { status });

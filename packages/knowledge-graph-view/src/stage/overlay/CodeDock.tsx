@@ -5,19 +5,30 @@
  * reading line while Follow is on. Selection and the journey step scroll it (`scrollLine`), a crumb jumps to an
  * enclosing symbol, a method name drills (`onDrill` ← `drillRefForName`), the open method's calls are numbered in the
  * gutter, a stage hover tints that symbol's lines, and Escape in the code is Out.
+ *
+ * An editor's chrome around it: tabs for the method's file and a callee's opened across, a breadcrumb of folders, file
+ * and enclosing symbols, an Outline of the file's symbols, and in the code a type rail, lens lines (a class's
+ * references and Show in map, a method's callers and Drill in) and a sticky header of the enclosing symbols.
  */
 
-import { useMemo, type CSSProperties } from 'react';
+import { useCallback, useMemo, useState, type CSSProperties } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { pathOf } from '../../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
+import { typeShape, type NodeShape } from '../../shapes';
+import { list } from '../../styles';
+import { ShapeGlyph } from '../../surface/LegendGlyph';
 import { TYPE } from '../../surface/ui/type';
 import { fileRefOf } from '../../surface/stations';
 import type { SourceLocation, SourceReader, SymbolRecord } from '../../types';
-import { CodeLayer, LINK_BUTTON } from '../drill/CodeLayer';
-import { codeTargetOf, MAX_SPAN, spanInFile, type CodeTarget } from '../drill/codeText';
+import { CodeLayer, LINK_BUTTON, RAIL_TONE, type LensAction } from '../drill/CodeLayer';
+import {
+    baseName, callerIndex, codeTargetOf, lensRows, MAX_SPAN, railKindOf, railKinds, spanInFile, stickyChain, symbolChain,
+    type CodeTarget, type Lens, type RailKind,
+} from '../drill/codeText';
 import type { CodeReading } from '../drill/useCodeReading';
+import { toggleButton as toggle } from './cardStyles';
 
 const floating: CSSProperties = {
     position: 'absolute', zIndex: 4, top: 8, right: 8, bottom: 8, width: 'min(420px, calc(100% - 16px))',
@@ -37,6 +48,10 @@ export function codePaneWidth(width: number): number {
 const bar: CSSProperties = {
     display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '4px 8px', borderRadius: 8,
     background: cssVar('bg'), color: cssVar('text'), border: `1px solid ${cssVar('border')}`, ...TYPE.meta,
+};
+const tab: CSSProperties = {
+    ...TYPE.meta, padding: '4px 10px', border: 0, borderBottom: '2px solid', borderRadius: '6px 6px 0 0', background: cssVar('bg'),
+    font: 'inherit', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,
 };
 
 export interface CodeDockProps {
@@ -59,12 +74,49 @@ export interface CodeDockProps {
     hover?: string | null | undefined;
     /** Fill the host's code pane (the split layout) instead of floating over the stage's right edge. */
     pane?: boolean;
+    /** A short message on the stage (a lens's references or callers). */
+    toast?: ((message: string) => void) | undefined;
+    /** Select a mark by its slot key (`node:<ref>`): a lens's Show in map, an outline row. */
+    onSelect?: ((key: string) => void) | undefined;
+    /** Ring and centre a symbol's mark on the stage without selecting it (the wiring's `followCode`). */
+    followCode?: ((ref: string) => void) | undefined;
+    /** The files open in the pane: the open method's (`home`) and a callee's opened across; shown as tabs. */
+    files?: { home: string; across: string | null } | undefined;
+    /** The home tab clicked while a callee's file is on show: back to the method (the wiring's `clearAcross`). */
+    onHomeTab?: (() => void) | undefined;
 }
 
-export function CodeDock({ target, name, reader, labels, records, scrollLine, reading, onDrill, onOpenSource, onClose, onOut, hover = null, pane = false }: CodeDockProps) {
+/** The outline's icon per symbol kind: the stage's silhouettes (a field is drawn as the data drum). */
+const KIND_SHAPE: Readonly<Record<RailKind, NodeShape>> = { class: typeShape('class'), method: typeShape('function'), field: typeShape('data') };
+const OUTLINE_INDENT_PX = 14;
+const ICON_PX = 10;
+
+
+export function CodeDock({
+    target, name, reader, labels, records, scrollLine, reading, onDrill, onOpenSource, onClose, onOut, hover = null, pane = false,
+    toast, onSelect, followCode, files, onHomeTab,
+}: CodeDockProps) {
     const t = labels.surface.code;
     const path = target?.path;
+    const { chain, fileSymbols, byRef, jumpTo } = reading;
     const marked = useMemo(() => path ? spanInFile(hover, records, path) : null, [hover, records, path]);
+    // The editor chrome needs the text: with no reader the pane only says the code is not available here.
+    const lens = useMemo(() => reader ? lensRows(fileSymbols, records, callerIndex(records)) : null, [reader, fileSymbols, records]);
+    const rails = useMemo(() => reader ? railKinds(fileSymbols, records) : null, [reader, fileSymbols, records]);
+    const readingRef = chain[chain.length - 1]?.ref ?? null;
+    const railSpan = useMemo(() => path ? spanInFile(readingRef, records, path) : null, [readingRef, records, path]);
+    const sticky = useCallback((line: number) => stickyChain(fileSymbols, byRef, line), [fileSymbols, byRef]);
+    const nameOf = useCallback((ref: string) => byRef.get(ref)?.name ?? ref, [byRef]);
+    const onLens = useCallback((action: LensAction, l: Lens) => {
+        if (action === 'drill') onDrill(l.ref);
+        else if (action === 'show') { onSelect?.(`node:${l.ref}`); followCode?.(l.ref); }
+        else if (action === 'references') toast?.(fillTemplate(t.referencesToast, { count: l.count, name: nameOf(l.ref) }));
+        else {
+            const callers = callerIndex(records).get(l.ref) ?? [];
+            toast?.(callers.length ? fillTemplate(t.calledBy, { names: callers.map(nameOf).join(', ') }) : fillTemplate(t.lensCallers, { count: 0 }));
+        }
+    }, [onDrill, onSelect, followCode, toast, t, nameOf, records]);
+    const [outline, setOutline] = useState(false);
     const dock = pane ? filling : floating;
     if (!target) {
         return (
@@ -77,24 +129,75 @@ export function CodeDock({ target, name, reader, labels, records, scrollLine, re
             </aside>
         );
     }
-    const { chain } = reading;
+    const folders = target.path.split('/');
+    const file = folders.pop() ?? target.path;
+    // The outline marks the symbol being read, else the one the pane opened on.
+    const currentRef = readingRef ?? target.ref;
+    const tabs = files ? [...new Set([files.home, files.across].filter((p): p is string => !!p))] : [];
     return (
         <aside data-code-dock data-code-pane={pane ? '' : undefined} role="complementary" aria-label={fillTemplate(t.buttonAria, { name: target.name })} style={dock}>
+            {tabs.length > 0 && (
+                <div role="tablist" aria-label={t.tabsAria} data-code-tabs style={{ display: 'flex', gap: 2, minWidth: 0, overflow: 'hidden' }}>
+                    {tabs.map((p) => {
+                        const on = p === target.path;
+                        const go = !on && p === files?.home ? onHomeTab : undefined;
+                        return (
+                            <button
+                                key={p} type="button" role="tab" aria-selected={on} data-code-tab={p} title={p} onClick={go}
+                                style={{ ...tab, borderBottomColor: cssVar(on ? 'accent' : 'border'), color: cssVar(on ? 'text' : 'muted'), cursor: go ? 'pointer' : 'default' }}
+                            >
+                                {baseName(p)}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
             <div style={bar}>
                 <nav aria-label={t.crumbsAria} data-code-crumbs style={{ display: 'flex', gap: 4, flexWrap: 'wrap', minWidth: 0, flex: '1 1 auto' }}>
-                    <span>{target.path.slice(target.path.lastIndexOf('/') + 1)}</span>
+                    {folders.map((f, i) => (
+                        <span key={`dir:${i}`} data-crumb-folder style={{ color: cssVar('muted') }}>{f}<span aria-hidden="true"> ›</span></span>
+                    ))}
+                    <b data-crumb-file>{file}</b>
                     {chain.map((r, i) => (
                         <span key={r.ref}>
                             <span aria-hidden="true">› </span>
-                            <button type="button" data-crumb={r.ref} aria-current={i === chain.length - 1 ? 'location' : undefined} onClick={() => reading.jumpTo(r.line)} style={LINK_BUTTON}>{r.name}</button>
+                            <button type="button" data-crumb={r.ref} aria-current={i === chain.length - 1 ? 'location' : undefined} onClick={() => jumpTo(r.line)} style={LINK_BUTTON}>{r.name}</button>
                         </span>
                     ))}
                 </nav>
+                {fileSymbols.length > 0 && (
+                    <button type="button" data-action="outline" aria-expanded={outline} onClick={() => setOutline((o) => !o)} style={{ ...toggle, borderColor: cssVar(outline ? 'accent' : 'border') }}>{t.outline}</button>
+                )}
             </div>
+            {outline && fileSymbols.length > 0 && (
+                <ul aria-label={t.outlineAria} data-code-outline style={{ ...list, ...bar, display: 'grid', gap: 0, maxHeight: '40%', overflow: 'auto', flex: '0 1 auto' }}>
+                    {fileSymbols.map((r) => {
+                        const kind = railKindOf(r.kind);
+                        return (
+                            <li key={r.ref}>
+                                <button
+                                    type="button" data-outline-row={r.ref} aria-current={r.ref === currentRef ? 'true' : undefined}
+                                    onClick={() => { onSelect?.(`node:${r.ref}`); jumpTo(r.line); }}
+                                    style={{
+                                        ...LINK_BUTTON, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left',
+                                        paddingLeft: (symbolChain(r.ref, byRef).length - 1) * OUTLINE_INDENT_PX,
+                                        fontWeight: r.ref === currentRef ? 700 : undefined, background: r.ref === currentRef ? cssVar('accentSoft') : 'transparent',
+                                    }}
+                                >
+                                    <ShapeGlyph shape={KIND_SHAPE[kind]} tone={RAIL_TONE[kind]} size={ICON_PX} />
+                                    <span>{r.name}</span>
+                                </button>
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
             <CodeLayer
                 target={target} reader={reader} labels={labels} records={records} scrollLine={reading.jump ?? scrollLine}
                 onDrill={onDrill} onOpenSource={onOpenSource} onClose={onClose} onOut={onOut}
                 onReadingLine={reading.onReadingLine} steps={reading.steps} currentStep={reading.current} span={reading.span} onStep={reading.goStep} marked={marked}
+                onViewport={reading.onViewport} onText={reading.onText} onPickLine={reading.pickLine} cursorLine={reading.cursor}
+                rails={rails} railSpan={railSpan} lens={lens} onLens={onLens} sticky={sticky} onJump={jumpTo}
             />
         </aside>
     );

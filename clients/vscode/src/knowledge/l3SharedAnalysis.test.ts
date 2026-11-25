@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({ key: "k1" as string | null, runs: 0 }));
-vi.mock("../localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
+vi.mock("../tools/localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
 vi.mock("@builderforce/repo-map", () => ({ repoMapPort: {} }));
 vi.mock("./l3Worker", () => ({ runL3InWorker: vi.fn(async () => { h.runs += 1; return { extracted: [], snapshot: { tools: [{ status: "complete" }] }, edges: 1 }; }) }));
 vi.mock("@builderforce/agent-tools/knowledge", async (importOriginal) => ({

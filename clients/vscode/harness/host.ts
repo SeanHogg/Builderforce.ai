@@ -17,8 +17,8 @@
  */
 
 import type { BrainAction, BrainMessage } from '@seanhogg/builderforce-brain-embedded';
-import { TOOL_DEFS } from '../src/fileTools';
-import { toolDefActions } from '../src/nativeRunTool';
+import { TOOL_DEFS } from '../src/tools/fileTools';
+import { toolDefActions } from '../src/native/nativeRunTool';
 
 /** An in-memory chat store that satisfies the loop's persistence port. */
 export interface HarnessPersistence {

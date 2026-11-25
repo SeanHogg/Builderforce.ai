@@ -34,7 +34,7 @@ import {
   type CalibrationState,
   type PrefetchPort,
 } from "@builderforce/prefetch";
-import { globalFetch, type LocalModelsConfig } from "../localModels";
+import { globalFetch, type LocalModelsConfig } from "../models/localModels";
 import { workspaceTools, type ToolDetector } from "./detectTools";
 import { VSCODE_PREFETCH_REGISTRY, editorPrefetchExecutors, type LspDiagnostics } from "./executors";
 

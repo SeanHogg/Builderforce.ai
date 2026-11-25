@@ -29,9 +29,9 @@
 
 import { DEFAULT_REGISTRIES, DELTA_CONFIG_PATH, withOverrides, type DeltaRegistries, type RunDelta } from "@builderforce/run-delta";
 import type { EntityDestination, LocalFirstStore } from "@builderforce/local-first";
-import { normalizePath } from "../gitChangeModel";
-import { fingerprintHash, type ChangeSetRepoBaseline } from "../runChangeBaseline";
-import type { FinalizedRunChangeSets, LocalChangeSetValue } from "../runChangeSets";
+import { normalizePath } from "../git/gitChangeModel";
+import { fingerprintHash, type ChangeSetRepoBaseline } from "../run/runChangeBaseline";
+import type { FinalizedRunChangeSets, LocalChangeSetValue } from "../run/runChangeSets";
 import { deltaAttribution, overlappingRun, writesInRepo } from "./attribution";
 import { computeInWorker } from "./deltaWorkerHost";
 import type { DynamicTierRun } from "./dynamicTier";

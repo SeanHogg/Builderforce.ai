@@ -9,6 +9,7 @@
 
 import type { ReactNode } from 'react';
 import { cssVar } from '../../scene/themeColors';
+import { LinkLegend } from '../../surface/LinkLegend';
 import { ShapeLegend } from '../../surface/ShapeLegend';
 import type { StageLegendValue } from './stageLegend';
 
@@ -34,6 +35,7 @@ export function StageCorner({ boxHeight, legend, children }: StageCornerProps) {
                         }}
                     >
                         <ShapeLegend types={types} labels={legend.labels} />
+                        {legend.links && <LinkLegend labels={legend.labels} />}
                     </div>
                 )}
                 {children}

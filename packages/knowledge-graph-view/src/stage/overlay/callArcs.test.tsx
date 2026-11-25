@@ -25,7 +25,7 @@ describe('the open method\'s calls on the stage', () => {
     });
 
     it('tracks each call in order from the method; none without a method mark or calls', () => {
-        const steps = [{ line: 3, to: 'src:sys::a.ts#check' }, { line: 4, to: 'src:sys::b.ts#charge' }, { line: 5, to: 'src:sys::a.ts#check' }];
+        const steps = [{ line: 3, to: 'src:sys::a.ts#check', kind: 'calls' }, { line: 4, to: 'src:sys::b.ts#charge', kind: 'calls' }, { line: 5, to: 'src:sys::a.ts#check', kind: 'calls' }] as const;
         expect(callTrackOf('src:sys::a.ts#run', steps, 1, slotOf)).toEqual({ from: 0, to: [1, 2, 1], current: 1 });
         expect(callTrackOf('src:sys::z.ts#nowhere', steps, 0, slotOf)).toBeNull();
         expect(callTrackOf(null, steps, 0, slotOf)).toBeNull();

@@ -1,5 +1,5 @@
 import { PlatformAccessDenied, type InferenceMode, type PlatformPolicySnapshot } from "@builderforce/local-first";
-import { platformInferenceMode, platformPolicy, platformRequestRefusalFor } from "./platformPolicy";
+import { platformInferenceMode, platformPolicy, platformRequestRefusalFor } from "./platform/platformPolicy";
 
 /**
  * Host-side wrapper for a platform call that is not a `fetch`. There is no second policy:

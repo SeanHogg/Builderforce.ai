@@ -17,8 +17,8 @@ import type { JudgementPort } from "@seanhogg/builderforce-memory/knowledge";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
 import { NO_LOCAL_MODEL } from "@seanhogg/builderforce-brain-embedded";
 import { onDeviceModelAvailable, onDeviceTasks, resolveModelRoute, routeComplete } from "../modelRouting";
-import { currentInferenceMode } from "../inferenceModeSetting";
-import type { ChatMessage } from "../gateway";
+import { currentInferenceMode } from "../models/inferenceModeSetting";
+import type { ChatMessage } from "../gateway/gateway";
 
 /** A judgement turn is only ever system + user — the narrow shape both the on-device port and the router accept. */
 type JudgementMessage = ChatMessage & { role: "system" | "user"; content: string };

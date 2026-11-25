@@ -107,6 +107,26 @@ describe('the stage layers (PRD 43 B3)', () => {
         for (const u of ['uTime', 'uMotion', 'uDepth', 'uViolationTone', 'uChangedTone', 'uTextTone']) expect(uniform(mesh!, u)).toBeDefined();
     });
 
+    it('fades every mark outside the lit set with the DIM flag on top of its own, and puts the paint back with null; a restore keeps it', () => {
+        const stage = createWebGLStage({ text: textPort().port, fonts: fixedFontPort({}) });
+        stage.setMarks(model.marks);
+        const p = paint();
+        stage.setPaint(p);
+        const [mesh] = meshes(stage.object!, 'marks:');
+        const attr = mesh!.geometry.getAttribute('paint') as BufferAttribute;
+        const slots = model.marks.batches[0]!.slots;
+        const lit = slots[0]!;
+        stage.setFade(new Set([lit]));
+        expect(attr.getW(0)).toBe(p.flags[lit]);
+        if (slots.length > 1) expect(attr.getW(1)).toBe(p.flags[slots[1]!]! | FLAG.DIM);
+        stage.restore(10);
+        const again = meshes(stage.object!, 'marks:')[0]!.geometry.getAttribute('paint') as BufferAttribute;
+        if (slots.length > 1) expect(again.getW(1)).toBe(p.flags[slots[1]!]! | FLAG.DIM);
+        stage.setFade(null);
+        expect((meshes(stage.object!, 'marks:')[0]!.geometry.getAttribute('paint') as BufferAttribute).getW(0)).toBe(p.flags[lit]);
+        if (slots.length > 1) expect((meshes(stage.object!, 'marks:')[0]!.geometry.getAttribute('paint') as BufferAttribute).getW(1)).toBe(p.flags[slots[1]!]);
+    });
+
     it('runs the pulse at ≤ 30 fps only while a PULSE mark is visible and motion is allowed', () => {
         const stage = createWebGLStage({ text: textPort().port, fonts: fixedFontPort({}) });
         stage.setMarks(model.marks);

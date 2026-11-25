@@ -18,8 +18,8 @@ vi.mock("./knowledgeRoots", () => ({ rootById: () => ({ rootId: "r", rootPath: "
 vi.mock("./vscodeDirectorySource", () => ({ createDirectorySource: () => ({}) }));
 vi.mock("./rootModules", () => ({ rootModules: async () => ({ aliases: { scopes: [] } }) }));
 vi.mock("./knowledgeFs", () => ({ vscodeKnowledgeFs: () => ({}) }));
-vi.mock("../gitChanges", () => ({ detectPendingChanges: async () => undefined, watchPendingChanges: () => ({ dispose: () => undefined }) }));
-vi.mock("../localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
+vi.mock("../git/gitChanges", () => ({ detectPendingChanges: async () => undefined, watchPendingChanges: () => ({ dispose: () => undefined }) }));
+vi.mock("../tools/localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
 vi.mock("@builderforce/agent-tools/knowledge", () => ({
   reviewPacks: () => [],
   knownKeysCache: () => ({ invalidate: () => undefined }),

@@ -11,7 +11,7 @@ import { readSourcePackages } from '../../../scripts/sourcePackages.mjs';
  * The source-package guard counts, as a project's sources, every file OUTSIDE its
  * `include` that it reaches by relative import (`scripts/check-source-package-graph.mjs`
  * rule 3). Before it did, `clients/vscode/webview` compiled
- * `../src/pageEngineBridgeProtocol.ts` — which imports `@builderforce/local-inference` —
+ * `./panels/pageEngineBridgeProtocol.ts` — which imports `@builderforce/local-inference` —
  * with no `paths` entry for that package, and the guard passed because it scanned only
  * `webview/src`.
  */
@@ -61,7 +61,7 @@ describe('the webview project', () => {
 
     const scanner = createImportScanner({ ts, repoRoot });
     const reached = await scanner.reachOutside(project!.sources, '@builderforce/');
-    const protocol = join(repoRoot, 'clients', 'vscode', 'src', 'pageEngineBridgeProtocol.ts');
+    const protocol = join(repoRoot, 'clients', 'vscode', 'src', 'panels/pageEngineBridgeProtocol.ts');
     expect(reached).toContain(protocol);
 
     // Every source-only package those reached files import resolves through the

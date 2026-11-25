@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createHostPageEngineBridge } from "../pageEngineBridge";
+import { createHostPageEngineBridge } from "../panels/pageEngineBridge";
 import type { FileModelStore } from "./modelFiles";
 import { installHostBfiRuntime } from "./runtime";
 

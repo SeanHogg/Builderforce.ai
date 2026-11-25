@@ -11,7 +11,7 @@ import { analyseWorkspaceExtracted, graphAcceptsOf, type WorkspaceExtracted, typ
 import type { PartitionRegistry } from "@seanhogg/builderforce-memory/knowledge";
 import type { L3CacheBinding } from "@builderforce/agent-tools";
 import { repoMapPort } from "@builderforce/repo-map";
-import { buildLocalCapabilityProvider } from "../localCapabilities";
+import { buildLocalCapabilityProvider } from "../tools/localCapabilities";
 import { indexerL3Binding } from "../runDelta/analyzers/l3Binding";
 import {
   assembleBounded, isOverBudget, postBounded, RESULT_OVER_BUDGET, type PartsReceiver, type TransferLimits, type TransferPart,

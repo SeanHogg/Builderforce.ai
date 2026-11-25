@@ -13,8 +13,8 @@ import {
   type LocalFirstSnapshot,
 } from "@builderforce/local-first";
 import { createDurableLocalFirstStore } from "./durableLocalFirstStore";
-import { JOURNAL_FILE, LEGACY_JOURNAL_FILE } from "./localFirstJournalIo";
-import { IMPORT_SIDECAR_FILE } from "./localFirstLegacyMerge";
+import { JOURNAL_FILE, LEGACY_JOURNAL_FILE } from "./localFirst/localFirstJournalIo";
+import { IMPORT_SIDECAR_FILE } from "./localFirst/localFirstLegacyMerge";
 
 const directories: string[] = [];
 

@@ -18,9 +18,9 @@ import type { PathHop, PathModel } from './path';
 import { sequenceOf } from './sequenceModel';
 import { hopText, pathMermaid } from './sequenceText';
 
-const COL_W = 150;
-const HEAD_H = 40;
-const ROW_H = 40;
+/** The diagram's grid (a lifeline's column, the header and a message's row), shared with the code level's sequence layout. */
+export const SEQUENCE_GEOMETRY = { COL_W: 150, HEAD_H: 40, ROW_H: 40 } as const;
+const { COL_W, HEAD_H, ROW_H } = SEQUENCE_GEOMETRY;
 const ARROW_TONES: readonly ThemeTone[] = ['edge', 'accent', 'violation'];
 
 export interface SequenceViewProps {

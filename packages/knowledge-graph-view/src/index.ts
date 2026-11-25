@@ -31,7 +31,7 @@ export type {
     ReviewEstimate, ReviewRequest, ReviewTarget, FactActions, LensId, KnowledgePanelRenderer,
     KnowledgePanelRenderProps, KnowledgeConfirm, KnowledgeBaseline, KnowledgeSnapshot, EvidenceSide,
     SourceLocation, FindingEvidence, ViewMode, PinpointResult, SyncStatus, SkippedFile, TryRequest, TryResponse, SymbolRecord,
-    SourceRange, SourceText, NotReviewedHere, ReplicaState, ReviewRunsPort, ReviewRunSummary, StoredReviewRun,
+    SourceRange, SourceText, EditorView, NotReviewedHere, ReplicaState, ReviewRunsPort, ReviewRunSummary, StoredReviewRun,
     AgentRunSeverity, AgentRunSummary, AgentRunTurnKind, AgentRunTurn, AgentRunEvidence, AgentRunFinding, AgentRunFile,
     AgentRunReport, AgentRunsPort, KnowledgeGraphPatch, KnowledgeEdgeKey, LiveGraphDecorate,
 } from './types';

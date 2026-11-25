@@ -20,9 +20,9 @@ import { extractSymbols, type RepoSymbolsCapability } from "@builderforce/agent-
 import { recallProjectFacts } from "../bfApi";
 import { readChatState } from "./chatStateReads";
 import { readCheckoutState } from "./checkoutState";
-import { workspaceSymbolIndex } from "../workspaceSymbols";
+import { workspaceSymbolIndex } from "../workspace/workspaceSymbols";
 import { codemapFactsForRequest, markStaleRemembered, type MarkedRequestFacts } from "./requestAreas";
-import { staleNote, staleReferences } from "../memoryStaleness";
+import { staleNote, staleReferences } from "../memory/memoryStaleness";
 import { withinMs } from "./withinMs";
 import { workspaceMapFor } from "./workspaceMapScan";
 import { extractFocusPaths, isRelativePath, resolveUnderRoot, workspaceRelative } from "./focusPaths";

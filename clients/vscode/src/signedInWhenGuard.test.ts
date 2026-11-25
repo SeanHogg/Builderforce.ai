@@ -49,7 +49,7 @@ describe("check-signed-in-when guard (PRD 41 A1)", () => {
 
 describe("no signed-in-derived context key outside the capability source (PRD 41 A1)", () => {
   const srcDir = __dirname;
-  const SOURCE_OF_CAPABILITIES = new Set(["capabilityStates.ts", "capabilityContext.ts"]);
+  const SOURCE_OF_CAPABILITIES = new Set(["tools/capabilityStates.ts", "tools/capabilityContext.ts"]);
   const SET_CONTEXT = /setContext["'`]\s*,\s*["'`](builderforce\.[\w.]+)["'`]\s*,([^)]*)\)/g;
 
   function sources(dir: string): string[] {
@@ -75,7 +75,7 @@ describe("no signed-in-derived context key outside the capability source (PRD 41
   });
 
   it("the scan finds the one setContext it is meant to allow", () => {
-    const wiring = readFileSync(path.join(srcDir, "capabilityWiring.ts"), "utf8");
+    const wiring = readFileSync(path.join(srcDir, "tools/capabilityWiring.ts"), "utf8");
     expect([...wiring.matchAll(SET_CONTEXT)].map((m) => m[1])).toContain("builderforce.signedIn");
   });
 });

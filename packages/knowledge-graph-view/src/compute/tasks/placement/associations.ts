@@ -24,6 +24,9 @@ export const ASSOCIATION_STYLE: Readonly<Record<AssociationLinkKind, { tone: The
     uses: { tone: 'muted', dash: DASH_DESCRIBES },
 };
 
+/** The open method's call arcs: the link the legend names `calls`. */
+export const CALL_LINK_STYLE: Readonly<{ tone: ThemeTone; dash: number }> = { tone: 'accent', dash: DASH_SOLID };
+
 const WIDTH_PX = 1.25;
 /** Associations drawn at most per level (the strongest are not ranked: the first the host sent). */
 export const MAX_ASSOCIATIONS = 512;

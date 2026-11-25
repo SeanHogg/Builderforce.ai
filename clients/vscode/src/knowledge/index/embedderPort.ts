@@ -34,7 +34,7 @@ import {
   type FetchLike,
   type LocalEndpoint,
 } from "@builderforce/local-inference";
-import { globalFetch, type LocalModelsConfig } from "../../localModels";
+import { globalFetch, type LocalModelsConfig } from "../../models/localModels";
 
 /** memory-mcp's `MODEL_FILE_ENV` / `TOKENIZER_FILE_ENV` — the ONE place a local checkpoint is named. */
 const EVERMIND_MODEL_ENV = "BUILDERFORCE_MEMORY_MODEL";

@@ -38,7 +38,7 @@ import {
   type BrainAction,
   type BrainTransport,
 } from '@seanhogg/builderforce-brain-embedded';
-import { TOOL_DEFS } from '../src/fileTools';
+import { TOOL_DEFS } from '../src/tools/fileTools';
 import { authedFetch } from '../webview/src/authedFetch';
 import { fetchPlanSnapshot } from '../webview/src/planSnapshot';
 import { buildTranscript } from '../webview/src/transcript';

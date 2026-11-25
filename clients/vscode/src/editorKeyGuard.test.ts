@@ -16,7 +16,7 @@ vi.mock("./bfApi", () => ({
   onEditorKeyRejected: () => ({ dispose: () => undefined }),
   dropWorkspaceSelection: h.drop,
 }));
-vi.mock("./gateway", () => ({ SECRET_KEY: "k" }));
+vi.mock("./gateway/gateway", () => ({ SECRET_KEY: "k" }));
 
 import { watchRejectedEditorKey } from "./editorKeyGuard";
 import { observeGatewayResponse } from "./gatewayAuth";

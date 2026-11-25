@@ -60,6 +60,8 @@ export interface StageRenderer {
     readonly labelCaptions: readonly Caption[];
     setMarks(set: MarkSet): void;
     setPaint(paint: MarkPaint): void;
+    /** Fades every mark outside `lit` (what the code on screen lights); null: none. Kept across a context restore. */
+    setFade(lit: ReadonlySet<number> | null): void;
     setPalette(colors: ThemeColors): void;
     /**
      * A new placement; `tweenMs` 0 jumps (reduced motion, the first placement). A placement that appends slots (a drill,
@@ -133,6 +135,7 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
     let overlayState: OverlayState = NO_OVERLAY;
     const tween = new Tween();
     let marks: MarkSet | null = null, placement: Placement | null = null, paint: MarkPaint | null = null, colors: ThemeColors | null = null;
+    let fade: ReadonlySet<number> | null = null;
     let view: StageView = { pxPerWorld: 1, dpr: 1 };
     let motion: StageMotion = { visible: true, reduced: false }, pulsing = false, lastMotion = -Infinity;
     const labelView = () => ({ pxPerWorld: view.pxPerWorld, depth: uniforms.uDepth.value });
@@ -157,6 +160,7 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
         onRedraw(cb) { redraw.add(cb); return () => { redraw.delete(cb); }; },
         setMarks(set) { base = set; runs = []; marks = set; marksLayer.setMarks(set); placement = null; appended.reset(); overlay.follow(null); live.reset(set.keys); },
         setPaint(next) { paint = next; marksLayer.setPaint(next); pulsing = hasPulse(next); },
+        setFade(lit) { fade = lit; marksLayer.setFade(lit); },
         get overlay() { return overlayState; },
         setOverlay(state) { overlayState = state; overlay.set(state); },
         setPalette(next) {
@@ -230,6 +234,7 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
             appended.reset();
             for (const run of runs) appended.add(run);
             overlay.follow(null);
+            marksLayer.setFade(fade);
             if (last.paint) r.setPaint(last.paint);
             if (last.colors) r.setPalette(last.colors);
             if (last.placement) r.setPlacement(last.placement, now, 0);
@@ -265,6 +270,7 @@ export function createNoopStage(): StageRenderer {
         setOverlay(state) { overlayState = state; },
         setMarks(set) { marks = set; placement = null; table = new SlotTable(set); appended.reset(); live.reset(set.keys); },
         setPaint() {},
+        setFade() {},
         setPalette() {},
         // The same slot rules as the WebGL stage (append into the headroom, rebuild on overflow), so a drill behaves alike.
         setPlacement(p) {

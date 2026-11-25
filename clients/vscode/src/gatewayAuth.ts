@@ -1,4 +1,4 @@
-import { getCurrentWorkspace } from "./workspaceSelection";
+import { getCurrentWorkspace } from "./workspace/workspaceSelection";
 
 /**
  * The request header that tells the gateway WHICH workspace the editor key should act in.

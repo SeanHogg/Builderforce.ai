@@ -28,8 +28,8 @@ import {
   type BrainRunRequest,
   type ModelFallbackSurface,
 } from '@seanhogg/builderforce-brain-embedded';
-import { applyListDelta } from '../../src/listDelta';
-import type { RunSyncMessage } from '../../src/brainRunHostProtocol';
+import { applyListDelta } from '../../src/sync/listDelta';
+import type { RunSyncMessage } from '../../src/brain/brainRunHostProtocol';
 import { onHostMessage, post } from './vscodeBridge';
 import { setChatChildren, steerRunTurns, type ChildView } from './chat/chatChildren';
 

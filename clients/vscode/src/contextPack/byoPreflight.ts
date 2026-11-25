@@ -12,7 +12,7 @@
 
 import type * as vscode from "vscode";
 import { authed, getCurrentWorkspace } from "../bfApi";
-import { ttlCache } from "../ttlCache";
+import { ttlCache } from "../localFirst/ttlCache";
 import { logLine } from "../errorReporter";
 import { messageOf } from "../messageOf";
 import type { ModelPreflightResult } from "@seanhogg/builderforce-brain-embedded";

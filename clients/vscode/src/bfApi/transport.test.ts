@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("vscode", () => ({ l10n: { t: (m: string) => m } }));
-vi.mock("../gateway", () => ({ getBaseUrl: () => "https://api.example" }));
-vi.mock("../outboxStorage", () => ({ trackReachability: <T>(p: T) => p }));
+vi.mock("../gateway/gateway", () => ({ getBaseUrl: () => "https://api.example" }));
+vi.mock("../sync/outboxStorage", () => ({ trackReachability: <T>(p: T) => p }));
 const current = vi.hoisted(() => ({ workspace: undefined as number | undefined }));
 vi.mock("./session", () => ({ exchangeJwt: async () => "jwt", tenantOfToken: () => 1, workspaceTenantId: () => current.workspace }));
 vi.mock("@seanhogg/builderforce-brain-embedded", () => ({ NOT_SIGNED_IN: "not_signed_in" }));

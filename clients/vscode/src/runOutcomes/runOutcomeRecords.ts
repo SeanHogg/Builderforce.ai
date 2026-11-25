@@ -17,7 +17,7 @@ import {
   defineRecordIndex, journalWrite, newLocalRecord, scanByIndex, stableEntityId,
   type EntityDestination, type LocalFirstStore, type LocalFirstTransaction, type LocalRecord,
 } from "@builderforce/local-first";
-import { changeSetRepoKey, changeSetRunId } from "../runChangeSets";
+import { changeSetRepoKey, changeSetRunId } from "../run/runChangeSets";
 import {
   isRunOutcomeRecordValue, mergeLabels, runOutcomeKey,
   type CommitAttribution, type RunFeatures, type RunOutcomeLabel, type RunOutcomeRecordValue,

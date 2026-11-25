@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { configureHostKnowledgeIndex, workspaceKnowledgeIndex } from "../knowledge/index/hostKnowledgeIndex";
 import { preSearchBlock, withPreSearch } from "./preSearchSource";
 
-vi.mock("../ripgrep", () => ({ findRipgrep: async () => "rg" }));
-vi.mock("../workspaceSearch", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../workspaceSearch")>()),
+vi.mock("../tools/ripgrep", () => ({ findRipgrep: async () => "rg" }));
+vi.mock("../workspace/workspaceSearch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../workspace/workspaceSearch")>()),
   searchWorkspace: async (opts: { query: string }) => ({ ok: true, query: opts.query, matches: [{ path: "src/billing/invoice.ts", line: 4, text: "createInvoice()" }] }),
 }));
 

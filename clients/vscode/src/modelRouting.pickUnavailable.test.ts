@@ -28,23 +28,23 @@ vi.mock("@builderforce/local-inference", () => ({
   localRuntime: () => ({ onDevice: false, gatewayVendor: "kimi-code", label: "Kimi Code" }),
   formatLocalModelRef: (p: string, m: string) => `local/${p}/${m}`,
 }));
-vi.mock("./gateway", () => ({
+vi.mock("./gateway/gateway", () => ({
   complete: vi.fn(),
   getApiKey: vi.fn(),
   getBaseUrl: () => "https://api.example",
   getLocalModelsConfig: () => ({ enabled: false, localFirst: false, endpoints: { "kimi-code": { baseUrl: "https://kimi.example" } } }),
 }));
-vi.mock("./localEndpointAuth", () => ({ authorizeLocalEndpoint: async () => ({ ok: false, detail: "Kimi is not connected." }) }));
-vi.mock("./providerConnect", () => ({ editorAccounts: () => ({ hybridAccounts: async () => ({ accounts: [] }) }) }));
+vi.mock("./auth/localEndpointAuth", () => ({ authorizeLocalEndpoint: async () => ({ ok: false, detail: "Kimi is not connected." }) }));
+vi.mock("./auth/providerConnect", () => ({ editorAccounts: () => ({ hybridAccounts: async () => ({ accounts: [] }) }) }));
 vi.mock("./errorReporter", () => ({ logLine: vi.fn() }));
-vi.mock("./localModels", () => ({ probeLocalFirstRuntimes: async () => [], probeOnDeviceRuntimes: async () => [] }));
-vi.mock("./modelState", () => ({ resolveEffectiveModelChoice: async () => ({ model: "direct/kimi-code/k3" }) }));
-vi.mock("./nativeGatewayStream", () => ({ createNativeStream: vi.fn() }));
+vi.mock("./models/localModels", () => ({ probeLocalFirstRuntimes: async () => [], probeOnDeviceRuntimes: async () => [] }));
+vi.mock("./models/modelState", () => ({ resolveEffectiveModelChoice: async () => ({ model: "direct/kimi-code/k3" }) }));
+vi.mock("./native/nativeGatewayStream", () => ({ createNativeStream: vi.fn() }));
 vi.mock("./hostBfi/provision", () => ({ hostModelProvisioner: { ensure: vi.fn() } }));
-vi.mock("./pageEngineBridge", () => ({ hostPageEngines: { connected: () => false, fetch: () => fetch } }));
-vi.mock("./localSuccessStorage", () => ({ localSuccessFederation: {}, localSuccessStore: {}, localSuccessTuning: {} }));
-vi.mock("./platformPolicy", () => ({ assertPlatformCapability: vi.fn(), platformPolicy: () => ({ allows: () => true }) }));
-vi.mock("./inferenceModeSetting", () => ({ currentInferenceMode: () => h.mode }));
+vi.mock("./panels/pageEngineBridge", () => ({ hostPageEngines: { connected: () => false, fetch: () => fetch } }));
+vi.mock("./localFirst/localSuccessStorage", () => ({ localSuccessFederation: {}, localSuccessStore: {}, localSuccessTuning: {} }));
+vi.mock("./platform/platformPolicy", () => ({ assertPlatformCapability: vi.fn(), platformPolicy: () => ({ allows: () => true }) }));
+vi.mock("./models/inferenceModeSetting", () => ({ currentInferenceMode: () => h.mode }));
 
 import { resolveModelRoute, routeStream } from "./modelRouting";
 

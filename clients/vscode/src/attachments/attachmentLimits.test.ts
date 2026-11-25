@@ -11,7 +11,7 @@ import { UPLOAD_MAX_BYTES, UPLOAD_MAX_VIDEO_BYTES, uploadMaxBytes, uploadRefusal
  * platform's. Read from the api source rather than imported: the api module is typed
  * against the Workers runtime, which this project does not compile.
  */
-const STORE = path.resolve(__dirname, "../../../api/src/application/assets/tenantAssetStore.ts");
+const STORE = path.resolve(__dirname, "../../../../api/src/application/assets/tenantAssetStore.ts");
 
 function apiConstant(source: string, name: string): number {
   const m = new RegExp(`export const ${name} = ([\\d\\s*]+);`).exec(source);

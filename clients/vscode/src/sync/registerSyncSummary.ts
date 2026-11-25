@@ -7,7 +7,7 @@
 
 import * as vscode from "vscode";
 import type { DurableLocalFirstStore } from "../durableLocalFirstStore";
-import { platformPolicy } from "../platformPolicy";
+import { platformPolicy } from "../platform/platformPolicy";
 import { hostSyncSummaryPorts } from "./hostSyncSummary";
 import { readSyncSummary, type SyncSummary } from "./syncSummary";
 

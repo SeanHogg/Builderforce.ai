@@ -31,10 +31,10 @@ import type { KnowledgeGraph, KnowledgeStore, LocalSnapshotStore, PlanDetail, Re
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import { NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import { fetchAuthed, type AuthedInit } from "../bfApi";
-import { getSelectedProject } from "../projectState";
-import { currentCapabilityInputs } from "../capabilityContext";
-import { workspaceLinked } from "../capabilityStates";
-import { buildLocalCapabilityProvider } from "../localCapabilities";
+import { getSelectedProject } from "../project/projectState";
+import { currentCapabilityInputs } from "../tools/capabilityContext";
+import { workspaceLinked } from "../tools/capabilityStates";
+import { buildLocalCapabilityProvider } from "../tools/localCapabilities";
 import { logLine } from "../errorReporter";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import { vscodeKnowledgeFs, workspaceKnowledgeFiles } from "./knowledgeFs";
@@ -51,7 +51,7 @@ import { UNTIMED, type LoadTimer } from "./knowledgeLoadTrace";
 import { storedGraphOffThread } from "./graphWorker";
 import { preemptBackground } from "./indexLevels";
 import { useL3GuardLog } from "./l3CrashGuard";
-import { untilAborted } from "../boundedStep";
+import { untilAborted } from "../run/boundedStep";
 import { messageOf } from "../messageOf";
 
 /** Where the reviewed roots are listed (`workspaceState`), set at activation. */

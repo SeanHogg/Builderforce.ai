@@ -1,7 +1,7 @@
 import type * as vscode from "vscode";
 import type { BrainMessage, EvermindLearnOutcome } from "@seanhogg/builderforce-brain-embedded";
 import { registerDeadLetterQueue } from "../deadLetterCommand";
-import { createDurableOutbox, outboxSecrets, scopeTenantId } from "../outboxStorage";
+import { createDurableOutbox, outboxSecrets, scopeTenantId } from "../sync/outboxStorage";
 import { authed } from "./transport";
 import { messageOf } from "../messageOf";
 

@@ -7,11 +7,11 @@ vi.mock("vscode", () => ({
     fire(e: unknown) { for (const l of this.listeners) l(e); }
   },
 }));
-vi.mock("../gateway", () => ({ getApiKey: async () => "bfk_stored", getBaseUrl: () => "https://api.example" }));
-vi.mock("../outboxStorage", () => ({ setOutboxScope: () => undefined, trackReachability: <T>(p: T) => p }));
+vi.mock("../gateway/gateway", () => ({ getApiKey: async () => "bfk_stored", getBaseUrl: () => "https://api.example" }));
+vi.mock("../sync/outboxStorage", () => ({ setOutboxScope: () => undefined, trackReachability: <T>(p: T) => p }));
 
 import { onWorkspaceRefused } from "../gatewayAuth";
-import { getCurrentWorkspace } from "../workspaceSelection";
+import { getCurrentWorkspace } from "../workspace/workspaceSelection";
 import {
   clearJwt,
   dropWorkspaceSelection,

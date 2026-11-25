@@ -21,12 +21,12 @@ vi.mock("vscode", () => ({
   l10n: { t: (m: string) => m },
 }));
 vi.mock("../bfApi", () => ({ fetchAuthed: mocks.fetchAuthed }));
-vi.mock("../projectState", () => ({ getSelectedProject: () => ({ id: 7, name: "linked" }) }));
-vi.mock("../capabilityContext", () => ({ currentCapabilityInputs: () => ({ signedIn: true, synchronize: true, gatewayInference: true, connectedFeatures: true }) }));
+vi.mock("../project/projectState", () => ({ getSelectedProject: () => ({ id: 7, name: "linked" }) }));
+vi.mock("../tools/capabilityContext", () => ({ currentCapabilityInputs: () => ({ signedIn: true, synchronize: true, gatewayInference: true, connectedFeatures: true }) }));
 vi.mock("../errorReporter", () => ({ logLine: vi.fn() }));
-vi.mock("../localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
-vi.mock("../workspaceSymbols", () => ({ workspaceSymbolIndex: () => ({ filesUnder: async () => [] }) }));
-vi.mock("../platformPolicy", () => ({ platformCapabilityAllows: () => true }));
+vi.mock("../tools/localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
+vi.mock("../workspace/workspaceSymbols", () => ({ workspaceSymbolIndex: () => ({ filesUnder: async () => [] }) }));
+vi.mock("../platform/platformPolicy", () => ({ platformCapabilityAllows: () => true }));
 vi.mock("./index/hostKnowledgeIndex", () => ({ getHostKnowledgeIndex: async () => ({ nearDuplicates: () => [] }) }));
 vi.mock("./knowledgeFs", () => ({
   vscodeKnowledgeFs: () => ({ readDirectory: async () => { throw new Error("ENOENT"); }, stat: async () => { throw new Error("ENOENT"); }, readFile: async () => new Uint8Array() }),

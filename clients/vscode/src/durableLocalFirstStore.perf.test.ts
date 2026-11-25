@@ -4,10 +4,10 @@ import nodePath from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { encodeJournalFrame, newLocalRecord, type LocalFirstSnapshot } from "@builderforce/local-first";
 import { createDurableLocalFirstStore } from "./durableLocalFirstStore";
-import { hostLog } from "./hostLog";
-import { LEGACY_JOURNAL_FILE, type JournalStageTiming } from "./localFirstJournalIo";
+import { hostLog } from "./host/hostLog";
+import { LEGACY_JOURNAL_FILE, type JournalStageTiming } from "./localFirst/localFirstJournalIo";
 
-vi.mock("./hostLog", () => ({ hostLog: vi.fn() }));
+vi.mock("./host/hostLog", () => ({ hostLog: vi.fn() }));
 
 const directories: string[] = [];
 

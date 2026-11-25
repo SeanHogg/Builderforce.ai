@@ -12,7 +12,7 @@
  */
 
 import { isRecordPayloadFence, type EntityDestination, type InferenceMode } from "@builderforce/local-first";
-import type { LocalFirstView } from "../localFirstView";
+import type { LocalFirstView } from "../localFirst/localFirstView";
 
 export type SyncSummaryDestination =
   | { kind: "unbound" }

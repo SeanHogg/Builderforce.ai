@@ -18,7 +18,7 @@
 import { isFailedToolResult, type RunStopHook, type RunStopInput } from "@seanhogg/builderforce-brain-embedded";
 import type { ShellResult } from "@builderforce/agent-tools";
 import { DIRECTIVES_DIR, HOOKS_FILE, appliesToRun, matchesTool, type HookEvent, type WorkspaceHook } from "./hookConfig";
-import type { LocalShellOptions } from "../localShell";
+import type { LocalShellOptions } from "../tools/localShell";
 import { messageOf } from "../messageOf";
 
 /** The hooks of one run, as the run's seams call them. */

@@ -27,8 +27,8 @@ import {
   naturalnessCollector, naturalnessLanguageOf, type NaturalnessCollector, type NaturalnessResult,
 } from "@builderforce/run-delta/predict";
 import { isBinaryBytes } from "@seanhogg/builderforce-memory/knowledge";
-import { yieldToEventLoop } from "../localFirstJournalIo";
-import type { LocalChangeSetValue } from "../runChangeSets";
+import { yieldToEventLoop } from "../localFirst/localFirstJournalIo";
+import type { LocalChangeSetValue } from "../run/runChangeSets";
 import { GIT_TIMEOUT_MS, isCommitId, repoGit } from "./gitSide";
 import type { StoredRunDelta } from "./runDeltaRecords";
 import { predictedOf, storeRunPrediction, type RunPredictionValue } from "./runDeltaPredictions";

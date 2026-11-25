@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createMemoryLocalFirstStore } from "@builderforce/local-first";
-import { ensureLocalAuditDefinitions, startLocalAuditRun } from "./localAuditStore";
+import { ensureLocalAuditDefinitions, startLocalAuditRun } from "./audit/localAuditStore";
 import { EXTENSION_ACTIVATION_LINE, installAuditClose } from "./installAuditClose";
 import { closeAuditLocally } from "./auditCloseCheckpoint";
 

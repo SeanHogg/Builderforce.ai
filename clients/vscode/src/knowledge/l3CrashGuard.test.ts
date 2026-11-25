@@ -15,7 +15,7 @@ const { memento } = vi.hoisted(() => ({
 }));
 vi.mock("./knowledgeSyncStatus", () => ({ hostMemento: () => memento }));
 vi.mock("@builderforce/agent-tools/node-git-history", () => ({ recentCommits: vi.fn(async () => (h.sha ? [{ sha: h.sha, paths: [] }] : [])) }));
-vi.mock("../localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
+vi.mock("../tools/localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
 vi.mock("@builderforce/repo-map", () => ({ repoMapPort: {} }));
 vi.mock("./l3Worker", () => ({
   runL3InWorker: vi.fn(async () => {

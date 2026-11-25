@@ -35,7 +35,8 @@ interface ResolveContext {
   resolve(source: string, importer?: string, options?: Record<string, unknown>): Promise<unknown>;
 }
 
-const peersFromHost = {
+/** Exported for the `/preview` harness build (`harness/vite.config.ts`): the same one-copy-of-each-peer rule. */
+export const peersFromHost = {
   name: 'knowledge-graph-view:peers-from-host',
   enforce: 'pre' as const,
   async resolveId(this: ResolveContext, source: string, importer: string | undefined, options: Record<string, unknown>) {

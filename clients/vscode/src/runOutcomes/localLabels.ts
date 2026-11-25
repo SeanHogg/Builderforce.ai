@@ -13,7 +13,7 @@
 
 import type { LocalFirstStore } from "@builderforce/local-first";
 import { LABEL_WINDOW_DAYS, windowEnd, type RunOutcomeRecordValue } from "@builderforce/run-delta/predict";
-import { repositoryIdentityOf } from "../runChangeBaseline";
+import { repositoryIdentityOf } from "../run/runChangeBaseline";
 import { syncedRepository } from "../runDelta/runDeltaRecords";
 import { labelBatchOffThread } from "./labelBatch";
 import { laterHistory } from "./outcomeGit";

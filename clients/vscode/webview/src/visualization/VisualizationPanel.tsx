@@ -51,7 +51,7 @@ import { getPendingChanges, onPendingChanges } from '../bridgeState';
 import { makeT } from '../chat/chatLabels';
 import { scopeChangesToChat } from '../chatChangeScope';
 import type { LabelBundle } from '../vscodeBridge';
-import type { PendingChange, PendingChangeSet } from '../../../src/gitChangeModel';
+import type { PendingChange, PendingChangeSet } from '../../../src/git/gitChangeModel';
 import { parseUnifiedDiff, type FileDiff } from './diffModel';
 import { buildChangeGraph, type ChangeGraph } from './changeGraph';
 import { ChangeTree } from './ChangeTree';

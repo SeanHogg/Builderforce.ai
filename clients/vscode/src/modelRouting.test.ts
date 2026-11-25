@@ -34,8 +34,8 @@ function stripComments(text: string): string {
 
 /** Every non-test source file, comments removed. */
 function sourceFiles(): Array<{ name: string; text: string }> {
-  return fs
-    .readdirSync(SRC)
+  return (fs.readdirSync(SRC, { recursive: true }) as string[])
+    .map((f) => f.split(path.sep).join("/"))
     .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
     .map((name) => ({ name, text: stripComments(fs.readFileSync(path.join(SRC, name), "utf8")) }));
 }
@@ -55,7 +55,7 @@ describe("model routing is centralized", () => {
     // are the two sides of the branch. A second module reaching for either one is a
     // second router, which is how the surfaces diverged before.
     const owners: Record<string, readonly string[]> = {
-      createNativeStream: ["modelRouting.ts", "nativeGatewayStream.ts"],
+      createNativeStream: ["modelRouting.ts", "native/nativeGatewayStream.ts"],
       // The local transports are brain-embedded's (shared with the Chrome extension);
       // in the editor only the seam reaches for them. `completeLocal` also matches
       // `completeLocalFirst` — local-first is a transport choice too. The streaming side
@@ -64,7 +64,7 @@ describe("model routing is centralized", () => {
       createLocalStream: [],
       completeLocal: ["modelRouting.ts"],
       createLocalFirstStream: [],
-      probeLocalFirstRuntimes: ["modelRouting.ts", "localModels.ts"],
+      probeLocalFirstRuntimes: ["modelRouting.ts", "models/localModels.ts"],
     };
     const sources = sourceFiles();
     for (const [symbol, allowed] of Object.entries(owners)) {
@@ -80,7 +80,7 @@ describe("model routing is centralized", () => {
     // The gateway module may read the local SETTINGS (it owns configuration accessors),
     // but it must not parse local refs or dispatch to a runtime — that briefly leaked
     // there and put routing policy inside the transport it was supposed to choose between.
-    const gateway = stripComments(fs.readFileSync(path.join(SRC, "gateway.ts"), "utf8"));
+    const gateway = stripComments(fs.readFileSync(path.join(SRC, "gateway/gateway.ts"), "utf8"));
     expect(gateway).not.toContain("parseLocalModelRef");
     expect(gateway).not.toContain("completeLocal");
     expect(gateway).not.toContain("localFirstPlan");
@@ -102,7 +102,7 @@ describe("model routing is centralized", () => {
     const readers = sourceFiles()
       .filter(({ text }) => text.includes('"defaultModel"'))
       .map(({ name }) => name);
-    expect(readers).toEqual(["modelState.ts"]);
+    expect(readers).toEqual(["models/modelState.ts"]);
   });
 
   it("routes the Brain webview through the seam too", () => {
@@ -111,11 +111,11 @@ describe("model routing is centralized", () => {
     // be HANDED the route (`localRoute` in `init`), never resolve one.
     // Every host of the workspace surface (editor tab, chat view) is handed `init` by
     // `workspaceInit.ts`, and every one proxies local fetches through `localFetchProxy.ts`.
-    const host = stripComments(fs.readFileSync(path.join(SRC, "workspaceInit.ts"), "utf8"));
+    const host = stripComments(fs.readFileSync(path.join(SRC, "workspace/workspaceInit.ts"), "utf8"));
     expect(host).toContain("resolveModelRoute");
     expect(host).not.toContain("resolveEffectiveModelChoice");
     // …and the proxy it exposes must be fenced by the shared rule, not a local copy.
-    const proxy = stripComments(fs.readFileSync(path.join(SRC, "localFetchProxy.ts"), "utf8"));
+    const proxy = stripComments(fs.readFileSync(path.join(SRC, "tools/localFetchProxy.ts"), "utf8"));
     expect(proxy).toContain("resolveLocalChatEndpoint");
   });
 
@@ -125,7 +125,7 @@ describe("model routing is centralized", () => {
     const scan = fs.readFileSync(path.join(SRC, "codebaseScan.ts"), "utf8");
     expect(scan).toContain("routeComplete");
     expect(scan).toContain("route: ModelRoute");
-    expect(scan).not.toContain('from "./gateway"');
+    expect(scan).not.toContain('from "./gateway/gateway"');
   });
 });
 
@@ -140,11 +140,11 @@ describe("the permission mode is decided in one place", () => {
     const readers = sourceFiles()
       .filter(({ text }) => text.includes('"permissionMode"'))
       .map(({ name }) => name);
-    expect(readers).toEqual(["permissionMode.ts"]);
+    expect(readers).toEqual(["platform/permissionMode.ts"]);
   });
 
   it("hands the panel the resolved value instead of letting it derive one", () => {
-    const host = stripComments(fs.readFileSync(path.join(SRC, "workspaceInit.ts"), "utf8"));
+    const host = stripComments(fs.readFileSync(path.join(SRC, "workspace/workspaceInit.ts"), "utf8"));
     expect(host).toContain("autoApproveDefault");
   });
 
@@ -167,8 +167,8 @@ describe("the permission mode is decided in one place", () => {
 describe("the platform stays on the gateway when the model does not", () => {
   // The run now executes in the extension host (brainRunHost.ts); its ports are where
   // the two questions are answered — and they must be answered by DIFFERENT seams.
-  const ports = stripComments(fs.readFileSync(path.join(SRC, "brainRunHostPorts.ts"), "utf8"));
-  const catalog = stripComments(fs.readFileSync(path.join(SRC, "platformTools.ts"), "utf8"));
+  const ports = stripComments(fs.readFileSync(path.join(SRC, "brain/brainRunHostPorts.ts"), "utf8"));
+  const catalog = stripComments(fs.readFileSync(path.join(SRC, "platform/platformTools.ts"), "utf8"));
 
   it("fetches the tool catalogue from the gateway, never from the route's endpoint", () => {
     expect(ports).toContain("brainToolCatalog(");
@@ -186,9 +186,9 @@ describe("the platform stays on the gateway when the model does not", () => {
   it("starts provisioning a local model only from a turn — never from a panel opening or a scan", () => {
     // `turn: true` is what lets the route call `hostModelProvisioner.ensure()`; the two
     // chat surfaces pass it, the panel init and the workspace scan resolve without it.
-    const participant = stripComments(fs.readFileSync(path.join(SRC, "chatParticipant.ts"), "utf8"));
+    const participant = stripComments(fs.readFileSync(path.join(SRC, "chat/chatParticipant.ts"), "utf8"));
     expect(participant).toContain("resolveModelRoute(ctx.secrets, { turn: true })");
-    const init = stripComments(fs.readFileSync(path.join(SRC, "workspaceInit.ts"), "utf8"));
+    const init = stripComments(fs.readFileSync(path.join(SRC, "workspace/workspaceInit.ts"), "utf8"));
     const extension = stripComments(fs.readFileSync(path.join(SRC, "extension.ts"), "utf8"));
     for (const source of [init, extension]) expect(source).not.toContain("turn: true");
     const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
@@ -197,9 +197,9 @@ describe("the platform stays on the gateway when the model does not", () => {
 
   it("never lets a Hybrid fallback be silent — both chat surfaces hear onFallback", () => {
     const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
-    const participant = stripComments(fs.readFileSync(path.join(SRC, "chatParticipant.ts"), "utf8"));
-    const host = stripComments(fs.readFileSync(path.join(SRC, "brainRunHost.ts"), "utf8"));
-    const participantRun = stripComments(fs.readFileSync(path.join(SRC, "participantRun.ts"), "utf8"));
+    const participant = stripComments(fs.readFileSync(path.join(SRC, "chat/chatParticipant.ts"), "utf8"));
+    const host = stripComments(fs.readFileSync(path.join(SRC, "brain/brainRunHost.ts"), "utf8"));
+    const participantRun = stripComments(fs.readFileSync(path.join(SRC, "chat/participantRun.ts"), "utf8"));
     // The seam hands the shared step the surface's handler…
     expect(routing).toContain("...(onFallback ? { onFallback } : {})");
     // …the panel's run host passes one that announces the notice to that chat's panel…
@@ -231,7 +231,7 @@ describe("the inference mode is decided by the seam", () => {
     const readers = sourceFiles()
       .filter(({ text }) => text.includes('"inferenceMode"'))
       .map(({ name }) => name);
-    expect(readers).toEqual(["inferenceModeSetting.ts"]);
+    expect(readers).toEqual(["models/inferenceModeSetting.ts"]);
   });
 
   it("never owes an account, nor builds a cloud stream, on Local only", () => {
@@ -269,8 +269,8 @@ describe("the inference mode is decided by the seam", () => {
   // login failed "Kimi credentials are not initialized" and the sign-in was never offered.
   // Now it is the SHARED connected accounts (Rovr's too), created on first use.
   it("authorizes Kimi through the shared connected accounts, with no init step to forget", () => {
-    const auth = stripComments(fs.readFileSync(path.join(SRC, "localEndpointAuth.ts"), "utf8"));
-    const store = stripComments(fs.readFileSync(path.join(SRC, "localProviderCredentials.ts"), "utf8"));
+    const auth = stripComments(fs.readFileSync(path.join(SRC, "auth/localEndpointAuth.ts"), "utf8"));
+    const store = stripComments(fs.readFileSync(path.join(SRC, "auth/localProviderCredentials.ts"), "utf8"));
     expect(auth).toContain("const accounts = editorAccounts(secrets);");
     expect(auth).toContain("accounts.providerFor(provider)");
     // Every request asks the shared accounts for the current token, not the one the run started with.

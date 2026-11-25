@@ -63,26 +63,26 @@ import {
   getLocalModelsConfig,
   type ChatMessage,
   type CompletionOptions,
-} from "./gateway";
-import { hasImageParts, IMAGE_NEEDS_GATEWAY, textOnly } from "./chatContent";
-import { authorizeLocalEndpoint } from "./localEndpointAuth";
-import { editorAccounts } from "./providerConnect";
+} from "./gateway/gateway";
+import { hasImageParts, IMAGE_NEEDS_GATEWAY, textOnly } from "./chat/chatContent";
+import { authorizeLocalEndpoint } from "./auth/localEndpointAuth";
+import { editorAccounts } from "./auth/providerConnect";
 import { logLine } from "./errorReporter";
-import { declaredLocalModels, lastProbedLocalModels, probeLocalFirstRuntimes, probeOnDeviceRuntimes, type LocalModelsConfig } from "./localModels";
-import { resolveEffectiveModelChoice, type EffectiveModelChoice } from "./modelState";
-import { createNativeStream } from "./nativeGatewayStream";
+import { declaredLocalModels, lastProbedLocalModels, probeLocalFirstRuntimes, probeOnDeviceRuntimes, type LocalModelsConfig } from "./models/localModels";
+import { resolveEffectiveModelChoice, type EffectiveModelChoice } from "./models/modelState";
+import { createNativeStream } from "./native/nativeGatewayStream";
 import { gatewayWorkspaceHeaders } from "./gatewayAuth";
 import { hostModelProvisioner } from "./hostBfi/provision";
-import { hostPageEngines } from "./pageEngineBridge";
-import { localSuccessFederation, localSuccessStore, localSuccessTuning } from "./localSuccessStorage";
-import { assertPlatformCapability, platformPolicy } from "./platformPolicy";
-import { currentInferenceMode } from "./inferenceModeSetting";
-import { unauthorizedError, type ModelRoute, type RouteRequest } from "./modelRoute";
-import { createOnDeviceTasks } from "./onDeviceTasks";
+import { hostPageEngines } from "./panels/pageEngineBridge";
+import { localSuccessFederation, localSuccessStore, localSuccessTuning } from "./localFirst/localSuccessStorage";
+import { assertPlatformCapability, platformPolicy } from "./platform/platformPolicy";
+import { currentInferenceMode } from "./models/inferenceModeSetting";
+import { unauthorizedError, type ModelRoute, type RouteRequest } from "./models/modelRoute";
+import { createOnDeviceTasks } from "./tickets/onDeviceTasks";
 
-export type { ModelRoute, RouteRequest } from "./modelRoute";
-export { routeCatalogEngine } from "./catalogEngine";
-export { onDeviceModelAvailable } from "./onDeviceTasks";
+export type { ModelRoute, RouteRequest } from "./models/modelRoute";
+export { routeCatalogEngine } from "./models/catalogEngine";
+export { onDeviceModelAvailable } from "./tickets/onDeviceTasks";
 
 /**
  * The model a RUN asks for, decided once by the host (`modelState.resolveEffectiveModelChoice`, persona precedence included) and handed

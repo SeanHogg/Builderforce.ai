@@ -31,12 +31,12 @@ vi.mock("../bfApi", () => ({
     return new Response("{}", { status: 429, headers: { "retry-after": "0" } });
   },
 }));
-vi.mock("../projectState", () => ({ getSelectedProject: () => (mocks.linked ? { id: 7, name: "linked" } : undefined) }));
+vi.mock("../project/projectState", () => ({ getSelectedProject: () => (mocks.linked ? { id: 7, name: "linked" } : undefined) }));
 // Linked means selected + signed in + `synchronize` granted (PRD 41 A2): this scenario is the granted one.
-vi.mock("../capabilityContext", () => ({ currentCapabilityInputs: () => ({ signedIn: true, synchronize: true, gatewayInference: true, connectedFeatures: true }) }));
+vi.mock("../tools/capabilityContext", () => ({ currentCapabilityInputs: () => ({ signedIn: true, synchronize: true, gatewayInference: true, connectedFeatures: true }) }));
 vi.mock("../errorReporter", () => ({ logLine: vi.fn() }));
-vi.mock("../localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
-vi.mock("../workspaceSymbols", () => ({ workspaceSymbolIndex: () => ({ filesUnder: async () => [] }) }));
+vi.mock("../tools/localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
+vi.mock("../workspace/workspaceSymbols", () => ({ workspaceSymbolIndex: () => ({ filesUnder: async () => [] }) }));
 vi.mock("./index/hostKnowledgeIndex", () => ({ getHostKnowledgeIndex: async () => undefined }));
 vi.mock("./knowledgeFs", () => ({
   vscodeKnowledgeFs: () => ({ readDirectory: async () => { throw new Error("ENOENT"); }, stat: async () => { throw new Error("ENOENT"); }, readFile: async () => new Uint8Array() }),

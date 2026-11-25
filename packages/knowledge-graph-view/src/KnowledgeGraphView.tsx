@@ -78,7 +78,7 @@ import { SceneState, SceneStatus } from './surface/SceneState';
 import { SurfaceFrame } from './surface/SurfaceStates';
 import { EMPTY_GRAPH } from './emptyGraph';
 import { useSurface } from './surface/useSurface';
-import type { EvidenceSide, KnowledgeConfirm, KnowledgeGraphSource, KnowledgePanelRenderer, LensId, SourceLocation, SourceRange, ViewMode } from './types';
+import type { EvidenceSide, KnowledgeConfirm, KnowledgeGraphSource, KnowledgePanelRenderer, LensId, EditorView, SourceLocation, SourceRange, ViewMode } from './types';
 
 /** Nodes a desktop view draws at most (instanced geometry is sized for it). */
 const MAX_DRAWN_NODES = 2000;
@@ -100,12 +100,14 @@ export interface KnowledgeGraphViewProps {
     lenses?: readonly LensId[];
     /** Opens a finding's line range in the host's editor. Absent ⇒ ranges are links or text. */
     onOpenSource?(location: SourceLocation): void;
+    /** What the host's editor shows of a file of the root on show: the code band follows it. */
+    editorView?: EditorView | null;
 }
 
 const EMPTY_VISIBLE: VisibleGraph = { nodes: [], edges: [] };
 
 export function KnowledgeGraphView({
-    source, labels: partial, onCompose, initialFocus, openReview, initialLens, renderPanel, confirm, lenses: lensSubset, onOpenSource,
+    source, labels: partial, onCompose, initialFocus, openReview, initialLens, renderPanel, confirm, lenses: lensSubset, onOpenSource, editorView,
 }: KnowledgeGraphViewProps) {
     const labels = useMemo(() => resolveLabels(partial), [partial]);
     // First-load triage: the graph's calls are timed (one wrapper per source), and the host's trace is read while a load runs.
@@ -146,7 +148,7 @@ export function KnowledgeGraphView({
     const changed = useMemo(() => new Set(history.commits.find((c) => c.sha === picked)?.refs ?? []), [history, picked]);
     const symbols = useMemo(() => (source.symbolsOf && kg.rootId ? (refs: string[]) => source.symbolsOf!(kg.rootId!, refs) : undefined), [source, kg.rootId]);
     const readSource = useMemo(() => (source.readSource && kg.rootId ? (path: string, range: SourceRange) => source.readSource!(kg.rootId!, path, range) : undefined), [source, kg.rootId]);
-    const surface = useSurface(graph, showingBefore ? null : kg.baseline?.graph ?? null, { question: questionForLens(kg.requested.id), focus: kg.focus, changed, symbols, readSource, repoConfigName: labels.surface.repoConfig, communityFallback: labels.communityFallback });
+    const surface = useSurface(graph, showingBefore ? null : kg.baseline?.graph ?? null, { question: questionForLens(kg.requested.id), focus: kg.focus, changed, symbols, readSource, editorView, repoConfigName: labels.surface.repoConfig, communityFallback: labels.communityFallback });
     // PRD 38 P7: the station transition table, built once per graph (memoised on it in `transitionTableOf`).
     const transitions = useMemo(() => (real ? transitionTableOf(graph, surface.stations) : null), [real, graph, surface.stations]);
     // The question follows the lens in effect: a requested lens the graph cannot show falls back, and the pills must say which one is on.

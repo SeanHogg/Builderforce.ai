@@ -11,12 +11,12 @@ import type { KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
 import { depthCrumbs, type DepthFrame } from '../../surface/DepthTrail';
 import { TYPE } from '../../surface/ui/type';
+import { toggleButton as toggle } from './cardStyles';
 
 /** The bar's height: the stage below it is this much shorter. */
 export const CODE_BAR_PX = 36;
 
 const crumb: CSSProperties = { ...TYPE.meta, border: 0, padding: '3px 6px', borderRadius: 4, background: 'transparent', color: cssVar('text'), cursor: 'pointer', whiteSpace: 'nowrap', font: 'inherit' };
-const toggle: CSSProperties = { ...TYPE.meta, padding: '2px 8px', borderRadius: 6, cursor: 'pointer', border: `1px solid ${cssVar('border')}`, background: 'transparent', color: cssVar('text'), whiteSpace: 'nowrap' };
 
 interface Crumb { key: string; name: string; go?: (() => void) | undefined }
 

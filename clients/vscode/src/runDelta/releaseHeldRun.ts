@@ -18,8 +18,8 @@
 
 import type { LocalFirstStore, RunWaiver } from "@builderforce/local-first";
 import { RUN_DELTA_RELEASE_REFUSED } from "@builderforce/run-delta/contract";
-import type { InstalledRunRecovery } from "../installRunRecovery";
-import { recordLocalAuditGate } from "../localAuditGate";
+import type { InstalledRunRecovery } from "../run/installRunRecovery";
+import { recordLocalAuditGate } from "../audit/localAuditGate";
 
 /** How long a release waits for a just-held run's hold to be journaled before it is refused `pending`. */
 export const RELEASE_JOURNAL_WAIT_MS = 5_000;

@@ -9,7 +9,7 @@ import { createShipPorts, parseReviewReply, catalogModelIds } from "./shipPorts"
 import { REVIEW_DIFF_BUDGET_CHARS, budgetReviewDiff, createReviewerPort } from "./reviewerPort";
 import type { VscodeLike } from "./pathDiagnostics";
 import type { GitRunner } from "./gitPort";
-import type { ModelChoices } from "../gateway";
+import type { ModelChoices } from "../gateway/gateway";
 
 const ROOT = path.resolve("/ws");
 

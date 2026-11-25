@@ -11,14 +11,14 @@ import {
   type MemoryLocalFirstStore,
 } from "@builderforce/local-first";
 import { createDurableLocalFirstStore, type DurableLocalFirstStore } from "./durableLocalFirstStore";
-import { JOURNAL_FILE } from "./localFirstJournalIo";
+import { JOURNAL_FILE } from "./localFirst/localFirstJournalIo";
 import {
   BACKUP_KEEP_MS,
   PRE_MIGRATION_RECORD_SUFFIX,
   PRE_MIGRATION_SUFFIX,
   migrateEventBacklog,
   restorePreMigrationBackup,
-} from "./localFirstEventMigration";
+} from "./localFirst/localFirstEventMigration";
 
 const directories: string[] = [];
 async function directory(): Promise<string> {

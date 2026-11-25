@@ -19,8 +19,8 @@
 import * as path from "node:path";
 import { scanByIndex, type LocalFirstStore } from "@builderforce/local-first";
 import type { ChangedFileInput } from "@builderforce/run-delta";
-import { isoDay, OPEN_CHANGE_SET_LIFECYCLES, type ChangeSetLifecycleValue } from "../changeSetLifecycle";
-import { CHANGE_SETS_BY_REPOSITORY_DAY, changeSetDayKey, type LocalChangeSetValue } from "../runChangeSets";
+import { isoDay, OPEN_CHANGE_SET_LIFECYCLES, type ChangeSetLifecycleValue } from "../git/changeSetLifecycle";
+import { CHANGE_SETS_BY_REPOSITORY_DAY, changeSetDayKey, type LocalChangeSetValue } from "../run/runChangeSets";
 
 /** An in-flight lifecycle older than this is a dead run's, not a parallel one. */
 export const STALE_RUN_MS = 12 * 60 * 60 * 1000;

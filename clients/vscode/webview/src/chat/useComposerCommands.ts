@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
 import type { PromptOptionsCommands } from '@seanhogg/builderforce-brain-ui';
-import { COMPOSER_COMMANDS_FRAME } from '../../../src/bridgeProtocol';
+import { COMPOSER_COMMANDS_FRAME } from '../../../src/panels/bridgeProtocol';
 import type { ComposerCommandsInit, ComposerInputResult, ComposerReply } from '../../../src/composerCommands/reply';
 import type { ComposerCommandsFrame } from '../bridgeTypes';
 import { onHostMessage, request, type InitData } from '../vscodeBridge';

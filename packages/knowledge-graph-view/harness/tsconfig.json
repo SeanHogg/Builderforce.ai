@@ -1,0 +1,8 @@
+{
+  // The `/preview` harness, type-checked with the package's own settings and peer paths (`tsc -p harness`).
+  // `vite.config.ts` is left out, as the package leaves out `vitest.config.ts`: it runs under Node, whose types this
+  // source-only package does not load.
+  "extends": "../tsconfig.json",
+  "include": ["*.ts", "*.tsx", "../src/**/*.ts", "../src/**/*.tsx"],
+  "exclude": ["vite.config.ts", "../node_modules", "../dist"]
+}

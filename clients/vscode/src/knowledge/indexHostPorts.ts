@@ -20,8 +20,8 @@ import { createReviewRecorder, knownKeysCache, markFilesEditedDetailed, reviewPa
 import { recentCommits } from "@builderforce/agent-tools/node-git-history";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
 import { ignoreSourcesOf, type FactStoreVersion, type PlanDetail, type ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
-import { buildLocalCapabilityProvider } from "../localCapabilities";
-import { symbolGrammarOptions } from "../workspaceSymbols";
+import { buildLocalCapabilityProvider } from "../tools/localCapabilities";
+import { symbolGrammarOptions } from "../workspace/workspaceSymbols";
 import { anyRunActive } from "./activeRuns";
 import { l3StateOf } from "./l3Persist";
 import { holdFreshAnalysis } from "./l3SharedAnalysis";

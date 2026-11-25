@@ -29,8 +29,10 @@ import { showsTowers } from '../../surface/useShowInTower';
 import { Segmented } from '../../surface/ui';
 import { TYPE } from '../../surface/ui/type';
 import { codePaneWidth } from '../overlay/CodeDock';
+import { toggleButton } from '../overlay/cardStyles';
 import { CODE_BAR_PX } from '../overlay/CodeTrail';
-import { useStageWiring } from '../overlay/useStageWiring';
+import { STATUS_PX } from '../overlay/StatusStrip';
+import { useStageWiring, type CodeLayout } from '../overlay/useStageWiring';
 import type { StageRenderer } from '../renderer';
 import { legendTypesOf } from '../rig/stageLegend';
 import { Stage } from '../Stage';
@@ -88,7 +90,7 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
     // The map's own box: beside the code pane and under its bar while the code is open.
     const code = wiring.code;
     const codeWidth = code?.split ? codePaneWidth(boxWidth) : 0;
-    const width = boxWidth - codeWidth, height = boxHeight - (code ? CODE_BAR_PX : 0);
+    const width = boxWidth - codeWidth, height = boxHeight - (code ? CODE_BAR_PX + STATUS_PX : 0);
 
     // Paint: the lens, the overlay, the question (+ its family) and what it lights; Show in towers' roles while a tower
     // picture is on show (the 3D scene, or the Map tilted).
@@ -118,7 +120,7 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
     const ready = !!marks && !!placement && placement.generation === marks.generation;
 
     // The selection: the stage's own (a mark picked here), else the surface's (a search hit, the List).
-    const selected = wiring.selected ?? (p.selected ? `node:${p.selected}` : null);
+    const selected = wiring.selected ?? (p.selected && p.selected !== wiring.dismissed ? `node:${p.selected}` : null);
     const setTowers = surface.setTowers;
     const onTilt = useCallback((d: number) => setTowers(d > 0), [setTowers]);
     const bus = useMemo(() => stageBus(renderer), [renderer]);
@@ -130,27 +132,31 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
         : drill.notice ? fillTemplate(labels.surface.map.drillReset, { name: drill.notice }) : drill.view?.noSymbols ? labels.surface.map.noSymbolsNote : null;
     const caption = ready ? placement.caption : null;
     const mapBand = MAP_BANDS.indexOf(wiring.zoom.band);
+    const sc = labels.surface.code;
+    // Reset view: bumped to fit the camera and put the tilt back up (the 3D view's own button).
+    const [resets, setResets] = useState(0);
+    const resetView = useCallback(() => setResets((n) => n + 1), []);
 
-    // Esc goes out from anywhere over the map (not while typing, and not when a pane already took it).
-    const onOut = wiring.onOut;
+    // Esc clears the pick, else goes out, from anywhere over a shown map (not while typing, in a dialog, or when a pane already took it).
+    const onEscape = wiring.onEscape;
     useEffect(() => {
         const el = box.current;
-        if (!el || !onOut) return undefined;
+        if (!el) return undefined;
         const key = (e: KeyboardEvent) => {
             if (e.key !== 'Escape' || e.defaultPrevented) return;
-            if ((e.target as HTMLElement | null)?.closest('input, textarea, [contenteditable="true"]')) return;
-            if (!el.matches(':hover') && !el.contains(document.activeElement)) return;
+            if ((e.target as HTMLElement | null)?.closest('input, textarea, [contenteditable="true"], [role="dialog"]')) return;
+            if (!el.isConnected || el.closest('[hidden], [aria-hidden="true"]')) return;
             e.preventDefault();
-            onOut();
+            onEscape();
         };
         window.addEventListener('keydown', key);
         return () => window.removeEventListener('keydown', key);
-    }, [onOut]);
+    }, [onEscape]);
 
     return (
         <div ref={box} style={BOX} data-stage-host data-stage-camera={camera}>
             {code?.split && (
-                <div data-code-split style={{ position: 'absolute', insetBlock: 0, insetInlineStart: 0, width: codeWidth, borderInlineEnd: `1px solid ${cssVar('border')}`, background: cssVar('bg') }}>
+                <div data-code-split style={{ position: 'absolute', insetBlockStart: 0, insetBlockEnd: STATUS_PX, insetInlineStart: 0, width: codeWidth, borderInlineEnd: `1px solid ${cssVar('border')}`, background: cssVar('bg') }}>
                     {code.pane}
                 </div>
             )}
@@ -164,8 +170,23 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
                         )}
                         {camera === 'map' && (
                             <Segmented
-                                label={zoom.group} value={MAP_BANDS[mapBand]!} onChange={(id) => wiring.zoom.outToBand(MAP_BANDS.indexOf(id as ZoomBand))}
-                                items={MAP_BANDS.map((b, i) => ({ id: b, label: zoom[b], disabled: i > mapBand }))}
+                                label={zoom.group} value={MAP_BANDS[mapBand]!} onChange={(id) => wiring.toBand(MAP_BANDS.indexOf(id as ZoomBand))}
+                                items={MAP_BANDS.map((b) => ({ id: b, label: zoom[b] }))}
+                            />
+                        )}
+                        {camera === 'map' && (
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                <Segmented
+                                    label={sc.viewAria} value={surface.towers ? '3d' : '2d'} onChange={(id) => setTowers(id === '3d')}
+                                    items={[{ id: '3d', label: sc.view3d }, { id: '2d', label: sc.view2d }]}
+                                />
+                                {surface.towers && <button type="button" data-action="reset-view" onClick={resetView} style={toggleButton}>{sc.resetView}</button>}
+                            </div>
+                        )}
+                        {camera === 'map' && wiring.zoom.code && (
+                            <Segmented
+                                label={sc.layoutAria} value={wiring.codeLayout} onChange={(id) => wiring.setCodeLayout(id as CodeLayout)}
+                                items={[{ id: 'flow', label: sc.flow }, { id: 'sequence', label: sc.sequence }]}
                             />
                         )}
                         {camera === 'map' && <p data-stage-hint style={{ margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'), ...TYPE.bodyMuted }}>{zoom.hint}</p>}
@@ -176,8 +197,9 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
                     <Stage
                         renderer={renderer} marks={marks} paint={paint} placement={placement ?? null} colors={colors}
                         width={width} height={height} reducedMotion={p.reducedMotion} selected={selected} onSelect={wiring.onSelect} onDrill={wiring.onDrill}
-                        depthLabel={labels.surface.scene.depth} nav={nav} description={labels.regionLabel} legend={{ types: legendTypesOf(marks.type), labels }} {...(wiring.onOut ? { onOut: wiring.onOut } : {})}
-                        {...(camera === 'map' ? { tilt: surface.towers ? 1 : 0, onTilt } : {})} onContextLost={onLost}
+                        depthLabel={labels.surface.scene.depth} nav={nav} description={labels.regionLabel} legend={{ types: legendTypesOf(marks.type), labels, links: camera === 'map' && wiring.zoom.band !== 'system' }}
+                        onOut={wiring.onEscape} onClear={wiring.clearSelection}
+                        {...(camera === 'map' ? { tilt: surface.towers ? 1 : 0, onTilt, resetTilt: resets, onWheelStep: wiring.wheelStep } : {})} onContextLost={onLost}
                     />
                 )}
                 {!ready && <LayingOut labels={labels} />}
@@ -191,6 +213,7 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
                 <EdgesCapped caption={caption} labels={labels} />
                 {code && !code.split && code.pane}
             </div>
+            {code && wiring.status}
         </div>
     );
 }

@@ -14,8 +14,8 @@ import {
 } from "@builderforce/local-first";
 import { chatClientIdOf, readRailFromFacts } from "./chatRail/buildRail";
 import { resolveChat } from "./chatRail/resolveChat";
-import { resolveLocalReference } from "./localEntityRefs";
-import { ticketServerIdLookup } from "./localTicketIdBridge";
+import { resolveLocalReference } from "./localFirst/localEntityRefs";
+import { ticketServerIdLookup } from "./tickets/localTicketIdBridge";
 
 const A: EntityDestination = { kind: "bound", platformInstance: "https://api.example", tenantId: "7" };
 const B: EntityDestination = { kind: "bound", platformInstance: "https://api.example", tenantId: "8" };

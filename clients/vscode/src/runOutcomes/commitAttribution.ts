@@ -13,10 +13,10 @@
 import { scanByIndex, type LocalFirstStore } from "@builderforce/local-first";
 import type { CommitAttribution } from "@builderforce/run-delta/predict";
 import type * as vscode from "vscode";
-import { getGitApi, watchGitRepositories } from "../gitApi";
+import { getGitApi, watchGitRepositories } from "../git/gitApi";
 import { nodeContentHash } from "../knowledge/nodeSha256";
-import { fingerprintHash, repositoryIdentityOf } from "../runChangeBaseline";
-import { CHANGE_SETS_BY_REPOSITORY_DAY, changeSetDayKey, type LocalChangeSetValue } from "../runChangeSets";
+import { fingerprintHash, repositoryIdentityOf } from "../run/runChangeBaseline";
+import { CHANGE_SETS_BY_REPOSITORY_DAY, changeSetDayKey, type LocalChangeSetValue } from "../run/runChangeSets";
 import { repoGit } from "../runDelta/gitSide";
 import { commitFiles, newCommits } from "./outcomeGit";
 import { runOutcomeIdOfChangeSet, updateRunOutcome } from "./runOutcomeRecords";

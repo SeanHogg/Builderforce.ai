@@ -9,8 +9,8 @@ import { parseBirths, parseLog, parseNumstat } from "./outcomeGit";
 import { readRunOutcomes, recordRunFeatures, runOutcomeId, runOutcomeIdOfChangeSet, updateRunOutcome } from "./runOutcomeRecords";
 
 vi.mock("vscode", () => ({ workspace: { workspaceFolders: [] }, l10n: { t: (m: string) => m } }));
-vi.mock("../gitChanges", () => ({ refreshPendingChanges: () => undefined, detectPendingChanges: async () => ({ repos: [] }) }));
-vi.mock("../gitApi", () => ({ getGitApi: async () => undefined, watchGitRepositories: () => ({ dispose() {} }), runGit: async () => undefined }));
+vi.mock("../git/gitChanges", () => ({ refreshPendingChanges: () => undefined, detectPendingChanges: async () => ({ repos: [] }) }));
+vi.mock("../git/gitApi", () => ({ getGitApi: async () => undefined, watchGitRepositories: () => ({ dispose() {} }), runGit: async () => undefined }));
 
 const AT = "2026-11-01T00:00:00.000Z";
 const features = freezeRunFeatures({

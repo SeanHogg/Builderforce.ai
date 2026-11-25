@@ -9,8 +9,8 @@ vi.mock("vscode", () => ({
     fire(e: unknown) { for (const l of this.listeners) l(e); }
   },
 }));
-vi.mock("../gateway", () => ({ getApiKey: async () => "bfk_stored", getBaseUrl: () => "https://api.example" }));
-vi.mock("../outboxStorage", () => ({
+vi.mock("../gateway/gateway", () => ({ getApiKey: async () => "bfk_stored", getBaseUrl: () => "https://api.example" }));
+vi.mock("../sync/outboxStorage", () => ({
   setOutboxScope: (ids: { workspace: number | undefined }) => { scopes.push(ids.workspace); },
   trackReachability: <T>(p: T) => p,
 }));

@@ -16,7 +16,7 @@
  * worth unit-testing without an extension host, and it is pure data by construction.
  */
 
-import { normalizePath, unquotePath } from '../../../src/gitChangeModel';
+import { normalizePath, unquotePath } from '../../../src/git/gitChangeModel';
 
 /** One line of a unified diff. */
 export type DiffRowKind = 'context' | 'add' | 'del';

@@ -4,9 +4,9 @@
  * Reads only: no platform call, so the summary answers the same with the network denied.
  */
 
-import { chatAccountDestination } from "../chatAccount";
+import { chatAccountDestination } from "../auth/chatAccount";
 import type { DurableLocalFirstStore } from "../durableLocalFirstStore";
-import { platformInferenceMode } from "../platformPolicy";
+import { platformInferenceMode } from "../platform/platformPolicy";
 import type { SyncSummaryPorts } from "./syncSummary";
 
 export function hostSyncSummaryPorts(store: Pick<DurableLocalFirstStore, "view" | "read">): SyncSummaryPorts {

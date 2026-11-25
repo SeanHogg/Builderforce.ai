@@ -13,7 +13,7 @@
 import { analysisKeep, createShaCache, workspaceAnalysisKey, type WorkspaceExtracted, type WorkspaceExtractedHooks } from "@builderforce/agent-tools/knowledge";
 import type { CapabilityProvider } from "@builderforce/agent-tools";
 import { repoMapPort } from "@builderforce/repo-map";
-import { buildLocalCapabilityProvider } from "../localCapabilities";
+import { buildLocalCapabilityProvider } from "../tools/localCapabilities";
 import { recentCommits } from "@builderforce/agent-tools/node-git-history";
 import { l3CrashGuard, l3GuardIds, L3Quarantined } from "./l3CrashGuard";
 import { takeFreshTicket } from "./l3FreshHold";

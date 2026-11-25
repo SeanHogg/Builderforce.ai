@@ -20,8 +20,8 @@ import { composeAnchor } from "@seanhogg/builderforce-memory/knowledge";
 
 const git = vi.hoisted(() => ({ roots: [] as string[] }));
 vi.mock("vscode", () => ({ workspace: { workspaceFolders: [] }, l10n: { t: (m: string) => m } }));
-vi.mock("../../gitChanges", async () => {
-  const model = await import("../../gitChangeModel");
+vi.mock("../../git/gitChanges", async () => {
+  const model = await import("../../git/gitChangeModel");
   const { execSync: exec } = await import("node:child_process");
   return {
     refreshPendingChanges: () => undefined,
@@ -31,7 +31,7 @@ vi.mock("../../gitChanges", async () => {
     }))),
   };
 });
-vi.mock("../../gitApi", async () => {
+vi.mock("../../git/gitApi", async () => {
   const { execSync: exec } = await import("node:child_process");
   return {
     runGit: async (cwd: string, args: string) => {
@@ -40,7 +40,7 @@ vi.mock("../../gitApi", async () => {
   };
 });
 
-import { recordChangeSetAroundRun } from "../../runChangeSets";
+import { recordChangeSetAroundRun } from "../../run/runChangeSets";
 import { startRunDelta, type L3Scheduler, type RunDeltaDeps } from "../finalizeRunDelta";
 import { repoGit } from "../gitSide";
 import { createRunHoldGate } from "../runHoldGate";

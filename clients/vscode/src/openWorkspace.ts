@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
-import { getSessionTabMode } from "./gateway";
-import { BuilderForcePanel } from "./builderforcePanel";
-import { revealChatView } from "./chatView";
+import { getSessionTabMode } from "./gateway/gateway";
+import { BuilderForcePanel } from "./panels/builderforcePanel";
+import { revealChatView } from "./panels/chatView";
 import type { BrainIntent } from "./workspaceSurface";
 
 /**

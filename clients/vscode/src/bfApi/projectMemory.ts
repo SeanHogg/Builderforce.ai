@@ -1,7 +1,7 @@
 import type * as vscode from "vscode";
 import type { EvermindRunHooks, ProjectMemoryRequest } from "@seanhogg/builderforce-brain-embedded";
 import { projectMemoryHooks } from "@seanhogg/builderforce-brain-embedded";
-import { ttlCache } from "../ttlCache";
+import { ttlCache } from "../localFirst/ttlCache";
 import { onSessionChange } from "./session";
 import { authed } from "./transport";
 

@@ -21,6 +21,8 @@ export function legendTypesOf(type: Uint8Array | undefined): MarkType[] {
 export interface StageLegendValue {
     types: readonly MarkType[];
     labels: Pick<KnowledgeGraphLabels, 'legend'>;
+    /** Also key the lines drawn between marks (the Map's calls and associations). */
+    links?: boolean;
 }
 
 const StageLegendContext = createContext<StageLegendValue | null>(null);

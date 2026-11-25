@@ -15,7 +15,7 @@
 
 import type { LocalRecord, TicketValue } from "@builderforce/local-first";
 import { isRailOnlyTicket } from "../chatRail/railPayloads";
-import type { LocalFirstView } from "../localFirstView";
+import type { LocalFirstView } from "../localFirst/localFirstView";
 import type { LocalWorkRepository } from "../localWorkRepository";
 import { presentRecordSyncStatus, type PresentedSyncStatus } from "../syncStatusPresenter";
 

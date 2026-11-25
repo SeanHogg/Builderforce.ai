@@ -5,7 +5,7 @@
  * the run's JOURNALED record (ask verbatim, plan, files, last steps, sub-agents), never the
  * bare headline (`interruptedResumeTurn.ts`).
  */
-import { interruptedResumeTurn, openOnlyResumeTurn } from '../../../src/interruptedResumeTurn';
+import { interruptedResumeTurn, openOnlyResumeTurn } from '../../../src/run/interruptedResumeTurn';
 import { useInterruptedRuns } from './interruptedRunsStore';
 import { useInterruptedResume, type InterruptedResume } from './useInterruptedResume';
 

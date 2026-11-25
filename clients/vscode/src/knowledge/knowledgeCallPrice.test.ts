@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   client: vi.fn(),
 }));
 vi.mock("../modelRouting", () => ({ onDeviceModelAvailable: mocks.onDevice }));
-vi.mock("../inferenceModeSetting", () => ({ currentInferenceMode: mocks.mode }));
+vi.mock("../models/inferenceModeSetting", () => ({ currentInferenceMode: mocks.mode }));
 vi.mock("./knowledgeService", () => ({ linkedKnowledgeClient: mocks.client }));
 
 import { editorCallPrice } from "./knowledgeCallPrice";

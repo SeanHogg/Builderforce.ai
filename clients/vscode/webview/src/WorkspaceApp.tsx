@@ -284,6 +284,8 @@ function VisualizationBody({ init, diff, canvas }: { init: InitData; diff: strin
             focus={knowledge.focus?.focus ?? null}
             focusKey={knowledge.focusRequests}
             onCompose={knowledge.compose}
+            onOpenSource={knowledge.openSource}
+            editorView={knowledge.editor}
           />
         </CanvasBoundary>
       )}

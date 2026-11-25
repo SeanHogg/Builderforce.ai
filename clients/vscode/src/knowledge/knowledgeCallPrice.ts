@@ -9,7 +9,7 @@
 import type * as vscode from "vscode";
 import type { ReviewCallPrice } from "@builderforce/agent-tools/knowledge";
 import { onDeviceModelAvailable } from "../modelRouting";
-import { currentInferenceMode } from "../inferenceModeSetting";
+import { currentInferenceMode } from "../models/inferenceModeSetting";
 import { linkedKnowledgeClient } from "./knowledgeService";
 
 export function editorCallPrice(secrets: vscode.SecretStorage): () => Promise<ReviewCallPrice | undefined> {

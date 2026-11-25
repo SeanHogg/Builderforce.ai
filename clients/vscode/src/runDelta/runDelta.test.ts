@@ -12,8 +12,8 @@ const git = vi.hoisted(() => ({ roots: [] as string[] }));
 vi.mock("vscode", () => ({ workspace: { workspaceFolders: [] }, l10n: { t: (m: string) => m } }));
 
 // The pending set is real `git status` of the test repositories (the editor's Git extension is not here).
-vi.mock("../gitChanges", async () => {
-  const model = await import("../gitChangeModel");
+vi.mock("../git/gitChanges", async () => {
+  const model = await import("../git/gitChangeModel");
   const { execSync: exec } = await import("node:child_process");
   return {
     refreshPendingChanges: () => undefined,
@@ -24,7 +24,7 @@ vi.mock("../gitChanges", async () => {
   };
 });
 
-vi.mock("../gitApi", async () => {
+vi.mock("../git/gitApi", async () => {
   const { execSync: exec } = await import("node:child_process");
   return {
     runGit: async (cwd: string, args: string) => {
@@ -37,10 +37,10 @@ vi.mock("../gitApi", async () => {
   };
 });
 
-import { captureRunChangeBaseline, type ChangeSetRepoBaseline } from "../runChangeBaseline";
-import { recordChangeSetAroundRun, runChangeSetRepoKey, type FinalizedRunChangeSets, type LocalChangeSetValue } from "../runChangeSets";
-import { createHostRunLifecycle } from "../hostRunLifecycle";
-import { installRunRecovery } from "../installRunRecovery";
+import { captureRunChangeBaseline, type ChangeSetRepoBaseline } from "../run/runChangeBaseline";
+import { recordChangeSetAroundRun, runChangeSetRepoKey, type FinalizedRunChangeSets, type LocalChangeSetValue } from "../run/runChangeSets";
+import { createHostRunLifecycle } from "../run/hostRunLifecycle";
+import { installRunRecovery } from "../run/installRunRecovery";
 import { finalizeRunDelta, RUN_DELTA_BUDGET_MS, startRunDelta, type RepoHostSources, type RunDeltaDeps } from "./finalizeRunDelta";
 import { createRunHoldGate, UNMEASURED_HOLD, type RunHoldPort } from "./runHoldGate";
 import { holdStateOf, withHold } from "./runHoldState";

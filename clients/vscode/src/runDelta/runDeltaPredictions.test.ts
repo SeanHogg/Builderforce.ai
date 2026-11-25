@@ -7,11 +7,11 @@ import { createMemoryLocalFirstStore, newLocalRecord, type LocalFirstStore } fro
 import type { RunDelta, RunDeltaCardPayload } from "@builderforce/run-delta";
 
 vi.mock("vscode", () => ({ workspace: { workspaceFolders: [] }, l10n: { t: (m: string) => m } }));
-vi.mock("../gitChanges", () => ({ refreshPendingChanges: () => undefined, detectPendingChanges: async () => ({ repos: [] }) }));
-vi.mock("../gitApi", () => ({ getGitApi: async () => undefined, watchGitRepositories: () => ({ dispose() {} }), runGit: async () => undefined }));
+vi.mock("../git/gitChanges", () => ({ refreshPendingChanges: () => undefined, detectPendingChanges: async () => ({ repos: [] }) }));
+vi.mock("../git/gitApi", () => ({ getGitApi: async () => undefined, watchGitRepositories: () => ({ dispose() {} }), runGit: async () => undefined }));
 
 import { nodeContentHash } from "../knowledge/nodeSha256";
-import type { LocalChangeSetValue } from "../runChangeSets";
+import type { LocalChangeSetValue } from "../run/runChangeSets";
 import { atRunEnd } from "./atRunEnd";
 import { MAX_FILE_BYTES, baselinePicks, parseLsTreeSizes } from "./recordNaturalness";
 import { predictionShownEvent, readRunPredictions, runPredictionId, withPredicted } from "./runDeltaPredictions";

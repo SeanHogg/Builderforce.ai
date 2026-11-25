@@ -5,7 +5,9 @@
  * (`hostKnowledgeGraphSource.ts`). A new focus (Open in graph) remounts the view on it.
  */
 
-import { KnowledgeGraphView, setWorkerFactory, type KnowledgeGraphLabels, type KnowledgeGraphSource } from '@builderforce/knowledge-graph-view';
+import {
+  KnowledgeGraphView, setWorkerFactory, type EditorView, type KnowledgeGraphLabels, type KnowledgeGraphSource, type SourceLocation,
+} from '@builderforce/knowledge-graph-view';
 // The compute worker as a BLOB worker (`?worker&inline`): a webview may refuse a worker loaded from its resource origin, and the
 // view would then compute on the main thread, the freeze the worker exists to prevent. Registered before the first view renders.
 import KnowledgeComputeWorker from '../../../../../packages/knowledge-graph-view/src/compute/graphCompute.worker.ts?worker&inline';
@@ -21,9 +23,13 @@ export interface KnowledgeViewProps {
   focusKey?: number;
   /** Fix with agent → the ONE composer. */
   onCompose?(text: string): void;
+  /** "Open at line" → the extension opens the file in the editor. */
+  onOpenSource?(location: SourceLocation): void;
+  /** What the editor shows of a file of the loaded root: the code band follows it. */
+  editorView?: EditorView | null;
 }
 
-export function KnowledgeView({ source, labels, focus, focusKey = 0, onCompose }: KnowledgeViewProps) {
+export function KnowledgeView({ source, labels, focus, focusKey = 0, onCompose, onOpenSource, editorView }: KnowledgeViewProps) {
   return (
     <div className="bf-viz__knowledge" data-testid="viz-knowledge">
       <KnowledgeGraphView
@@ -32,6 +38,8 @@ export function KnowledgeView({ source, labels, focus, focusKey = 0, onCompose }
         labels={labels}
         {...(focus && focus.length > 0 ? { initialFocus: [...focus] } : {})}
         {...(onCompose ? { onCompose } : {})}
+        {...(onOpenSource ? { onOpenSource } : {})}
+        {...(editorView !== undefined ? { editorView } : {})}
       />
     </div>
   );

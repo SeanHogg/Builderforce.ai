@@ -14,7 +14,7 @@
 import type { BrainRunRequest, BrainStreamFn } from "@seanhogg/builderforce-brain-embedded";
 import { createHash } from "crypto";
 import { runsOnDevice, servedIdentity } from "@builderforce/local-inference";
-import type { EditorRunSettings } from "../stageModels";
+import type { EditorRunSettings } from "../models/stageModels";
 import type { VscodeLike } from "./pathDiagnostics";
 import type { GitRunner } from "./gitPort";
 import { createGit, createReviewer, createVerifierPort, type VerifyHostDeps } from "./index";
@@ -22,7 +22,7 @@ import type { ReviewerDeps, ReviewSubRunResult } from "./reviewerPort";
 // Type-only: gateway.ts has a runtime `import * as vscode`, and this module must stay loadable
 // under a fake (the port header's "no runtime vscode" rule). The live catalog read is INJECTED
 // via `ShipPortsDeps.getCatalog` (wired in `editorShipPorts.ts`), never imported here.
-import type { ModelChoices } from "../gateway";
+import type { ModelChoices } from "../gateway/gateway";
 
 export type ShipPorts = Required<Pick<BrainRunRequest, "verifier" | "git">> & Pick<BrainRunRequest, "reviewer">;
 

@@ -21,10 +21,10 @@
  */
 
 import { answerWhereDefined, preSearch, whereDefinedTargets, type PreSearchResult, type RepoSymbolsCapability } from "@builderforce/agent-tools";
-import type { RunContextPack } from "../brainRunHostContract";
-import { findRipgrep } from "../ripgrep";
-import { searchWorkspace } from "../workspaceSearch";
-import { workspaceSymbolIndex } from "../workspaceSymbols";
+import type { RunContextPack } from "../brain/brainRunHostContract";
+import { findRipgrep } from "../tools/ripgrep";
+import { searchWorkspace } from "../workspace/workspaceSearch";
+import { workspaceSymbolIndex } from "../workspace/workspaceSymbols";
 import { REQUEST_SYMBOL_LIMIT } from "./requestSymbols";
 import { knowledgePart, knowledgeRecall, preSearchPaths } from "./knowledgeSource";
 import { withinMs } from "./withinMs";

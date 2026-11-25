@@ -6,7 +6,7 @@
 import type { InferenceMode, PlatformPolicySnapshot } from '@builderforce/local-first';
 import type { ModelChoiceLabels } from '@seanhogg/builderforce-brain-embedded';
 import type { EditorContext } from '@seanhogg/builderforce-brain-embedded';
-import type { PendingChangeSet } from '../../src/gitChangeModel';
+import type { PendingChangeSet } from '../../src/git/gitChangeModel';
 
 /**
  * A localized string bundle the host builds from its `vscode.l10n` catalog and
@@ -177,4 +177,4 @@ export interface InitData {
 }
 
 /** Host → webview: the `/` menu's help model, recomputed after `init` (`src/bridgeProtocol.ts`). */
-export type ComposerCommandsFrame = import('../../src/bridgeProtocol').ComposerCommandsFrame;
+export type ComposerCommandsFrame = import('../../src/panels/bridgeProtocol').ComposerCommandsFrame;

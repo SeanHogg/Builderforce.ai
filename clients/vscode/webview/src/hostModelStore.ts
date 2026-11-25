@@ -9,7 +9,7 @@
  * Pure over an injected bridge, so it is unit tested without a webview.
  */
 import type { HfModelStore } from '@seanhogg/builderforce-brain-embedded';
-import type { ModelFileEvent, ModelFileResults } from '../../src/pageEngineBridgeProtocol';
+import type { ModelFileEvent, ModelFileResults } from '../../src/panels/pageEngineBridgeProtocol';
 
 type RequestType = keyof ModelFileResults;
 

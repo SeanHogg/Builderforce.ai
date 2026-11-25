@@ -4,7 +4,7 @@
  * builds them, and diff text joined the way git writes it.
  */
 
-import type { PendingChangeSet, PendingChangeStatus } from '../../../src/gitChangeModel';
+import type { PendingChangeSet, PendingChangeStatus } from '../../../src/git/gitChangeModel';
 
 export const ROOT = 'C:/repo';
 

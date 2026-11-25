@@ -8,7 +8,7 @@ import {
   bindOutboxStorage,
   createDurableOutbox,
   setOutboxScope,
-} from "./outboxStorage";
+} from "./sync/outboxStorage";
 
 /**
  * G13 live constructors. The queue table names `activity` and `run-outcomes` as
@@ -62,8 +62,8 @@ describe("live outbox constructors — work kind", () => {
   });
 
   it("stamps that work kind on each live constructor", () => {
-    const activity = source("activity.ts");
-    const gateway = source("gateway.ts");
+    const activity = source("diagnostics/activity.ts");
+    const gateway = source("gateway/gateway.ts");
     const reporter = source("errorReporter.ts");
     expect(activity).toContain(
       'work: classifyQueue("activity")?.retention === "best-effort" ? "telemetry" : "history"',

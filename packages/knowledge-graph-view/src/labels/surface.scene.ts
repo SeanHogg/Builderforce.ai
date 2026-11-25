@@ -13,11 +13,20 @@ export interface SceneLabels {
     /**
      * The code band's panel (B1a rule 9): its accessible name (`{name}`, `{from}`, `{to}`), the read in progress, the
      * note when the host has no file contents (the panel then shows `path:line` and "Open at line"), and the note when
-     * the host cut the range short (`{count}` lines shown); then the step card's and the map trail's words.
+     * the host cut the range short (`{count}` lines shown); then the step card's and the map trail's words, the editor
+     * chrome's (lens lines, the sticky header, the Outline, the tabs), the map bar's view switches, the symbol card's
+     * and the status line's.
      */
     code: Record<
         | 'aria' | 'loading' | 'unavailable' | 'truncated' | 'button' | 'buttonAria' | 'drillAria' | 'stepAria' | 'step' | 'crumbsAria' | 'follow' | 'out'
-        | 'prevStep' | 'nextStep' | 'drillCallee' | 'atLine' | 'codeLevel' | 'callsInOrder' | 'sameFile' | 'otherFile' | 'stepThrough' | 'stepNote' | 'trailAria',
+        | 'prevStep' | 'nextStep' | 'drillCallee' | 'atLine' | 'codeLevel' | 'callsInOrder' | 'sameFile' | 'otherFile' | 'stepThrough' | 'stepNote' | 'trailAria'
+        | 'toastNoMethod' | 'toastNoCalls' | 'toastFollowOn' | 'toastFollowOff'
+        | 'lensReferences' | 'lensCallers' | 'lensCaller' | 'referencesToast' | 'calledBy' | 'showInMap' | 'drillIn' | 'stickyAria'
+        | 'kindCalls' | 'kindReads' | 'kindSuper' | 'awaited' | 'sync' | 'openCallee' | 'callers'
+        | 'outline' | 'outlineAria' | 'tabsAria'
+        | 'layoutAria' | 'flow' | 'sequence' | 'viewAria' | 'view3d' | 'view2d' | 'followsEditor'
+        | 'stateSelected' | 'stateReading' | 'statePinned' | 'methodsCount' | 'fieldsCount' | 'callsCount' | 'imported' | 'drillInAction' | 'showCode' | 'openFile'
+        | 'status' | 'following' | 'pinnedStatus' | 'statusLine' | 'resetView',
         string
     >;
     /**
@@ -65,7 +74,7 @@ export const SCENE_DEFAULTS: SceneLabels = {
         stepAria: 'Call {n} of {count}',
         step: 'Call {n} of {count} → {name}',
         crumbsAria: 'Where you are reading',
-        follow: 'Follow the code',
+        follow: 'Follow editor',
         out: 'Out',
         prevStep: 'Previous call',
         nextStep: 'Next call',
@@ -79,6 +88,57 @@ export const SCENE_DEFAULTS: SceneLabels = {
         stepThrough: 'Step through',
         stepNote: 'Scroll the method in the code. The call on the reading line lights up here and on the map.',
         trailAria: 'Zoom path',
+        /** The stage's toasts: zooming into code with no method (`{name}` has no calls), and Follow turned on / off. */
+        toastNoMethod: 'Scroll to a method, or select one, to zoom into its code.',
+        toastNoCalls: '{name} has no calls to show.',
+        toastFollowOn: 'Following the editor again.',
+        toastFollowOff: 'Pinned. Scrolling the editor no longer moves the map.',
+        /** The lens line above a class (`{count}` references, its toast with `{name}`) or a method (`{count}` callers, One and Other; "Called by" `{names}`), its actions, and the sticky header's name. */
+        lensReferences: '{count} references',
+        lensCallers: '{count} callers',
+        lensCaller: '{count} caller',
+        referencesToast: '{count} references to {name} in the knowledge graph.',
+        calledBy: 'Called by {names}',
+        showInMap: 'Show in map',
+        drillIn: 'Drill in ⤓',
+        stickyAria: 'Enclosing symbols',
+        /** The step card's chips: what the step does, awaited or not; "Open" a callee not loaded here (`{name}`); the method's callers (`{count}`). */
+        kindCalls: 'calls',
+        kindReads: 'reads',
+        kindSuper: 'super call',
+        awaited: 'awaited',
+        sync: 'sync',
+        openCallee: 'Open {name} ↗',
+        callers: 'Callers: {count}',
+        /** The code pane's Outline toggle and list, and its file tabs. */
+        outline: 'Outline',
+        outlineAria: 'Symbols in this file',
+        tabsAria: 'Open files',
+        /** The map bar: the code band's layout switch, the 3D / 2D switch, and the crumb that follows the editor. */
+        layoutAria: 'Code band layout',
+        flow: 'Flow',
+        sequence: 'Sequence',
+        viewAria: 'Map view',
+        view3d: '3D',
+        view2d: '2D',
+        followsEditor: 'Follows the editor',
+        /** The symbol card: why it shows (selected, reading, pinned), its chips (`{count}`), its actions. */
+        stateSelected: 'selected',
+        stateReading: 'reading',
+        statePinned: 'pinned',
+        methodsCount: 'Methods: {count}',
+        fieldsCount: 'Fields: {count}',
+        callsCount: 'Calls: {count}',
+        imported: 'imported',
+        drillInAction: 'Drill in',
+        showCode: 'Show code',
+        openFile: 'Open file ↗',
+        /** The status line: `{level}` and `{state}` (following `{file}`, or pinned), then the line read (`{line}`). */
+        status: 'Visualization · {level} level · {state}',
+        following: 'following {file}',
+        pinnedStatus: 'pinned',
+        statusLine: 'Ln {line}',
+        resetView: 'Reset view',
     },
     nav: {
         group: 'Move the view',

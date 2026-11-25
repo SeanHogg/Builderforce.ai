@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMemoryLocalFirstStore, newLocalRecord, type LocalFirstStore, type LocalFirstTransaction } from "@builderforce/local-first";
 
 vi.mock("vscode", () => ({ workspace: { workspaceFolders: [] }, l10n: { t: (m: string) => m } }));
-vi.mock("../gitChanges", () => ({ refreshPendingChanges: () => undefined, detectPendingChanges: async () => ({ total: 0, repos: [] }) }));
-import type { ChangeSetLifecycleValue } from "../changeSetLifecycle";
-import type { LocalChangeSetValue } from "../runChangeSets";
+vi.mock("../git/gitChanges", () => ({ refreshPendingChanges: () => undefined, detectPendingChanges: async () => ({ total: 0, repos: [] }) }));
+import type { ChangeSetLifecycleValue } from "../git/changeSetLifecycle";
+import type { LocalChangeSetValue } from "../run/runChangeSets";
 import { overlappingRun, windowDays } from "./attribution";
 import { isCommitId, repoGit } from "./gitSide";
 import { realFileUnder } from "./openCode";

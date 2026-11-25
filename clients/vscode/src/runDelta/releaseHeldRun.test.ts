@@ -7,7 +7,7 @@ import { RUN_DELTA_RELEASE_REFUSED, type RunDelta } from "@builderforce/run-delt
 // `gitChanges` instantiates `vscode.EventEmitter` at load, so mocking `vscode` alone is
 // not enough — the module itself has to be replaced.
 vi.mock("vscode", () => ({ workspace: { workspaceFolders: [] }, l10n: { t: (m: string) => m } }));
-vi.mock("../gitChanges", () => ({
+vi.mock("../git/gitChanges", () => ({
   refreshPendingChanges: () => undefined,
   detectPendingChanges: async () => ({ total: 0, repos: [] }),
 }));
@@ -16,9 +16,9 @@ vi.mock("./folderWorkingSet", () => ({
   workingSetStatus: async () => "clean",
 }));
 
-import { installRunRecovery } from "../installRunRecovery";
-import { recordLocalAuditGate } from "../localAuditGate";
-import { getLocalAuditRun, startLocalAuditRun } from "../localAuditStore";
+import { installRunRecovery } from "../run/installRunRecovery";
+import { recordLocalAuditGate } from "../audit/localAuditGate";
+import { getLocalAuditRun, startLocalAuditRun } from "../audit/localAuditStore";
 import { authorizeRelease, type ReleaseAuthorityDeps } from "./releaseAuthority";
 import { releaseHeldRun, type ReleaseHeldRunDeps } from "./releaseHeldRun";
 import { readRunDeltas, storeRunDelta, type RunDeltaCard } from "./runDeltaRecords";

@@ -32,7 +32,7 @@ import { repoMapPort } from "@builderforce/repo-map";
 import { defineRegistry, type PrefetchAction, type PrefetchExecutors } from "@builderforce/prefetch";
 import { CONTEXT_PACK_DEADLINE_MS } from "../contextPack/deadline";
 import { preSearchOnce, whereDefinedOnce } from "../contextPack/preSearchSource";
-import { buildLocalCapabilityProvider } from "../localCapabilities";
+import { buildLocalCapabilityProvider } from "../tools/localCapabilities";
 import type { Extracted, PartitionRegistry } from "@seanhogg/builderforce-memory/knowledge";
 import { buildOffThread } from "../knowledge/graphWorker";
 import { knowledgeRootId } from "../knowledge/knowledgeRoots";

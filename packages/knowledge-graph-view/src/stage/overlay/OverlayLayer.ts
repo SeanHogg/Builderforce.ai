@@ -12,6 +12,7 @@
  */
 
 import { Color, DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry, SRGBColorSpace } from 'three';
+import { CALL_LINK_STYLE } from '../../compute/tasks/placement/associations';
 import { polylineBatch, roundedPoints, type WorldPath } from '../../compute/tasks/placement/links';
 import { LinkLayer } from '../links/LinkLayer';
 import { slotHalfPx } from '../markSize';
@@ -58,6 +59,7 @@ const lifted = (pts: readonly GroundPt[]) => pts.map((q): [number, number, numbe
  */
 export function overlayLinks(p: Placement, state: OverlayState): LinkBatch | null {
     const tone = toneIndex('accent');
+    const callTone = toneIndex(CALL_LINK_STYLE.tone);
     const paths: WorldPath[] = [];
     const stops: GroundPt[] = [];
     for (let i = 0; i < state.path.length; i++) { const s = state.path[i]!; if (shown(p, s)) stops.push(at(p, s)); }
@@ -81,7 +83,7 @@ export function overlayLinks(p: Placement, state: OverlayState): LinkBatch | nul
             if (!shown(p, s) || s === calls.from) continue;
             const pts = lifted(callArc(from, at(p, s), nthCallTo(calls.to, i)));
             if (i === calls.current) current = { pts, tone: toneIndex('partner'), width: CURRENT_CALL_PX, dash: 0, flags: 0 };
-            else paths.push({ pts, tone, width: CALL_PX, dash: 0, flags: 0 });
+            else paths.push({ pts, tone: callTone, width: CALL_PX, dash: CALL_LINK_STYLE.dash, flags: 0 });
         }
         if (current) paths.push(current);
     }

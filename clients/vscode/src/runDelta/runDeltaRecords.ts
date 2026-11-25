@@ -17,8 +17,8 @@
 import { createHash } from "node:crypto";
 import { defineRecordIndex, newLocalRecord, scanByIndex, stableEntityId, type EntityDestination, type LocalFirstStore, type LocalFirstTransaction } from "@builderforce/local-first";
 import type { ComputedRunDeltaCard, RunDelta } from "@builderforce/run-delta";
-import { syncedRepositoryIdentity } from "../repoIdentity";
-import { changeSetRepoKey, changeSetRunId } from "../runChangeSets";
+import { syncedRepositoryIdentity } from "../git/repoIdentity";
+import { changeSetRepoKey, changeSetRunId } from "../run/runChangeSets";
 import { droppedOverrides } from "./droppedOverrides";
 import { readRunHolds, withHold, type RunHoldState } from "./runHoldState";
 import type { RunPredictionValue } from "./runDeltaPredictions";

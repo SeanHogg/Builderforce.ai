@@ -5,7 +5,7 @@
 
 import * as vscode from "vscode";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
-import { getSelectedProject, type SelectedProject } from "../../projectState";
+import { getSelectedProject, type SelectedProject } from "../../project/projectState";
 import { linkedKnowledgeClient } from "../knowledgeService";
 
 // `gz` admits the gzipped library form (`.bfpack.gz`); parsePack still refuses anything that is not a pack.

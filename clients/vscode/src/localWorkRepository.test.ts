@@ -19,7 +19,7 @@ import {
 } from "@builderforce/local-first";
 import { readRailFromFacts } from "./chatRail/buildRail";
 import { createLocalWorkRepository } from "./localWorkRepository";
-import { creationDestination, isSignedInTenantLure, LocalWorkRepositoryError } from "./localWorkShared";
+import { creationDestination, isSignedInTenantLure, LocalWorkRepositoryError } from "./localWork/localWorkShared";
 
 /** A VS Code authentication session, the shape `auth.ts` actually builds. */
 const SIGNED_IN_SESSION = {
@@ -54,7 +54,7 @@ function harness() {
 
 describe("localWorkRepository", () => {
   it("does not import bfApi, vscode, or fetch", () => {
-    for (const file of ["localWorkRepository", "localWorkShared", "localProjectRepository", "localTicketRepository", "localWorkOwnership"]) {
+    for (const file of ["localWorkRepository", "localWork/localWorkShared", "localProjectRepository", "tickets/localTicketRepository", "localWork/localWorkOwnership"]) {
       const source = readFileSync(new URL(`./${file}.ts`, import.meta.url), "utf8");
       expect(source, file).not.toMatch(/from\s+["']\.\/bfApi["']/);
       expect(source, file).not.toMatch(/from\s+["']vscode["']/);

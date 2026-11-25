@@ -7,12 +7,12 @@
 
 import * as os from "node:os";
 import * as vscode from "vscode";
-import { fetchAuthed } from "./bfApi";
+import { fetchAuthed } from "../bfApi";
 import { downloadAttachment, type AttachmentDownloadRequest } from "./attachmentDownload";
 import { ATTACHMENT_DOWNLOAD_MAX_BYTES } from "./attachmentLimits";
-import { logLine } from "./errorReporter";
-import { messageOf } from "./messageOf";
-import { getBaseUrl } from "./gateway";
+import { logLine } from "../errorReporter";
+import { messageOf } from "../messageOf";
+import { getBaseUrl } from "../gateway/gateway";
 
 /**
  * How long one download may take, body included. `fetchAuthed`'s own 60 s bound is for API

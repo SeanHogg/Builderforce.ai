@@ -57,6 +57,8 @@ export class StageBus {
     hover = -1;
     /** The slot of the symbol on the code panel's reading line (-1 none): ringed apart from the hover. */
     reading = -1;
+    /** The slots lit while the rest fade (the code on screen), null when nothing is faded. */
+    fade: ReadonlySet<number> | null = null;
     /** The open method's numbered calls (the code band), null when none is open. */
     calls: CallTrack | null = null;
     /** True once a real camera pushed a projection: the fitted-frame fallback stops being used. */
@@ -72,6 +74,7 @@ export class StageBus {
     private readonly revealFns = new Set<Fn<[number]>>();
     private readonly hoverFns = new Set<Fn<[number]>>();
     private readonly readingFns = new Set<Fn<[number]>>();
+    private readonly fadeFns = new Set<Fn<[ReadonlySet<number> | null]>>();
     private readonly callsFns = new Set<Fn<[CallTrack | null]>>();
     private readonly tweenFns = new Set<Fn<[boolean]>>();
     private readonly placementFns = new Set<Fn<[Placement]>>();
@@ -176,6 +179,12 @@ export class StageBus {
         for (const fn of this.readingFns) fn(slot);
     }
 
+    setFade(lit: ReadonlySet<number> | null): void {
+        if (lit === this.fade) return;
+        this.fade = lit;
+        for (const fn of this.fadeFns) fn(lit);
+    }
+
     setCalls(track: CallTrack | null): void {
         if (track === this.calls) return;
         this.calls = track;
@@ -197,6 +206,7 @@ export class StageBus {
     onReveal(fn: Fn<[number]>): () => void { this.revealFns.add(fn); return () => this.revealFns.delete(fn); }
     onHover(fn: Fn<[number]>): () => void { this.hoverFns.add(fn); return () => this.hoverFns.delete(fn); }
     onReading(fn: Fn<[number]>): () => void { this.readingFns.add(fn); return () => this.readingFns.delete(fn); }
+    onFade(fn: Fn<[ReadonlySet<number> | null]>): () => void { this.fadeFns.add(fn); return () => this.fadeFns.delete(fn); }
     onCalls(fn: Fn<[CallTrack | null]>): () => void { this.callsFns.add(fn); return () => this.callsFns.delete(fn); }
     /** Another placement is on show (a camera switch, a band crossed, a drill, a new MarkSet): what was about the old one closes. */
     onPlacement(fn: Fn<[Placement]>): () => void { this.placementFns.add(fn); return () => this.placementFns.delete(fn); }
@@ -206,7 +216,7 @@ export class StageBus {
     dispose(): void {
         if (this.timer !== null) clearTimeout(this.timer);
         this.timer = null;
-        this.frameFns.clear(); this.settleFns.clear(); this.revealFns.clear(); this.hoverFns.clear(); this.readingFns.clear(); this.callsFns.clear(); this.optionFns.clear(); this.tweenFns.clear(); this.placementFns.clear();
+        this.frameFns.clear(); this.settleFns.clear(); this.revealFns.clear(); this.hoverFns.clear(); this.readingFns.clear(); this.fadeFns.clear(); this.callsFns.clear(); this.optionFns.clear(); this.tweenFns.clear(); this.placementFns.clear();
     }
 
     /** The grid is stale (camera, placement or tween changed): kept as the next settle's buffers, never queried again. */

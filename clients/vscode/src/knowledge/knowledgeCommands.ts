@@ -14,7 +14,7 @@
 
 import * as vscode from "vscode";
 import { openWorkspace } from "../openWorkspace";
-import { onProjectChange } from "../projectState";
+import { onProjectChange } from "../project/projectState";
 import { VisualizationPanel } from "../visualizationPanel";
 import { rootIdOfSourceRef } from "@builderforce/agent-tools/knowledge";
 import { reviewArgumentOf, rootForPath } from "./knowledgeRoots";
@@ -22,7 +22,7 @@ import { registerKnowledgePackCommands } from "./knowledgePackCommands";
 import { configureKnowledgeHost, linkedProject, workspaceFolders } from "./knowledgeService";
 import { pendingBinding, type PendingBinding } from "./pendingBinding";
 import { configureExtractPool, disposeExtractPool } from "./review/extractPoolHost";
-import { BuilderForceAuthProvider } from "../auth";
+import { BuilderForceAuthProvider } from "../auth/auth";
 import { resumeAuthPaused } from "./knowledgeReplica";
 import { shutdownKnowledge } from "./folderKnowledge";
 import { replicateReviewedRoots } from "./knowledgeReplicate";

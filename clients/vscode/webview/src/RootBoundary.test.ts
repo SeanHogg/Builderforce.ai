@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const bridge = vi.hoisted(() => ({ post: vi.fn() }));
 vi.mock('./vscodeBridge', () => bridge);
 
-import { BOOT_STRINGS_ELEMENT_ID } from '../../src/webviewBundleShell';
+import { BOOT_STRINGS_ELEMENT_ID } from '../../src/panels/webviewBundleShell';
 import { DEFAULT_ROOT_FALLBACK_STRINGS, RootBoundary, RootFallback, errorDetails, readBootStrings } from './RootBoundary';
 
 /**

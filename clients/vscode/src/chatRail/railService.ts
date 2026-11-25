@@ -11,7 +11,7 @@
  */
 
 import type { EntityScope, LocalFirstStore } from "@builderforce/local-first";
-import { readLocalChatChangedFiles } from "../chatChangedFiles";
+import { readLocalChatChangedFiles } from "../chat/chatChangedFiles";
 import { chatClientIdOf, readRailFromFacts, type RailFacts } from "./buildRail";
 import { linkRailTicket, unlinkRailTicket } from "./railLinks";
 import type {

@@ -20,7 +20,7 @@ import type { SurfaceResult } from '../compute/kinds';
 import { isSmall } from '../compute/size';
 import { isCommunityKey } from '../placement';
 import { useDrill, type DrillModel, type SymbolLoader } from './transit/useDrill';
-import type { SourceReader } from '../types';
+import type { EditorView, SourceReader } from '../types';
 import { stationTypes } from './transit/stationType';
 import type { MarkType } from '../shapes';
 import type { TowerHighlight } from './towerHighlight';
@@ -39,6 +39,8 @@ export interface SurfaceModel {
     drill: DrillModel;
     /** Reads some lines of a file of the root on show (the code band, PRD 43 B1a rule 9); absent on a host without file contents. */
     readSource?: SourceReader | undefined;
+    /** What the host's editor shows (the code band follows it while Follow is on); absent ⇒ only the pane's own scroll is followed. */
+    editorView?: EditorView | null | undefined;
     preset: PresetId | 'custom';
     question: QuestionId;
     /** The pattern family the patterns question is narrowed to ("Behavioural only"); null = every family. */
@@ -99,6 +101,8 @@ export interface SurfaceOptions {
     symbols?: SymbolLoader | undefined;
     /** Reads some lines of a file, for the map's code band; absent ⇒ the band shows `path:line` and "Open at line". */
     readSource?: SourceReader | undefined;
+    /** What the host's editor shows (the code band follows it while Follow is on); absent ⇒ only the pane's own scroll is followed. */
+    editorView?: EditorView | null | undefined;
     /** The localized name of the top-level config station (`labels.surface.repoConfig`). */
     repoConfigName?: string | undefined;
     /** The localized name of a community with no label (`labels.communityFallback`, `{n}`). */
@@ -200,7 +204,7 @@ export function useSurface(graph: KnowledgeGraph | null, baseline: KnowledgeGrap
     }, [path]);
 
     return {
-        stations, types, lines, coverage, overlay, drill, readSource: opts.readSource, preset: presetOf(bindings), question, family, line, lineChosen: chosen !== null, station, step, path, lit,
+        stations, types, lines, coverage, overlay, drill, readSource: opts.readSource, editorView: opts.editorView, preset: presetOf(bindings), question, family, line, lineChosen: chosen !== null, station, step, path, lit,
         context, pins, scope, pinned, panel, resolving, changedFiles: changed, highlight, setHighlight, towers, setTowers, fixFlows, dispatchFix,
         setPreset: (id) => setBindings(PRESETS[id]),
         setChannel: (channel, metric) => setBindings((b) => setChannel(b, channel, metric)),

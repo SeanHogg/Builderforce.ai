@@ -45,12 +45,14 @@ export function panZoomOf(rig: RigController, reducedMotion: boolean, settle: ()
     };
 }
 
-export function useRig(placement: Placement | null, width: number, height: number, reducedMotion: boolean, box: RefObject<HTMLElement | null>, onSettle: () => void): RigController {
+export function useRig(placement: Placement | null, width: number, height: number, reducedMotion: boolean, box: RefObject<HTMLElement | null>, onSettle: () => void, wheelStep?: (dir: 1 | -1) => void): RigController {
     const rig = useMemo(() => new RigController(), []);
     const homed = useRef<string | null>(null);
     const lastKey = useRef<string | null>(null);
     const settle = useRef(onSettle);
     settle.current = onSettle;
+    const stepRef = useRef(wheelStep);
+    stepRef.current = wheelStep;
     const frame = useRef<CameraRig['frame']>(placement?.rig.frame ?? 'fill');
     frame.current = placement?.rig.frame ?? frame.current;
 
@@ -71,7 +73,7 @@ export function useRig(placement: Placement | null, width: number, height: numbe
     useEffect(() => {
         const el = box.current;
         if (!el) return undefined;
-        return bindGestures(el, rig, () => frame.current, () => settle.current());
+        return bindGestures(el, rig, () => frame.current, () => settle.current(), () => stepRef.current);
     }, [rig, box]);
 
     return rig;

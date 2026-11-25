@@ -15,7 +15,7 @@
 import * as vscode from "vscode";
 import { signedInTenantId } from "../bfApi/session";
 import { authedRaw } from "../bfApi/transport";
-import { createDurableOutbox, outboxSecrets, scopeTenantId } from "../outboxStorage";
+import { createDurableOutbox, outboxSecrets, scopeTenantId } from "../sync/outboxStorage";
 import { createProductEventChannel, gatedSend, productEventSpans, type ProductEvent } from "./productEventChannel";
 
 const SPANS_PATH = "/api/telemetry/spans";

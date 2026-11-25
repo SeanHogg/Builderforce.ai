@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 // `runDelta.test.ts` stubs them. `gitChanges` instantiates `vscode.EventEmitter` at load,
 // so mocking `vscode` alone is not enough — the module itself has to be replaced.
 vi.mock("vscode", () => ({ workspace: { workspaceFolders: [] }, l10n: { t: (m: string) => m } }));
-vi.mock("../gitChanges", () => ({
+vi.mock("../git/gitChanges", () => ({
   refreshPendingChanges: () => undefined,
   detectPendingChanges: async () => ({ total: 0, repos: [] }),
 }));

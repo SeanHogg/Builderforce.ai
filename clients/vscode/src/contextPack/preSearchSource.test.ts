@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { preSearchBlock } from "./preSearchSource";
 
 const { searches } = vi.hoisted(() => ({ searches: [] as AbortSignal[] }));
-vi.mock("../ripgrep", () => ({ findRipgrep: async () => "rg" }));
-vi.mock("../workspaceSearch", async (importOriginal) => ({
+vi.mock("../tools/ripgrep", () => ({ findRipgrep: async () => "rg" }));
+vi.mock("../workspace/workspaceSearch", async (importOriginal) => ({
   // The module's constants (SKIP_DIRS, read by the symbol index at import) stay real.
-  ...(await importOriginal<typeof import("../workspaceSearch")>()),
+  ...(await importOriginal<typeof import("../workspace/workspaceSearch")>()),
   // A search that never finishes on its own — only its signal ends it, as rg's kill does.
   searchWorkspace: (opts: { query: string; signal?: AbortSignal }) => new Promise((resolve) => {
     if (opts.signal) searches.push(opts.signal);

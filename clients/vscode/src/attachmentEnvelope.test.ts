@@ -44,17 +44,17 @@ vi.mock("vscode", () => ({
   },
 }));
 vi.mock("./bfApi", () => ({ getCurrentUserId: vi.fn() }));
-vi.mock("./gateway", () => ({ getWebBaseUrl: () => "https://web" }));
-vi.mock("./personalityLimbic", () => ({ turnLimbicBlock: vi.fn() }));
-vi.mock("./chatDeletion", () => ({ confirmChatDelete: vi.fn() }));
+vi.mock("./gateway/gateway", () => ({ getWebBaseUrl: () => "https://web" }));
+vi.mock("./memory/personalityLimbic", () => ({ turnLimbicBlock: vi.fn() }));
+vi.mock("./chat/chatDeletion", () => ({ confirmChatDelete: vi.fn() }));
 vi.mock("./editorContext", () => ({ getEditorContext: vi.fn(), watchEditorContext: () => ({ dispose() {} }) }));
-vi.mock("./gitChanges", () => ({ detectPendingChanges: vi.fn(), detectPendingDiff: vi.fn(), watchPendingChanges: () => ({ dispose() {} }) }));
-vi.mock("./modelState", () => ({ setSelectedModel: vi.fn(), setSelectedModelPool: vi.fn() }));
-vi.mock("./pageEngineBridge", () => ({ hostPageEngines: { attach: () => () => undefined } }));
-vi.mock("./canvasHostActions", () => ({ captureFromEditor: vi.fn(), navigateFromCanvas: vi.fn(), openCapturedFile: vi.fn() }));
-vi.mock("./workspaceInit", () => ({ buildWorkspaceInit: vi.fn() }));
+vi.mock("./git/gitChanges", () => ({ detectPendingChanges: vi.fn(), detectPendingDiff: vi.fn(), watchPendingChanges: () => ({ dispose() {} }) }));
+vi.mock("./models/modelState", () => ({ setSelectedModel: vi.fn(), setSelectedModelPool: vi.fn() }));
+vi.mock("./panels/pageEngineBridge", () => ({ hostPageEngines: { attach: () => () => undefined } }));
+vi.mock("./panels/canvasHostActions", () => ({ captureFromEditor: vi.fn(), navigateFromCanvas: vi.fn(), openCapturedFile: vi.fn() }));
+vi.mock("./workspace/workspaceInit", () => ({ buildWorkspaceInit: vi.fn() }));
 vi.mock("./contextPicker", () => ({ pickWorkspaceContext: vi.fn() }));
-vi.mock("./localFetchProxy", () => ({
+vi.mock("./tools/localFetchProxy", () => ({
   LocalFetchProxy: class {
     dispose(): void {}
     fetch(): void {}
@@ -63,7 +63,7 @@ vi.mock("./localFetchProxy", () => ({
 }));
 // The host's two frame writers, as `webviewHostBridge.ts` writes them (that module pulls
 // the whole local-first store in, which this test has no use for).
-vi.mock("./webviewHostBridge", () => ({
+vi.mock("./panels/webviewHostBridge", () => ({
   postToWebview: (webview: { postMessage(m: unknown): unknown } | undefined, msg: unknown) => void webview?.postMessage(msg),
   respondToWebview: (webview: { postMessage(m: unknown): unknown } | undefined, id: string | undefined, ok: boolean, result?: unknown, error?: string) => {
     if (!id || !webview) return;
@@ -71,8 +71,8 @@ vi.mock("./webviewHostBridge", () => ({
   },
 }));
 // The REAL ingress (`attachmentIngress.ts`) behind the surface; only its network is faked.
-vi.mock("./hostIngress", async () => {
-  const { createAttachmentIngress } = await vi.importActual<typeof import("./attachmentIngress")>("./attachmentIngress");
+vi.mock("./host/hostIngress", async () => {
+  const { createAttachmentIngress } = await vi.importActual<typeof import("./attachments/attachmentIngress")>("./attachments/attachmentIngress");
   const { mentionBudget } = await import("@builderforce/tool-output-policy");
   const ingress = createAttachmentIngress({
     admit: ingressPorts.admit,

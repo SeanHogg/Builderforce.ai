@@ -19,7 +19,7 @@ import * as assert from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { makeNonce, renderBundleShell } from '../src/webviewBundleShell';
+import { makeNonce, renderBundleShell } from '../src/panels/webviewBundleShell';
 import { localSqliteAvailable, openLocalSqlite } from '../../../packages/agent-tools/src/node-local-sqlite';
 
 const EXTENSION_ID = 'builderforce.builderforce-ai';

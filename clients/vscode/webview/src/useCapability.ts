@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { capabilityStates, type CapabilityId } from '../../src/capabilityStates';
+import { capabilityStates, type CapabilityId } from '../../src/tools/capabilityStates';
 import { subscribeWebviewPolicy, webviewCapabilityInputs } from './platformPolicy';
 
 /**

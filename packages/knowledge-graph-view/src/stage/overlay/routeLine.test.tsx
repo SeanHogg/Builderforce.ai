@@ -8,6 +8,7 @@ import { createNoopStage } from '../renderer';
 import { Stage } from '../Stage';
 import type { SceneProps } from '../../surface/registry';
 import { useStageWiring } from './useStageWiring';
+import { DEFAULT_KNOWLEDGE_GRAPH_LABELS } from '../../labels';
 
 const graph = surfaceFixture();
 const model = buildStageModel(graph, []);
@@ -54,7 +55,7 @@ describe('route → line (a route pick selects its line, as the SVG map\'s hop d
     it('the stage wiring turns a route pick into the surface\'s line selection on the world map (not inside a drilled level)', () => {
         const selectLine = vi.fn();
         const drill = { stack: [], view: null, canOut: false, parent: null, selected: null, select: vi.fn(), canEnter: () => ({ can: false, reason: 'noSymbols' as const }), enter: vi.fn(), out: vi.fn(), loading: false, notice: null, symbols: [] };
-        const p = { graph, labels: {}, onSelect: vi.fn(), surface: { stations: model.stations, drill, line: null, selectLine, selectStation: vi.fn(), setQuestion: vi.fn(), openPanel: vi.fn() } } as unknown as SceneProps;
+        const p = { graph, labels: DEFAULT_KNOWLEDGE_GRAPH_LABELS, onSelect: vi.fn(), surface: { stations: model.stations, drill, line: null, selectLine, selectStation: vi.fn(), setQuestion: vi.fn(), openPanel: vi.fn() } } as unknown as SceneProps;
         const renderer = createNoopStage();
         const { rerender } = renderHook((props: SceneProps) => useStageWiring(props, renderer, null, 800), { initialProps: p });
         const bus = stageBus(renderer);

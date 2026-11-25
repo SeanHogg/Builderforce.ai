@@ -280,6 +280,9 @@ export interface SourceText { startLine: number; lines: string[]; truncated: boo
 /** `KnowledgeGraphSource.readSource` bound to the root on show (the view's code band reads through it). */
 export type SourceReader = (path: string, range: SourceRange) => Promise<SourceText | null>;
 
+/** What the host's editor shows of a file of the root on show (root-relative `path`, 1-based lines): the code band follows it. */
+export interface EditorView { path: string; firstLine: number; lastLine: number; cursorLine: number | null }
+
 /** One definition. `ref` names it (`<file ref>#<name>`); `parent` is its file's ref, or its class's ref for a member. */
 export interface SymbolRecord {
     ref: string;

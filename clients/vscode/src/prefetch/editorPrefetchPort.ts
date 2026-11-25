@@ -12,7 +12,7 @@
  */
 
 import { TEMPLATES } from "@builderforce/ide-templates";
-import type { LocalModelsConfig } from "../localModels";
+import type { LocalModelsConfig } from "../models/localModels";
 import { lspDiagnostics, openWorkspaceFiles } from "./lspDiagnostics";
 import { createVscodePrefetchPort, type CalibrationMemento } from "./vscodePrefetchPort";
 import { defineRegistry, type PrefetchPort } from "@builderforce/prefetch";

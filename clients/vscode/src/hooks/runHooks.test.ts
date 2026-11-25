@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ShellResult } from "@builderforce/agent-tools";
 import { parseHooksFile } from "./hookConfig";
 import { createRunHooks, NO_RUN_HOOKS } from "./runHooks";
-import type { LocalShellOptions } from "../localShell";
+import type { LocalShellOptions } from "../tools/localShell";
 
 type Call = { command: string; options: LocalShellOptions };
 

@@ -16,7 +16,9 @@
     "*.css"
   ],
   "scripts": {
-    "test": "node ../../frontend/node_modules/vitest/vitest.mjs run --config vitest.config.ts"
+    "test": "node ../../frontend/node_modules/vitest/vitest.mjs run --config vitest.config.ts",
+    "harness": "node ../../clients/vscode/node_modules/vite/bin/vite.js build --config harness/vite.config.ts",
+    "harness:dev": "node ../../clients/vscode/node_modules/vite/bin/vite.js --config harness/vite.config.ts"
   },
   "peerDependencies": {
     "@react-three/drei": "^10.7.8",

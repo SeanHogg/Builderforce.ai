@@ -17,12 +17,12 @@ vi.mock("./desktopContext", () => ({
   forgetDesktopProbe,
   registerWorkspace,
 }));
-vi.mock("./workspaceSymbols", () => ({ symbolIndexGrounding: async () => undefined }));
-vi.mock("./hostCostLevers", () => ({ hostCostLeverOn: () => false }));
-vi.mock("./sessionNotes", () => ({ readRecentSessionNotes: async () => "" }));
+vi.mock("./workspace/workspaceSymbols", () => ({ symbolIndexGrounding: async () => undefined }));
+vi.mock("./host/hostCostLevers", () => ({ hostCostLeverOn: () => false }));
+vi.mock("./memory/sessionNotes", () => ({ readRecentSessionNotes: async () => "" }));
 
 import { onDesktopStart, watchDesktopStarts } from "./desktopConnect";
-import { getStableGrounding, setGroundingSummary } from "./grounding";
+import { getStableGrounding, setGroundingSummary } from "./memory/grounding";
 
 describe("Desktop's start event", () => {
   let dir: string;

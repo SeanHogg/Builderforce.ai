@@ -37,6 +37,11 @@ export interface SemanticZoom {
     zoomInto(stationId: string): void;
     /** The Map's ladder: go back out to band `target` (0 system … CODE-1 method). Bands at or past the current one stay. */
     outToBand(target: number): void;
+    /** One band in, from the mark `prefer` when it can be entered, else the one nearest the zoom point; false when nothing can be. */
+    stepIn(prefer: string | null): boolean;
+    /** The Map's ladder: go to band `target` (0 system … CODE). Out is `outToBand`; in steps band by band from `prefer`,
+     *  and `onBlocked` runs when a step has nothing to enter. */
+    toBand(target: number, prefer: string | null, onBlocked: () => void): void;
     /** The Sequence's band control: fly to band `band`'s threshold (0 = Fit). */
     zoomToBand(band: number): void;
     /** The code band's method, when it is open. */
@@ -95,6 +100,10 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         });
     }, [band, map.stations, map.keyOfStation, drill.view, drill.canEnter, drill.symbols]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // The band the ladder is walking to (-1: none), and what to do when a step has nothing to enter.
+    const goal = useRef(-1);
+    const blocked = useRef<() => void>(() => {});
+
     const state = useRef<ZoomState>({ drill, map, entries, codeKey, trail, seqBand, band, candidates });
     state.current = { drill, map, entries, codeKey, trail, seqBand, band, candidates };
 
@@ -142,6 +151,17 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
     useEffect(() => { evaluate(); }, [evaluate, candidates]);
 
     const ms = reducedMotion ? 0 : TWEEN_MS;
+    const stepGoal = useRef<() => boolean>(() => false);
+    const walk = useCallback(() => {
+        if (goal.current < 0) return;
+        if (state.current.band >= goal.current) { goal.current = -1; return; }
+        if (pending.current || bus.tweening) return;
+        if (!stepGoal.current()) { goal.current = -1; blocked.current(); }
+    }, [bus]);
+    // The ladder walks on: each band reached, each level that finishes loading and each landed tween takes the next step toward its goal.
+    useEffect(() => { walk(); }, [walk, band, candidates]);
+    useEffect(() => bus.onSettle(walk), [bus, walk]);
+
     const zoomInto = useCallback((stationId: string) => {
         const s = state.current, p = bus.placement, rig = rigOf(bus);
         const station = s.map.stations.byId.get(stationId);
@@ -185,6 +205,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
 
     const outToBand = useCallback((target: number) => {
         const s = state.current;
+        goal.current = -1;
         if (target >= s.band) return;
         if (s.band === CODE) {
             if (target === CODE - 1) { leaveCode(); return; }
@@ -214,6 +235,34 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         return true;
     }, [bus, flyToCode]);
 
+    const stepIn = useCallback((prefer: string | null): boolean => {
+        const s = state.current, p = bus.placement, proj = bus.projector;
+        if (s.band >= CODE || pending.current || bus.tweening) return false;
+        let c = s.candidates.find((k) => k.key === prefer);
+        // At the method band a loaded method that is not a station of this level still opens its code.
+        if (!c && prefer?.startsWith('node:') && s.band === CODE - 1 && codeTargetOf(prefer.slice(5), s.drill.symbols)) return enterCode(prefer.slice(5));
+        if (!c && p && proj) {
+            const slots = s.candidates.map((k) => bus.slotOf(k.key));
+            const at = rigOf(bus)?.focusPoint ?? [proj.width / 2, proj.height / 2];
+            const f = focusOf(p, proj, slots, at, Number.POSITIVE_INFINITY);
+            if (f) c = s.candidates[slots.indexOf(f.slot)];
+        }
+        if (!c) return false;
+        if (s.band === CODE - 1) return enterCode(c.key.slice('node:'.length));
+        zoomInto(c.id);
+        return true;
+    }, [bus, enterCode, zoomInto]);
+    stepGoal.current = () => stepIn(null);
+
+    const toBand = useCallback((target: number, prefer: string | null, onBlocked: () => void) => {
+        const s = state.current;
+        blocked.current = onBlocked;
+        if (target < s.band) { goal.current = -1; outToBand(target); return; }
+        if (target === s.band) { goal.current = -1; return; }
+        goal.current = target;
+        if (!stepIn(prefer)) { goal.current = -1; onBlocked(); }
+    }, [outToBand, stepIn]);
+
     const nested = useMemo(() => new WeakMap<Placement, Placement>(), [entries]);
     const nest = useCallback((p: Placement): Placement => {
         const e = entries.get(drillOfPlacement(p));
@@ -234,7 +283,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
     }), [trail, drill.symbols]);
 
     return {
-        band: bandOf(band), sequenceLod: sequenceLodOf(seqBand), nest, zoomInto, zoomToBand, outToBand, code, closeCode, leaveCode, enterCode,
+        band: bandOf(band), sequenceLod: sequenceLodOf(seqBand), nest, zoomInto, zoomToBand, outToBand, stepIn, toBand, code, closeCode, leaveCode, enterCode,
         trail: crumbs, codeBack,
     };
 }

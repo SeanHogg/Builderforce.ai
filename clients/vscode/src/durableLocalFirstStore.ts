@@ -35,21 +35,21 @@ import {
   type LocalFirstSnapshot,
   type MemoryLocalFirstStore,
 } from "@builderforce/local-first";
-import type { DurableLocalFirstStore, DurableLocalFirstStoreOptions } from "./durableLocalFirstStoreContract";
-import { LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS, createLocalFirstFileLock } from "./localFirstLock";
-import { legacyMoved, readLegacyMerge, writeLegacyBaseline } from "./localFirstLegacyMerge";
-import { createRecovery } from "./durableLocalFirstRecovery";
-import { writeSnapshotCache } from "./localFirstSnapshotCacheWrite";
-import { createCompactionScheduler } from "./localFirstCompactionScheduler";
-import { migrateEventBacklog } from "./localFirstEventMigration";
-import { createCompactionBackoff } from "./localFirstCompactionBackoff";
-import { createNodeJournalIo, yieldToEventLoop, type JournalStageTiming, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
+import type { DurableLocalFirstStore, DurableLocalFirstStoreOptions } from "./localFirst/durableLocalFirstStoreContract";
+import { LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS, createLocalFirstFileLock } from "./localFirst/localFirstLock";
+import { legacyMoved, readLegacyMerge, writeLegacyBaseline } from "./localFirst/localFirstLegacyMerge";
+import { createRecovery } from "./localFirst/durableLocalFirstRecovery";
+import { writeSnapshotCache } from "./localFirst/localFirstSnapshotCacheWrite";
+import { createCompactionScheduler } from "./localFirst/localFirstCompactionScheduler";
+import { migrateEventBacklog } from "./localFirst/localFirstEventMigration";
+import { createCompactionBackoff } from "./localFirst/localFirstCompactionBackoff";
+import { createNodeJournalIo, yieldToEventLoop, type JournalStageTiming, type LoadedJournal, type TailRead } from "./localFirst/localFirstJournalIo";
 import {
   checkSnapshotCache,
   hasLegacyState,
   removeOrphanedTemporaries,
-} from "./localFirstMigration";
-import { hostLog } from "./hostLog";
+} from "./localFirst/localFirstMigration";
+import { hostLog } from "./host/hostLog";
 
 const fs = nodeFs.promises;
 
@@ -69,7 +69,7 @@ const envPerfFlag = (): boolean => {
 };
 
 // The store's contract (what it returns and takes) lives in `durableLocalFirstStoreContract.ts`.
-export { VSIX_LOCAL_FIRST_REDACTION_RULE, type DurableLocalFirstStore, type DurableLocalFirstStoreOptions } from "./durableLocalFirstStoreContract";
+export { VSIX_LOCAL_FIRST_REDACTION_RULE, type DurableLocalFirstStore, type DurableLocalFirstStoreOptions } from "./localFirst/durableLocalFirstStoreContract";
 
 export function createDurableLocalFirstStore(
   directory: string,

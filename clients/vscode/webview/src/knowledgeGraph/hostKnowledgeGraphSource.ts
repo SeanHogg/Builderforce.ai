@@ -25,7 +25,7 @@ import { ABORT_GRACE_MS, FixStepError, HOST_CHECK_IDS, ReviewFailure } from '@bu
 import type { FixCheckResult } from '@builderforce/knowledge-graph-view';
 import type {
   KnowledgeBaseline, KnowledgeGraphSource, KnowledgeReviewEvent, KnowledgeScopeSummary, KnowledgeSearchHit, NotReviewedHere, PinpointResult,
-  ReviewControl, ReviewRequest, ReviewTarget, SymbolRecord, SyncStatus, TryRequest, TryResponse,
+  ReviewControl, ReviewRequest, ReviewTarget, SourceRange, SourceText, SymbolRecord, SyncStatus, TryRequest, TryResponse,
 } from '@builderforce/knowledge-graph-view';
 import type {
   KnowledgeCall, KnowledgeCheckReply, KnowledgeEvent, KnowledgeFixPreview, KnowledgeFixResult, KnowledgeHistoryResult, KnowledgeLoadTrace, KnowledgePlanReply, KnowledgeTargetRow,
@@ -44,6 +44,8 @@ export interface HostKnowledgeSourceOptions {
   overlay?(graph: KnowledgeGraph, changed: readonly string[]): KnowledgeGraph;
   /** True when a review starts, false when it ends however it ends (planning, confirm and run included). Reviews may overlap: count them with {@link reviewCount}. */
   onReviewActive?(active: boolean): void;
+  /** The view loads `rootId` (the root an "Open at line" opens a file of). */
+  onLoad?(rootId: string): void;
 }
 
 
@@ -185,9 +187,12 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
   return {
     scopes: () => t.call<KnowledgeScopeSummary[]>({ op: 'scopes' }),
     // A root with no review on this machine answers `{ notReviewedHere }` (PRD 41 A7), which the view says plainly.
-    load: (rootId, q) => t.call<KnowledgeGraph | NotReviewedHere | null>({
-      op: 'load', rootId, ...(q?.focus ? { focus: q.focus } : {}), ...(q?.maxNodes ? { maxNodes: q.maxNodes } : {}),
-    }),
+    load: (rootId, q) => {
+      opts.onLoad?.(rootId);
+      return t.call<KnowledgeGraph | NotReviewedHere | null>({
+        op: 'load', rootId, ...(q?.focus ? { focus: q.focus } : {}), ...(q?.maxNodes ? { maxNodes: q.maxNodes } : {}),
+      });
+    },
     // The extension keeps the last full load on disk; any failure is "nothing remembered".
     lastSeen: () => t.call<{ scopes: KnowledgeScopeSummary[]; rootId: string; graph: KnowledgeGraph } | null>({ op: 'lastSeen' }).catch(() => null),
     async targets(): Promise<ReviewTarget[]> {
@@ -289,5 +294,8 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
     tryRequest: (req: TryRequest) => t.call<TryResponse>({ op: 'tryRequest', req }),
     // The extension reads the files (capped, path-safe) and extracts their definitions; the graph itself never holds them.
     symbolsOf: (rootId: string, fileRefs: string[]) => t.call<SymbolRecord[]>({ op: 'symbols', rootId, fileRefs }),
+    // The code band's text: the extension keeps the path inside the root, caps the file size and clamps the lines; null when it refuses.
+    readSource: (rootId: string, path: string, range: SourceRange) =>
+      t.call<SourceText | null>({ op: 'readSource', rootId, path, startLine: range.startLine, endLine: range.endLine }),
   };
 }

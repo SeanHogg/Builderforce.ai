@@ -6,7 +6,7 @@
  */
 
 import * as vscode from "vscode";
-import { createLocalShell } from "../localShell";
+import { createLocalShell } from "../tools/localShell";
 import { HOOKS_FILE, STARTER_HOOKS_FILE } from "./hookConfig";
 import { hookCommandsAllowed } from "./hookTrust";
 import { createRunHooks, NO_RUN_HOOKS, type RunDirectives } from "./runHooks";

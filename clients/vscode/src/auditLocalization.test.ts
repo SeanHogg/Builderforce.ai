@@ -27,7 +27,7 @@ describe('audit settings localization', () => {
   });
   it.each(['', '.de', '.es', '.fr', '.zh-cn'])('resolves audit UI copy in %s', (locale) => {
     const catalog = read(`l10n/bundle.l10n${locale}.json`);
-    const source = ['auditExecution.ts', 'systemAuditApi.ts'].map((file) => readFileSync(new URL(`src/${file}`, root), 'utf8')).join('\n');
+    const source = ['audit/auditExecution.ts', 'audit/systemAuditApi.ts'].map((file) => readFileSync(new URL(`src/${file}`, root), 'utf8')).join('\n');
     for (const match of source.matchAll(/vscode\.l10n\.t\('([^']+)'/g)) expect(catalog[match[1]!], match[1]).toBeTruthy();
     expect(catalog['Remediation tickets']).toBeTruthy();
     expect(catalog['Audit preview. Source review is pending.']).toBeTruthy();

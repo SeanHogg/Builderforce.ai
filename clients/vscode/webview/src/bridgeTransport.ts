@@ -9,7 +9,7 @@
  * Import from `./vscodeBridge`, never from here — that is the public entry.
  */
 
-import type { HostMessageType } from '../../src/bridgeProtocol';
+import type { HostMessageType } from '../../src/panels/bridgeProtocol';
 
 interface VsCodeApi {
   postMessage(msg: unknown): void;

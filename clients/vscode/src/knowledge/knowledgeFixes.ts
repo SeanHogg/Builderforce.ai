@@ -31,7 +31,7 @@ import { sourcePathOf } from "@builderforce/agent-tools/knowledge";
 import { runGit } from "@builderforce/agent-tools/node-git-history";
 import { removeExportFromSource } from "@builderforce/agent-tools/node-symbols";
 import type { Finding } from "@seanhogg/builderforce-memory/knowledge";
-import { symbolGrammarOptions } from "../workspaceSymbols";
+import { symbolGrammarOptions } from "../workspace/workspaceSymbols";
 import { assertInsideRoot } from "./knowledgeFixPaths";
 import type { KnowledgeFixResult } from "./knowledgeProtocol";
 import { runShell } from "./knowledgeShell";

@@ -12,7 +12,7 @@ import { factKeyOf, type Finding, type KnowledgeGraph, type NodeRef } from "@sea
 import { factRightsCache, humanFactBatch, readSystems, type FactRightsCache } from "@builderforce/agent-tools/knowledge";
 import { knowledgeBaseline } from "./knowledgeBaseline";
 import { openWorkspace } from "../openWorkspace";
-import { SELECTED_TENANT_KEY } from "../projectState";
+import { SELECTED_TENANT_KEY } from "../project/projectState";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import {
   KNOWLEDGE_EVENT, type KnowledgeCall, type KnowledgeEvent, type KnowledgeFixResult, type KnowledgeFocusFrame, type KnowledgeScopeRow,
@@ -26,6 +26,7 @@ import { rootHistory } from "./knowledgeHistory";
 import { pinpointRoot } from "./knowledgePinpointHost";
 import { retryRootSync, rootSyncStatus } from "./knowledgeSync";
 import { rootSymbols, SymbolsGate } from "./knowledgeSymbols";
+import { openSource, readSource } from "./sourcePort";
 import { tryRequestOf } from "./knowledgeTryRequestHost";
 import { reviewedRoots, rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { KnowledgeReviewSessions } from "./knowledgeReviewSessions";
@@ -41,7 +42,7 @@ import { assertWritable, packRootGraph, packScopeRows, readOnlyPack } from "./pa
 import { linkedKnowledgeClient, linkedProject, loadGraph, log, openRoot, rootKnowledgeFiles, workspaceFolders, type GraphQuery } from "./knowledgeService";
 import { getRun, listRuns } from "./review/reviewRuns";
 import { createAgentRuns, type AgentRuns } from "./agentRuns";
-import { localBrainApplication } from "../localFirstStore";
+import { localBrainApplication } from "../localFirst/localFirstStore";
 import { messageOf } from "../messageOf";
 
 /** Search hits the view shows at most. */
@@ -211,7 +212,15 @@ export class KnowledgeBridge implements vscode.Disposable {
           this.symbolsGate.run(call.rootId, call.fileRefs, (refs) => rootSymbols(rootPath, call.rootId, refs, undefined, undefined, traced.timer)),
           (records) => ({ count: records.length }));
       }
+      // The code band: the root must be open here (`rootOf` throws); the path and lines are checked in `sourcePort.ts`.
+      case "readSource": return readSource(this.rootOf(call.rootId), call.path, call.startLine, call.endLine);
+      case "openSource": return openSource(this.rootOf(call.rootId), call.path, call.startLine, call.endLine);
     }
+  }
+
+  /** The root the view last loaded, when an open workspace folder holds it (the editor feed's root). */
+  loadedRoot(): KnowledgeRoot | undefined {
+    return this.lastRoot ? rootById(this.lastRoot, workspaceFolders()) : undefined;
   }
 
   /** One root's graph: a pack's, this machine's, the server's (a root no folder here holds), or "not reviewed here"; each branch a timed phase. */

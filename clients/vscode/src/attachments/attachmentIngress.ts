@@ -28,7 +28,7 @@
 import { MAX_INLINE_TEXT_BYTES } from "@seanhogg/builderforce-brain-embedded";
 import type { InferenceMode } from "@builderforce/local-first";
 import { inlineMentions, mentionBudget, type MentionBudget } from "@builderforce/tool-output-policy";
-import { ingressBlock, type IngressDeps, type IngressText } from "./contextIngress";
+import { ingressBlock, type IngressDeps, type IngressText } from "../contextIngress";
 import { uploadMaxBytes } from "./attachmentLimits";
 
 /** Texts kept at once. A pending attachment that was never sent is forgotten oldest first. */

@@ -6,9 +6,9 @@
  */
 
 import * as vscode from "vscode";
-import { LOCAL_TICKET_STATUSES } from "../localWorkShared";
+import { LOCAL_TICKET_STATUSES } from "./localWorkShared";
 import { surfaceError } from "../errorReporter";
-import { localBrainApplication } from "../localFirstStore";
+import { localBrainApplication } from "../localFirst/localFirstStore";
 import { createLocalWorkRepository } from "../localWorkRepository";
 import { openWorkspace } from "../openWorkspace";
 import { boundChatOf, type LocalWorkNode } from "./localWorkModel";

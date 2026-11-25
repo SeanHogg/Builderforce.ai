@@ -10,7 +10,7 @@
 
 import { execFile } from "node:child_process";
 import { runGit } from "@builderforce/agent-tools/node-git-history";
-import { baseCommitOf } from "../runChangeBaseline";
+import { baseCommitOf } from "../run/runChangeBaseline";
 
 /** One git call's ceiling: well inside the delta's budget (`RUN_DELTA_BUDGET_MS`). */
 export const GIT_TIMEOUT_MS = 10_000;

@@ -31,6 +31,8 @@ export interface StageInteractionProps {
     onOut?: (() => void) | undefined;
     /** Double-click on a mark, or Enter on the selected one: go inside it. */
     onDrill?: ((key: string) => void) | undefined;
+    /** A click on empty space: clear the selection. */
+    onClear?: (() => void) | undefined;
 }
 
 /** A press that moved more than this is a drag (the rig's), not a click. */
@@ -43,13 +45,15 @@ function useBusOptions(bus: StageBus): StageBus['options'] {
     return options;
 }
 
-export function StageInteraction({ bus, renderer, keys, placement, tweening, selected, description, onSelect, onOut, onDrill }: StageInteractionProps) {
+export function StageInteraction({ bus, renderer, keys, placement, tweening, selected, description, onSelect, onOut, onDrill, onClear }: StageInteractionProps) {
     const options = useBusOptions(bus);
     const own = useRef<HTMLDivElement>(null);
     const select = useRef(onSelect);
     select.current = onSelect;
     const drill = useRef(onDrill);
     drill.current = onDrill;
+    const clear = useRef(onClear);
+    clear.current = onClear;
 
     // The bus reads the renderer at a settle: the depth (towers at their drawn height), the MarkSet's importance (the
     // tie-break `nearestHit` uses) and the live keys (appended slots included).
@@ -81,7 +85,9 @@ export function StageInteraction({ bus, renderer, keys, placement, tweening, sel
         const offHover = bus.onHover((hover) => patch({ hover }));
         const offReading = bus.onReading((reading) => patch({ reading }));
         const offCalls = bus.onCalls((calls) => patch({ calls }));
-        return () => { offHover(); offReading(); offCalls(); };
+        // The fade (what the code on screen lights) is a mark flag, not an overlay mesh.
+        const offFade = bus.onFade((lit) => { renderer.setFade(lit); bus.invalidate(); });
+        return () => { offHover(); offReading(); offCalls(); offFade(); };
     }, [bus, renderer]);
 
     // Pointer picking on the stage's box: hover on move, select on a click that did not drag.
@@ -103,6 +109,7 @@ export function StageInteraction({ bus, renderer, keys, placement, tweening, sel
             const hit = bus.pick(p.x, p.y);
             if (hit?.kind === 'mark') { const key = bus.keys[hit.slot]; if (key) select.current(key); }
             else if (hit?.kind === 'link') bus.options.onLink?.(hit, p);
+            else clear.current?.();
         };
         const dbl = (e: MouseEvent) => {
             const rect = box.getBoundingClientRect(), hit = bus.pick(e.clientX - rect.left, e.clientY - rect.top);

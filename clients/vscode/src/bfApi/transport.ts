@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
-import { getBaseUrl } from "../gateway";
-import { trackReachability } from "../outboxStorage";
+import { getBaseUrl } from "../gateway/gateway";
+import { trackReachability } from "../sync/outboxStorage";
 import { exchangeJwt, tenantOfToken, workspaceTenantId } from "./session";
 
 /**

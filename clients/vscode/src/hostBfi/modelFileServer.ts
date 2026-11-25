@@ -18,7 +18,7 @@ import {
   type ModelFileEvent,
   type ModelFileRequest,
   type ModelFileResults,
-} from "../pageEngineBridgeProtocol";
+} from "../panels/pageEngineBridgeProtocol";
 import type { LocalDeviceSupport } from "@builderforce/local-inference";
 import type { FileModelStore } from "./modelFiles";
 import { messageOf } from "../messageOf";

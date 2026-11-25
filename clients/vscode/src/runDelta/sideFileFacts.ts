@@ -11,7 +11,7 @@ import { importResolver, isRouterFacts, NO_MODULE_ALIASES, resolveFileFacts, typ
 import { hasFileFacts } from "@builderforce/agent-tools/node-file-facts";
 import type { FileFacts } from "@seanhogg/builderforce-memory/knowledge";
 import { extractFactsJob } from "../knowledge/review/extractPoolHost";
-import { symbolGrammarOptions } from "../workspaceSymbols";
+import { symbolGrammarOptions } from "../workspace/workspaceSymbols";
 
 /** One changed file of a side, by repo path. */
 export interface FactsSideFile { path: string; hash?: string; text?: string }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { mentionBudget } from "@builderforce/tool-output-policy";
 import { INGRESS_COMPRESS_MIN_CHARS, ingressBlock } from "./contextIngress";
-import { createAttachmentIngress, decodedLengthOf, MAX_STORED_ATTACHMENT_TEXTS, MAX_STORED_TEXT_CHARS } from "./attachmentIngress";
+import { createAttachmentIngress, decodedLengthOf, MAX_STORED_ATTACHMENT_TEXTS, MAX_STORED_TEXT_CHARS } from "./attachments/attachmentIngress";
 
 const longProse = "The release notes describe the change. ".repeat(Math.ceil(INGRESS_COMPRESS_MIN_CHARS / 39) + 5);
 const halved = (text: string) => ({ text: text.slice(0, Math.floor(text.length / 2)), compressed: true, originalTokens: 1000, keptTokens: 500 });

@@ -34,7 +34,7 @@ import type { LocalDeviceSupport } from '@builderforce/local-inference';
 import bfiWasmUrl from '@seanhogg/bfi-web/bfi_web_bg.wasm?url';
 // The worker bundle's URL (Vite `worker.format: 'es'`), a webview resource URI.
 import bfiWorkerUrl from './bfiWorker.ts?worker&url';
-import { MODEL_FILE_EVENT_TYPES, type ModelFileEvent } from '../../src/pageEngineBridgeProtocol';
+import { MODEL_FILE_EVENT_TYPES, type ModelFileEvent } from '../../src/panels/pageEngineBridgeProtocol';
 import { createHostModelStore } from './hostModelStore';
 import { onHostMessage, post, request } from './vscodeBridge';
 

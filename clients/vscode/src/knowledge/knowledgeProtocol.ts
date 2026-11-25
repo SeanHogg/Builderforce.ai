@@ -7,7 +7,8 @@
  *   host → webview  `knowledge.event` — a review's progress / end, or a live graph, keyed
  *                   by the `stream` the webview opened it with;
  *                   `knowledge.focus` — open the Knowledge view on these refs
- *                   (`builderforce.openKnowledgeGraph`).
+ *                   (`builderforce.openKnowledgeGraph`);
+ *                   `knowledge.editor` — what the editor shows of a file of the loaded root.
  *
  * A review never rides one long request (a request times out; a review can take
  * minutes, and so can planning a big folder or leaving the folder picker open): `plan`
@@ -26,6 +27,8 @@ export type { IndexLevelStatus };
 export const KNOWLEDGE_CALL = "knowledge.call";
 export const KNOWLEDGE_EVENT = "knowledge.event";
 export const KNOWLEDGE_FOCUS = "knowledge.focus";
+/** host → webview: the editor's view of a file of the loaded root ({@link KnowledgeEditorFrame}), throttled. */
+export const KNOWLEDGE_EDITOR = "knowledge.editor";
 
 /** The view's review request (the view package's `ReviewRequest`, restated for the host). */
 export interface KnowledgeReviewRequest {
@@ -84,6 +87,10 @@ export type KnowledgeCall =
   // If `untrustedWorkspaces` is ever declared `limited` in package.json, gate `symbols`, `history` and `pinpoint`
   // (they read the workspace's files or run git in it) on `vscode.workspace.isTrusted`, as the fix flow does.
   | { op: "symbols"; rootId: string; fileRefs: string[] }
+  // The code band (PRD 43 B1a rule 9): some lines of one root-relative file, and "Open at line" in the editor. Both untrusted:
+  // `sourcePort.ts` keeps the path inside the root's real path, caps the file size and clamps the lines to MAX_SOURCE_LINES.
+  | { op: "readSource"; rootId: string; path: string; startLine: number; endLine: number }
+  | { op: "openSource"; rootId: string; path: string; startLine: number; endLine?: number }
   // The review's run record (PRD 41 A8): a root's recent runs (light), one whole run, and Stop by run id.
   // A retry of failed files is not an op: it is a normal review request (`KnowledgeReviewRequest.retry`).
   | { op: "runs"; rootId: string }
@@ -274,6 +281,32 @@ export type KnowledgePlanReply = { reviewId: string; rootId: string; plan: Revie
 export interface KnowledgeFocusFrame {
   focus: string[];
   rootId?: string;
+}
+
+/**
+ * The most lines one `readSource` answers (and `openSource` selects): the view's `MAX_SPAN` (`knowledge-graph-view`
+ * `stage/drill/codeText.ts`), restated because the extension host cannot import that package.
+ */
+export const MAX_SOURCE_LINES = 400;
+
+/** `readSource`'s answer: the view's `SourceText`, restated. `truncated` when the host cut the range at {@link MAX_SOURCE_LINES}. */
+export interface KnowledgeSourceText {
+  startLine: number;
+  lines: string[];
+  truncated: boolean;
+}
+
+/**
+ * The `knowledge.editor` frame (host → webview): what the editor shows of a file of the root the view loaded — its
+ * root-relative `path`, the visible lines (1-based, inclusive) and the cursor's line (null without a cursor). The view's
+ * `EditorView` plus the root it belongs to.
+ */
+export interface KnowledgeEditorFrame {
+  rootId: string;
+  path: string;
+  firstLine: number;
+  lastLine: number;
+  cursorLine: number | null;
 }
 
 /** The `knowledge.event` frame: the event rides WRAPPED (its own `type` is not the frame's). */
