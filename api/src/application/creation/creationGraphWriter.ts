@@ -352,6 +352,21 @@ export function creationGraphStatements(db: Db, write: CreationGraphWrite): unkn
     statements.push(db.insert(creationSessionConnections).values(connections.map((edge) => connectionInsertRow(sessionId, edge, authorUserId))));
   }
 
+  // Built in execution order (bookkeeping, then snapshot) so construction order matches statement order.
+  const bookkeeping = revisionBookkeepingStatements(db, {
+    sessionId,
+    tenantId,
+    revision,
+    authorUserId,
+    actorType: write.actorType,
+    actorRef: write.actorRef,
+    eventType: write.eventType,
+    eventPayload: write.eventPayload,
+    idempotencyKey: write.idempotencyKey,
+    sessionSet: { viewport: write.viewport, preview: buildPreview(objects) },
+    now,
+  });
+
   const snapshot = db.insert(creationSessionSnapshots).values({
     sessionId,
     revision,
@@ -360,22 +375,7 @@ export function creationGraphStatements(db: Db, write: CreationGraphWrite): unkn
     createdBy: authorUserId,
   });
 
-  statements.push(
-    ...revisionBookkeepingStatements(db, {
-      sessionId,
-      tenantId,
-      revision,
-      authorUserId,
-      actorType: write.actorType,
-      actorRef: write.actorRef,
-      eventType: write.eventType,
-      eventPayload: write.eventPayload,
-      idempotencyKey: write.idempotencyKey,
-      sessionSet: { viewport: write.viewport, preview: buildPreview(objects) },
-      now,
-    }),
-    write.snapshotOnConflictDoNothing ? snapshot.onConflictDoNothing() : snapshot,
-  );
+  statements.push(...bookkeeping, write.snapshotOnConflictDoNothing ? snapshot.onConflictDoNothing() : snapshot);
 
   return statements;
 }

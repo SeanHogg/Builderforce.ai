@@ -78,8 +78,8 @@ describe('invalidateCached rate-limit retry', () => {
     const env = { AUTH_CACHE_KV: { get: vi.fn(), put: vi.fn(), delete: del } } as unknown as Env;
 
     await invalidateCached(env, 'ver:tenant:1');
-    // One delete per KV spelling (plain + last-known-good), plus the retried 429.
-    expect(del).toHaveBeenCalledTimes(3);
+    // One delete (lkg spelling is opt-in), plus the retried 429.
+    expect(del).toHaveBeenCalledTimes(2);
   });
 
   it('does not retry a non-rate-limit failure', async () => {
@@ -87,7 +87,7 @@ describe('invalidateCached rate-limit retry', () => {
     const env = { AUTH_CACHE_KV: { get: vi.fn(), put: vi.fn(), delete: del } } as unknown as Env;
 
     await invalidateCached(env, 'ver:tenant:2');
-    expect(del).toHaveBeenCalledTimes(2);
+    expect(del).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -77,7 +77,7 @@ describe('legacy board import', () => {
     expect(replica.board.edges).toHaveLength(1);
     expect(replica.timeline).toHaveLength(1);
     expect(replica.media).toHaveLength(1);
-    const image = replica.board.nodes.find((node) => node.id === boards[0]!.imageNodeId)!.data as { url: string };
+    const image = replica.board.nodes.find((node) => node.id === boards[0]!.imageNodeId)!.data;
     expect(image.url).toBe(`media:${replica.media[0]!.id}`);
     expect((await (await blobs.get(replica.media[0]!.id))!.arrayBuffer()).byteLength).toBe(4);
     expect(JSON.stringify(await store.export())).not.toContain('data:image');

@@ -41,22 +41,14 @@ export function createWebSyncLease(options: WebSyncLeaseOptions): SyncLease {
   if (!locks) return inTab;
   const lockName = `builderforce-web-sync:${options.deviceId}`;
   return {
-    run<R>(owner: string, work: (fence?: CoordinatorLeaseFence) => Promise<R>): Promise<R | undefined> {
-      return new Promise<R | undefined>((resolve, reject) => {
-        locks
-          .request(lockName, { ifAvailable: true }, async (lock) => {
-            if (!lock) {
-              resolve(undefined);
-              return;
-            }
-            try {
-              resolve(await inTab.run(owner, work));
-            } catch (error) {
-              reject(error);
-            }
-          })
-          .catch(reject);
+    async run<R>(owner: string, work: (fence?: CoordinatorLeaseFence) => Promise<R>): Promise<R | undefined> {
+      // Settle only once `request` does: that is AFTER the lock is released, so the next run
+      // never races the release.
+      let result: R | undefined;
+      await locks.request(lockName, { ifAvailable: true }, async (lock) => {
+        if (lock) result = await inTab.run(owner, work);
       });
+      return result;
     },
   };
 }

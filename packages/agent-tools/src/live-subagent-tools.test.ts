@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LIVE_FANOUT_NEXT, RESOLVE_OPEN_ISSUES, VERIFY_DELEGATION_STEP, VERIFY_STEP, childReportText } from "./live-subagent-tools.js";
+import { LIVE_FANOUT_NEXT, RESOLVE_OPEN_ISSUES, VERIFY_DELEGATION_STEP, VERIFY_STEP, childReportText, ownerSections, ownerSectionsChars } from "./live-subagent-tools.js";
 
 const report = { handle: "a1", name: "Developer", label: "#7 Drawer", state: "done" as const, output: "Moved it." };
 
@@ -22,7 +22,18 @@ describe("childReportText", () => {
 
   it("tells the owner to check each unverified claim before relaying it", () => {
     const text = childReportText({ ...report, unverifiedClaims: ["X does not exist.", "Y is impossible."] });
-    expect(text).toContain("Unverified claims — check each with one search before relaying or acting on it: X does not exist. | Y is impossible.");
+    expect(text).toContain("Unverified claims — check each with one search before relaying or acting on it:\n- X does not exist.\n- Y is impossible.");
+  });
+
+  it("renders a capped claims list with its 'more' marker as a bullet, like open issues", () => {
+    const text = childReportText({ ...report, unverifiedClaims: ["X does not exist.", "…and 3 more — see the full report"] });
+    expect(text).toContain("- …and 3 more — see the full report");
+  });
+
+  it("counts the owner sections against the report budget", () => {
+    expect(ownerSectionsChars(report)).toBe(0);
+    const claims = { ...report, unverifiedClaims: ["X does not exist."] };
+    expect(ownerSectionsChars(claims)).toBe(ownerSections(claims)[1].length + 2);
   });
 });
 

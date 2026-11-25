@@ -1,3 +1,5 @@
+import { parseSubagentReport } from "@builderforce/agent-loop";
+import { ownerSections } from "@builderforce/agent-tools";
 import { resolveQueueSettings } from "../auto-reply/reply/queue.js";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { loadConfig } from "../config/config.js";
@@ -56,6 +58,13 @@ function buildCompletionDeliveryMessage(params: {
     return header;
   }
   return `${header}\n\n${findingsText}`;
+}
+
+/** What the owner is told a child left or claimed — the same open-issues / unverified-claims
+ *  sections the editor and cloud owners read (`ownerSections`), each preceded by a blank line. */
+export function ownerSectionsOf(findings: string): string[] {
+  const { openIssues, unverifiedClaims } = parseSubagentReport(findings);
+  return ownerSections({ state: "done", openIssues, unverifiedClaims }).flatMap((s) => (s ? ["", s] : []));
 }
 
 function summarizeDeliveryError(error: unknown): string {
@@ -830,6 +839,7 @@ export async function runSubagentAnnounceFlow(params: {
       "",
       "Result:",
       findings,
+      ...ownerSectionsOf(findings),
       "",
       statsLine,
     ].join("\n");

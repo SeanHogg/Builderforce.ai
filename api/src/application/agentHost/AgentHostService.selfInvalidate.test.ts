@@ -60,9 +60,9 @@ describe('invalidateAgentHostKeyCache', () => {
 
     await invalidateAgentHostKeyCache(env, 'abc123');
 
-    expect(kv.delete).toHaveBeenCalledTimes(2); // plain + last-known-good spelling
+    // Only the jwt regime has a last-known-good copy, so `clk` is a single delete.
+    expect(kv.delete).toHaveBeenCalledTimes(1);
     expect(kv.delete.mock.calls[0]![0]).toBe(`cache:${keyCacheKey('clk', 'abc123')}`);
-    expect(kv.delete.mock.calls[1]![0]).toBe(`cache:lkg:${keyCacheKey('clk', 'abc123')}`);
     expect(kv.put).not.toHaveBeenCalled();
   });
 

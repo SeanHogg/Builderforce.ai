@@ -9,20 +9,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 vi.mock('./messages/en.json', () => ({ default: undefined }));
 
+const reportMock = vi.hoisted(() => vi.fn(async () => true));
+vi.mock('@/lib/reportError', () => ({ reportBackgroundFailure: reportMock }));
+vi.mock('./requestOrigin', () => ({ requestOrigin: async () => 'https://example.test' }));
+
 const published = { common: { hello: 'Hello' } };
+const down = { ok: false, status: 503, json: async () => ({}) };
+const up = { ok: true, json: async () => published };
+const SLOT = Symbol.for('builderforce.i18n.defaultCatalog');
 
 describe('i18n catalog on the edge server (no bundled default)', () => {
   const fetchMock = vi.fn();
 
   beforeEach(() => {
     vi.resetModules();
-    delete (globalThis as Record<symbol, unknown>)[Symbol.for('builderforce.i18n.defaultCatalog')];
+    delete (globalThis as Record<symbol, unknown>)[SLOT];
     fetchMock.mockReset();
+    reportMock.mockClear();
     vi.stubGlobal('fetch', fetchMock);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    delete (globalThis as Record<symbol, unknown>)[SLOT];
   });
 
   it('refuses a synchronous read until the catalog is primed', async () => {
@@ -57,13 +67,54 @@ describe('i18n catalog on the edge server (no bundled default)', () => {
     expect(ssr.defaultCatalog()).toBe(primed);
   });
 
-  it('does not cache a failed read: the next prime retries', async () => {
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) });
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => published });
+  it('retries a failed read once before giving up', async () => {
+    fetchMock.mockResolvedValueOnce(down).mockResolvedValueOnce(up);
+    const { primeDefaultCatalog } = await import('./catalog');
+
+    await expect(primeDefaultCatalog('https://example.test')).resolves.toEqual(published);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(reportMock).not.toHaveBeenCalled();
+  });
+
+  it('reports a read that fails twice, rejects, and does not cache the failure', async () => {
+    fetchMock.mockResolvedValueOnce(down).mockResolvedValueOnce(down).mockResolvedValueOnce(up);
     const { primeDefaultCatalog } = await import('./catalog');
 
     await expect(primeDefaultCatalog('https://example.test')).rejects.toThrow(/503/);
-    await expect(primeDefaultCatalog('https://example.test')).resolves.toEqual(published);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(reportMock).toHaveBeenCalledTimes(1);
+    expect(reportMock).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/503/) }));
+
+    await expect(primeDefaultCatalog('https://example.test')).resolves.toEqual(published);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('lets a waiter on a failed shared read make one read of its own', async () => {
+    fetchMock.mockResolvedValueOnce(down).mockResolvedValueOnce(down).mockResolvedValue(up);
+    const { primeDefaultCatalog } = await import('./catalog');
+
+    const owner = primeDefaultCatalog('https://example.test');
+    const waiter = primeDefaultCatalog('https://example.test');
+    const another = primeDefaultCatalog('https://example.test');
+    await expect(owner).rejects.toThrow(/503/);
+    const [a, b] = await Promise.all([waiter, another]);
+    expect(a).toEqual(published);
+    expect(b).toBe(a);
+    // owner: two attempts; both waiters share ONE fresh load.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await expect(primeDefaultCatalog('https://example.test')).resolves.toBe(a);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('defaultCopy refuses to read before the prime, then answers from the primed catalog', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'edge');
+    fetchMock.mockResolvedValue({ ok: true, json: async () => published });
+    const { defaultCopy, serverDefaultCopy } = await import('@/lib/content/defaultCopy');
+
+    expect(() => defaultCopy('common.hello')).toThrow(/primeDefaultCatalog/);
+    const copy = await serverDefaultCopy();
+    expect(copy).toBe(defaultCopy);
+    expect(defaultCopy('common.hello')).toBe('Hello');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

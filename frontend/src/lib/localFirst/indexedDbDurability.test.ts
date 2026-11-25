@@ -441,7 +441,9 @@ describe('G26 web durability: durable across reload', () => {
       expect(snapshot.events[0].localSequence).toBeLessThan(snapshot.events[1].localSequence);
       const ticketEvent = snapshot.events[1];
       expect(ticketEvent.clientEntityId).toBe(tickets[0].id);
-      expect(ticketEvent.dependsOn).toEqual([snapshot.events[0].eventId]);
+      // Stored as the author wrote it — the dependency's idempotency KEY; the wire form
+      // (`wireDependencies`) resolves it to an event id at send time.
+      expect(ticketEvent.dependsOn).toEqual([snapshot.events[0].idempotencyKey]);
       expect(snapshot.events.every((event) => destinationKey(event.destination) === PARTITION)).toBe(true);
 
       const pending = await reopened.read((tx) => tx.pending(BOUND));

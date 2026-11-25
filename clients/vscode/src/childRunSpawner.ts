@@ -32,6 +32,7 @@ import {
   childReportText as reportText,
   clipChildOutput,
   duplicateOfLiveChild,
+  ownerSectionsChars,
   ownerDirectionText as directionText,
   type StartedCommand,
 } from "@builderforce/agent-tools";
@@ -344,7 +345,8 @@ async function reportOf(host: ChildRunHost, key: number, lineage: RunLineage, re
         : answer;
   const { openIssues, unverifiedClaims } = parseSubagentReport(answer);
   // Report + coverage + data note share ONE report budget (the owner's wait_agents result holds several).
-  const packet = coverageChars(coverage) + (dataFile ? childDataNote(dataFile).length + 2 : 0);
+  const packet =
+    coverageChars(coverage) + (dataFile ? childDataNote(dataFile).length + 2 : 0) + ownerSectionsChars({ state, openIssues, unverifiedClaims });
   return {
     handle: lineage.handle,
     name: lineage.agent.name,

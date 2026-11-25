@@ -104,11 +104,27 @@ const knowledgeWorkerFactoryServerAlias = {
  * Their exports are `import`-only, so there is no condition to choose between.
  *
  * This collapses EVERY consumer onto that one copy — `brain-embedded` and the linked
- * `packages/*` alike — which is only sound while they all declare the same range
- * (they do: one version pinned across the workspace, bumped together), so a linked
- * package whose own install drifts is reported at build time rather than silently
- * running the frontend's version.
+ * `packages/*` alike. The declared ranges are NOT identical across the workspace
+ * (they are bumped separately), so the invariant is: the frontend's installed version
+ * must SATISFY every linked package's declared range. A package whose declared range
+ * the installed copy does not satisfy FAILS the build (it would otherwise run a version
+ * it never asked for); a linked package merely carrying its own differently-versioned
+ * install is only warned about, once, since the bundle never loads that copy.
  */
+function satisfiesRange(installed, range) {
+  try {
+    return require('semver').satisfies(installed, range);
+  } catch {
+    // No semver available: a simple caret check (^Y.M.P: same major, >= declared).
+    const caret = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range);
+    if (!caret) return true; // a range shape we cannot judge is not a reason to fail
+    const [want, have] = [caret.slice(1, 4).map(Number), installed.split('.').map(Number)];
+    if (have[0] !== want[0]) return false;
+    for (let i = 1; i < 3; i += 1) if (have[i] !== want[i]) return have[i] > want[i];
+    return true;
+  }
+}
+
 function pinnedPackageAliases(name) {
   const root = path.join(__dirname, 'node_modules', ...name.split('/'));
   const manifestFile = path.join(root, 'package.json');
@@ -128,18 +144,34 @@ function pinnedPackageAliases(name) {
         .map((entry) => path.join(packagesDir, entry.name))
       : []),
   ];
+  const unsatisfied = [];
+  const drifted = [];
   for (const linkedRoot of linkedRoots) {
+    const label = path.relative(workspace, linkedRoot);
+    const ownManifest = path.join(linkedRoot, 'package.json');
+    if (fs.existsSync(ownManifest)) {
+      const own = JSON.parse(fs.readFileSync(ownManifest, 'utf8'));
+      const declared = { ...own.devDependencies, ...own.peerDependencies, ...own.dependencies }[name];
+      if (declared && !satisfiesRange(version, declared)) unsatisfied.push(`${label} declares ${name}@${declared}`);
+    }
     const nested = path.join(linkedRoot, 'node_modules', ...name.split('/'), 'package.json');
     if (!fs.existsSync(nested)) continue;
     const nestedVersion = JSON.parse(fs.readFileSync(nested, 'utf8')).version;
-    if (nestedVersion !== version) {
-      console.warn(`[next.config] ${path.relative(workspace, linkedRoot)} installs ${name}@${nestedVersion}; the bundle uses the frontend's ${version}.`);
-    }
+    if (nestedVersion !== version) drifted.push(`${label}@${nestedVersion}`);
+  }
+  if (unsatisfied.length) {
+    throw new Error(`[next.config] the frontend installs ${name}@${version}, which does not satisfy: ${unsatisfied.join('; ')}. Bump the frontend's dependency (and its lockfile) or lower the linked package's range.`);
+  }
+  if (drifted.length) {
+    console.warn(`[next.config] ${name}: ${drifted.join(', ')} install a different version; the bundle uses the frontend's ${version}.`);
   }
   const aliases = {};
   for (const [subpath, target] of Object.entries(exportMap ?? {})) {
     const file = typeof target === 'string' ? target : target?.import ?? target?.default;
-    if (typeof file !== 'string' || subpath.includes('*')) continue;
+    if (typeof file !== 'string' || subpath.includes('*')) {
+      console.warn(`[next.config] ${name}${subpath === '.' ? '' : subpath.slice(1)} is a wildcard or non-string export; it is not pinned.`);
+      continue;
+    }
     aliases[`${name}${subpath === '.' ? '' : subpath.slice(1)}$`] = path.join(root, file);
   }
   return aliases;

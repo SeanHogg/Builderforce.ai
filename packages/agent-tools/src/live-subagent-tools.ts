@@ -119,13 +119,28 @@ export function childReportText(report: ChildReportLike): string {
   const files = report.changedFiles?.length ? `Changed: ${report.changedFiles.join(", ")}` : "";
   const coverage = report.coverage?.length ? `${CHILD_COVERAGE_HEAD}\n${report.coverage.map((c) => `- ${c}`).join("\n")}` : "";
   const data = report.dataFile ? childDataNote(report.dataFile) : "";
+  const [issues, claims] = ownerSections(report);
+  return [head, report.output, files, coverage, data, issues, claims].filter(Boolean).join("\n\n");
+}
+
+/** The open-issues and unverified-claims sections an owner is handed under a report — ONE
+ *  rendering for every surface that tells an owner what a child left (`childReportText`,
+ *  the on-prem announce). Each is "" when it has nothing to say. */
+export function ownerSections(report: Pick<ChildReportLike, "state" | "openIssues" | "unverifiedClaims">): [issues: string, claims: string] {
+  const bullets = (items: readonly string[]): string => items.map((i) => `- ${i}`).join("\n");
   const issues = report.openIssues?.length
-    ? `${OPEN_ISSUES_HEAD}\n${report.openIssues.map((i) => `- ${i}`).join("\n")}`
+    ? `${OPEN_ISSUES_HEAD}\n${bullets(report.openIssues)}`
     : report.state === "failed"
       ? `${OPEN_ISSUES_HEAD}\n- the whole slice: it failed — finish it yourself or delegate it again`
       : "";
-  const claims = report.unverifiedClaims?.length ? `${UNVERIFIED_CLAIMS_HEAD} ${report.unverifiedClaims.join(" | ")}` : "";
-  return [head, report.output, files, coverage, data, issues, claims].filter(Boolean).join("\n\n");
+  const claims = report.unverifiedClaims?.length ? `${UNVERIFIED_CLAIMS_HEAD}\n${bullets(report.unverifiedClaims)}` : "";
+  return [issues, claims];
+}
+
+/** Characters those sections take beside the report (with their separators) — what a surface
+ *  deducts from {@link SUBAGENT_REPORT_CHARS} so the report stays inside ONE budget. */
+export function ownerSectionsChars(report: Pick<ChildReportLike, "state" | "openIssues" | "unverifiedClaims">): number {
+  return ownerSections(report).reduce((n, s) => n + (s ? s.length + 2 : 0), 0);
 }
 
 /** Heads the child's coverage in its report — what it already read, so the owner does not. */

@@ -83,7 +83,16 @@ export interface ParsedSubagentReport {
 }
 
 /** A report line — never a bullet, so an issue that starts "Changed: …" stays an issue. */
-const HEADING = /^\s*[*_#>\s]*(outcome|changed|verified|checked|open issues)(?:\s*\(\d+\))?[*_]*\s*:\s*(.*)$/i;
+const HEADING = /^[*_#>\s]*(outcome|changed|verified|checked|open issues)(?:\s*\(\d+\))?[*_]*\s*:\s*(.*)$/i;
+
+/** Trim emphasis marks and whitespace from both ends in LINEAR time (a `[*_\s]+$` regex is
+ *  quadratic on a long whitespace run that does not end the string). */
+function stripMarks(s: string): string {
+  const left = s.replace(/^[*_\s]+/, "");
+  let end = left.length;
+  while (end > 0 && /[*_\s]/.test(left[end - 1]!)) end--;
+  return left.slice(0, end);
+}
 /** The words an outcome may be; prose after `Outcome:` is not one. */
 const OUTCOME = /^(done|partial|failed|fail|passed|pass)\b/i;
 /** "None", "None — all pass", "No open issues", "Nothing outstanding", "N/A (…)" — clean. */
@@ -132,7 +141,7 @@ export function parseSubagentReport(output: string): ParsedSubagentReport {
     const heading = HEADING.exec(raw);
     if (heading) {
       const key = heading[1]!.toLowerCase();
-      const value = heading[2]!.replace(/^[*_\s]+|[*_\s]+$/g, "");
+      const value = stripMarks(heading[2]!);
       inIssues = key === "open issues";
       if (key === "outcome") outcome = OUTCOME.exec(value)?.[1]?.toLowerCase() ?? outcome;
       if (inIssues) issues = value && !NONE.test(value) ? [value] : [];
@@ -168,34 +177,84 @@ const NEGATIVE_CLAIMS: readonly RegExp[] = [
   /\b(?:could\s*not|couldn't|cannot|can\s*not|can't|unable\s+to|failed\s+to\s+find)\s+\w+/i,
   /\b(?:does\s*not|doesn't|do\s*not|don't|did\s*not|didn't|is\s*not|isn't|are\s*not|aren't)\s+(?:exist|support|supported|possible|available|implemented|defined|provided)\b/i,
   /\b(?:nonexistent|non-existent|impossible|unfixable|infeasible|unsupportable)\b|\bnot\s+(?:possible|feasible|fixable)\b/i,
-  /\b(?:has|have|had|with|there\s+is|there\s+are)\s+no\s+(?!(?:errors?|issues?|changes?|problems?|failures?|warnings?|blockers?|further|more|other|remaining|open|outstanding|need|longer|output|diff|differences?)\b)[\w-]+/i,
+  /\b(?:has|have|had|there\s+is|there\s+are)\s+no\s+(?!(?:errors?|issues?|changes?|problems?|failures?|warnings?|blockers?|further|more|other|remaining|open|outstanding|need|longer|output|diff|differences?|new|effect|impact|regress\w*|side[\s-]effects?|type\s+errors?|behaviou?r|unresolved)\b)[\w-]+/i,
   /\bno\s+such\s+\w+/i,
+  /\blacks?\s+\w+/i,
+  /\b(?:is|are)\s+missing\s+from\b/i,
+  /\bfound\s+no\s+(?:callers?|usages?|references?|uses?|consumers?|imports?)\b/i,
+  /\b(?:isn't|aren't|is\s+not|are\s+not)\s+(?:wired|hooked|connected|registered|exported)\b/i,
+  /\b(?:does\s*not|doesn't)\s+export\b/i,
+  /\b(?:is|are)\s+never\s+(?:called|used|imported|invoked|referenced)\b/i,
+  /\bnobody\s+(?:calls|uses|imports|references)\b/i,
+  /\b(?:won't|will\s+not)\s+work\s+without\b/i,
 ];
+
+/** Sentences that only DESCRIBE a negative (a fixed bug, a compiler or runtime message) — never a claim. */
+const NOT_A_CLAIM: readonly RegExp[] = [
+  /^(?:fix(?:ed|es)?|resolved?|resolves|addressed)\b/i,
+  /\bwhere\b.*\b(?:could\s*not|couldn't|cannot|can't|unable\s+to)\b/i,
+  /\b\w*Error\s*:/,
+  /\berror\s+TS\d+/i,
+];
+
+/** Headings whose lines report what was DONE or RUN — their negatives are results, not findings. */
+const RESULT_SECTIONS = new Set(["verified", "changed", "checked"]);
+
+/** Abbreviations a sentence does not end at. */
+const ABBREVIATIONS = ["e.g.", "i.e.", "etc.", "vs.", "cf."];
 
 /** Claims an owner is handed from one report, and how long each may run. */
 const MAX_UNVERIFIED_CLAIMS = 5;
+/** The scan reads no more of a report than its owner is ever handed, and no line past this length. */
+const CLAIM_SCAN_CHARS = 8_000;
+const CLAIM_LINE_CHARS = 1_000;
+
+/** Split a line into sentences, rejoining where the break followed an abbreviation. */
+function splitSentences(line: string): string[] {
+  const out: string[] = [];
+  for (const piece of line.split(/(?<=[.!?])\s+/)) {
+    const prev = out[out.length - 1];
+    const lower = prev?.toLowerCase();
+    if (prev !== undefined && ABBREVIATIONS.some((a) => lower!.endsWith(a) && !/[a-z]/.test(lower!.charAt(lower!.length - a.length - 1)))) {
+      out[out.length - 1] = `${prev} ${piece}`;
+    } else out.push(piece);
+  }
+  return out;
+}
 
 /**
  * The sentences of a report that assert a negative the owner could relay as fact — outside
- * code fences, and not already carried as an open issue (those reach the owner as work).
+ * code fences and result sections (Verified / Changed / Checked), and not already carried as
+ * an open issue (those reach the owner as work). Past the cap, one "…and N more" entry.
  */
 function findUnverifiedClaims(output: string, capturedIssues: readonly string[]): string[] {
   const claims: string[] = [];
   let inFence = false;
-  for (const raw of output.split(/\r?\n/)) {
+  let inResults = false;
+  for (const raw of output.slice(0, CLAIM_SCAN_CHARS).split(/\r?\n/)) {
     if (FENCE.test(raw)) {
       inFence = !inFence;
       continue;
     }
-    if (inFence) continue;
-    const line = raw.replace(HEADING, "$2").replace(BULLET, "").trim();
-    for (const sentence of line.split(/(?<=[.!?])\s+/)) {
-      const text = sentence.replace(/^[*_\s]+|[*_\s]+$/g, "");
-      if (!text || capturedIssues.some((i) => i.includes(text))) continue;
-      if (NEGATIVE_CLAIMS.some((p) => p.test(text)) && !claims.includes(clipIssue(text))) claims.push(clipIssue(text));
+    if (inFence || raw.length > CLAIM_LINE_CHARS) continue;
+    if (!raw.trim()) {
+      inResults = false;
+      continue;
+    }
+    const heading = HEADING.exec(raw);
+    if (heading) inResults = RESULT_SECTIONS.has(heading[1]!.toLowerCase());
+    if (inResults) continue;
+    const line = (heading ? heading[2]! : raw).replace(BULLET, "").trim();
+    for (const sentence of splitSentences(line)) {
+      const text = stripMarks(sentence);
+      if (!text || NOT_A_CLAIM.some((p) => p.test(text)) || capturedIssues.some((i) => i.includes(text))) continue;
+      const clipped = clipIssue(text);
+      if (NEGATIVE_CLAIMS.some((p) => p.test(text)) && !claims.includes(clipped)) claims.push(clipped);
     }
   }
-  return claims.slice(0, MAX_UNVERIFIED_CLAIMS);
+  if (claims.length <= MAX_UNVERIFIED_CLAIMS) return claims;
+  const more = claims.length - MAX_UNVERIFIED_CLAIMS;
+  return [...claims.slice(0, MAX_UNVERIFIED_CLAIMS), `…and ${more} more — see the full report`];
 }
 
 /**

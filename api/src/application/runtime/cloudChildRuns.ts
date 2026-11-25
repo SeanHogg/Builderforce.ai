@@ -16,7 +16,7 @@
  */
 
 import { eq, inArray } from 'drizzle-orm';
-import { childReportText, clipChildOutput, type ChildReportLike } from '@builderforce/agent-tools';
+import { SUBAGENT_REPORT_CHARS, childReportText, clipChildOutput, ownerSectionsChars, type ChildReportLike } from '@builderforce/agent-tools';
 import { parseSubagentReport } from '@builderforce/agent-loop';
 import { executions } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
@@ -125,7 +125,8 @@ function reportOf(row: ChildRow, spec: CloudChildSpec): ChildReportLike {
     name: spec.asAgent?.name ?? spec.persona?.name ?? spec.label,
     state,
     label: spec.label,
-    output: clipChildOutput(answer),
+    // The report and the owner's sections share ONE budget, like the editor's.
+    output: clipChildOutput(answer, SUBAGENT_REPORT_CHARS - ownerSectionsChars({ state, openIssues, unverifiedClaims })),
     ...(spec.ticket ? { ticket: spec.ticket } : {}),
     ...(openIssues.length ? { openIssues } : {}),
     ...(unverifiedClaims?.length ? { unverifiedClaims } : {}),

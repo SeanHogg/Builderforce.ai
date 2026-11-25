@@ -198,7 +198,8 @@ describe('createReadThroughCache · injected error reporting and delete retry', 
     };
     await cache.set(kv, 'w', 1);
     await cache.invalidate(kv, 'w');
-    expect(onError.mock.calls.map((call) => (call[1] as { cacheOperation: string }).cacheOperation)).toEqual(['put', 'delete', 'delete']);
+    // A plain invalidation issues ONE KV delete (the lkg spelling is opt-in).
+    expect(onError.mock.calls.map((call) => (call[1] as { cacheOperation: string }).cacheOperation)).toEqual(['put', 'delete']);
   });
 
   it('routes the KV delete through retryDelete', async () => {
@@ -216,9 +217,9 @@ describe('createReadThroughCache · injected error reporting and delete retry', 
     });
     const cache = createReadThroughCache({ retryDelete });
     await cache.invalidate({ get: vi.fn(), put: vi.fn(), delete: del } as unknown as KvNamespaceLike, 'ver:tenant:1');
-    // One retried delete per spelling (plain + last-known-good); only the first op's first attempt fails.
-    expect(retryDelete).toHaveBeenCalledTimes(2);
-    expect(del).toHaveBeenCalledTimes(3);
+    // A plain invalidation is one retried delete; its first attempt fails, the retry succeeds.
+    expect(retryDelete).toHaveBeenCalledTimes(1);
+    expect(del).toHaveBeenCalledTimes(2);
   });
 });
 

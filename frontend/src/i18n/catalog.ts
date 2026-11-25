@@ -115,16 +115,27 @@ export function defaultCatalog(): Messages {
  * Make {@link defaultCatalog} answerable. Free wherever the catalog is bundled; on
  * the edge server it reads the published `en.json` (the ASSETS binding on the
  * deployed Worker; `origin` is the network fallback elsewhere) once per isolate and
- * shares one in-flight read. A failed read is not cached, so the next render retries.
+ * shares one in-flight read. The read is retried once; a read that still fails is
+ * reported, rejects, and is not cached, so the next render retries. A caller that
+ * only WAITED on another caller's failed read makes one read of its own (the first
+ * caller's request may simply have been cancelled).
  */
-export function primeDefaultCatalog(origin = ''): Promise<Messages> {
-  if (defaultMessages) return Promise.resolve(defaultMessages);
+export async function primeDefaultCatalog(origin = ''): Promise<Messages> {
+  if (defaultMessages) return defaultMessages;
   const slot = primedSlot();
-  if (slot.messages) return Promise.resolve(slot.messages);
-  slot.loading ??= fetchPublishedAsset(catalogUrl(DEFAULT_LOCALE), origin)
-    .then(async (response) => {
-      if (!response.ok) throw new Error(`[i18n] default catalog: HTTP ${response.status}`);
-      const messages = (await response.json()) as Messages;
+  if (slot.messages) return slot.messages;
+  const owner = !slot.loading;
+  try {
+    return await startDefaultLoad(slot, origin);
+  } catch (error) {
+    if (owner) throw error;
+    return slot.messages ?? startDefaultLoad(slot, origin);
+  }
+}
+
+function startDefaultLoad(slot: PrimedDefault, origin: string): Promise<Messages> {
+  slot.loading ??= readDefaultCatalogWithRetry(origin)
+    .then((messages) => {
       slot.messages = messages;
       return messages;
     })
@@ -132,6 +143,31 @@ export function primeDefaultCatalog(origin = ''): Promise<Messages> {
       slot.loading = undefined;
     });
   return slot.loading;
+}
+
+async function readDefaultCatalog(origin: string): Promise<Messages> {
+  const response = await fetchPublishedAsset(catalogUrl(DEFAULT_LOCALE), origin);
+  if (!response.ok) throw new Error(`[i18n] default catalog: HTTP ${response.status}`);
+  return (await response.json()) as Messages;
+}
+
+async function readDefaultCatalogWithRetry(origin: string): Promise<Messages> {
+  try {
+    return await readDefaultCatalog(origin);
+  } catch {
+    try {
+      return await readDefaultCatalog(origin);
+    } catch (error) {
+      // Imported on demand: the reporter (and its API client) stays out of this module's closure.
+      const { reportBackgroundFailure } = await import('@/lib/reportError');
+      await reportBackgroundFailure({
+        title: 'Default message catalog could not be read',
+        message: error instanceof Error ? error.message : String(error),
+        level: 'fatal',
+      });
+      throw error;
+    }
+  }
 }
 
 /**

@@ -8,7 +8,7 @@ const studio = vi.hoisted(() => ({
 const auth = vi.hoisted(() => ({ token: 'tok' as string | null }));
 
 vi.mock('@/lib/studioLoader', () => ({ loadStudio: async () => studio }));
-vi.mock('@/lib/auth', () => ({ getStoredTenantToken: () => auth.token }));
+vi.mock('@/lib/auth', () => ({ getStoredTenantToken: () => auth.token, AUTH_API_URL: 'https://api.test' }));
 vi.mock('@/lib/apiClient', () => ({ getApiBaseUrl: () => 'https://api.test' }));
 vi.mock('@/lib/canvasHost', () => ({ canvasWasmBaseUrl: () => null }));
 

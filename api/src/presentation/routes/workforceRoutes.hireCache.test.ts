@@ -12,7 +12,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
  */
 
 const invalidateCached = vi.fn(async () => {});
-vi.mock('../../infrastructure/cache/readThroughCache', () => ({
+vi.mock('../../infrastructure/cache/readThroughCache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/cache/readThroughCache')>()),
   invalidateCached,
   getOrSetCached: vi.fn(async (_e: unknown, _k: string, _t: number, fn: () => unknown) => fn()),
 }));

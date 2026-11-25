@@ -17,7 +17,10 @@ import type { Db } from '../../infrastructure/database/connection';
 
 const { bumpCacheVersion } = vi.hoisted(() => ({ bumpCacheVersion: vi.fn(async () => {}) }));
 
-vi.mock('../../infrastructure/cache/readThroughCache', () => ({ bumpCacheVersion }));
+vi.mock('../../infrastructure/cache/readThroughCache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../infrastructure/cache/readThroughCache')>()),
+  bumpCacheVersion,
+}));
 
 vi.mock('../middleware/authMiddleware', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../middleware/authMiddleware')>();

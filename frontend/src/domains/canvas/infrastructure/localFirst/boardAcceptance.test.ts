@@ -91,7 +91,7 @@ describe('studio local-first acceptance (library level)', () => {
     expect(replica.board.nodes).toHaveLength(4);
     expect(replica.board.edges).toHaveLength(1);
     expect(replica.timeline.map((message) => message.body)).toEqual(['hello']);
-    expect((replica.board.nodes.find((node) => node.id === image.id)!.data as { url: string }).url).toBe(photo.url);
+    expect(replica.board.nodes.find((node) => node.id === image.id)!.data.url).toBe(photo.url);
     expect((await (await reblobs.get(photo.mediaId))!.arrayBuffer()).byteLength).toBe(4);
     expect(JSON.stringify(await reopened.export())).not.toContain('data:');
     // An unbound board owes the server nothing.

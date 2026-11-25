@@ -68,7 +68,10 @@ describe('useWebTurnGate — THE web turn door', () => {
 
     await act(async () => { door.gate.choose('local-only'); });
 
-    expect(send).toHaveBeenCalledTimes(1);
+    // Choosing applies the mode through a lazily imported policy module, so the held turn is
+    // sent once that import (cold-transformed under vitest) settles — wait for it, not a tick.
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1), { timeout: 15_000 });
+    await act(async () => {});
     expect(window.localStorage.getItem(WEB_INFERENCE_MODE_STORAGE_KEY)).toBe('local-only');
     expect(door.gate.asking).toBe(false);
     // Chosen: the next turn goes straight through.
@@ -76,5 +79,5 @@ describe('useWebTurnGate — THE web turn door', () => {
     expect(ranNow).toBe(true);
     expect(send).toHaveBeenCalledTimes(2);
     unmount();
-  });
+  }, 20_000);
 });
