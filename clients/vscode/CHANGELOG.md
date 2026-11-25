@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.11.218] — Maintenance release
+
+- Rebuilt against BuilderForce WebContainers 2026.11.29.
+
 ## [2026.10.217] — Launch a page or a folder with `/launch <path>`
 
 - `/launch` takes a file or folder path. An `.html`/`.htm` page runs in the in-browser runtime. A folder runs its `builderforce.json` when it has one, otherwise its top-level `index.html` (else `index.htm`), otherwise what app detection finds. Quoted paths with spaces work, and relative paths resolve against each workspace folder.
