@@ -27,7 +27,7 @@ if (files.length === 0) {
   process.exit(2);
 }
 console.log(`oracle: ${files.length} file(s) in ${pkg}`);
-const run = spawnSync('pnpm', ['exec', 'vitest', 'run', ...files], {
+const run = spawnSync('pnpm', ['exec', 'vitest', 'run', '--reporter=default', '--reporter=hanging-process', ...files], {
   cwd: join(root, pkg),
   stdio: 'inherit',
   shell: process.platform === 'win32',

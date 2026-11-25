@@ -1036,7 +1036,7 @@ jobs:
             run: >-
               bash "$GITHUB_WORKSPACE/.github/scripts/run-parallel.sh"
               "node ../brain-embedded/src/run/parity/runOracle.mjs brain-embedded"
-              "pnpm --dir ../brain-embedded exec vitest run src/run/parity"
+              "pnpm --dir ../brain-embedded exec vitest run src/run/parity --reporter=default --reporter=hanging-process"
           - name: oracle (clients/chrome)
             run: >-
               pnpm --dir ../clients/chrome install --frozen-lockfile &&
@@ -1092,6 +1092,9 @@ jobs:
         working-directory: frontend
         env:
           NODE_OPTIONS: --max-old-space-size=6144
+          # run-parallel.sh buffers each command's output until it exits, so a hung vitest prints nothing before the
+          # job limit kills it; this ends it first and the log shows which file was still running.
+          RUN_PARALLEL_TIMEOUT: 20m
         run: |
           pnpm install --frozen-lockfile
           ${{ matrix.run }}
