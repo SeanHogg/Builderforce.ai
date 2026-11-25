@@ -24,3 +24,11 @@ export const BRAIN_UPLOAD_SIGN_PATH = '/api/brain/uploads/sign';
 
 /** The upload endpoint (multipart, field `file` → `{ key, name, type }`). */
 export const BRAIN_UPLOAD_PATH = '/api/brain/upload';
+
+/**
+ * How large an upload may be: the one rule the workspace's asset store enforces
+ * (`api/src/application/assets/tenantAssetStore.ts` mirrors these two numbers) and the
+ * device blob store admits against, so a client never accepts a file the server refuses.
+ */
+export const ASSET_MAX_BYTES = 10 * 1024 * 1024;
+export const ASSET_MAX_VIDEO_BYTES = 100 * 1024 * 1024;

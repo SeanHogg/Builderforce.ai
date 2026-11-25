@@ -157,7 +157,7 @@ export { prepareImageDataUrl } from './imagePrep';
 export type { ImageEncodeDecision, ImagePrepOptions, PreparedImage } from './imagePrep';
 // Attachments into a turn: prepare + upload, and the model-visible content (inlined text).
 export { AttachmentRefusedError, MAX_INLINE_TEXT_BYTES } from './attachmentContent';
-export { BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIGN_PATH, brainUploadUrl, signedBrainFileUrl } from './uploadUrls';
+export { ASSET_MAX_BYTES, ASSET_MAX_VIDEO_BYTES, BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIGN_PATH, brainUploadUrl, signedBrainFileUrl } from './uploadUrls';
 
 // Project-Evermind memory hooks for the run loop (recall → learn → reconcile).
 export { projectMemoryHooks } from './evermindMemory';

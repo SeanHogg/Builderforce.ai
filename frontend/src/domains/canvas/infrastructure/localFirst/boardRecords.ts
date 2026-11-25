@@ -91,9 +91,11 @@ export interface MediaPayload {
   storageKey?: string;
   /** Upload attempts so far — this device's bookkeeping, not synced. */
   attempts?: number;
+  /** ISO time before which a failed upload is not tried again — this device's bookkeeping, not synced. */
+  nextAttemptAt?: string;
 }
 
-export type SyncedMediaPayload = Omit<MediaPayload, 'attempts'>;
+export type SyncedMediaPayload = Omit<MediaPayload, 'attempts' | 'nextAttemptAt'>;
 
 export type BoardRecord = LocalRecord<BoardPayload>;
 
@@ -143,7 +145,7 @@ export function syncedBoardPayload(payload: BoardPayload): SyncedBoardPayload {
 }
 
 export function syncedMediaPayload(payload: MediaPayload): SyncedMediaPayload {
-  const { attempts: _attempts, ...synced } = payload;
+  const { attempts: _attempts, nextAttemptAt: _nextAttemptAt, ...synced } = payload;
   return synced;
 }
 

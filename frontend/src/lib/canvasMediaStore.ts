@@ -1,6 +1,6 @@
 import { request } from '@/lib/builderforceApi';
 import { apiRequestStream } from '@/lib/apiClient';
-import { AUTH_API_URL } from '@/lib/auth';
+import { AUTH_API_URL, getStoredTenant } from '@/lib/auth';
 import { fetchWithTransportReport } from '@/lib/errors/transportFailure';
 import { BRAIN_UPLOAD_PATH } from '@seanhogg/builderforce-brain-embedded';
 import type { CanvasVideoCaptureKind, CanvasVideoSource, CanvasVideoSourceKind } from '@builderforce/creation-canvas-contract';
@@ -52,7 +52,10 @@ export interface UploadedCanvasFile { url: string; storageKey: string }
  * decides; this function only ever means "uploaded, here is where it lives". Authoring media goes to
  * the device first (`storeCanvasMedia`); the upload queue calls this to send it.
  */
-export async function uploadCanvasFile(file: File): Promise<UploadedCanvasFile | null> {
+export async function uploadCanvasFile(file: File, scope?: { tenantId: string }): Promise<UploadedCanvasFile | null> {
+  // The authorization point for queued media: the request carries the ACTIVE tenant's token, so a blob
+  // that belongs to another workspace is refused here rather than sent under this one's.
+  if (scope && String(getStoredTenant()?.id) !== scope.tenantId) throw new Error('tenant_switched');
   try {
     // `brain.upload` carries only the file; canvas media is PRIVATE to the tenant
     // (stored under `<tenant>/private/media/`), so the form also names the visibility.

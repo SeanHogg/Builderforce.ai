@@ -23,12 +23,13 @@ import {
   newLocalCreationBoardSnapshot,
   newLocalCreationSessionSnapshot,
   type LocalCreationSnapshot,
+  type ProjectTie,
 } from '../../domain/boardSnapshot';
 import type { BlobStore } from './blobStore';
 import { createBoard, deleteBoard, updateBoardHeader, type BoardWriteContext } from './boardCommit';
 import { dehydrateBoardMedia } from './boardMediaUrls';
 import { openBoardSession, activeBoardSession } from './boardSession';
-import { listBoards, readBoard, type BoardReplica } from './boardReplica';
+import { listBoards, projectTiesByBoard, readBoard, type BoardReplica } from './boardReplica';
 import type { BoardPayload } from './boardRecords';
 
 /** One row of the device's board list: enough to list and open a board without reading it. */
@@ -37,6 +38,8 @@ export interface LocalCreationEntry {
   title: string;
   folder?: string;
   updatedAt: string;
+  /** The projects the board is tied to (its project cards); only the workspace list fills it. */
+  projectIds?: number[];
 }
 
 type StoredTimeline = NonNullable<LocalCreationSnapshot['timeline']>;
@@ -89,8 +92,8 @@ export async function writeNewStudioBoard(boardId: string, snapshot: LocalCreati
   });
 }
 
-export const writeSessionBoard = (boardId: string, prompt: string, mode: ChatMode | undefined, destination: EntityDestination): Promise<void> =>
-  writeNewStudioBoard(boardId, newLocalCreationSessionSnapshot(prompt, mode).snapshot, destination);
+export const writeSessionBoard = (boardId: string, prompt: string, mode: ChatMode | undefined, destination: EntityDestination, project?: ProjectTie): Promise<void> =>
+  writeNewStudioBoard(boardId, newLocalCreationSessionSnapshot(prompt, mode, project).snapshot, destination);
 
 export const writeNotesBoard = (boardId: string, input: { title?: string; text?: string; stickies: readonly string[] }, destination: EntityDestination): Promise<void> =>
   writeNewStudioBoard(boardId, newLocalCreationBoardSnapshot(input).snapshot, destination);
@@ -143,9 +146,12 @@ async function entries(keep: (destination: EntityDestination) => boolean): Promi
 export const listLocalCreationSessions = (): Promise<LocalCreationEntry[]> => entries((destination) => destination.kind === 'unbound');
 
 /** Boards bound to the workspace in use: the library's offline list (the server's list stays the online one). */
-export function listWorkspaceBoards(): Promise<LocalCreationEntry[]> {
+export async function listWorkspaceBoards(): Promise<LocalCreationEntry[]> {
   const mine = destinationKey(bound().destination());
-  return entries((destination) => destination.kind === 'bound' && destinationKey(destination) === mine);
+  const [boards, runtime] = await Promise.all([entries((destination) => destination.kind === 'bound' && destinationKey(destination) === mine), bound().runtime()]);
+  if (!runtime || boards.length === 0) return boards;
+  const ties = await projectTiesByBoard(runtime.store);
+  return boards.map((board) => (ties.has(board.sessionId) ? { ...board, projectIds: ties.get(board.sessionId)! } : board));
 }
 
 /**

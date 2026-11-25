@@ -16,6 +16,7 @@
 import {
   defineRecordIndex,
   selectByIndex,
+  selectRecords,
   type EntityDestination,
   type LocalFirstStore,
   type LocalFirstTransaction,
@@ -141,6 +142,22 @@ export async function listBoards(store: LocalFirstStore): Promise<BoardListEntry
       destination: row.destination,
     }))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+/**
+ * The projects each board on this device is tied to, from its project cards: ONE scan over the object
+ * records (not a query per board). Boards with no project card are absent.
+ */
+export async function projectTiesByBoard(store: LocalFirstStore): Promise<Map<string, number[]>> {
+  const cards = await store.read((tx) => selectRecords<ObjectPayload>(tx, CANVAS_OBJECT, (row) =>
+    !row.deletedAt && row.payload.kind === 'project' && row.payload.resourceType === 'project'));
+  const ties = new Map<string, number[]>();
+  for (const card of cards) {
+    const projectId = Number(card.payload.resourceId);
+    if (!Number.isInteger(projectId) || projectId <= 0) continue;
+    ties.set(card.payload.boardId, [...(ties.get(card.payload.boardId) ?? []), projectId]);
+  }
+  return ties;
 }
 
 /** The ids of this board's records (its own and its children's) that have an unsent journal event. */

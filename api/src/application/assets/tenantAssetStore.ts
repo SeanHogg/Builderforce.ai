@@ -47,6 +47,7 @@ export type AssetRejection =
  * alternative to a 100MB ceiling is that the video surfaces cannot store their
  * own output at all.
  */
+/** Mirrored by `ASSET_MAX_BYTES` in brain-embedded `uploadUrls.ts`, which the device blob store admits against. */
 export const ASSET_MAX_BYTES = 10 * 1024 * 1024;
 export const ASSET_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 

@@ -31177,7 +31177,6 @@
     "moreSeats": "{count} puestos más"
   },
   "sessions": {
-    "projectTieDropped": "Este tablero se creó en tu dispositivo, pero no se pudo guardar su vínculo con el proyecto. Vincúlalo al proyecto cuando tengas conexión.",
     "newCanvas": "+ Nuevo lienzo",
     "active": "Activo",
     "renameAria": "Cambiar el nombre de este lienzo",

@@ -31177,7 +31177,6 @@
     "moreSeats": "{count} weitere Sitze"
   },
   "sessions": {
-    "projectTieDropped": "Dieses Board wurde auf deinem Gerät erstellt, aber die Projektverknüpfung konnte nicht gespeichert werden. Verknüpfe es mit dem Projekt, sobald du online bist.",
     "newCanvas": "+ Neues Canvas",
     "active": "Aktiv",
     "renameAria": "Dieses Canvas umbenennen",

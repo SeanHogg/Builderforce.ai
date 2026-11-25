@@ -31177,7 +31177,6 @@
     "moreSeats": "{count} sièges de plus"
   },
   "sessions": {
-    "projectTieDropped": "Ce tableau a été créé sur votre appareil, mais son lien avec le projet n'a pas pu être enregistré. Associez-le au projet une fois en ligne.",
     "newCanvas": "+ Nouveau tableau",
     "active": "En cours",
     "renameAria": "Renommer ce tableau",

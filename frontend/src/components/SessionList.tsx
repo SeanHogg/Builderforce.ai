@@ -29,7 +29,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { useToast } from '@/components/ToastProvider';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { fetchRecentCanvases, invalidateRecentCanvases, listPendingDrafts, reportStudioFailure, createLocalCreationSession, listWorkspaceBoards, updateLocalCreationSession, type LocalCreationEntry } from '@/lib/pendingWork';
@@ -77,12 +76,12 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
   // provider, same as TenantProjectSwitcher — it degrades to unfiltered.
   const projectScope = useOptionalProjectScope();
   const currentProjectId = projectScope?.currentProjectId ?? null;
+  const currentProject = projectScope?.currentProject ?? null;
 
   const [recent, setRecent] = useState<CreationSessionSummary[]>([]);
   const [drafts, setDrafts] = useState<LocalCreationEntry[]>([]);
   const [deviceBoards, setDeviceBoards] = useState<LocalCreationEntry[]>([]);
   const [creating, setCreating] = useState(false);
-  const toast = useToast();
   // Null keeps the default 42%-of-rail height (globals.css) until a drag sets
   // an explicit px value. Seeded from a stored preference, or — the first
   // time this browser sees the panel — from its own rendered height, so the
@@ -136,34 +135,21 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
 
   const newCanvas = useCallback(async () => {
     setCreating(true);
-    const openDevice = () => {
+    try {
       // The board is made on this device FIRST — in the workspace when there is one, unbound for a
       // guest — and the sync driver sends it; it is real work the moment it exists, with or without
-      // a network. (It used to bounce to `/create`, a login redirect for a signed-out visitor.)
+      // a network. Born in a project scope, it carries the project card (the tie syncs as an object,
+      // checked by the server for tenant and access), so "Tied to this project" lists it with no
+      // server round trip. A guest has no projects, so no card.
+      const tie = hasTenant && currentProject ? { id: currentProject.id, name: currentProject.name } : undefined;
       onNavigate?.();
-      router.push(`/create/${hasTenant ? createLocalCreationSession('') : startGuestCreationSession('', { surface: 'brain' })}`);
-    };
-    try {
-      if (hasTenant && currentProjectId != null) {
-        // Born tied to the scoped Project so it shows up under "Tied to this project" with no manual
-        // step. A project tie is a server-side link outside the sync contract (sync v1), so this one
-        // create stays a server write; if it fails the board is still made on the device.
-        const created = await creationSessionsApi.create({ title: t('untitled'), projectIds: [currentProjectId] });
-        invalidateRecentCanvases();
-        onNavigate?.();
-        router.push(`/create/${created.session.id}`);
-        return;
-      }
-      openDevice();
+      router.push(`/create/${hasTenant ? createLocalCreationSession('', undefined, tie) : startGuestCreationSession('', { surface: 'brain' })}`);
     } catch (error) {
       void reportStudioFailure('SessionList.newCanvas', error);
-      // The board is made on the device anyway; the project tie is a server link and is NOT kept — say so.
-      toast.warning(t('projectTieDropped'));
-      openDevice();
     } finally {
       setCreating(false);
     }
-  }, [hasTenant, onNavigate, router, t, toast, currentProjectId]);
+  }, [hasTenant, onNavigate, router, currentProject]);
 
   const activeSession = recent.find((session) => session.id === currentId);
   const activeDraft = activeSession ? undefined : drafts.find((draft) => draft.sessionId === currentId);
@@ -206,7 +192,7 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
     // The workspace's boards this device holds that the server list does not (yet): made a moment ago, or offline.
     ...deviceBoards
       .filter((board) => board.sessionId !== currentId && !serverIds.has(board.sessionId))
-      .map((board) => ({ id: board.sessionId, title: board.title || t('untitled'), draft: false, tied: false })),
+      .map((board) => ({ id: board.sessionId, title: board.title || t('untitled'), draft: false, tied: currentProjectId != null && (board.projectIds ?? []).includes(currentProjectId) })),
     ...recent
       .filter((session) => session.id !== currentId)
       .map((session) => ({

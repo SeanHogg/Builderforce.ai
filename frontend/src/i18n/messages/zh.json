@@ -31177,7 +31177,6 @@
     "moreSeats": "另外 {count} 个席位"
   },
   "sessions": {
-    "projectTieDropped": "此画布已创建在你的设备上，但其项目关联未能保存。联网后请重新将其关联到该项目。",
     "newCanvas": "+ 新建画布",
     "active": "进行中",
     "renameAria": "重命名此画布",

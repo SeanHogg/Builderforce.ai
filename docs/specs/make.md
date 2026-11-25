@@ -24,6 +24,7 @@
 - [PRD 41 — Offline understanding and the run delta](#prd-41--offline-understanding-and-the-run-delta)
 - [Design — Local-first closure: G03, G21 + G23, G27](#design--local-first-closure-g03-g21--g23-g27)
 - [Design — Web, Rovr, and VSIX local-first architecture and batch sync review](#design--web-rovr-and-vsix-local-first-architecture-and-batch-sync-review)
+- [Design — Studio local-first](#design--studio-local-first)
 - [Design — Deterministic knowledge index (LEANN-style)](#design--deterministic-knowledge-index-leann-style)
 - [Design — Deterministic-first PreFetch](#design--deterministic-first-prefetch)
 - [PRD 38 — The knowledge graph (any directory; code and docs first)](#prd-38--the-knowledge-graph-any-directory-code-and-docs-first)
@@ -1990,6 +1991,41 @@ Suggested connected sync cadence: a configurable coarse interval plus run-comple
 - Unit and in-process acceptance layers exist per host (`clients/vscode/src/deniedNetworkAcceptance.test.ts` (mocks `vscode`), `clients/chrome/src/platform/deniedNetworkAcceptance.test.ts`, `frontend/src/lib/localFirst/deniedNetworkAcceptance.test.ts`, `packages/local-first/src/networkDenialScenario.ts`), plus the separate packaged-VSIX harness `qa-e2e/tests/vsix-offline-acceptance.spec.ts`, which no CI job runs.
 - None of the gates above runs against a packaged artifact in CI; that is the G27 work in [Local-first closure §3](#3-g27-one-scenario-three-packaged-drivers-the-network-denied-at-the-os).
 - No request-budget measurement exists (last gate).
+
+---
+
+## Design — Studio local-first
+
+**Mostly implemented.** Reviewed against the repository on 2026-11-25. The Canvas replica, journal, sync importers, guest binding and editor media queue are wired into Studio. The full browser offline and database-outage journeys remain unverified.
+
+The scope is web Canvas boards, including `/studio/<id>`, the Studio library, the guest/start flow and other Canvas lenses. A project’s linked Canvas board is within scope. The `/studio/project/<id>` IDE and its files, runs and deploys are part of [PRD 31](#prd-31--build-run-and-ship-a-real-app-on-builderforce).
+
+### Implemented in the repository
+
+| Area | Current behavior and code |
+|---|---|
+| Create, open and save | `startCreationSession.ts` creates the ordinary board on the device with a stable UUID. `useBoardOpen.ts` renders the IndexedDB replica first. `restBoardSource.ts` seeds and refreshes it from session detail and timeline REST reads, including after room and poll notifications. `boardCommit.ts` stores changed objects, edges, transcript entries and their journal events transactionally. Deletes use tombstones and viewport changes stay local. |
+| Sync and collaboration | `studioRuntime.ts` starts the shared `webSyncDriver.ts`. The driver pushes by active destination, serializes sync across tabs and holds work on network failures and 503s. `BoardConflictsPanel.tsx` offers keep mine, keep theirs and restore as a copy for delete/edit conflicts. Work-management boot can use the same driver through its sync option. |
+| API contract | The shared contract and named importers accept `canvas-board`, `canvas-object`, `canvas-edge`, `canvas-timeline` and `canvas-media`. Importers enforce board roles and creation limits. Graph edits share `creationGraphWriter.ts` revision and event bookkeeping and schedule snapshots after commit. Existing REST and agent writers still use the Canvas domain tables. |
+| Migration and sign-in | `legacyBoardImport.ts` imports `builderforce:create:local-*` boards with durable markers and removes legacy keys after successful import. Legacy bookmarks redirect to the normalized UUID. `bindLocalBoard` moves a guest board and its children to the account destination and queues the parent before the children, keeping the same board URL. A plan refusal keeps the bound board on the device and opens the upgrade UI. Guest boards have no automatic retention deadline. |
+| Editor media | `storeCanvasMedia` writes bytes to IndexedDB or OPFS and records a small manifest. `mediaUploadQueue.ts` uploads privately and journals the manifest and object URL rewrite in dependency order. Blob storage and the board store use separate transactions. `boardMedia.ts` removes the blob if the manifest write fails. The queue has a five-attempt limit and a seven-day eviction grace. |
+| Offline shell and models | `frontend/public/sw.js` caches visited `/studio` HTML and RSC responses at runtime, serves cached responses on 5xx and keeps API requests network-only. `SceneDeviceBody` exposes the on-device model download, which stores supported diffusion model weights and the CLIP tokenizer for later use. |
+
+The sync contract keeps one versioned record per board, object, edge, timeline entry and media manifest. Stable IDs, versioned event keys and parent dependencies make retry safe. Guests stay unbound until sign-in. Different-object edits can merge, same-object conflicts keep the local value visible, and a delete preserves the competing edit for recovery. The transcript is append-only and deduplicated by client message ID.
+
+### Remaining gaps and acceptance
+
+| Gap | Evidence and exit condition |
+|---|---|
+| Media workspace isolation | `studioRuntime.ts` opens a shared store and passes a signed-in/online boolean to the queue. `mediaUploadQueue.ts` scans every bound destination, while `uploadCanvasFile` authenticates with the current workspace. Scope selection and each upload to the active destination and cover a workspace switch in flight. A pending blob from workspace A must never upload under workspace B’s credentials. |
+| Media import and recovery | Drop/paste intake still reaches `ImportCanvasFile.ts` branches that encode media inline or upload DOCX figures directly. Move those paths and retained attachment bytes onto the blob/manifest path. Align the 25 MiB file and 200 MiB video local allowances with the upload endpoint’s current 10 MiB and 100 MiB ceilings. The 500 MiB usage check counts the shared blob store. Apply the approved per-partition cap, surface quota and failed-upload state in Studio, wire manual retry, and use explicit upload backoff. Test offline reload before and after upload and eviction, including rendering uploaded references during an outage. |
+| Offline navigation and recent boards | The worker caches visited URLs. A newly created UUID route has no cached response, and `useStudioApps.ts` fetches server summaries without seeding replicas. Make the start flow and library open a device-held board at a fresh URL with the network denied, including after reload. Pre-seed the 20 most recent accessible boards on sign-in, as approved on 2026-11-24. Show which boards are available offline. |
+| Board metadata and project links | `importSyncedCanvasBoard.ts` persists core header fields. Folder, opening prompt and branch lineage are outside its current write contract. `SessionList.tsx` still creates project-scoped boards on the server first and loses the link on offline fallback. Carry the project link through the local create and sync transaction with same-tenant and caller access checks. Verify header fields needed by another device through the board or timeline contract. |
+| Pull projection | Push writes sync records, but server-originated Canvas changes still have no projector. Keep REST reconciliation until the projection covers existing boards, edits and deletes from the Canvas domain writers. Backfill existing boards and verify board-level read permissions, including shared boards and revoked access, before switching `BoardReconcileSource` to pull. This was deferred from the original migration. |
+| Templates and offline inference | `lib/templates/api.ts` still reads the server catalog. Define and test what template content can be reopened offline. Verify a prepared on-device model can generate and save a rendition from a freshly loaded cached Studio route with the network denied. A first model download still requires connectivity. |
+| Browser release gate | Run a packaged-browser flow through the actual start, board and library routes. Cover guest and signed-in create/edit/reload, media, legacy migration and sign-in bind, reconnect, and a forced 503 with and without `Retry-After`. Check route caching and recovery, the held count, retained edits and a drained queue after recovery. Use a database-outage fixture for the server path and assert that server-only work remains unavailable during the outage. |
+
+**Verification on 2026-11-25.** 86 focused frontend tests passed, covering board storage, sync, conflicts, migrations, sign-in, Canvas flow, service-worker caching and offline model controls. 61 API tests passed, covering Canvas importers, the push contract and graph writer bookkeeping. These tests use fixtures and mocks. The browser release gate and a live database-outage run are open.
 
 ---
 

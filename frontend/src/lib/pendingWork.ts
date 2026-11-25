@@ -4,7 +4,7 @@ import { getStoredTenant, getStoredTenantToken } from '@/lib/auth';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import { clearGuestSession } from '@/domains/guest/infrastructure/guestSessionStore';
 import type { ChatMode } from '@/lib/brain';
-import type { LocalCreationSnapshot } from '@/domains/canvas/domain/boardSnapshot';
+import type { LocalCreationSnapshot, ProjectTie } from '@/domains/canvas/domain/boardSnapshot';
 import type { LocalCreationEntry, writeLocalCreationSession as WriteContent } from '@/domains/canvas/infrastructure/localFirst/studioBoards';
 
 export type { LocalCreationEntry };
@@ -292,12 +292,16 @@ function track(write: () => Promise<void>): void {
   inFlight.add(settled);
 }
 
-/** A new board from a prompt; the id at once, the write tracked. */
-export function createLocalCreationSession(prompt: string, mode?: ChatMode): string {
+/**
+ * A new board from a prompt; the id at once, the write tracked. A `project` is the tie the board is
+ * born with: a project card in the snapshot, written and synced like any object — so it survives
+ * an offline create.
+ */
+export function createLocalCreationSession(prompt: string, mode?: ChatMode, project?: ProjectTie): string {
   const boardId = crypto.randomUUID();
   // The destination is the person's AT CREATION: a sign-in between this call and the write must not rebind it.
   const destination = studioDestination();
-  track(async () => (await loadBoards()).writeSessionBoard(boardId, prompt, mode, destination));
+  track(async () => (await loadBoards()).writeSessionBoard(boardId, prompt, mode, destination, project));
   return boardId;
 }
 

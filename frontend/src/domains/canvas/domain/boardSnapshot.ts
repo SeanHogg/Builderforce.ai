@@ -13,6 +13,7 @@
  */
 
 import type { Edge } from '@xyflow/react';
+import { formatResourceRef } from '@builderforce/creation-canvas-contract';
 import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
 import { STICKY_COLORS } from './authoredColors';
 import type { CanvasObject } from './canvasObject';
@@ -119,8 +120,26 @@ export function newLocalCreationBoardSnapshot(input: { title?: string; text?: st
   return { sessionId, snapshot: { version: 1, title, updatedAt: now, nodes, edges: [] } };
 }
 
+/** The project a board is born tied to. */
+export interface ProjectTie { id: number; name: string }
+
+/**
+ * The card that ties a board to a project: the same object the server makes when it creates a board
+ * with `projectIds` (`kind: 'project'`, `project:<id>`), so a board made offline syncs as an ordinary
+ * card and the server's tenant and access check (`validateResourceAccess`) is the one gate.
+ */
+export function projectCardObject(project: ProjectTie, index = 0): CanvasObject {
+  return {
+    id: crypto.randomUUID(),
+    type: 'creation',
+    position: { x: 120 + index * 360, y: 100 },
+    style: { width: 300, height: 220 },
+    data: { kind: 'project', title: project.name, resourceId: formatResourceRef('project', project.id) ?? undefined },
+  };
+}
+
 /** A new local session from a prompt, as a session id and snapshot. The caller writes it. */
-export function newLocalCreationSessionSnapshot(prompt: string, mode: ChatMode = NEW_CHAT_MODE): { sessionId: string; snapshot: LocalCreationSnapshot } {
+export function newLocalCreationSessionSnapshot(prompt: string, mode: ChatMode = NEW_CHAT_MODE, project?: ProjectTie): { sessionId: string; snapshot: LocalCreationSnapshot } {
   const sessionId = `${LOCAL_CREATION_PREFIX}${crypto.randomUUID()}`;
   const now = new Date().toISOString();
   const nodeId = crypto.randomUUID();
@@ -128,9 +147,10 @@ export function newLocalCreationSessionSnapshot(prompt: string, mode: ChatMode =
   const nodes: CanvasObject[] = [{
     id: nodeId,
     type: 'creation',
-    position: { x: 120, y: 140 },
+    position: { x: 120, y: project ? 380 : 140 },
     data: { kind: 'chat', title: 'Brain', subtitle: prompt.trim() },
   }];
+  if (project) nodes.unshift(projectCardObject(project));
   // NOTHING is pre-seeded from the WORDING of the prompt — not a website, not a
   // workflow, and not a dataset/dashboard pair. A guess made by a regex over the
   // prompt is not authored by Brain through the AI tool contract, the palette or a

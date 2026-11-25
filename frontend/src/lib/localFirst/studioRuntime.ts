@@ -43,6 +43,12 @@ export { studioDestination };
 
 const isOnline = (): boolean => typeof navigator === 'undefined' || navigator.onLine !== false;
 
+/** The workspace uploads may go to now: the bound Studio destination's tenant, while online. */
+function activeTenantId(): string | undefined {
+  const destination = studioDestination();
+  return destination.kind === 'bound' && isOnline() ? destination.tenantId : undefined;
+}
+
 let booting: Promise<StudioRuntime | undefined> | undefined;
 let storage: WebLocalFirstStorageStatus | undefined;
 
@@ -65,7 +71,7 @@ async function boot(): Promise<StudioRuntime | undefined> {
   }
 
   const driver = createWebSyncDriver({ store, deviceId: handle.deviceId, destination: studioDestination, ...(handle.lease ? { lease: handle.lease } : {}) });
-  const queue = createMediaUploadQueue({ ctx, blobs, canUpload: () => studioDestination().kind === 'bound' && isOnline() });
+  const queue = createMediaUploadQueue({ ctx, blobs, activeTenantId });
   const drain = (): void => { void queue.drain().catch((error: unknown) => reportLocalFirstFailure('studioRuntime.mediaDrain', error)); };
   // A finished round is when new bytes can go up (a bind just made them uploadable).
   driver.subscribe((status) => { if (status.state === 'idle') drain(); });

@@ -12,6 +12,7 @@
  * the safe one: blob first, then manifest, and a failed manifest removes the blob it just wrote.
  */
 
+import { destinationKey } from '@builderforce/local-first';
 import { writeRecord } from './boardJournal';
 import { BoardCommitError, type BoardWriteContext } from './boardCommit';
 import type { BlobStore } from './blobStore';
@@ -41,7 +42,10 @@ export async function attachBoardMedia(
   report: LocalFirstFailureSink = reportLocalFirstFailure,
 ): Promise<AttachedMedia> {
   const mediaId = input.mediaId ?? crypto.randomUUID();
-  const stored = await blobs.put(mediaId, input.file);
+  // The board's workspace is the quota partition: one workspace's media never uses another's room.
+  const owner = await ctx.store.read((tx) => tx.get<BoardPayload>(CANVAS_BOARD, input.boardId));
+  if (!owner || owner.deletedAt) throw new BoardCommitError('board_not_found', `No local board: ${input.boardId}`);
+  const stored = await blobs.put(mediaId, input.file, { partition: destinationKey(owner.destination) });
   try {
     await ctx.store.transact(async (tx) => {
       const header = await tx.get<BoardPayload>(CANVAS_BOARD, input.boardId);

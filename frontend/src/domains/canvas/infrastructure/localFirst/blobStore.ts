@@ -8,7 +8,8 @@
  * files and video go there instead and the row keeps only their metadata; the `BlobStore` interface
  * is the same either way.
  *
- * CAPS (decided 2026-11-24): 25 MB per file, 200 MB per video, 500 MB per device partition — the
+ * CAPS: the per-file and per-video caps are the workspace asset store's own (10 MB, 100 MB: one rule, so
+ * the device never accepts a file the server will refuse); 500 MB per partition (a workspace) — the
  * partition cap checked against what the browser says is left (`navigator.storage.estimate()`).
  * Over a cap `put` REFUSES with a `BlobQuotaError` carrying the `quota-exceeded` state the web store
  * already uses (`WebLocalFirstStorageState`); it never stores a smaller copy or an inline data URL.
@@ -17,13 +18,15 @@
  * decision (`mediaUploadQueue.ts`); this module only stores, reads, deletes and measures.
  */
 
+import { ASSET_MAX_BYTES, ASSET_MAX_VIDEO_BYTES } from '@seanhogg/builderforce-brain-embedded';
+
 export const BLOB_DB_NAME = 'builderforce-canvas-blobs';
 const BLOB_STORE = 'blob';
 const MB = 1024 * 1024;
 
 export const BLOB_CAPS = Object.freeze({
-  fileBytes: 25 * MB,
-  videoBytes: 200 * MB,
+  fileBytes: ASSET_MAX_BYTES,
+  videoBytes: ASSET_MAX_VIDEO_BYTES,
   partitionBytes: 500 * MB,
 });
 
@@ -63,15 +66,25 @@ export interface StoredBlob {
   bytes: number;
   sha256: string;
   mimeType: string;
+  /** The partition (workspace destination key) the bytes are counted against; '' when none was given. */
+  partition: string;
+}
+
+export interface BlobPutOptions {
+  /** The workspace the blob belongs to (a destination key): usage is counted per partition. */
+  partition?: string;
 }
 
 export interface BlobStore {
   /** Store `blob` under `id` (replacing one); refuses over a cap with `BlobQuotaError`. */
-  put(id: string, blob: Blob): Promise<StoredBlob>;
+  put(id: string, blob: Blob, options?: BlobPutOptions): Promise<StoredBlob>;
   get(id: string): Promise<Blob | undefined>;
   delete(id: string): Promise<void>;
-  /** Bytes held in this partition. */
-  usage(): Promise<number>;
+  /**
+   * Bytes held by a partition. Rows written before partitions existed have none and count against
+   * every partition (conservative). With no partition: every byte held.
+   */
+  usage(partition?: string): Promise<number>;
   close(): void;
 }
 
@@ -101,6 +114,8 @@ interface BlobRow {
   mimeType: string;
   bytes: number;
   sha256: string;
+  /** Absent on rows written before partitions existed. */
+  partition?: string;
   location: 'idb' | 'opfs';
   /**
    * The bytes of an IndexedDB-held blob, as an ArrayBuffer rather than a `Blob`: an ArrayBuffer
@@ -172,7 +187,7 @@ export function createBlobStore(options: BlobStoreOptions): BlobStore {
     return settle(tx.objectStore(BLOB_STORE).get(id) as IDBRequest<BlobRow | undefined>);
   };
 
-  const usage = async (): Promise<number> => {
+  const usage = async (partition?: string): Promise<number> => {
     const tx = (await database()).transaction(BLOB_STORE, 'readonly');
     let total = 0;
     await new Promise<void>((resolve, reject) => {
@@ -180,7 +195,8 @@ export function createBlobStore(options: BlobStoreOptions): BlobStore {
       cursor.onsuccess = () => {
         const at = cursor.result;
         if (!at) return resolve();
-        total += (at.value as BlobRow).bytes;
+        const held = at.value as BlobRow;
+        if (partition === undefined || held.partition === undefined || held.partition === partition) total += held.bytes;
         at.continue();
       };
       cursor.onerror = () => reject(cursor.error ?? new Error('blob_store_cursor_failed'));
@@ -204,10 +220,11 @@ export function createBlobStore(options: BlobStoreOptions): BlobStore {
   };
 
   return {
-    async put(id, blob) {
+    async put(id, blob, putOptions) {
+      const partition = putOptions?.partition ?? '';
       const mimeType = blob.type || 'application/octet-stream';
       const held = await row(id);
-      const refusal = admitBlob({ bytes: blob.size, mimeType }, (await usage()) - (held?.bytes ?? 0), await (options.estimate ?? browserEstimate)(), caps);
+      const refusal = admitBlob({ bytes: blob.size, mimeType }, (await usage(partition)) - (held && (held.partition === undefined || held.partition === partition) ? held.bytes : 0), await (options.estimate ?? browserEstimate)(), caps);
       if (refusal) throw new BlobQuotaError(refusal);
       const data = await blob.arrayBuffer();
       const sha256 = await (options.hash ?? sha256Hex)(data);
@@ -217,11 +234,11 @@ export function createBlobStore(options: BlobStoreOptions): BlobStore {
         await writable.write(blob);
         await writable.close();
       }
-      const stored: BlobRow = { id, mimeType, bytes: blob.size, sha256, location: opfs ? 'opfs' : 'idb', ...(opfs ? {} : { data }), storedAt: new Date().toISOString() };
+      const stored: BlobRow = { id, mimeType, bytes: blob.size, sha256, partition, location: opfs ? 'opfs' : 'idb', ...(opfs ? {} : { data }), storedAt: new Date().toISOString() };
       const tx = (await database()).transaction(BLOB_STORE, 'readwrite');
       tx.objectStore(BLOB_STORE).put(stored);
       await completed(tx);
-      return { id, bytes: blob.size, sha256, mimeType };
+      return { id, bytes: blob.size, sha256, mimeType, partition };
     },
     async get(id) {
       const found = await row(id);

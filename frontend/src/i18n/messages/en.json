@@ -30435,7 +30435,6 @@
     "moreSeats": "{count} more seats"
   },
   "sessions": {
-    "projectTieDropped": "This board was made on your device, but its project link could not be saved. Link it to the project once you are online.",
     "newCanvas": "+ New canvas",
     "active": "Active",
     "renameAria": "Rename this canvas",
