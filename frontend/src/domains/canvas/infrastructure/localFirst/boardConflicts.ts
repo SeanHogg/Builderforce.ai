@@ -20,6 +20,7 @@ import {
   CANVAS_ENTITY_TYPES,
   type JournalEvent,
   type LocalFirstStore,
+  type LocalFirstTransaction,
   type LocalRecord,
   type SyncConflict,
 } from '@builderforce/local-first';
@@ -104,6 +105,32 @@ export async function captureBoardConflicts(
   });
 }
 
+const TAB_REASON = 'concurrent_tab_edit';
+
+/**
+ * Two tabs of one browser edited the SAME object. The store serialises their commits, so the second
+ * tab would silently overwrite the first; instead its proposed value is kept beside the stored one
+ * as a conflict (`local` = this tab's proposal, `remote` = what the other tab committed) and the
+ * stored value stays. Same side panel, same three settlements, as a conflict with the server.
+ */
+export async function recordTabConflict(
+  tx: LocalFirstTransaction,
+  ctx: JournalContext,
+  existing: LocalRecord,
+  proposed: unknown,
+): Promise<void> {
+  const at = (ctx.now?.() ?? new Date()).toISOString();
+  await tx.putConflict({
+    id: `tab:${existing.entityType}:${existing.id}:${existing.version}`,
+    clientEntityId: existing.id,
+    entityType: existing.entityType,
+    local: { ...existing, version: existing.version + 1, baseVersion: existing.version, updatedAt: at, payload: proposed },
+    remote: existing,
+    reason: TAB_REASON,
+    createdAt: at,
+  });
+}
+
 /** The unresolved conflicts of a board, oldest first — what the notice and its side panel list. */
 export async function listBoardConflicts(store: LocalFirstStore, boardId: string): Promise<SyncConflict[]> {
   const all = await store.read((tx) => tx.conflicts());
@@ -130,6 +157,22 @@ export async function resolveBoardConflict(ctx: ConflictResolveContext, conflict
     const { local, remote } = conflict;
     const current = await tx.get(local.entityType, local.id);
     if (!current) throw new Error(`conflict_record_missing: ${conflictId}`);
+    if (conflict.reason === TAB_REASON) {
+      // The other tab's value is already the stored one; "mine" re-applies this tab's proposal as a normal edit.
+      if (choice === 'mine') {
+        await writeRecord(tx, ctx, current, {
+          entityType: current.entityType,
+          id: current.id,
+          payload: local.payload,
+          destination: current.destination,
+          ...(current.entityType === CANVAS_BOARD ? { syncPayload: syncedBoardPayload(local.payload as BoardPayload) } : { boardId: (local.payload as { boardId: string }).boardId }),
+        });
+      } else if (choice === 'restore-copy') {
+        throw new Error(`conflict_choice_unsupported: ${choice}`);
+      }
+      await tx.putConflict({ ...conflict, resolvedAt: stamp });
+      return;
+    }
     const heldEvents: JournalEvent[] = [];
     await tx.scanPending((event) => {
       if (!event.deadLetter && event.clientEntityId === local.id && event.entityType === local.entityType) heldEvents.push(event as JournalEvent);

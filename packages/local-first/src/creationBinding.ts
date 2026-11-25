@@ -82,7 +82,7 @@ interface ProposedBinding {
   hasIdentity: boolean;
 }
 
-function readProposed(destination: CreationBindingInput['destination']): ProposedBinding {
+function readProposed(destination: unknown): ProposedBinding {
   if (!isRecord(destination)) {
     return { explicitUnbound: false, kindLegal: true, fields: {}, hasIdentity: false };
   }

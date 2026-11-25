@@ -427,7 +427,7 @@ jobs:
             echo "Marketplace already has the universal VSIX for $version."
             exit 0
           fi
-          npx --yes @vscode/vsce@4.1.1 publish --oidc --no-dependencies --packagePath builderforce.vsix
+          npx --yes @vscode/vsce@4.1.1 publish --oidc --no-dependencies --packagePath builderforce.vsix --allow-proposed-apis chatSessionsProvider
 
       - name: Publish to Open VSX
         working-directory: clients/vscode
@@ -996,6 +996,7 @@ jobs:
   verify-frontend:
     name: Verify frontend (${{ matrix.name }})
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     needs: plan
     if: ${{ needs.plan.outputs.verify-frontend == 'true' }}
     strategy:

@@ -130,7 +130,7 @@ export const CODING_MODEL_POOL: readonly string[] = [
   // PAID, METERED — strong agentic coders reachable by Pro tenants on the credited key.
   ...flagshipsOf('openrouter', 'agentic'),     // the OpenRouter catalog's flagship coder (Claude)
   'openai/gpt-4.1',
-  'xiaomi/mimo-v2.5',                          // Programming #1 on OpenRouter, $0.14/$0.28
+  'xiaomi/mimo-v2.6-flash',                          // Programming #1 on OpenRouter, $0.14/$0.28
   'qwen/qwen3.7-plus',                         // agentic coder + vision, $0.40/$1.60
   'deepseek/deepseek-v4-flash',               // fast cheap coder, $0.10/$0.20
   // FREE — strong agentic coders on the OpenRouter free key (the cloud default).
@@ -150,9 +150,7 @@ export const CODING_MODEL_POOL: readonly string[] = [
   // (`modelDrift.test.ts` is what caught the retirement; it fails the build for the
   // next one rather than letting a dead id sit at the head of the cascade.)
   'nvidia/nemotron-3-ultra-550b-a55b:free',   // free agentic-coding lead — Programming #6, 1M context
-  'poolside/laguna-s-2.1:free',               // current flagship coding-agent model
-  'cohere/north-mini-code:free',              // code-specialized, 256K context
-  'nvidia/nemotron-3-super-120b-a12b:free',   // agentic reasoning fallback
+  'nvidia/nemotron-3.5-super-vl:free',   // agentic reasoning fallback
   'google/gemma-4-26b-a4b-it:free',           // multimodal tools + structured output
   'nvidia/nemotron-3.5-lightning:free',       // compact tool-capable reliability tail
   // DIRECT-ANTHROPIC reliability floor (NVIDIA-of-last-resort). Served by the

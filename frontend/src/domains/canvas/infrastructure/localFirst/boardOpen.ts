@@ -22,7 +22,7 @@ import { adoptRemoteBoard } from '../../application/AdoptRemoteBoard';
 import { boardSignature, type CanvasSessionPort } from '../../application/PersistCanvas';
 import { mergeCollaboratorBoards, type CanvasBoard, type RejectedCanvasObject } from '../../domain/canvasBoard';
 import { reportLocalFirstFailure, type LocalFirstFailureSink } from '@/lib/localFirst/reportLocalFirstFailure';
-import { hasPendingFor, ingestFromServer, readBoard, seedFromServer, type BoardReplica } from './boardReplica';
+import { ingestFromServer, pendingIdsOf, readBoard, seedFromServer, type BoardReplica } from './boardReplica';
 import type { ServerBoardSnapshot } from './boardRecords';
 
 /** How a board's server copy is read. The one thing that changes when pull replaces REST. */
@@ -92,13 +92,17 @@ export async function reconcileBoard(options: BoardOpenOptions, boardId: string,
     const signature = boardSignature(replica.board);
     const decision = await adoptRemoteBoard(boardId, { saving: false, signature, savedSignature: signature, revision: replica.serverRevision ?? -1 }, port);
     if (!decision.adopt || !captured.snapshot) return { kind: 'current' };
-    const pending = await hasPendingFor(options.store, boardId);
+    const pending = await pendingIdsOf(options.store, boardId);
     await ingestFromServer(options.store, captured.snapshot, options.destination, { replaceMissing: true, now: options.now });
     const fresh = await readBoard(options.store, boardId);
     if (!fresh) return { kind: 'offline', error: 'replica_lost' };
-    return pending
-      ? { kind: 'rebased', replica: fresh, rebased: mergeCollaboratorBoards(replica.board, decision.board), rejected: decision.rejected }
-      : { kind: 'replaced', replica: fresh, rejected: decision.rejected };
+    if (pending.size === 0) return { kind: 'replaced', replica: fresh, rejected: decision.rejected };
+    // The rebase: the server's board, with this device's UNSENT objects laid over it (local last).
+    const unsent: CanvasBoard = {
+      nodes: replica.board.nodes.filter((node) => pending.has(node.id)),
+      edges: replica.board.edges.filter((edge) => pending.has(edge.id)),
+    };
+    return { kind: 'rebased', replica: fresh, rebased: mergeCollaboratorBoards(unsent, decision.board), rejected: decision.rejected };
   } catch (error) {
     // The expected failure is the network being down; it is still REPORTED, never swallowed, and the
     // replica stays the board on screen.

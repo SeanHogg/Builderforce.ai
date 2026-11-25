@@ -88,6 +88,8 @@ export interface BoardReplica {
   rejected: RejectedCanvasObject[];
   timeline: TimelinePayload[];
   media: LocalRecord<MediaPayload>[];
+  /** The record version of every object and connection as read: the `baseVersions` of the next `commitBoardDiff`. */
+  versions: Record<string, number>;
   /** The `canvasRevision` last reconciled with the server, when this board has one. */
   serverRevision?: number;
 }
@@ -112,6 +114,7 @@ export async function readBoard(store: LocalFirstStore, boardId: string): Promis
       rejected,
       timeline: children.timeline.map((row) => row.payload),
       media: children.media,
+      versions: Object.fromEntries([...children.objects, ...children.edges].map((row) => [row.id, row.version])),
       ...(header.payload.serverRevision !== undefined ? { serverRevision: header.payload.serverRevision } : {}),
     };
   });
@@ -140,17 +143,22 @@ export async function listBoards(store: LocalFirstStore): Promise<BoardListEntry
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-/** Whether any live pending event belongs to this board (its own, or a child's). */
-export async function hasPendingFor(store: LocalFirstStore, boardId: string): Promise<boolean> {
+/** The ids of this board's records (its own and its children's) that have an unsent journal event. */
+export async function pendingIdsOf(store: LocalFirstStore, boardId: string): Promise<Set<string>> {
   return store.read(async (tx) => {
-    let found = false;
+    const ids = new Set<string>();
     await tx.scanPending((event) => {
       if (event.deadLetter) return;
       const owner = event.entityType === CANVAS_BOARD ? event.clientEntityId : (event.payload as { boardId?: string } | null)?.boardId;
-      if (owner === boardId) found = true;
+      if (owner === boardId) ids.add(event.clientEntityId);
     });
-    return found;
+    return ids;
   });
+}
+
+/** Whether any live pending event belongs to this board. */
+export async function hasPendingFor(store: LocalFirstStore, boardId: string): Promise<boolean> {
+  return (await pendingIdsOf(store, boardId)).size > 0;
 }
 
 export interface IngestResult {
@@ -183,7 +191,7 @@ export async function ingestFromServer(
     const versionOf = (id: string): number => snapshot.versions?.[id] ?? snapshot.revision;
 
     /** One server row → one record, unless the device has an unsynced edit of it or deleted it. */
-    const ingest = async <T,>(entityType: LocalRecord['entityType'], id: string, payload: T, version: number): Promise<void> => {
+    const ingest = async <T>(entityType: LocalRecord['entityType'], id: string, payload: T, version: number): Promise<void> => {
       if (hasPending.has(key(entityType, id))) {
         result.skippedPending += 1;
         return;
@@ -217,7 +225,7 @@ export async function ingestFromServer(
       ...(snapshot.folder !== undefined ? { folder: snapshot.folder } : {}),
       ...(snapshot.mode !== undefined ? { mode: snapshot.mode } : {}),
       serverRevision: snapshot.revision,
-    }, snapshot.revision);
+    }, versionOf(boardId));
 
     const live = new Set<string>();
     for (const object of snapshot.graph.objects) {
@@ -243,7 +251,7 @@ export async function ingestFromServer(
         if (listed || hasPending.has(key(row.entityType, row.id))) continue;
         // Never held by the server (an unsynced local row) is not a server deletion.
         if (!(await tx.mapping(row.entityType, row.id, destination))) continue;
-        await tx.put({ ...row, version: row.version + 1, baseVersion: row.version, updatedAt: stamp, deletedAt: stamp, provenance: { ...SERVER_OBSERVED } }, row.version);
+        await tx.put<ObjectPayload | EdgePayload>({ ...row, version: row.version + 1, baseVersion: row.version, updatedAt: stamp, deletedAt: stamp, provenance: { ...SERVER_OBSERVED } }, row.version);
         result.removed += 1;
       }
     }

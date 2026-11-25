@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-10-10T14:52:23.574Z",
+  "fetchedAt": "2026-11-25T04:07:51.704Z",
   "sources": {
     "openrouter": {
       "vendor": "openrouter",
@@ -51,6 +51,9 @@
         "~openai/gpt-terra-latest": {
           "tools": true
         },
+        "~unbiased/pareto-latest": {
+          "tools": true
+        },
         "~x-ai/grok-latest": {
           "tools": true
         },
@@ -99,19 +102,19 @@
         "anthropic/claude-fable-5": {
           "tools": true
         },
-        "anthropic/claude-fable-5:batch": {
-          "tools": true
-        },
         "anthropic/claude-fable-5.1": {
           "tools": true
         },
         "anthropic/claude-fable-5.1:batch": {
           "tools": true
         },
-        "anthropic/claude-haiku-4.5": {
+        "anthropic/claude-fable-5.2": {
           "tools": true
         },
-        "anthropic/claude-haiku-4.5:batch": {
+        "anthropic/claude-fable-5.2:batch": {
+          "tools": true
+        },
+        "anthropic/claude-haiku-4.5": {
           "tools": true
         },
         "anthropic/claude-haiku-5.5": {
@@ -123,31 +126,16 @@
         "anthropic/claude-opus-4.1": {
           "tools": true
         },
-        "anthropic/claude-opus-4.1:batch": {
-          "tools": true
-        },
         "anthropic/claude-opus-4.5": {
-          "tools": true
-        },
-        "anthropic/claude-opus-4.5:batch": {
           "tools": true
         },
         "anthropic/claude-opus-4.6": {
           "tools": true
         },
-        "anthropic/claude-opus-4.6:batch": {
-          "tools": true
-        },
         "anthropic/claude-opus-4.7": {
           "tools": true
         },
-        "anthropic/claude-opus-4.7:batch": {
-          "tools": true
-        },
         "anthropic/claude-opus-4.8": {
-          "tools": true
-        },
-        "anthropic/claude-opus-4.8:batch": {
           "tools": true
         },
         "anthropic/claude-opus-5": {
@@ -162,25 +150,13 @@
         "anthropic/claude-opus-5.5:batch": {
           "tools": true
         },
-        "anthropic/claude-sonnet-4": {
-          "tools": true
-        },
         "anthropic/claude-sonnet-4.5": {
-          "tools": true
-        },
-        "anthropic/claude-sonnet-4.5:batch": {
           "tools": true
         },
         "anthropic/claude-sonnet-4.6": {
           "tools": true
         },
-        "anthropic/claude-sonnet-4.6:batch": {
-          "tools": true
-        },
         "anthropic/claude-sonnet-5": {
-          "tools": true
-        },
-        "anthropic/claude-sonnet-5:batch": {
           "tools": true
         },
         "anthropic/claude-sonnet-5.5": {
@@ -189,22 +165,13 @@
         "anthropic/claude-sonnet-5.5:batch": {
           "tools": true
         },
-        "apodex/apodex-1.1-mini:free": {
+        "baidu/ernie-5.5-flash-preview:free": {
           "tools": true
         },
-        "arcee-ai/trinity-large-thinking": {
-          "tools": true
-        },
-        "bytedance-seed/seed-1.6": {
-          "tools": true
-        },
-        "bytedance-seed/seed-1.6-flash": {
+        "baidu/ernie-light-dt-1.0-intl": {
           "tools": true
         },
         "bytedance-seed/seed-2-1-turbo": {
-          "tools": true
-        },
-        "bytedance-seed/seed-2.0-code": {
           "tools": true
         },
         "bytedance-seed/seed-2.0-lite": {
@@ -220,7 +187,7 @@
           "tools": false
         },
         "cohere/command-a": {
-          "tools": false
+          "tools": true
         },
         "cohere/command-a-plus": {
           "tools": true
@@ -232,9 +199,6 @@
           "tools": true
         },
         "cohere/command-r7b-12-2024": {
-          "tools": false
-        },
-        "cohere/north-mini-code:free": {
           "tools": true
         },
         "deepseek/deepseek-chat": {
@@ -244,9 +208,6 @@
           "tools": true
         },
         "deepseek/deepseek-chat-v3.1": {
-          "tools": true
-        },
-        "deepseek/deepseek-r1": {
           "tools": true
         },
         "deepseek/deepseek-r1-0528": {
@@ -267,6 +228,9 @@
         "deepseek/deepseek-v4-flash-0731": {
           "tools": true
         },
+        "deepseek/deepseek-v4-flash-0731:batch": {
+          "tools": true
+        },
         "deepseek/deepseek-v4-flash-vision-exp": {
           "tools": true
         },
@@ -279,10 +243,16 @@
         "deepseek/deepseek-v4.1-flash": {
           "tools": true
         },
+        "deepseek/deepseek-v4.1-flash-1017": {
+          "tools": true
+        },
+        "deepseek/deepseek-v4.1-flash-1017:batch": {
+          "tools": true
+        },
         "deepseek/deepseek-v4.1-flash:batch": {
           "tools": true
         },
-        "dots-studio/dots-3-note-preview:free": {
+        "elorian/glimpse": {
           "tools": true
         },
         "fireworks/ember-1": {
@@ -297,19 +267,10 @@
         "google/gemini-2.5-flash-lite": {
           "tools": true
         },
-        "google/gemini-2.5-flash-lite:batch": {
-          "tools": true
-        },
-        "google/gemini-2.5-flash:batch": {
-          "tools": true
-        },
         "google/gemini-2.5-pro": {
           "tools": true
         },
         "google/gemini-2.5-pro-preview": {
-          "tools": true
-        },
-        "google/gemini-2.5-pro:batch": {
           "tools": true
         },
         "google/gemini-3-flash-preview": {
@@ -381,8 +342,38 @@
         "google/gemini-3.8-flash:batch": {
           "tools": true
         },
+        "google/gemini-4-argon": {
+          "tools": true
+        },
+        "google/gemini-4-argon:batch": {
+          "tools": true
+        },
+        "google/gemini-4-carbon": {
+          "tools": true
+        },
+        "google/gemini-4-carbon:batch": {
+          "tools": true
+        },
+        "google/gemini-4-hydrogen": {
+          "tools": true
+        },
+        "google/gemini-4-hydrogen:batch": {
+          "tools": true
+        },
+        "google/gemini-4-neon": {
+          "tools": true
+        },
+        "google/gemini-4-neon:batch": {
+          "tools": true
+        },
         "google/gemini-nano-banana-2.1": {
           "tools": true
+        },
+        "google/gemini-omni-1.1-flash": {
+          "tools": false
+        },
+        "google/gemini-omni-1.2-flash": {
+          "tools": false
         },
         "google/gemma-2-27b-it": {
           "tools": false
@@ -417,31 +408,22 @@
         "gryphe/mythomax-l2-13b": {
           "tools": false
         },
-        "ibm-granite/granite-4.0-h-micro": {
-          "tools": false
-        },
         "ibm-granite/granite-4.2-8b": {
-          "tools": true
-        },
-        "inception/mercury-2": {
-          "tools": true
-        },
-        "inception/mercury-2.5": {
           "tools": true
         },
         "inclusionai/ling-3.0-flash": {
           "tools": true
         },
-        "inclusionai/ling-3.0-flash-fin": {
-          "tools": true
-        },
-        "inclusionai/ling-3.0-flash-sante": {
-          "tools": true
-        },
         "inclusionai/ling-3.0-flash-vl": {
           "tools": true
         },
+        "inclusionai/ling-3.0-tiny": {
+          "tools": true
+        },
         "inclusionai/ling-3.1-flash": {
+          "tools": true
+        },
+        "inclusionai/ling-3.2-flash:free": {
           "tools": true
         },
         "inference-net/schematron-v2-small": {
@@ -450,23 +432,26 @@
         "inference-net/schematron-v2-turbo": {
           "tools": false
         },
-        "liquid/lfm-2.5-2.6b:free": {
+        "kt/midm-k-3.0-pro": {
+          "tools": true
+        },
+        "liquid/lfm-2.5-24b-a2b": {
+          "tools": true
+        },
+        "liquid/lfm-3-1.7b": {
+          "tools": true
+        },
+        "liquid/lfm-3-1.7b:free": {
           "tools": true
         },
         "mancer/weaver": {
           "tools": false
-        },
-        "meituan/longcat-2.0": {
-          "tools": true
         },
         "meta-llama/llama-3.1-70b-instruct": {
           "tools": true
         },
         "meta-llama/llama-3.1-8b-instruct": {
           "tools": true
-        },
-        "meta-llama/llama-3.2-1b-instruct": {
-          "tools": false
         },
         "meta-llama/llama-3.2-3b-instruct": {
           "tools": false
@@ -483,7 +468,13 @@
         "meta-llama/llama-guard-4-12b": {
           "tools": false
         },
+        "meta/muse-ember": {
+          "tools": true
+        },
         "meta/muse-glimmer-30b": {
+          "tools": true
+        },
+        "meta/muse-glimmer-30b:batch": {
           "tools": true
         },
         "meta/muse-spark-1.1": {
@@ -501,26 +492,14 @@
         "meta/muse-spark-1.3-contributor": {
           "tools": true
         },
+        "meta/muse-spark-open": {
+          "tools": true
+        },
+        "meta/muse-wonder": {
+          "tools": true
+        },
         "microsoft/phi-4": {
           "tools": false
-        },
-        "microsoft/wizardlm-2-8x22b": {
-          "tools": false
-        },
-        "minimax/minimax-01": {
-          "tools": false
-        },
-        "minimax/minimax-m1": {
-          "tools": true
-        },
-        "minimax/minimax-m2": {
-          "tools": true
-        },
-        "minimax/minimax-m2-her": {
-          "tools": false
-        },
-        "minimax/minimax-m2.1": {
-          "tools": true
         },
         "minimax/minimax-m2.5": {
           "tools": true
@@ -528,19 +507,16 @@
         "minimax/minimax-m2.7": {
           "tools": true
         },
-        "minimax/minimax-m2.7-highspeed": {
-          "tools": true
-        },
         "minimax/minimax-m3": {
           "tools": true
         },
-        "minimax/minimax-m3.1-flash-preview": {
+        "minimax/minimax-m3:batch": {
+          "tools": true
+        },
+        "minimax/minimax-m3.1-flash": {
           "tools": true
         },
         "mistralai/codestral-2508": {
-          "tools": true
-        },
-        "mistralai/codestral-2508:batch": {
           "tools": true
         },
         "mistralai/devstral-2512": {
@@ -555,9 +531,6 @@
         "mistralai/ministral-8b-2512": {
           "tools": true
         },
-        "mistralai/ministral-8b-2512:batch": {
-          "tools": true
-        },
         "mistralai/mistral-large": {
           "tools": true
         },
@@ -567,25 +540,13 @@
         "mistralai/mistral-large-2512": {
           "tools": true
         },
-        "mistralai/mistral-large-2512:batch": {
-          "tools": true
-        },
         "mistralai/mistral-large-4-0": {
-          "tools": true
-        },
-        "mistralai/mistral-medium-3": {
           "tools": true
         },
         "mistralai/mistral-medium-3-5": {
           "tools": true
         },
         "mistralai/mistral-medium-3-5:batch": {
-          "tools": true
-        },
-        "mistralai/mistral-medium-3.1": {
-          "tools": true
-        },
-        "mistralai/mistral-medium-3.1:batch": {
           "tools": true
         },
         "mistralai/mistral-nemo": {
@@ -600,9 +561,6 @@
         "mistralai/mistral-small-2603": {
           "tools": true
         },
-        "mistralai/mistral-small-2603:batch": {
-          "tools": true
-        },
         "mistralai/mistral-small-3.1-24b-instruct": {
           "tools": true
         },
@@ -612,17 +570,17 @@
         "mistralai/mixtral-8x22b-instruct": {
           "tools": true
         },
+        "mistralai/pixtral-large-2502": {
+          "tools": false
+        },
         "mistralai/voxtral-small-24b-2507": {
           "tools": true
         },
-        "moonshotai/kimi-k2": {
-          "tools": true
+        "moondream/moondream3-preview": {
+          "tools": false
         },
-        "moonshotai/kimi-k2-0905": {
-          "tools": true
-        },
-        "moonshotai/kimi-k2-thinking": {
-          "tools": true
+        "moondream/moondream3.1-9b-a2b": {
+          "tools": false
         },
         "moonshotai/kimi-k2.5": {
           "tools": true
@@ -639,11 +597,26 @@
         "moonshotai/kimi-k3:batch": {
           "tools": true
         },
+        "moonshotai/kimi-k3.1-pro": {
+          "tools": true
+        },
+        "moonshotai/kimi-k3.1-pro:batch": {
+          "tools": true
+        },
         "morph/morph-v3-fast": {
+          "tools": false
+        },
+        "morph/morph-v3-fast:batch": {
           "tools": false
         },
         "morph/morph-v3-large": {
           "tools": false
+        },
+        "morph/morph-v3-large:batch": {
+          "tools": false
+        },
+        "motif-technologies/motif-3": {
+          "tools": true
         },
         "nex-agi/nex-n2.5-mini": {
           "tools": false
@@ -651,11 +624,8 @@
         "nex-agi/nex-n2.5-pro": {
           "tools": true
         },
-        "nousresearch/hermes-3-llama-3.1-405b": {
-          "tools": false
-        },
-        "nousresearch/hermes-3-llama-3.1-70b": {
-          "tools": false
+        "nex-agi/nex-n2.6": {
+          "tools": true
         },
         "nousresearch/hermes-4-405b": {
           "tools": false
@@ -669,9 +639,6 @@
         "nvidia/nemotron-3-super-120b-a12b": {
           "tools": true
         },
-        "nvidia/nemotron-3-super-120b-a12b:free": {
-          "tools": true
-        },
         "nvidia/nemotron-3-ultra-550b-a55b": {
           "tools": true
         },
@@ -681,20 +648,20 @@
         "nvidia/nemotron-3.5-content-safety": {
           "tools": false
         },
-        "nvidia/nemotron-3.5-content-safety:free": {
-          "tools": false
-        },
         "nvidia/nemotron-3.5-lightning": {
           "tools": true
         },
         "nvidia/nemotron-3.5-lightning:free": {
           "tools": true
         },
+        "nvidia/nemotron-3.5-super-vl": {
+          "tools": true
+        },
+        "nvidia/nemotron-3.5-super-vl:free": {
+          "tools": true
+        },
         "nvidia/switchyard": {
           "tools": false
-        },
-        "openai/gpt-3.5-turbo": {
-          "tools": true
         },
         "openai/gpt-3.5-turbo-0613": {
           "tools": true
@@ -702,19 +669,7 @@
         "openai/gpt-3.5-turbo-16k": {
           "tools": true
         },
-        "openai/gpt-3.5-turbo-instruct": {
-          "tools": false
-        },
-        "openai/gpt-3.5-turbo:batch": {
-          "tools": true
-        },
         "openai/gpt-4": {
-          "tools": true
-        },
-        "openai/gpt-4-turbo": {
-          "tools": true
-        },
-        "openai/gpt-4-turbo:batch": {
           "tools": true
         },
         "openai/gpt-4.1": {
@@ -723,16 +678,7 @@
         "openai/gpt-4.1-mini": {
           "tools": true
         },
-        "openai/gpt-4.1-mini:batch": {
-          "tools": true
-        },
         "openai/gpt-4.1-nano": {
-          "tools": true
-        },
-        "openai/gpt-4.1-nano:batch": {
-          "tools": true
-        },
-        "openai/gpt-4.1:batch": {
           "tools": true
         },
         "openai/gpt-4o": {
@@ -753,12 +699,6 @@
         "openai/gpt-4o-mini-2024-07-18": {
           "tools": true
         },
-        "openai/gpt-4o-mini:batch": {
-          "tools": true
-        },
-        "openai/gpt-4o:batch": {
-          "tools": true
-        },
         "openai/gpt-5": {
           "tools": true
         },
@@ -771,9 +711,6 @@
         "openai/gpt-5-mini": {
           "tools": true
         },
-        "openai/gpt-5-mini:batch": {
-          "tools": true
-        },
         "openai/gpt-5-nano": {
           "tools": true
         },
@@ -781,12 +718,6 @@
           "tools": true
         },
         "openai/gpt-5-pro": {
-          "tools": true
-        },
-        "openai/gpt-5-pro:batch": {
-          "tools": true
-        },
-        "openai/gpt-5:batch": {
           "tools": true
         },
         "openai/gpt-5.1": {
@@ -801,25 +732,13 @@
         "openai/gpt-5.1-codex-mini": {
           "tools": true
         },
-        "openai/gpt-5.1:batch": {
-          "tools": true
-        },
         "openai/gpt-5.2": {
-          "tools": true
-        },
-        "openai/gpt-5.2-chat": {
           "tools": true
         },
         "openai/gpt-5.2-codex": {
           "tools": true
         },
         "openai/gpt-5.2-pro": {
-          "tools": true
-        },
-        "openai/gpt-5.2-pro:batch": {
-          "tools": true
-        },
-        "openai/gpt-5.2:batch": {
           "tools": true
         },
         "openai/gpt-5.3-codex": {
@@ -834,34 +753,16 @@
         "openai/gpt-5.4-mini": {
           "tools": true
         },
-        "openai/gpt-5.4-mini:batch": {
-          "tools": true
-        },
         "openai/gpt-5.4-nano": {
           "tools": true
         },
-        "openai/gpt-5.4-nano:batch": {
-          "tools": true
-        },
         "openai/gpt-5.4-pro": {
-          "tools": true
-        },
-        "openai/gpt-5.4-pro:batch": {
-          "tools": true
-        },
-        "openai/gpt-5.4:batch": {
           "tools": true
         },
         "openai/gpt-5.5": {
           "tools": true
         },
         "openai/gpt-5.5-pro": {
-          "tools": true
-        },
-        "openai/gpt-5.5-pro:batch": {
-          "tools": true
-        },
-        "openai/gpt-5.5:batch": {
           "tools": true
         },
         "openai/gpt-5.6-luna": {
@@ -948,6 +849,42 @@
         "openai/gpt-6.1-sol:batch": {
           "tools": true
         },
+        "openai/gpt-6.1-terra": {
+          "tools": true
+        },
+        "openai/gpt-6.1-terra-pro": {
+          "tools": true
+        },
+        "openai/gpt-6.1-terra-pro:batch": {
+          "tools": true
+        },
+        "openai/gpt-6.1-terra:batch": {
+          "tools": true
+        },
+        "openai/gpt-6.2-astra": {
+          "tools": true
+        },
+        "openai/gpt-6.2-astra-pro": {
+          "tools": true
+        },
+        "openai/gpt-6.2-astra-pro:batch": {
+          "tools": true
+        },
+        "openai/gpt-6.2-astra:batch": {
+          "tools": true
+        },
+        "openai/gpt-6.2-sol": {
+          "tools": true
+        },
+        "openai/gpt-6.2-sol-pro": {
+          "tools": true
+        },
+        "openai/gpt-6.2-sol-pro:batch": {
+          "tools": true
+        },
+        "openai/gpt-6.2-sol:batch": {
+          "tools": true
+        },
         "openai/gpt-audio": {
           "tools": true
         },
@@ -972,43 +909,19 @@
         "openai/gpt-oss-safeguard-20b": {
           "tools": true
         },
-        "openai/o1": {
-          "tools": true
-        },
-        "openai/o1-pro": {
-          "tools": false
-        },
         "openai/o3": {
           "tools": true
         },
-        "openai/o3-mini": {
-          "tools": true
-        },
-        "openai/o3-mini-high": {
-          "tools": true
-        },
-        "openai/o3-mini:batch": {
-          "tools": true
-        },
         "openai/o3-pro": {
-          "tools": true
-        },
-        "openai/o3:batch": {
-          "tools": true
-        },
-        "openai/o4-mini": {
-          "tools": true
-        },
-        "openai/o4-mini-high": {
-          "tools": true
-        },
-        "openai/o4-mini:batch": {
           "tools": true
         },
         "openrouter/auto": {
           "tools": true
         },
         "openrouter/auto-beta": {
+          "tools": true
+        },
+        "openrouter/auto-code": {
           "tools": true
         },
         "openrouter/bodybuilder": {
@@ -1021,7 +934,13 @@
           "tools": false
         },
         "openrouter/pareto-code": {
-          "tools": false
+          "tools": true
+        },
+        "particle-ai/particle-1": {
+          "tools": true
+        },
+        "particle-ai/particle-1:free": {
+          "tools": true
         },
         "perceptron/perceptron-mk1": {
           "tools": false
@@ -1044,25 +963,13 @@
         "perplexity/sonar-reasoning-pro": {
           "tools": false
         },
-        "poolside/laguna-s-2.1": {
-          "tools": true
-        },
-        "poolside/laguna-s-2.1:free": {
-          "tools": true
-        },
-        "poolside/laguna-xs-2.1": {
-          "tools": true
-        },
-        "poolside/laguna-xs-2.1:free": {
-          "tools": true
-        },
         "prism-ml/ternary-bonsai-2-27b": {
           "tools": true
         },
-        "qwen/qwen-2.5-72b-instruct": {
+        "prism-ml/ternary-bonsai-2-9b": {
           "tools": true
         },
-        "qwen/qwen-2.5-7b-instruct": {
+        "qwen/qwen-2.5-72b-instruct": {
           "tools": true
         },
         "qwen/qwen-2.5-coder-32b-instruct": {
@@ -1107,16 +1014,10 @@
         "qwen/qwen3-next-80b-a3b-instruct": {
           "tools": true
         },
-        "qwen/qwen3-next-80b-a3b-thinking": {
-          "tools": true
-        },
         "qwen/qwen3-vl-235b-a22b-instruct": {
           "tools": true
         },
         "qwen/qwen3-vl-30b-a3b-instruct": {
-          "tools": true
-        },
-        "qwen/qwen3-vl-30b-a3b-thinking": {
           "tools": true
         },
         "qwen/qwen3-vl-8b-instruct": {
@@ -1167,10 +1068,16 @@
         "qwen/qwen3.7-plus": {
           "tools": true
         },
+        "qwen/qwen3.7-plus:batch": {
+          "tools": true
+        },
         "qwen/qwen3.8-2.4t-a95b": {
           "tools": true
         },
         "qwen/qwen3.8-27b": {
+          "tools": true
+        },
+        "qwen/qwen3.8-27b:batch": {
           "tools": true
         },
         "qwen/qwen3.8-flash": {
@@ -1179,10 +1086,25 @@
         "qwen/qwen3.8-max-0902": {
           "tools": true
         },
+        "qwen/qwen3.8-max-0902:batch": {
+          "tools": true
+        },
         "qwen/qwen3.8-max-prime": {
           "tools": true
         },
         "qwen/qwen3.8-omni-flash": {
+          "tools": true
+        },
+        "qwen/qwen4-max": {
+          "tools": true
+        },
+        "radixark/daisyrose-27b": {
+          "tools": true
+        },
+        "recursive/flint-v1.0:free": {
+          "tools": true
+        },
+        "reflection/beam-1.0-501b-a23b": {
           "tools": true
         },
         "rekaai/reka-edge": {
@@ -1195,6 +1117,9 @@
           "tools": false
         },
         "relace/relace-search": {
+          "tools": true
+        },
+        "ricursiveai/ripple-65b-preview": {
           "tools": true
         },
         "sakana/fugu-max": {
@@ -1215,20 +1140,17 @@
         "sao10k/l3.1-euryale-70b": {
           "tools": false
         },
-        "sao10k/l3.3-euryale-70b": {
+        "scaledown/extract": {
           "tools": false
         },
-        "stepfun/step-3.5-flash": {
-          "tools": true
+        "scaledown/summarize": {
+          "tools": false
         },
         "stepfun/step-3.7-flash": {
           "tools": true
         },
         "stepfun/step-5-preview": {
           "tools": true
-        },
-        "tencent/hunyuan-a13b-instruct": {
-          "tools": false
         },
         "tencent/hy-mt2-1.8b": {
           "tools": false
@@ -1242,7 +1164,10 @@
         "tencent/hy3": {
           "tools": true
         },
-        "tencent/hy3-preview": {
+        "tencent/hy4": {
+          "tools": true
+        },
+        "tencent/hy4-flash": {
           "tools": true
         },
         "tencent/hy4-preview": {
@@ -1260,31 +1185,40 @@
         "thinkingmachines/inkling": {
           "tools": true
         },
+        "thinkingmachines/inkling-2-mini": {
+          "tools": true
+        },
+        "thinkingmachines/inkling-2-small": {
+          "tools": true
+        },
         "thinkingmachines/inkling-small": {
           "tools": true
         },
-        "thinkingmachines/inkling-small:free": {
-          "tools": true
-        },
-        "thinkingmachines/inkling:free": {
+        "thinkingmachines/inkling-small:batch": {
           "tools": true
         },
         "typesafe/jev-router": {
           "tools": true
         },
-        "unbiased/pareto": {
+        "unbiased/pareto-26.10": {
           "tools": true
         },
         "unbiased/pareto-26.10-preview": {
           "tools": true
         },
+        "unbiased/pareto-26.9": {
+          "tools": true
+        },
         "undi95/remm-slerp-l2-13b": {
           "tools": false
+        },
+        "upstage/solar-mini-4-5": {
+          "tools": true
         },
         "upstage/solar-mini4": {
           "tools": true
         },
-        "upstage/solar-pro-3": {
+        "upstage/solar-pro-4-contributor": {
           "tools": true
         },
         "upstage/solar-pro4": {
@@ -1311,19 +1245,19 @@
         "x-ai/grok-4.6": {
           "tools": true
         },
+        "x-ai/grok-4.6:batch": {
+          "tools": true
+        },
         "x-ai/grok-4.7": {
           "tools": true
         },
-        "x-ai/grok-build-0.1": {
-          "tools": true
-        },
-        "xiaomi/mimo-v2.5": {
-          "tools": true
-        },
-        "xiaomi/mimo-v2.5-pro": {
+        "x-ai/grok-4.7:batch": {
           "tools": true
         },
         "xiaomi/mimo-v2.6-flash": {
+          "tools": true
+        },
+        "xiaomi/mimo-v2.6-flash-mopd": {
           "tools": true
         },
         "xiaomi/mimo-v2.6-pro": {
@@ -1365,6 +1299,9 @@
         "z-ai/glm-5.2": {
           "tools": true
         },
+        "z-ai/glm-5.2:batch": {
+          "tools": true
+        },
         "z-ai/glm-5.3": {
           "tools": true
         },
@@ -1375,6 +1312,9 @@
           "tools": true
         },
         "z-ai/glm-5.3-flashx": {
+          "tools": true
+        },
+        "z-ai/glm-5.3-flashx-legal": {
           "tools": true
         },
         "z-ai/glm-5.3-prime": {
@@ -1393,43 +1333,10 @@
       "url": "https://integrate.api.nvidia.com/v1/models",
       "reachable": true,
       "models": {
-        "01-ai/yi-large": {
-          "tools": null
-        },
-        "adept/fuyu-8b": {
-          "tools": null
-        },
-        "ai21labs/jamba-1.5-large-instruct": {
-          "tools": null
-        },
-        "aisingapore/sea-lion-7b-instruct": {
-          "tools": null
-        },
         "bigcode/starcoder2-15b": {
           "tools": null
         },
-        "databricks/dbrx-instruct": {
-          "tools": null
-        },
-        "deepseek-ai/deepseek-coder-6.7b-instruct": {
-          "tools": null
-        },
-        "deepseek-ai/deepseek-v4.1-flash": {
-          "tools": null
-        },
-        "google/codegemma-1.1-7b": {
-          "tools": null
-        },
-        "google/codegemma-7b": {
-          "tools": null
-        },
-        "google/deplot": {
-          "tools": null
-        },
-        "google/diffusiongemma-26b-a4b-it": {
-          "tools": null
-        },
-        "google/gemma-2b": {
+        "fastino/gliner2-pii": {
           "tools": null
         },
         "google/gemma-3-12b-it": {
@@ -1438,73 +1345,13 @@
         "google/gemma-3-4b-it": {
           "tools": null
         },
-        "google/gemma-4-31b-it": {
+        "minimaxai/minimax-m3.1-flash": {
           "tools": null
         },
-        "google/recurrentgemma-2b": {
+        "mistralai/mistral-large-4-1t-a52b": {
           "tools": null
         },
-        "ibm/granite-3.0-3b-a800m-instruct": {
-          "tools": null
-        },
-        "ibm/granite-3.0-8b-instruct": {
-          "tools": null
-        },
-        "ibm/granite-34b-code-instruct": {
-          "tools": null
-        },
-        "ibm/granite-8b-code-instruct": {
-          "tools": null
-        },
-        "meta/codellama-70b": {
-          "tools": null
-        },
-        "meta/llama-3.2-11b-vision-instruct": {
-          "tools": null
-        },
-        "meta/llama-3.2-90b-vision-instruct": {
-          "tools": null
-        },
-        "meta/llama-guard-4-12b": {
-          "tools": null
-        },
-        "meta/llama2-70b": {
-          "tools": null
-        },
-        "meta/muse-glimmer-30b": {
-          "tools": null
-        },
-        "microsoft/kosmos-2": {
-          "tools": null
-        },
-        "microsoft/phi-3-vision-128k-instruct": {
-          "tools": null
-        },
-        "microsoft/phi-3.5-moe-instruct": {
-          "tools": null
-        },
-        "mistralai/codestral-22b-instruct-v0.1": {
-          "tools": null
-        },
-        "mistralai/mistral-7b-instruct-v0.3": {
-          "tools": null
-        },
-        "mistralai/mistral-large": {
-          "tools": null
-        },
-        "mistralai/mistral-large-2-instruct": {
-          "tools": null
-        },
-        "mistralai/mixtral-8x22b-v0.1": {
-          "tools": null
-        },
-        "moonshotai/kimi-k2.6": {
-          "tools": null
-        },
-        "moonshotai/kimi-k3": {
-          "tools": null
-        },
-        "nv-mistralai/mistral-nemo-12b-instruct": {
+        "moonshotai/kimi-k3.1-pro": {
           "tools": null
         },
         "nvidia/ai-synthetic-video-detector": {
@@ -1519,22 +1366,10 @@
         "nvidia/ising-calibration-1.5-31b": {
           "tools": null
         },
-        "nvidia/llama-3.1-nemoguard-8b-content-safety": {
-          "tools": null
-        },
         "nvidia/llama-3.1-nemoguard-8b-topic-control": {
           "tools": null
         },
-        "nvidia/llama-3.1-nemotron-51b-instruct": {
-          "tools": null
-        },
-        "nvidia/llama-3.1-nemotron-70b-instruct": {
-          "tools": null
-        },
         "nvidia/llama-3.1-nemotron-safety-guard-8b-v3": {
-          "tools": null
-        },
-        "nvidia/llama-3.1-nemotron-ultra-253b-v1": {
           "tools": null
         },
         "nvidia/llama-3.2-nemoretriever-1b-vlm-embed-v1": {
@@ -1543,49 +1378,28 @@
         "nvidia/llama-3.2-nv-embedqa-1b-v1": {
           "tools": null
         },
-        "nvidia/llama-nemotron-embed-vl-1b-v2": {
-          "tools": null
-        },
-        "nvidia/llama3-chatqa-1.5-70b": {
-          "tools": null
-        },
-        "nvidia/mistral-nemo-minitron-8b-8k-instruct": {
-          "tools": null
-        },
-        "nvidia/nemotron-3-embed-1b": {
-          "tools": null
-        },
         "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
-          "tools": null
-        },
-        "nvidia/nemotron-3-super-120b-a12b": {
           "tools": null
         },
         "nvidia/nemotron-3-ultra-550b-a55b": {
           "tools": null
         },
+        "nvidia/nemotron-3.5-bolt-e4b": {
+          "tools": null
+        },
         "nvidia/nemotron-3.5-content-safety": {
+          "tools": null
+        },
+        "nvidia/nemotron-3.5-embed-1b": {
+          "tools": null
+        },
+        "nvidia/nemotron-3.5-embed-8b": {
           "tools": null
         },
         "nvidia/nemotron-3.5-lightning-30b-a3b": {
           "tools": null
         },
-        "nvidia/nemotron-4-340b-instruct": {
-          "tools": null
-        },
-        "nvidia/nemotron-4-340b-reward": {
-          "tools": null
-        },
-        "nvidia/nemotron-nano-3-30b-a3b": {
-          "tools": null
-        },
-        "nvidia/nemotron-parse": {
-          "tools": null
-        },
-        "nvidia/nemotron-parse-2.0": {
-          "tools": null
-        },
-        "nvidia/neva-22b": {
+        "nvidia/nemotron-3.5-super-vl-120b-a12b": {
           "tools": null
         },
         "nvidia/nv-embedqa-mistral-7b-v2": {
@@ -1594,16 +1408,7 @@
         "nvidia/nvclip": {
           "tools": null
         },
-        "nvidia/riva-translate-4b-instruct": {
-          "tools": null
-        },
         "nvidia/riva-translate-4b-instruct-v2": {
-          "tools": null
-        },
-        "nvidia/vila": {
-          "tools": null
-        },
-        "openai/gpt-oss-20b": {
           "tools": null
         },
         "poolside/laguna-xs-2.1": {
@@ -1612,25 +1417,10 @@
         "snowflake/arctic-embed-l": {
           "tools": null
         },
-        "writer/palmyra-creative-122b": {
-          "tools": null
-        },
-        "writer/palmyra-fin-70b-32k": {
-          "tools": null
-        },
-        "writer/palmyra-med-70b": {
-          "tools": null
-        },
-        "writer/palmyra-med-70b-32k": {
-          "tools": null
-        },
-        "z-ai/glm-5.3": {
+        "stepfun-ai/step-5-preview": {
           "tools": null
         },
         "z-ai/glm-5.3-flash": {
-          "tools": null
-        },
-        "zyphra/zamba2-7b-instruct": {
           "tools": null
         }
       }

@@ -178,6 +178,11 @@ export function siblingDatabaseOf(core: Db, which: SiblingDatabase): Db {
 /** The handle a transaction body receives: the same query builder as {@link Db}. */
 export type Tx = Parameters<Parameters<NeonDatabase<typeof schema>['transaction']>[0]>[0];
 
+/** Roll back part of an existing interactive transaction without rolling back its caller. */
+export function inSavepoint<T>(tx: Tx, work: (savepoint: Tx) => Promise<T>): Promise<T> {
+  return tx.transaction(work);
+}
+
 /**
  * Run `work` in ONE interactive database transaction — reads and writes that see
  * each other, commit together, or roll back together.

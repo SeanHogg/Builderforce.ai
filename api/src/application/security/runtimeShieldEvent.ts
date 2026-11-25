@@ -41,6 +41,9 @@ export const SHIELD_REASON_CODES = [
   'ingress.handoff_conflict',
   'egress.policy_invalid',
   'process.message_undeliverable',
+  'agent.tool_not_allowed',
+  'agent.path_invalid',
+  'agent.service_not_allowed',
 ] as const;
 export type ShieldReasonCode = (typeof SHIELD_REASON_CODES)[number];
 
@@ -102,6 +105,9 @@ export const SHIELD_REASON_POLICY: { readonly [C in ShieldReasonCode]: ShieldRea
   'ingress.handoff_conflict': { severity: 'medium', ruleId: 'shield.ingress.handoff-conflict' },
   'egress.policy_invalid': { severity: 'medium', ruleId: 'shield.egress.policy-invalid' },
   'process.message_undeliverable': { severity: 'medium', ruleId: 'shield.process.message-undeliverable' },
+  'agent.tool_not_allowed': { severity: 'medium', ruleId: 'shield.agent.tool-allowlist' },
+  'agent.path_invalid': { severity: 'high', ruleId: 'shield.agent.workspace-path' },
+  'agent.service_not_allowed': { severity: 'high', ruleId: 'shield.agent.own-services' },
 };
 
 /**

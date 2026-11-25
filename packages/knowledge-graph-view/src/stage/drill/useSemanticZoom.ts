@@ -65,7 +65,7 @@ interface Candidate { id: string; key: string }
 export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap, reducedMotion: boolean): SemanticZoom {
     const [entries, setEntries] = useState<ReadonlyMap<string, NestEntry>>(() => new Map());
     const [trail, setTrail] = useState<readonly string[]>([]);
-    const codeKey = trail[trail.length - 1] ?? null;
+    const codeKey = trail.at(-1) ?? null;
     const [seqBand, setSeqBand] = useState(0);
     // An enter / out asked for and not yet in the stack: no second step until it lands.
     const pending = useRef(false);

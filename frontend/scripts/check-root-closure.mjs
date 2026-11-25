@@ -45,6 +45,9 @@
  * got easier; only the noise around it went away.
  *
  * Deliberate raises, so a name in the baseline always has an argument:
+ *   +1 file (Studio local-first) — `domains/canvas/domain/boardSnapshot.ts` holds the
+ *     snapshot parsing and shaping moved out of `localCanvasStore.ts`. Shell callers
+ *     still read local board data synchronously, and the import keeps that existing path.
  *   +1 / -8 files (2026-11-21, Worker size) — `components/legal/LazyLegalDocPreview.tsx`
  *     (~5 lines of code: one `next/dynamic(..., { ssr: false })`). It REPLACES the static
  *     edge `LegalDocModal`/`OnboardingGate` → `admin/LegalDocPreview` → `DocumentMarkdown` →

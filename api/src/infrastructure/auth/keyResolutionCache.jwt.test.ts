@@ -107,4 +107,12 @@ describe('JWT membership resolution via resolveKeyCached', () => {
     expect(loader).toHaveBeenCalledTimes(2); // the drop forced a re-load
     expect(afterInvalidate).toEqual({ ok: true, payload: { isSuperadmin: true } });
   });
+
+  it('a revoke (remove/demote) change throws a failed delete; a grant (add/create) only reports it', async () => {
+    const failing = { get: vi.fn(async () => null), put: vi.fn(), delete: vi.fn(async () => { throw new Error('KV DELETE failed'); }) };
+    const env = { AUTH_CACHE_KV: failing as unknown } as unknown as Env;
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await expect(invalidateJwtMembershipCache(env, 1, 'u', 'revoke')).rejects.toThrow('KV DELETE failed');
+    await expect(invalidateJwtMembershipCache(env, 1, 'u', 'grant')).resolves.toBeUndefined();
+  });
 });

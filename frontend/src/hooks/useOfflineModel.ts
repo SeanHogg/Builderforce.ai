@@ -18,6 +18,7 @@ import { getApiBaseUrl } from '@/lib/apiClient';
 import { loadStudio } from '@/lib/studioLoader';
 import { canvasWasmBaseUrl } from '@/lib/canvasHost';
 import { resolveOrtWasmPaths } from '@/lib/ortWasmPaths';
+import { recordedFailure } from '@/lib/reportError';
 
 export type OfflineModelState = 'checking' | 'idle' | 'downloading' | 'available' | 'error';
 
@@ -42,7 +43,7 @@ export interface UseOfflineModelResult {
 async function warmOrtWasm(): Promise<void> {
   const base = resolveOrtWasmPaths(canvasWasmBaseUrl());
   if (!base.startsWith('/')) return; // a host-served copy is the host's to cache
-  await Promise.all(ORT_WASM_FILES.map((file) => fetch(`${base}${file}`).then((res) => res.arrayBuffer()).catch(() => undefined)));
+  await Promise.all(ORT_WASM_FILES.map((file) => fetch(`${base}${file}`).then((res) => res.arrayBuffer()).catch(recordedFailure(`Caching ${file} for offline use`, undefined))));
 }
 
 export function useOfflineModel(modelId: string): UseOfflineModelResult {
@@ -69,9 +70,12 @@ export function useOfflineModel(modelId: string): UseOfflineModelResult {
 
   useEffect(() => {
     let current = true;
-    setError(null);
-    setFraction(null);
-    void refresh(() => current);
+    queueMicrotask(() => {
+      if (!current) return;
+      setError(null);
+      setFraction(null);
+      void refresh(() => current);
+    });
     return () => {
       current = false;
       abortRef.current?.abort();

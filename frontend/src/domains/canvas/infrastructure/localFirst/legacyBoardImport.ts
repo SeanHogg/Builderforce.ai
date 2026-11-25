@@ -33,7 +33,7 @@ import { writeRecord, type JournalContext } from './boardJournal';
 import { CANVAS_BOARD, CANVAS_MEDIA, legacyImportMark, mediaUrl, syncableId, type MediaPayload, type TimelinePayload } from './boardRecords';
 
 const STORAGE_PREFIX = 'builderforce:create:';
-const DATA_URL = /^data:([^;,]+)(;base64)?,(.*)$/s;
+const DATA_URL = /^data:([^;,]+)(;base64)?,([\s\S]*)$/;
 
 export interface LegacyImportOptions extends Partial<JournalContext> {
   store: LocalFirstStore;

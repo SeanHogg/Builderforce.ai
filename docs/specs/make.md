@@ -912,6 +912,15 @@ cdnPins?: string[];
 ignoredDirs?: string[];                  // file API and live sync skip these
 ```
 
+Open as of 2026-11-24: of these, only `frameAncestors` (as a single string) and the existing `dotnetBundleDir` override are in source. The rest is still to build, with these constraints:
+
+- `assetsDir` (already accepted as an alias for `distDir`): resolve explicit paths and check realpath containment for every served asset, the same way `dotnetBundle.ts` does. Prove it through a bundled host, not only `import.meta.url` dev resolution. Keep `distDir` compatible, and test the `dotnetBundleDir` override and its package fallback before changing either.
+- `frameAncestors` becomes a validated allowlist of `https:` or `vscode-webview:` origins. It always includes the launcher page origin.
+- `ignoredDirs` needs tests on both the file API and live sync.
+- `egress` is validated once, by the same read-only-origin rule as the signed web worker policy (ROADMAP, "Apps cannot declare external APIs"). The AI relay does not depend on it. It uses the host path in the W11 ai-resource contract.
+- `apiIngress`: first confirm a same-origin launcher `/api` proxy is still needed, given the shipped service-worker ingress. If it is, reuse `ApplicationSpec.ingress` and its narrowing guarantees rather than a second router.
+- `POST /__bf/report` is separate from the existing preview report route. It writes under `paths.diagnostics`.
+
 `POST /__bf/report` (`launcher/server/reportRoute.ts`) checks `reportToken`, then writes the body under the diagnostics folder from §1.1. Starters and `/preview` write `.builderforce/builderforce.json` and never a root manifest.
 
 ##### 1.4 The one resolver (VSIX)

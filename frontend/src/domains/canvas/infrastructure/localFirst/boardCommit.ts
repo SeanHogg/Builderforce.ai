@@ -22,6 +22,7 @@ import {
 } from '@builderforce/local-first';
 import { persistedGraphFromBoard, type CanvasBoard } from '../../domain/canvasBoard';
 import { writeRecord, type JournalContext } from './boardJournal';
+import { recordTabConflict } from './boardConflicts';
 import { childRecordsOf } from './boardReplica';
 import {
   CANVAS_BOARD,
@@ -31,6 +32,7 @@ import {
   diffGraphs,
   edgePayloadOf,
   objectPayloadOf,
+  samePayload,
   syncedBoardPayload,
   timelineRecordId,
   type BoardPayload,
@@ -55,6 +57,10 @@ export class BoardCommitError extends Error {
 export interface BoardCommitResult {
   written: number;
   deleted: number;
+  /** Ids another tab changed since this tab last read them: kept as conflicts, not overwritten. */
+  conflicts: string[];
+  /** The version of every row this commit wrote: the caller's `baseVersions` for its next commit. */
+  versions: Record<string, number>;
 }
 
 const EMPTY_BOARD: CanvasBoard = { nodes: [], edges: [] };
@@ -74,7 +80,7 @@ async function writeHeader(
   payload: BoardPayload,
   destination: EntityDestination,
 ): Promise<LocalRecord<BoardPayload>> {
-  const syncedChanged = !existing || JSON.stringify(syncedBoardPayload(existing.payload)) !== JSON.stringify(syncedBoardPayload(payload));
+  const syncedChanged = !existing || !samePayload(syncedBoardPayload(existing.payload), syncedBoardPayload(payload));
   return writeRecord(tx, ctx, existing, {
     entityType: CANVAS_BOARD,
     id: boardId,
@@ -85,6 +91,24 @@ async function writeHeader(
   });
 }
 
+/**
+ * Whether ANOTHER tab changed the stored record since this tab last read it: its version is not the
+ * one this tab holds (`baseVersion`), and it is not already what this tab proposes. A tab that
+ * passes no version for a row (it added the row, or does not track versions) never conflicts.
+ */
+function editedByAnotherTab(existing: LocalRecord, baseVersion: number | undefined, proposed: unknown): boolean {
+  return baseVersion !== undefined && existing.version !== baseVersion && !existing.deletedAt && !samePayload(existing.payload, proposed);
+}
+
+export interface CommitOptions {
+  /**
+   * The record versions this tab holds (`BoardReplica.versions`, then `BoardCommitResult.versions`
+   * after each commit). A row whose stored version moved on is another tab's edit: it is kept as a
+   * conflict instead of being overwritten.
+   */
+  baseVersions?: Readonly<Record<string, number>>;
+}
+
 /** Write a diff of objects and connections under `boardId`; returns how many rows it wrote and tombstoned. */
 async function writeGraphDiff(
   tx: LocalFirstTransaction,
@@ -92,20 +116,25 @@ async function writeGraphDiff(
   header: LocalRecord<BoardPayload>,
   prev: CanvasBoard,
   next: CanvasBoard,
+  options: CommitOptions = {},
 ): Promise<BoardCommitResult> {
   const boardId = header.id;
   const diff = diffGraphs(persistedGraphFromBoard(prev), persistedGraphFromBoard(next));
-  const result: BoardCommitResult = { written: 0, deleted: 0 };
-  for (const object of diff.upsertObjects) {
-    const existing = await tx.get<ObjectPayload>(CANVAS_OBJECT, object.id);
-    await writeRecord(tx, ctx, existing, { entityType: CANVAS_OBJECT, id: object.id, payload: objectPayloadOf(boardId, object), destination: header.destination, boardId });
+  const result: BoardCommitResult = { written: 0, deleted: 0, conflicts: [], versions: {} };
+  /** One upsert: written, or kept as a conflict when another tab got there first. */
+  const upsert = async <T>(entityType: typeof CANVAS_OBJECT | typeof CANVAS_EDGE, id: string, proposed: T): Promise<void> => {
+    const existing = await tx.get<T>(entityType, id);
+    if (existing && editedByAnotherTab(existing, options.baseVersions?.[id], proposed)) {
+      await recordTabConflict(tx, ctx, existing, proposed);
+      result.conflicts.push(id);
+      return;
+    }
+    const written = await writeRecord(tx, ctx, existing, { entityType, id, payload: proposed, destination: header.destination, boardId });
+    result.versions[id] = written.version;
     result.written += 1;
-  }
-  for (const connection of diff.upsertConnections) {
-    const existing = await tx.get<EdgePayload>(CANVAS_EDGE, connection.id);
-    await writeRecord(tx, ctx, existing, { entityType: CANVAS_EDGE, id: connection.id, payload: edgePayloadOf(boardId, connection), destination: header.destination, boardId });
-    result.written += 1;
-  }
+  };
+  for (const object of diff.upsertObjects) await upsert(CANVAS_OBJECT, object.id, objectPayloadOf(boardId, object));
+  for (const connection of diff.upsertConnections) await upsert(CANVAS_EDGE, connection.id, edgePayloadOf(boardId, connection));
   // Edges first: nothing may point at an object the same commit removes.
   for (const [type, ids] of [[CANVAS_EDGE, diff.deleteConnectionIds], [CANVAS_OBJECT, diff.deleteObjectIds]] as const) {
     for (const id of ids) {
@@ -165,8 +194,8 @@ export function createBoard(ctx: BoardWriteContext, input: NewBoardInput): Promi
 }
 
 /** The autosave: ONE transaction writing exactly what changed between `prev` and `next`. */
-export function commitBoardDiff(ctx: BoardWriteContext, boardId: string, prev: CanvasBoard, next: CanvasBoard): Promise<BoardCommitResult> {
-  return ctx.store.transact(async (tx) => writeGraphDiff(tx, ctx, await liveHeader(tx, boardId), prev, next));
+export function commitBoardDiff(ctx: BoardWriteContext, boardId: string, prev: CanvasBoard, next: CanvasBoard, options: CommitOptions = {}): Promise<BoardCommitResult> {
+  return ctx.store.transact(async (tx) => writeGraphDiff(tx, ctx, await liveHeader(tx, boardId), prev, next, options));
 }
 
 /** Rename, file, or change the mode of a board — and carry this device's viewport, which is never journaled. */

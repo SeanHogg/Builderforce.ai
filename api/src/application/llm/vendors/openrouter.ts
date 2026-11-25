@@ -35,12 +35,9 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   // an honest 404 rather than a silent swap to another vendor's model.
   { id: 'nvidia/nemotron-3-ultra-550b-a55b:free',    tier: 'FREE', weights: 'nemotron-3-ultra-550b-a55b', label: 'Nemotron 3 Ultra 550B (Free)',       brand: 'NVIDIA'    },
   { id: 'google/gemma-4-26b-a4b-it:free',            tier: 'FREE', weights: 'gemma-4-26b-a4b-it', label: 'Gemma 4 26B A4B (Free)',             brand: 'Google',    capabilities: ['vision'] },
-  { id: 'nvidia/nemotron-3-super-120b-a12b:free',    tier: 'FREE', weights: 'nemotron-3-super-120b-a12b', label: 'Nemotron 3 Super 120B (Free)',       brand: 'NVIDIA'    },
-  { id: 'poolside/laguna-s-2.1:free',                tier: 'FREE', label: 'Laguna S 2.1 (Free)',                 brand: 'Poolside'  },
+  { id: 'nvidia/nemotron-3.5-super-vl:free', tier: 'FREE', label: 'Nemotron 3.5 Super VL (Free)', brand: 'NVIDIA', capabilities: ['vision'], supersedes: ['nvidia/nemotron-3-super-120b-a12b:free'] },
   { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', tier: 'FREE', label: 'Nemotron 3 Nano Omni 30B Reasoning (Free)', brand: 'NVIDIA' },
   { id: 'google/gemma-4-31b-it:free',                tier: 'FREE', weights: 'gemma-4-31b-it', label: 'Gemma 4 31B (Free)',                  brand: 'Google',    supersedes: ['google/gemma-3-27b-it:free'] },
-  { id: 'poolside/laguna-xs-2.1:free',               tier: 'FREE', label: 'Laguna XS 2.1 (Free)',                brand: 'Poolside'   },
-  { id: 'cohere/north-mini-code:free',               tier: 'FREE', label: 'North Mini Code (Free)',              brand: 'Cohere'     },
   { id: 'nvidia/nemotron-3.5-lightning:free',        tier: 'FREE', label: 'Nemotron 3.5 Lightning (Free)',      brand: 'NVIDIA'     },
   // Free slugs retired on 2026-10-04 with no free successor (each still exists PAID,
   // and mapping free → paid is a tier change, so they are dropped, not superseded):
@@ -58,7 +55,7 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'z-ai/glm-4.7',                              tier: 'STANDARD', label: 'GLM 4.7',                  brand: 'Z.AI'      },
   { id: 'openai/gpt-5-nano',                         tier: 'STANDARD', label: 'GPT-5 Nano',               brand: 'OpenAI'    },
   // Cheap, top-ranked agentic coders (verified live; cost ~$0.1-0.3/M).
-  { id: 'xiaomi/mimo-v2.5',                          tier: 'STANDARD', label: 'MiMo-V2.5 (Programming #1)', brand: 'Xiaomi'  },
+  { id: 'xiaomi/mimo-v2.6-flash', tier: 'STANDARD', label: 'MiMo V2.6 Flash', brand: 'Xiaomi', supersedes: ['xiaomi/mimo-v2.5'] },
   { id: 'deepseek/deepseek-v4-flash',                tier: 'STANDARD', weights: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash',        brand: 'DeepSeek'  },
 
   // ── STANDARD tier (cont.) — cheap current-gen frontier for routing/short tasks
@@ -71,7 +68,6 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'anthropic/claude-sonnet-5.5',               tier: 'PREMIUM', label: 'Claude Sonnet 5.5',     brand: 'Anthropic', capabilities: ['vision'],
     supersedes: ['anthropic/claude-sonnet-5', 'anthropic/claude-sonnet-4-6', 'anthropic/claude-sonnet-4-5', 'anthropic/claude-sonnet-5-5'] },
   { id: 'openai/gpt-4.1',                            tier: 'PREMIUM', label: 'GPT-4.1',               brand: 'OpenAI',    capabilities: ['vision'] },
-  { id: 'openai/o4-mini',                            tier: 'PREMIUM', label: 'o4-mini (reasoning)',   brand: 'OpenAI'    },
   { id: 'google/gemini-2.5-pro',                     tier: 'PREMIUM', weights: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro',        brand: 'Google',    capabilities: ['vision'] },
   { id: 'qwen/qwen3.7-plus',                         tier: 'PREMIUM', label: 'Qwen3.7 Plus (agentic + vision)', brand: 'Qwen' },
   { id: 'x-ai/grok-4.20',                            tier: 'PREMIUM', label: 'Grok 4.20',             brand: 'xAI'       },

@@ -136,6 +136,13 @@ function parseEntityRef(v) {
 }
 
 // ../packages/local-first/src/records.ts
+var CANVAS_ENTITY_TYPES = [
+  "canvas-board",
+  "canvas-object",
+  "canvas-edge",
+  "canvas-timeline",
+  "canvas-media"
+];
 var UNBOUND_DESTINATION = { kind: "unbound" };
 function destinationKey(destination) {
   if (destination.kind === "unbound") return "unbound";
@@ -266,6 +273,28 @@ function newLocalRecord(input) {
 }
 
 // ../packages/local-first/src/dependencyGraph.ts
+var KNOWN_TYPES = /* @__PURE__ */ new Set([
+  "project",
+  "ticket",
+  "chat",
+  "message",
+  "execution",
+  "step",
+  "approval",
+  "audit-definition",
+  "audit-run",
+  "audit-finding",
+  "change-set",
+  "memory-fact",
+  "attachment-manifest",
+  "policy-snapshot",
+  "remediation",
+  "usage",
+  "run-outcome",
+  "chat-ticket-link",
+  "run-delta",
+  ...CANVAS_ENTITY_TYPES
+]);
 var bySequence = (a, b) => a.localSequence - b.localSequence;
 
 // ../packages/local-first/src/pendingQueries.ts
@@ -21563,4 +21592,4 @@ export {
   computeBrainDiagnostics,
   buildBrainTriageReport
 };
-//# sourceMappingURL=chunk-VM5EOBRX.mjs.map
+//# sourceMappingURL=chunk-J5IX5IAS.mjs.map

@@ -1,4 +1,4 @@
-"use strict";Object.defineProperty(exports, "__esModule", {value: true}); function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } } function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return rhsFn(); } } function _optionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = fn(value); } else if (op === 'call' || op === 'optionalCall') { value = fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; } async function _asyncOptionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = await fn(value); } else if (op === 'call' || op === 'optionalCall') { value = await fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; } var _class; var _class2; var _class3; var _class4; var _class5; var _class6;
+"use strict";Object.defineProperty(exports, "__esModule", {value: true}); function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } } function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return rhsFn(); } } async function _asyncNullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return await rhsFn(); } } function _optionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = fn(value); } else if (op === 'call' || op === 'optionalCall') { value = fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; } async function _asyncOptionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = await fn(value); } else if (op === 'call' || op === 'optionalCall') { value = await fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; } var _class; var _class2; var _class3; var _class4; var _class5; var _class6;
 
 
 var _chunkVKVEFIZWcjs = require('./chunk-VKVEFIZW.cjs');
@@ -1677,6 +1677,11 @@ function weightStore() {
 // src/engine/weight-cache.ts
 var DEFAULT_R2_BASE = "https://api.builderforce.ai/api/studio/weights";
 var HF_BASE = "https://huggingface.co";
+var DEFAULT_WEIGHT_SOURCES = ["r2-proxy", "huggingface-cdn"];
+function deriveR2Base(baseUrl) {
+  if (!baseUrl) return void 0;
+  return `${baseUrl.replace(/\/$/, "")}/api/studio/weights`;
+}
 async function getOrFetchWeight(opts) {
   const store = weightStore();
   const cached = await store.read(opts.cacheKey);
@@ -1740,6 +1745,48 @@ function resolveSource(source, opts) {
   };
 }
 
+// src/engine/offline/tokenizer-store.ts
+
+var TOKENIZER_FILES = ["tokenizer.json", "tokenizer_config.json"];
+function tokenizerCacheKey(repo, file) {
+  return `tokenizer/${repo}/${file}`;
+}
+async function isTokenizerStored(repo) {
+  const store = weightStore();
+  const have = await Promise.all(TOKENIZER_FILES.map((f) => store.has(tokenizerCacheKey(repo, f))));
+  return have.every(Boolean);
+}
+async function loadStoredTokenizer(repo) {
+  const store = weightStore();
+  const [json, config] = await Promise.all(TOKENIZER_FILES.map((f) => store.read(tokenizerCacheKey(repo, f))));
+  if (!json || !config) return null;
+  try {
+    const decode = (buf) => JSON.parse(new TextDecoder().decode(buf));
+    return new (0, _transformers.CLIPTokenizer)(decode(json), decode(config));
+  } catch (e12) {
+    return null;
+  }
+}
+async function storeTokenizerFiles(repo, signal) {
+  const store = weightStore();
+  let bytes = 0;
+  for (const file of TOKENIZER_FILES) {
+    const key = tokenizerCacheKey(repo, file);
+    let buf = await store.read(key);
+    if (!buf) {
+      const url = `${HF_BASE}/${repo}/resolve/main/${file}`;
+      const res = await fetch(url, { signal });
+      if (!res.ok) throw new Error(`tokenizer ${url} \u2192 HTTP ${res.status}`);
+      buf = await res.arrayBuffer();
+      if (!await store.write(key, buf)) {
+        throw new Error(`The tokenizer file ${file} could not be saved for offline use.`);
+      }
+    }
+    bytes += buf.byteLength;
+  }
+  return bytes;
+}
+
 // src/engine/residency/session-residency.ts
 var SESSION_COMPONENTS = ["text_encoder", "unet", "vae_decoder"];
 var MIB = 1024 * 1024;
@@ -1801,7 +1848,7 @@ async function releaseQuietly(session) {
   if (!session) return;
   try {
     await session.release();
-  } catch (e12) {
+  } catch (e13) {
   }
 }
 
@@ -2567,7 +2614,7 @@ var DiffusionEngine = (_class2 = class {
     }
     try {
       reportProgress(`Loading CLIP tokenizer (${d.tokenizerRepo})\u2026`, onProgress);
-      this.tokenizer = await _transformers.AutoTokenizer.from_pretrained(d.tokenizerRepo);
+      this.tokenizer = await _asyncNullishCoalesce(await loadStoredTokenizer(d.tokenizerRepo), async () => ( await _transformers.AutoTokenizer.from_pretrained(d.tokenizerRepo)));
       reportProgress("Tokenizer ready.", onProgress);
       reportProgress(`Loading ${d.id} weights (UNet + text-encoder + VAE)\u2026`, onProgress);
       const fetchWeight = (file) => this.fetchWeight(file);
@@ -2607,7 +2654,7 @@ var DiffusionEngine = (_class2 = class {
     if (this.opts.probed.kind === "webgpu" && this.opts.probed.gpuDevice) {
       try {
         this.opts.probed.gpuDevice.destroy();
-      } catch (e13) {
+      } catch (e14) {
       }
     }
   }
@@ -3154,7 +3201,7 @@ async function selectiveScanStep(a, device) {
   if (device && a.channels * a.order > 0) {
     try {
       return await selectiveScanStepGpu(device, a);
-    } catch (e14) {
+    } catch (e15) {
     }
   }
   return selectiveScanStepCpu(a);
@@ -3703,13 +3750,13 @@ async function structuredCall(client, args) {
   if (!text || typeof text !== "string") return null;
   try {
     return JSON.parse(text);
-  } catch (e15) {
+  } catch (e16) {
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     if (start !== -1 && end > start) {
       try {
         return JSON.parse(text.slice(start, end + 1));
-      } catch (e16) {
+      } catch (e17) {
         return null;
       }
     }
@@ -3784,7 +3831,7 @@ ${characterBlock}`
     const verdict = parseVerdict(typeof text === "string" ? text : null);
     if (!verdict) return permissive();
     return { ok: verdict.score >= threshold, score: verdict.score, issues: verdict.issues };
-  } catch (e17) {
+  } catch (e18) {
     return permissive();
   }
 }
@@ -3796,13 +3843,13 @@ function parseVerdict(text) {
   let obj;
   try {
     obj = JSON.parse(text);
-  } catch (e18) {
+  } catch (e19) {
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     if (start === -1 || end <= start) return null;
     try {
       obj = JSON.parse(text.slice(start, end + 1));
-    } catch (e19) {
+    } catch (e20) {
       return null;
     }
   }
@@ -3883,7 +3930,7 @@ async function firstSupportedCodec(candidates, opts, probe) {
         framerate: opts.fps
       });
       if (_optionalChain([res, 'optionalAccess', _139 => _139.supported])) return codec;
-    } catch (e20) {
+    } catch (e21) {
     }
   }
   return null;
@@ -4154,7 +4201,6 @@ async function generateWebDitClip(bundle, args) {
 // src/engine/video-engine.ts
 var DEFAULT_WIDTH = 512;
 var DEFAULT_HEIGHT = 512;
-var DEFAULT_WEIGHT_SOURCES = ["r2-proxy", "huggingface-cdn"];
 var DEFAULT_COHERENCE = "prompt-bias";
 var DEFAULT_COHERENCE_STRENGTH = 0.5;
 var DEFAULT_MOTION_AMOUNT = 0.15;
@@ -4894,7 +4940,7 @@ var VideoEngine = class _VideoEngine {
       );
       try {
         clip.frames[i].close();
-      } catch (e21) {
+      } catch (e22) {
       }
       frames[i] = bitmap;
       muxFrames[i] = { rgba };
@@ -4950,7 +4996,7 @@ var VideoEngine = class _VideoEngine {
         passThreshold: ctx.passThreshold,
         signal: ctx.signal
       });
-    } catch (e22) {
+    } catch (e23) {
       return null;
     }
   }
@@ -4995,7 +5041,7 @@ function closeClip(clip) {
   for (const bm of clip.frames) {
     try {
       bm.close();
-    } catch (e23) {
+    } catch (e24) {
     }
   }
 }
@@ -5020,10 +5066,6 @@ async function rgbaToDataUrl(rgba, width, height) {
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   return `data:image/jpeg;base64,${btoa(binary)}`;
 }
-function deriveR2Base(baseUrl) {
-  if (!baseUrl) return void 0;
-  return `${baseUrl.replace(/\/$/, "")}/api/studio/weights`;
-}
 function trimTimesteps(defaults, steps) {
   if (steps >= defaults.length) return defaults;
   if (steps <= 1) return [defaults[0]];
@@ -5033,6 +5075,106 @@ function trimTimesteps(defaults, steps) {
     out.push(defaults[idx]);
   }
   return out;
+}
+
+// src/engine/offline/model-offline.ts
+var manifestKey = (model) => `offline/${model}/manifest.json`;
+var weightKey = (model, file) => `${model}/${file}`;
+async function readManifest(model) {
+  const buf = await weightStore().read(manifestKey(model));
+  if (!buf) return null;
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(buf));
+    return _optionalChain([parsed, 'optionalAccess', _172 => _172.v]) === 1 && parsed.sizes ? parsed : null;
+  } catch (e25) {
+    return null;
+  }
+}
+function abortError() {
+  return new DOMException("Offline download cancelled", "AbortError");
+}
+async function getModelOfflineStatus(model) {
+  const descriptor = MODEL_REGISTRY[model];
+  if (descriptor.engine !== "lcm-diffusion") return { available: false, sizeBytes: null };
+  const store = weightStore();
+  const files = modelWeightFiles(descriptor);
+  const stored = await Promise.all(files.map((f) => store.has(weightKey(model, f))));
+  const available = stored.every(Boolean) && await isTokenizerStored(descriptor.tokenizerRepo);
+  if (!available) return { available: false, sizeBytes: null };
+  const manifest = await readManifest(model);
+  const known = manifest && files.every((f) => manifest.sizes[weightKey(model, f)] !== void 0);
+  const sizeBytes = known ? files.reduce((sum, f) => sum + manifest.sizes[weightKey(model, f)], manifest.tokenizerBytes) : null;
+  return { available: true, sizeBytes };
+}
+async function isModelAvailableOffline(model) {
+  return (await getModelOfflineStatus(model)).available;
+}
+async function prepareModelOffline(opts) {
+  const { model, signal } = opts;
+  const descriptor = MODEL_REGISTRY[model];
+  if (descriptor.engine !== "lcm-diffusion") {
+    throw new Error(`Model '${model}' cannot be made available offline yet.`);
+  }
+  const store = weightStore();
+  if (!store.canPersist()) throw new Error("Offline storage (IndexedDB) is not available in this browser.");
+  const source = {
+    apiKey: opts.authToken,
+    weightSources: _nullishCoalesce(opts.weightSources, () => ( DEFAULT_WEIGHT_SOURCES)),
+    r2Base: deriveR2Base(opts.baseUrl)
+  };
+  const files = modelWeightFiles(descriptor);
+  const previous = await readManifest(model);
+  const sizes = {};
+  for (const f of files) {
+    const known = _optionalChain([previous, 'optionalAccess', _173 => _173.sizes, 'access', _174 => _174[weightKey(model, f)]]);
+    if (known !== void 0) sizes[weightKey(model, f)] = known;
+  }
+  let doneBytes = 0;
+  for (let i = 0; i < files.length; i++) {
+    if (_optionalChain([signal, 'optionalAccess', _175 => _175.aborted])) throw abortError();
+    const file = files[i];
+    const key = weightKey(model, file);
+    const report = (current, currentTotal) => {
+      const projected = files.map((f) => sizes[weightKey(model, f)]);
+      const totalBytes = currentTotal !== null && projected.every((s, idx) => s !== void 0 || idx === i) ? projected.reduce((sum, s, idx) => sum + (idx === i ? currentTotal : s), 0) : null;
+      _optionalChain([opts, 'access', _176 => _176.onProgress, 'optionalCall', _177 => _177({ loadedBytes: doneBytes + current, totalBytes, file, fileIndex: i + 1, fileCount: files.length })]);
+    };
+    if (await store.has(key)) {
+      const size = _nullishCoalesce(sizes[key], () => ( 0));
+      doneBytes += size;
+      report(0, size || null);
+      continue;
+    }
+    let persistFailed = false;
+    let buffer;
+    try {
+      buffer = await getOrFetchWeight({
+        ...weightRequest(descriptor, file, source),
+        signal,
+        onProgress: report,
+        onPersistFailed: () => {
+          persistFailed = true;
+        }
+      });
+    } catch (err) {
+      if (_optionalChain([signal, 'optionalAccess', _178 => _178.aborted])) throw abortError();
+      throw err;
+    }
+    if (persistFailed) throw new Error(`${file} could not be saved for offline use (storage full or blocked).`);
+    sizes[key] = buffer.byteLength;
+    doneBytes += buffer.byteLength;
+  }
+  if (_optionalChain([signal, 'optionalAccess', _179 => _179.aborted])) throw abortError();
+  let tokenizerBytes;
+  try {
+    tokenizerBytes = await storeTokenizerFiles(descriptor.tokenizerRepo, signal);
+  } catch (err) {
+    if (_optionalChain([signal, 'optionalAccess', _180 => _180.aborted])) throw abortError();
+    throw err;
+  }
+  const manifest = { v: 1, sizes, tokenizerBytes };
+  const bytes = new TextEncoder().encode(JSON.stringify(manifest));
+  await store.write(manifestKey(model), bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
 }
 
 // src/engine/voice/audio-frames.ts
@@ -5750,7 +5892,7 @@ function markSynthesizedPcm(samples, sampleRate) {
   const watermarkId = newWatermarkId();
   try {
     return { pcm: embedWatermark(samples, sampleRate, watermarkId), watermarkId };
-  } catch (e24) {
+  } catch (e26) {
     return { pcm: samples, watermarkId: null };
   }
 }
@@ -5781,14 +5923,14 @@ var VoiceCloneEngine = class {
   /** Speak `text` in `speaker`'s voice. */
   async synthesize(options) {
     const activeDevice = await this.resolveDevice(options.device);
-    _optionalChain([options, 'access', _172 => _172.signal, 'optionalAccess', _173 => _173.throwIfAborted, 'call', _174 => _174()]);
+    _optionalChain([options, 'access', _181 => _181.signal, 'optionalAccess', _182 => _182.throwIfAborted, 'call', _183 => _183()]);
     const text = tokenizeText(options.text);
     const { codec, wordTimestamps } = this.acoustic.generate(
       text,
       options.speaker,
       _nullishCoalesce(options.speed, () => ( 1))
     );
-    _optionalChain([options, 'access', _175 => _175.signal, 'optionalAccess', _176 => _176.throwIfAborted, 'call', _177 => _177()]);
+    _optionalChain([options, 'access', _184 => _184.signal, 'optionalAccess', _185 => _185.throwIfAborted, 'call', _186 => _186()]);
     const { samples } = this.codec.decode(codec);
     peakNormalize(samples, 0.95);
     const durationMs = Math.round(samples.length / this.sampleRate * 1e3);
@@ -5808,7 +5950,7 @@ var VoiceCloneEngine = class {
   async resolveDevice(requested) {
     if (requested) return requested;
     const probed = await _chunkVKVEFIZWcjs.probeDevice.call(void 0, "auto");
-    return _nullishCoalesce(_optionalChain([probed, 'optionalAccess', _178 => _178.kind]), () => ( "cpu"));
+    return _nullishCoalesce(_optionalChain([probed, 'optionalAccess', _187 => _187.kind]), () => ( "cpu"));
   }
 };
 function peakNormalize(samples, target) {
@@ -5941,5 +6083,8 @@ function writeAscii(view, offset, text) {
 
 
 
-exports.CAMERA_MOVES = CAMERA_MOVES; exports.MODEL_REGISTRY = MODEL_REGISTRY; exports.NeuralCodec = NeuralCodec; exports.SSMAcousticModel = SSMAcousticModel; exports.SSMVoiceProvider = SSMVoiceProvider; exports.TEXT_VOCAB_SIZE = TEXT_VOCAB_SIZE; exports.UnsupportedVideoEncodingError = UnsupportedVideoEncodingError; exports.VideoEngine = VideoEngine; exports.VoiceCloneEngine = VoiceCloneEngine; exports.buildInterpolatedSequence = buildInterpolatedSequence; exports.cameraMoveToMotion = cameraMoveToMotion; exports.composeShotPrompt = composeShotPrompt; exports.configureOnnxRuntime = configureOnnxRuntime; exports.cosineSimilarity = cosineSimilarity; exports.directorPass = directorPass; exports.encodeSpeaker = encodeSpeaker; exports.encodeWav = encodeWav; exports.encodeWavBlob = encodeWavBlob; exports.estimateBlockMotion = estimateBlockMotion; exports.hasWebGPUSupport = _chunkVKVEFIZWcjs.hasWebGPUSupport; exports.interpolateFrames = interpolateFrames; exports.luma = luma; exports.melSpectrogram = melSpectrogram; exports.melToWaveform = melToWaveform; exports.normaliseShotBudget = normaliseShotBudget; exports.planKeyframeIndices = planKeyframeIndices; exports.planScene = planScene; exports.probeDevice = _chunkVKVEFIZWcjs.probeDevice; exports.resolveVoiceProvider = resolveVoiceProvider; exports.setOrtWasmBase = setOrtWasmBase; exports.shotPlannerPass = shotPlannerPass; exports.slerp = slerp; exports.storyboardFrameCount = storyboardFrameCount; exports.tokenizeText = tokenizeText; exports.validateFrame = validateFrame; exports.verifySpeaker = verifySpeaker; exports.videoExtensionForMime = videoExtensionForMime;
+
+
+
+exports.CAMERA_MOVES = CAMERA_MOVES; exports.MODEL_REGISTRY = MODEL_REGISTRY; exports.NeuralCodec = NeuralCodec; exports.SSMAcousticModel = SSMAcousticModel; exports.SSMVoiceProvider = SSMVoiceProvider; exports.TEXT_VOCAB_SIZE = TEXT_VOCAB_SIZE; exports.UnsupportedVideoEncodingError = UnsupportedVideoEncodingError; exports.VideoEngine = VideoEngine; exports.VoiceCloneEngine = VoiceCloneEngine; exports.buildInterpolatedSequence = buildInterpolatedSequence; exports.cameraMoveToMotion = cameraMoveToMotion; exports.composeShotPrompt = composeShotPrompt; exports.configureOnnxRuntime = configureOnnxRuntime; exports.cosineSimilarity = cosineSimilarity; exports.directorPass = directorPass; exports.encodeSpeaker = encodeSpeaker; exports.encodeWav = encodeWav; exports.encodeWavBlob = encodeWavBlob; exports.estimateBlockMotion = estimateBlockMotion; exports.getModelOfflineStatus = getModelOfflineStatus; exports.hasWebGPUSupport = _chunkVKVEFIZWcjs.hasWebGPUSupport; exports.interpolateFrames = interpolateFrames; exports.isModelAvailableOffline = isModelAvailableOffline; exports.luma = luma; exports.melSpectrogram = melSpectrogram; exports.melToWaveform = melToWaveform; exports.normaliseShotBudget = normaliseShotBudget; exports.planKeyframeIndices = planKeyframeIndices; exports.planScene = planScene; exports.prepareModelOffline = prepareModelOffline; exports.probeDevice = _chunkVKVEFIZWcjs.probeDevice; exports.resolveVoiceProvider = resolveVoiceProvider; exports.setOrtWasmBase = setOrtWasmBase; exports.shotPlannerPass = shotPlannerPass; exports.slerp = slerp; exports.storyboardFrameCount = storyboardFrameCount; exports.tokenizeText = tokenizeText; exports.validateFrame = validateFrame; exports.verifySpeaker = verifySpeaker; exports.videoExtensionForMime = videoExtensionForMime;
 //# sourceMappingURL=index.cjs.map

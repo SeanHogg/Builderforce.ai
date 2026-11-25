@@ -20,7 +20,7 @@
  * camera — a viewport is the device's own and is never merged.
  */
 
-import type { Db, Tx } from '../../../infrastructure/database/connection';
+import { inSavepoint, type Db, type Tx } from '../../../infrastructure/database/connection';
 import { isUniqueViolation } from '../../../infrastructure/database/uniqueViolation';
 import { normalizeChatMode, type ChatMode } from '../../brain/chatMode';
 import { creationSessionQuotaError } from '../../../domain/tenant/creationSessionQuota';
@@ -103,7 +103,7 @@ async function createBoard(
   const quota = await ports.sessionQuota(db, tenantId, userId);
   if (!quota.allowed) return rejected(creationSessionQuotaError(quota).code);
   try {
-    await tx.transaction(async (savepoint) => {
+    await inSavepoint(tx, async (savepoint) => {
       const writes = newCreationSessionStatements(savepoint as unknown as Db, {
         sessionId: id,
         tenantId,

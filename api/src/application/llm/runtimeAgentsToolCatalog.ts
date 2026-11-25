@@ -14,6 +14,7 @@
  *
  * Every refusal is `{ ok: false, code, error, … }` with a stable `code` the model can act on.
  */
+import { advertisedName } from './toolNaming';
 import { ENV_TOOL_PREFIX } from '@seanhogg/builderforce-webcontainers-core';
 import {
   AGENT_ROLE_PATTERN,
@@ -250,7 +251,7 @@ export function createRuntimeAgentsTools(deps: RuntimeAgentsToolDeps): BuiltinTo
       mutates: false,
       description:
         "List the agents declared in the project's app manifest (builderforce.json): each id, its role and its tool allowlist. " +
-        'Declare a new one with app_manifest.add_agent; start one with runtime.agents.start.',
+        `Declare a new one with ${advertisedName('app_manifest.add_agent')}; start one with ${advertisedName('runtime.agents.start')}.`,
       parameters: listParameters,
       run: guarded('runtime.agents.list', listParameters, async (ctx, _a, projectId) => {
         const loaded = await loadManifest(files, ctx, projectId);

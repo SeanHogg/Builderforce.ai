@@ -30,11 +30,11 @@ import {
 } from '@builderforce/local-first';
 import {
   createIndexedDbLocalFirstStore,
-  createIndexedDbSyncLease,
   type IndexedDbLocalFirstStore,
 } from '@builderforce/local-first/indexed-db';
 import type { SyncLease } from '@builderforce/local-first';
 import { readLocal, writeLocal } from '../storage';
+import { createWebSyncLease } from './webSyncLease';
 
 export const WEB_LOCAL_FIRST_DB_NAME = 'builderforce-local-first';
 
@@ -85,7 +85,11 @@ export interface WebLocalFirstStoreOptions {
 export interface WebLocalFirstStoreHandle {
   /** The durable store, or undefined when `storage.state` is not `durable`. */
   store?: IndexedDbLocalFirstStore;
-  /** The cross-tab ownership lease for sync, backed by the same database. */
+  /**
+   * The cross-tab ownership lease for sync: Web Locks across tabs, fenced within one. It is NOT the
+   * store's own partition lease (`createIndexedDbSyncLease`): holding that for a whole sync run
+   * starves the coordinator's own `transact` on the same partition (`local_first_store_busy`).
+   */
   lease?: SyncLease;
   storage: WebLocalFirstStorageStatus;
   deviceId: string;
@@ -146,7 +150,7 @@ export async function openWebLocalFirstStore(options: WebLocalFirstStoreOptions 
 
   return {
     store,
-    lease: createIndexedDbSyncLease(storeOptions),
+    lease: createWebSyncLease({ deviceId }),
     storage: { state: 'durable', persisted },
     deviceId,
     destination,

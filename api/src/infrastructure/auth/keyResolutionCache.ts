@@ -40,7 +40,7 @@
  */
 
 import type { Env } from '../../env';
-import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached, invalidateCachedStrict, peekCached, setCached } from '../cache/readThroughCache';
+import { INVALIDATE_WITH_LKG, LATE_WRITE_RECHECK_MS, OUTAGE_STALE_TTL_SECONDS, invalidateCachedStrictInBackground, getOrSetCached, invalidateCached, invalidateCachedStrict, peekCached, setCached } from '../cache/readThroughCache';
 
 /** 365 days. Long-lived because mutations invalidate explicitly. */
 const TTL_SECONDS = 365 * 24 * 60 * 60;
@@ -142,7 +142,8 @@ export async function resolveKeyCached(
  * entry for up to TTL_SECONDS.
  */
 export async function invalidateKeyCache(env: Env, keyType: KeyCacheType, hash: string): Promise<void> {
-  await invalidateCached(env, keyCacheKey(keyType, hash));
+  // Only the jwt regime reads with `staleOnUnavailableSeconds`, so only it has an lkg copy.
+  await invalidateCached(env, keyCacheKey(keyType, hash), keyType === 'jwt' ? INVALIDATE_WITH_LKG : undefined);
 }
 
 /**
@@ -175,8 +176,19 @@ export function jwtMembershipHash(tenantId: number, userId: string): string {
  * fast-path: wire it into a membership mutation when you want the change to
  * take effect immediately instead of after `JWT_TTL_SECONDS`. Safe to no-op.
  */
-export async function invalidateJwtMembershipCache(env: Env, tenantId: number, userId: string): Promise<void> {
-  // strict: this entry is served as last-known-good through a database outage, so a removed
-  // or demoted member whose delete failed must surface, not keep access for days.
-  await invalidateCachedStrict(env, keyCacheKey('jwt', jwtMembershipHash(tenantId, userId)));
+export async function invalidateJwtMembershipCache(
+  env: Env,
+  tenantId: number,
+  userId: string,
+  /** `revoke` (remove / deactivate / demote): STRICT — the entry is served as last-known-good
+   *  through a database outage, so a failed delete must surface, not leave access for days.
+   *  `grant` (add / create): a stale entry only under-grants, so a failed delete is reported. */
+  change: 'grant' | 'revoke' = 'revoke',
+): Promise<void> {
+  const key = keyCacheKey('jwt', jwtMembershipHash(tenantId, userId));
+  if (change === 'revoke') {
+    await invalidateCachedStrict(env, key);
+    // Closes the cross-isolate late-write race (see LATE_WRITE_RECHECK_MS).
+    invalidateCachedStrictInBackground(env, key, LATE_WRITE_RECHECK_MS);
+  } else await invalidateCached(env, key, INVALIDATE_WITH_LKG);
 }

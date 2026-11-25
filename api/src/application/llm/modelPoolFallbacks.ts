@@ -104,7 +104,7 @@ export const CHEAPEST_PAID_CODER = 'deepseek/deepseek-v4-flash'; // $0.10/$0.20
  */
 export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = leadPoolWithVendor([
   CHEAPEST_PAID_CODER,           // $0.10/$0.20 — cheapest reliable paid coder (OpenRouter)
-  'xiaomi/mimo-v2.5',            // $0.14/$0.28 — OpenRouter Programming #1
+  'xiaomi/mimo-v2.6-flash',            // $0.14/$0.28 — OpenRouter Programming #1
   // Cloudflare Workers AI coders — FREE up to the daily neuron allowance; `leadPoolWithVendor`
   // floats all of these to the head so the free neurons are spent before any metered coder.
   // Ordered FAST-FIRST behind a big-window lead: glm-4.7-flash (128K) leads — it fits the
@@ -165,7 +165,7 @@ export const PREMIUM_FALLBACK_MODELS: readonly string[] = [
  * `paid_overflow_daily_cap`).
  *
  * By-id detection is deliberately conservative here: the *stronger* coding-floor
- * coders (`xiaomi/mimo-v2.5`, `anthropic/claude-sonnet-5`) are Pro plan-pool
+ * coders (`xiaomi/mimo-v2.6-flash`, `anthropic/claude-sonnet-5`) are Pro plan-pool
  * models, so flagging them by id would mis-meter a Pro tenant's legitimate plan
  * usage as overflow. Their genuine overflow case — resolving via the funded
  * coding *backstop* — is metered directly by `complete()` (which sets

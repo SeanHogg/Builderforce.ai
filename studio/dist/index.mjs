@@ -1677,6 +1677,11 @@ function weightStore() {
 // src/engine/weight-cache.ts
 var DEFAULT_R2_BASE = "https://api.builderforce.ai/api/studio/weights";
 var HF_BASE = "https://huggingface.co";
+var DEFAULT_WEIGHT_SOURCES = ["r2-proxy", "huggingface-cdn"];
+function deriveR2Base(baseUrl) {
+  if (!baseUrl) return void 0;
+  return `${baseUrl.replace(/\/$/, "")}/api/studio/weights`;
+}
 async function getOrFetchWeight(opts) {
   const store = weightStore();
   const cached = await store.read(opts.cacheKey);
@@ -1738,6 +1743,48 @@ function resolveSource(source, opts) {
     url: `${HF_BASE}/${opts.hfRepo}/resolve/main/${opts.hfPath}`,
     headers: {}
   };
+}
+
+// src/engine/offline/tokenizer-store.ts
+import { CLIPTokenizer } from "@huggingface/transformers";
+var TOKENIZER_FILES = ["tokenizer.json", "tokenizer_config.json"];
+function tokenizerCacheKey(repo, file) {
+  return `tokenizer/${repo}/${file}`;
+}
+async function isTokenizerStored(repo) {
+  const store = weightStore();
+  const have = await Promise.all(TOKENIZER_FILES.map((f) => store.has(tokenizerCacheKey(repo, f))));
+  return have.every(Boolean);
+}
+async function loadStoredTokenizer(repo) {
+  const store = weightStore();
+  const [json, config] = await Promise.all(TOKENIZER_FILES.map((f) => store.read(tokenizerCacheKey(repo, f))));
+  if (!json || !config) return null;
+  try {
+    const decode = (buf) => JSON.parse(new TextDecoder().decode(buf));
+    return new CLIPTokenizer(decode(json), decode(config));
+  } catch {
+    return null;
+  }
+}
+async function storeTokenizerFiles(repo, signal) {
+  const store = weightStore();
+  let bytes = 0;
+  for (const file of TOKENIZER_FILES) {
+    const key = tokenizerCacheKey(repo, file);
+    let buf = await store.read(key);
+    if (!buf) {
+      const url = `${HF_BASE}/${repo}/resolve/main/${file}`;
+      const res = await fetch(url, { signal });
+      if (!res.ok) throw new Error(`tokenizer ${url} \u2192 HTTP ${res.status}`);
+      buf = await res.arrayBuffer();
+      if (!await store.write(key, buf)) {
+        throw new Error(`The tokenizer file ${file} could not be saved for offline use.`);
+      }
+    }
+    bytes += buf.byteLength;
+  }
+  return bytes;
 }
 
 // src/engine/residency/session-residency.ts
@@ -2567,7 +2614,7 @@ var DiffusionEngine = class {
     }
     try {
       reportProgress(`Loading CLIP tokenizer (${d.tokenizerRepo})\u2026`, onProgress);
-      this.tokenizer = await AutoTokenizer.from_pretrained(d.tokenizerRepo);
+      this.tokenizer = await loadStoredTokenizer(d.tokenizerRepo) ?? await AutoTokenizer.from_pretrained(d.tokenizerRepo);
       reportProgress("Tokenizer ready.", onProgress);
       reportProgress(`Loading ${d.id} weights (UNet + text-encoder + VAE)\u2026`, onProgress);
       const fetchWeight = (file) => this.fetchWeight(file);
@@ -4154,7 +4201,6 @@ async function generateWebDitClip(bundle, args) {
 // src/engine/video-engine.ts
 var DEFAULT_WIDTH = 512;
 var DEFAULT_HEIGHT = 512;
-var DEFAULT_WEIGHT_SOURCES = ["r2-proxy", "huggingface-cdn"];
 var DEFAULT_COHERENCE = "prompt-bias";
 var DEFAULT_COHERENCE_STRENGTH = 0.5;
 var DEFAULT_MOTION_AMOUNT = 0.15;
@@ -5020,10 +5066,6 @@ async function rgbaToDataUrl(rgba, width, height) {
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   return `data:image/jpeg;base64,${btoa(binary)}`;
 }
-function deriveR2Base(baseUrl) {
-  if (!baseUrl) return void 0;
-  return `${baseUrl.replace(/\/$/, "")}/api/studio/weights`;
-}
 function trimTimesteps(defaults, steps) {
   if (steps >= defaults.length) return defaults;
   if (steps <= 1) return [defaults[0]];
@@ -5033,6 +5075,106 @@ function trimTimesteps(defaults, steps) {
     out.push(defaults[idx]);
   }
   return out;
+}
+
+// src/engine/offline/model-offline.ts
+var manifestKey = (model) => `offline/${model}/manifest.json`;
+var weightKey = (model, file) => `${model}/${file}`;
+async function readManifest(model) {
+  const buf = await weightStore().read(manifestKey(model));
+  if (!buf) return null;
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(buf));
+    return parsed?.v === 1 && parsed.sizes ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function abortError() {
+  return new DOMException("Offline download cancelled", "AbortError");
+}
+async function getModelOfflineStatus(model) {
+  const descriptor = MODEL_REGISTRY[model];
+  if (descriptor.engine !== "lcm-diffusion") return { available: false, sizeBytes: null };
+  const store = weightStore();
+  const files = modelWeightFiles(descriptor);
+  const stored = await Promise.all(files.map((f) => store.has(weightKey(model, f))));
+  const available = stored.every(Boolean) && await isTokenizerStored(descriptor.tokenizerRepo);
+  if (!available) return { available: false, sizeBytes: null };
+  const manifest = await readManifest(model);
+  const known = manifest && files.every((f) => manifest.sizes[weightKey(model, f)] !== void 0);
+  const sizeBytes = known ? files.reduce((sum, f) => sum + manifest.sizes[weightKey(model, f)], manifest.tokenizerBytes) : null;
+  return { available: true, sizeBytes };
+}
+async function isModelAvailableOffline(model) {
+  return (await getModelOfflineStatus(model)).available;
+}
+async function prepareModelOffline(opts) {
+  const { model, signal } = opts;
+  const descriptor = MODEL_REGISTRY[model];
+  if (descriptor.engine !== "lcm-diffusion") {
+    throw new Error(`Model '${model}' cannot be made available offline yet.`);
+  }
+  const store = weightStore();
+  if (!store.canPersist()) throw new Error("Offline storage (IndexedDB) is not available in this browser.");
+  const source = {
+    apiKey: opts.authToken,
+    weightSources: opts.weightSources ?? DEFAULT_WEIGHT_SOURCES,
+    r2Base: deriveR2Base(opts.baseUrl)
+  };
+  const files = modelWeightFiles(descriptor);
+  const previous = await readManifest(model);
+  const sizes = {};
+  for (const f of files) {
+    const known = previous?.sizes[weightKey(model, f)];
+    if (known !== void 0) sizes[weightKey(model, f)] = known;
+  }
+  let doneBytes = 0;
+  for (let i = 0; i < files.length; i++) {
+    if (signal?.aborted) throw abortError();
+    const file = files[i];
+    const key = weightKey(model, file);
+    const report = (current, currentTotal) => {
+      const projected = files.map((f) => sizes[weightKey(model, f)]);
+      const totalBytes = currentTotal !== null && projected.every((s, idx) => s !== void 0 || idx === i) ? projected.reduce((sum, s, idx) => sum + (idx === i ? currentTotal : s), 0) : null;
+      opts.onProgress?.({ loadedBytes: doneBytes + current, totalBytes, file, fileIndex: i + 1, fileCount: files.length });
+    };
+    if (await store.has(key)) {
+      const size = sizes[key] ?? 0;
+      doneBytes += size;
+      report(0, size || null);
+      continue;
+    }
+    let persistFailed = false;
+    let buffer;
+    try {
+      buffer = await getOrFetchWeight({
+        ...weightRequest(descriptor, file, source),
+        signal,
+        onProgress: report,
+        onPersistFailed: () => {
+          persistFailed = true;
+        }
+      });
+    } catch (err) {
+      if (signal?.aborted) throw abortError();
+      throw err;
+    }
+    if (persistFailed) throw new Error(`${file} could not be saved for offline use (storage full or blocked).`);
+    sizes[key] = buffer.byteLength;
+    doneBytes += buffer.byteLength;
+  }
+  if (signal?.aborted) throw abortError();
+  let tokenizerBytes;
+  try {
+    tokenizerBytes = await storeTokenizerFiles(descriptor.tokenizerRepo, signal);
+  } catch (err) {
+    if (signal?.aborted) throw abortError();
+    throw err;
+  }
+  const manifest = { v: 1, sizes, tokenizerBytes };
+  const bytes = new TextEncoder().encode(JSON.stringify(manifest));
+  await store.write(manifestKey(model), bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
 }
 
 // src/engine/voice/audio-frames.ts
@@ -5923,14 +6065,17 @@ export {
   encodeWav,
   encodeWavBlob,
   estimateBlockMotion,
+  getModelOfflineStatus,
   hasWebGPUSupport,
   interpolateFrames,
+  isModelAvailableOffline,
   luma,
   melSpectrogram,
   melToWaveform,
   normaliseShotBudget,
   planKeyframeIndices,
   planScene,
+  prepareModelOffline,
   probeDevice,
   resolveVoiceProvider,
   setOrtWasmBase,

@@ -46,7 +46,7 @@ describe('resolveTenantMembership', () => {
     expect(await resolveTenantMembership(env, () => db, 3, 'u')).not.toBeNull();
 
     rows = [];
-    await membershipChanged(env, 3, ['u']);
+    await membershipChanged(env, 3, ['u'], 'revoke');
     expect(await resolveTenantMembership(env, () => db, 3, 'u')).toBeNull();
   });
 });

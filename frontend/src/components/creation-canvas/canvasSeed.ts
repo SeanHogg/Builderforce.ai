@@ -51,3 +51,15 @@ export function initialEdges(t: CanvasTextTranslator): Edge[] {
     { id: SEED.websiteDashboard, source: SEED.website, target: SEED.dashboard, label: t('seedBoard.measures'), type: 'smoothstep', data: { connectionKind: 'data' } },
   ];
 }
+
+/**
+ * Which guided tour this board offers, and at which revision.
+ *
+ * Exported because the tour's "have I already seen this?" history is keyed by
+ * exactly this pair — so a test (or any other caller) that needs the
+ * returning-visitor state has to write the SAME key. Typed inline in two places
+ * it drifted the moment the version was bumped, and the failure mode is silent:
+ * the seed stops matching, the welcome dialog opens over the board again, and
+ * whatever the test was actually measuring is measured through an overlay.
+ */
+export const CREATION_CANVAS_TOUR = { sectionId: 'creation-canvas', version: 2 } as const;

@@ -141,13 +141,21 @@ const ports: CanvasSyncPorts = {
 
 function harness() {
   const tx = dbOf();
-  const importers = {
+  const unexpectedImporter = async () => { throw new Error('Unexpected non-canvas importer'); };
+  const importers: SyncNamedImporters = {
+    importSyncedTicket: unexpectedImporter,
+    importSyncedProject: unexpectedImporter,
+    importSyncedChat: unexpectedImporter,
+    importSyncedMessage: unexpectedImporter,
+    importSyncedUsage: unexpectedImporter,
+    importSyncedChatTicketLink: unexpectedImporter,
+    importMirrorRecord: unexpectedImporter,
     importSyncedCanvasBoard: (e, c, s) => importSyncedCanvasBoard(e, c, s, tx, ports),
     importSyncedCanvasObject: (e, c, s) => importSyncedCanvasObject(e, c, s, tx, ports),
     importSyncedCanvasEdge: (e, c, s) => importSyncedCanvasEdge(e, c, s, tx, ports),
     importSyncedCanvasTimeline: (e, c, s) => importSyncedCanvasTimeline(e, c, s, tx),
     importSyncedCanvasMedia: (e, c, s) => importSyncedCanvasMedia(e, c, s, tx),
-  } as unknown as SyncNamedImporters;
+  };
   const stores = createMemorySyncStores({ importers, now: () => NOW });
   const push = (events: Array<ReturnType<typeof ev>>) => handleSyncPush({
     batchId: 'batch-1',

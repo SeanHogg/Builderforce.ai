@@ -5433,6 +5433,15 @@ var PLATFORM_ROUTE_RULES = Object.freeze([
   { path: "/api/vscode/connect", capability: "connected-feature", note: "the editor presence beat" }
 ]);
 
+// ../packages/local-first/src/records.ts
+var CANVAS_ENTITY_TYPES = [
+  "canvas-board",
+  "canvas-object",
+  "canvas-edge",
+  "canvas-timeline",
+  "canvas-media"
+];
+
 // ../packages/local-first/src/payloadHash.ts
 function fnv1a32(text, seed = 2166136261) {
   let hash = seed >>> 0;
@@ -5449,6 +5458,30 @@ function hashPayload(payload) {
 
 // ../packages/local-first/src/recordPayloadMarker.ts
 var NULL_PAYLOAD_HASH = hashPayload(null);
+
+// ../packages/local-first/src/dependencyGraph.ts
+var KNOWN_TYPES = /* @__PURE__ */ new Set([
+  "project",
+  "ticket",
+  "chat",
+  "message",
+  "execution",
+  "step",
+  "approval",
+  "audit-definition",
+  "audit-run",
+  "audit-finding",
+  "change-set",
+  "memory-fact",
+  "attachment-manifest",
+  "policy-snapshot",
+  "remediation",
+  "usage",
+  "run-outcome",
+  "chat-ticket-link",
+  "run-delta",
+  ...CANVAS_ENTITY_TYPES
+]);
 
 // ../packages/local-first/src/domainToolClass.ts
 var LOCAL_DOMAIN_TOOL_NAMES = Object.freeze([

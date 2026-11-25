@@ -56,7 +56,7 @@ export async function changeMemberRole(
     if (!row) return { ok: false, reason: 'not_member' };
     await db.update(tenantMembers).set({ role }).where(scopedToTenant(tenantMembers, tenantId, eq(tenantMembers.id, row.id)));
     // The footer roster label AND the gateway's cached claim — one announcement.
-    await membershipChanged(env, tenantId, [targetUserId]);
+    await membershipChanged(env, tenantId, [targetUserId], 'revoke'); // a role change may be a demotion
     await writeAdminAudit(db, 'USER_PERSONA_CHANGED', actorUserId, {
       targetUserId,
       tenantId,

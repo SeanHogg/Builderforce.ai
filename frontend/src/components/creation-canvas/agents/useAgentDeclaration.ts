@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { faultText } from '@/lib/apiClient';
+import { useErrorText } from '@/i18n/useErrorMessage';
 import {
   declareAppAgent,
   loadAgentToolOptions,
@@ -14,6 +14,7 @@ import { agentFormToDraft, EMPTY_AGENT_FORM, type AgentFormState } from './Agent
  * once) and the submit to `app_manifest.add_agent`. The form itself holds nothing.
  */
 export function useAgentDeclaration(projectId: number, onDeclared: (agentId: string) => void) {
+  const errorText = useErrorText();
   const [form, setForm] = useState<AgentFormState>(EMPTY_AGENT_FORM);
   const [toolOptions, setToolOptions] = useState<string[] | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -39,7 +40,7 @@ export function useAgentDeclaration(projectId: number, onDeclared: (agentId: str
       if (result.ok) onDeclared(result.agentId);
       else setRefusal(result.refusal);
     } catch (error) {
-      setRefusal({ error: faultText(error), issues: [] });
+      setRefusal({ error: errorText(error), issues: [] });
     } finally {
       setSubmitting(false);
     }

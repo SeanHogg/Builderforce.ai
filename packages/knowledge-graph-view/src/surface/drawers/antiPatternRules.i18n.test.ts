@@ -4,15 +4,11 @@
  * label and a fix request.
  */
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import de from '../../../../../frontend/src/i18n/messages/de.json?raw';
-import en from '../../../../../frontend/src/i18n/messages/en.json?raw';
-import es from '../../../../../frontend/src/i18n/messages/es.json?raw';
-import fr from '../../../../../frontend/src/i18n/messages/fr.json?raw';
-import zh from '../../../../../frontend/src/i18n/messages/zh.json?raw';
 import { ANTI_PATTERN_RULES, GENERIC_RULE } from './antiPatternRules';
 
-const CATALOGS = { en, de, es, fr, zh } as const;
+const LOCALES = ['en', 'de', 'es', 'fr', 'zh'] as const;
 const camel = (kind: string) => kind.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 
 interface KnowledgeGraphCatalog {
@@ -22,8 +18,9 @@ interface KnowledgeGraphCatalog {
 }
 
 describe('anti-pattern rule copy', () => {
-    for (const [lang, raw] of Object.entries(CATALOGS)) {
+    for (const lang of LOCALES) {
         it(`${lang} translates every rule row`, () => {
+            const raw = readFileSync(new URL(`../../../../../frontend/src/i18n/messages/${lang}.json`, import.meta.url), 'utf8');
             const kg = (JSON.parse(raw) as { knowledgeGraph: KnowledgeGraphCatalog }).knowledgeGraph;
             for (const rule of [...ANTI_PATTERN_RULES, GENERIC_RULE]) {
                 for (const key of [rule.reasonKey, rule.goodKey, rule.afterKey]) {

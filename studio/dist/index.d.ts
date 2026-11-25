@@ -1,5 +1,5 @@
-import { A as ActiveDevice, V as VideoEngineOptions, G as GenerateOptions, a as GenerateResult, S as StoryboardGenerateOptions, b as StoryboardGenerateResult, M as MambaStateSnapshot, D as DiffusionModelId, c as ModelDescriptor, C as CameraMove, P as PlannedShot, d as CharacterBible, e as ScenePlanOptions, f as Storyboard, g as ValidateFrameOptions, F as FrameValidation } from './device-router-B99djikV.js';
-export { h as CoherenceMode, i as DeviceTarget, j as FrameIssueKind, k as FrameValidationIssue, I as InterpolationBackend, L as LcmModelDescriptor, l as LcmModelId, O as OnnxFile, m as OrtInputSpec, n as OrtTensorDtype, o as ProbedDevice, Q as QualityMode, p as ShotValidation, W as WebDitModelDescriptor, q as WebDitModelId, r as WeightSource, s as hasWebGPUSupport, t as probeDevice } from './device-router-B99djikV.js';
+import { A as ActiveDevice, V as VideoEngineOptions, G as GenerateOptions, a as GenerateResult, S as StoryboardGenerateOptions, b as StoryboardGenerateResult, M as MambaStateSnapshot, D as DiffusionModelId, c as ModelDescriptor, W as WeightSource, C as CameraMove, P as PlannedShot, d as CharacterBible, e as ScenePlanOptions, f as Storyboard, g as ValidateFrameOptions, F as FrameValidation } from './device-router-BXETIG9h.js';
+export { h as CoherenceMode, i as DeviceTarget, j as FrameIssueKind, k as FrameValidationIssue, I as InterpolationBackend, L as LcmModelDescriptor, l as LcmModelId, O as OnnxFile, m as OrtInputSpec, n as OrtTensorDtype, o as ProbedDevice, Q as QualityMode, p as ShotValidation, q as WebDitModelDescriptor, r as WebDitModelId, s as hasWebGPUSupport, t as probeDevice } from './device-router-BXETIG9h.js';
 import { BuilderforceClient } from '@seanhogg/builderforce-sdk';
 
 /**
@@ -175,6 +175,57 @@ declare class VideoEngine {
  */
 
 declare const MODEL_REGISTRY: Record<DiffusionModelId, ModelDescriptor>;
+
+/**
+ * Make a model available offline — download every file the model needs into
+ * the existing IndexedDB weight store, then the engine runs with no network.
+ *
+ * What "available" means: every ONNX file of the model AND both tokenizer
+ * files are in the store. The weights are the very entries `getOrFetchWeight`
+ * reads on a normal load (same keys), so a model the user already ran is
+ * already most of the way there; only the tokenizer is extra.
+ *
+ * A tiny raw-bytes manifest (`offline/<model>/manifest.json`, same store, same
+ * raw-ArrayBuffer format) remembers the sizes so the UI can show "1.9 GB
+ * stored" without reading multi-GB values back.
+ */
+
+interface OfflineProgress {
+    /** Bytes stored so far across all files (including files already stored, when their size is known). */
+    loadedBytes: number;
+    /** Total bytes when every file's size is known, else null. */
+    totalBytes: number | null;
+    /** The file currently downloading. */
+    file: string;
+    /** 1-based index of the current file, and how many there are (a fallback for a percentage). */
+    fileIndex: number;
+    fileCount: number;
+}
+interface PrepareModelOfflineOptions {
+    model: DiffusionModelId;
+    /** Builderforce API origin (the r2-proxy weights base is derived from it). */
+    baseUrl?: string;
+    /** Bearer token for the authenticated r2-proxy. */
+    authToken: string;
+    weightSources?: WeightSource[];
+    onProgress?: (progress: OfflineProgress) => void;
+    signal?: AbortSignal;
+}
+interface ModelOfflineStatus {
+    available: boolean;
+    /** Bytes the model occupies offline, when known (null for a model stored before this feature, or not stored). */
+    sizeBytes: number | null;
+}
+/** Whether `model` (weights + tokenizer) is in the store, and how big it is. */
+declare function getModelOfflineStatus(model: DiffusionModelId): Promise<ModelOfflineStatus>;
+/** Whether `model` can start with no network (weights AND tokenizer stored). */
+declare function isModelAvailableOffline(model: DiffusionModelId): Promise<boolean>;
+/**
+ * Download everything `model` needs into the weight store. Files already stored
+ * are skipped, so a cancelled or failed run resumes where it stopped. Rejects
+ * with an `AbortError` when `signal` aborts.
+ */
+declare function prepareModelOffline(opts: PrepareModelOfflineOptions): Promise<void>;
 
 /**
  * Single source of truth for ONNX Runtime configuration across the host app.
@@ -922,4 +973,4 @@ declare function encodeWav(audio: PcmAudio): ArrayBuffer;
 /** Same as {@link encodeWav} but wrapped as a `Blob` (browser/worker only). */
 declare function encodeWavBlob(audio: PcmAudio): Blob;
 
-export { type AcousticGenerateResult, type AcousticModelOptions, ActiveDevice, CAMERA_MOVES, CameraMove, CharacterBible, type CloneSynthesisResult, type CodecTokens, DiffusionModelId, FrameValidation, GenerateOptions, GenerateResult, type InterpolatedSlot, type Keyframe, MODEL_REGISTRY, MambaStateSnapshot, type MelConfig, type MelSpectrogram, ModelDescriptor, type MotionField, type MotionOptions, type MuxedVideo, NeuralCodec, type NeuralCodecOptions, type OnnxRuntimeConfigOptions, type PcmAudio, PlannedShot, type ResolveProviderResult, SSMAcousticModel, SSMVoiceProvider, ScenePlanOptions, type SpeakerEmbedding, type SpeakerEncoderOptions, Storyboard, StoryboardGenerateOptions, StoryboardGenerateResult, type SynthesizeOptions, TEXT_VOCAB_SIZE, type TokenizedText, UnsupportedVideoEncodingError, ValidateFrameOptions, type VideoContainer, VideoEngine, VideoEngineOptions, VoiceCloneEngine, type VoiceCloneEngineOptions, type VoiceProvider, type VoiceProviderId, type WordTimestamp, buildInterpolatedSequence, cameraMoveToMotion, composeShotPrompt, configureOnnxRuntime, cosineSimilarity, directorPass, encodeSpeaker, encodeWav, encodeWavBlob, estimateBlockMotion, interpolateFrames, luma, melSpectrogram, melToWaveform, normaliseShotBudget, planKeyframeIndices, planScene, resolveVoiceProvider, setOrtWasmBase, shotPlannerPass, slerp, storyboardFrameCount, tokenizeText, validateFrame, verifySpeaker, videoExtensionForMime };
+export { type AcousticGenerateResult, type AcousticModelOptions, ActiveDevice, CAMERA_MOVES, CameraMove, CharacterBible, type CloneSynthesisResult, type CodecTokens, DiffusionModelId, FrameValidation, GenerateOptions, GenerateResult, type InterpolatedSlot, type Keyframe, MODEL_REGISTRY, MambaStateSnapshot, type MelConfig, type MelSpectrogram, ModelDescriptor, type ModelOfflineStatus, type MotionField, type MotionOptions, type MuxedVideo, NeuralCodec, type NeuralCodecOptions, type OfflineProgress, type OnnxRuntimeConfigOptions, type PcmAudio, PlannedShot, type PrepareModelOfflineOptions, type ResolveProviderResult, SSMAcousticModel, SSMVoiceProvider, ScenePlanOptions, type SpeakerEmbedding, type SpeakerEncoderOptions, Storyboard, StoryboardGenerateOptions, StoryboardGenerateResult, type SynthesizeOptions, TEXT_VOCAB_SIZE, type TokenizedText, UnsupportedVideoEncodingError, ValidateFrameOptions, type VideoContainer, VideoEngine, VideoEngineOptions, VoiceCloneEngine, type VoiceCloneEngineOptions, type VoiceProvider, type VoiceProviderId, WeightSource, type WordTimestamp, buildInterpolatedSequence, cameraMoveToMotion, composeShotPrompt, configureOnnxRuntime, cosineSimilarity, directorPass, encodeSpeaker, encodeWav, encodeWavBlob, estimateBlockMotion, getModelOfflineStatus, interpolateFrames, isModelAvailableOffline, luma, melSpectrogram, melToWaveform, normaliseShotBudget, planKeyframeIndices, planScene, prepareModelOffline, resolveVoiceProvider, setOrtWasmBase, shotPlannerPass, slerp, storyboardFrameCount, tokenizeText, validateFrame, verifySpeaker, videoExtensionForMime };

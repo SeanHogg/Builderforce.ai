@@ -52,7 +52,7 @@ export function bindBoardToAccount(ctx: BoardWriteContext, boardId: string, dest
     }
 
     const to = binding.destination;
-    const rebind = async <T,>(row: LocalRecord<T>): Promise<LocalRecord<T>> => {
+    const rebind = async <T>(row: LocalRecord<T>): Promise<LocalRecord<T>> => {
       const moved = { ...row, destination: to };
       await tx.put(moved, row.version);
       return moved;

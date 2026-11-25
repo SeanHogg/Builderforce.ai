@@ -82,7 +82,17 @@ type LocalEntityType = 'project' | 'ticket' | 'chat' | 'message' | 'execution' |
  *    keyed by `stableEntityId('run-outcome:<runId>:<repoKey>')`, synced as a domain-imported record. */
  | 'run-outcome'
 /** One run's delta per repository (PRD 41 §C14), `run-delta:<runId>:<repoKey>`: immutable, synced as a mirror record. */
- | 'run-delta';
+ | 'run-delta'
+/** The canvas board (a Studio session row): `{ title, mode, ... }`. Synced, domain-imported. */
+ | 'canvas-board'
+/** One node of a board (`kind`, `canvasData`, `content` + `boardId`). Synced, domain-imported. */
+ | 'canvas-object'
+/** One connection between two objects of a board. Synced, domain-imported. */
+ | 'canvas-edge'
+/** One transcript message of a board; append-only. Synced, domain-imported. */
+ | 'canvas-timeline'
+/** One media blob's manifest (never the bytes). Synced, domain-imported. */
+ | 'canvas-media';
 interface DestinationBinding {
     platformInstance?: string;
     accountId?: string;

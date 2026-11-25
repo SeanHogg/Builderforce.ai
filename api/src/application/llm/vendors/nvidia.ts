@@ -29,18 +29,11 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   // NIM segment burned an attempt on a 404 before the cascade could advance. Do not
   // add an id here from memory — refresh the snapshot and take it from there.
   { id: 'nvidia/nemotron-3-ultra-550b-a55b',            tier: 'FREE', weights: 'nemotron-3-ultra-550b-a55b', label: 'Nemotron 3 Ultra 550B (NIM)',    brand: 'NVIDIA'    },
-  { id: 'nvidia/nemotron-3-super-120b-a12b',            tier: 'FREE', weights: 'nemotron-3-super-120b-a12b', label: 'Nemotron 3 Super 120B (NIM)',    brand: 'NVIDIA'    },
-  // `moonshotai/kimi-k2.6` is still LISTED by `/v1/models` but its NVCF function is gone
-  // (`404 Function '23d4f03a-…': Not found`, 21× in 2026-10-03..10), so listing is not
-  // proof of service here: it is superseded by K3 rather than kept.
-  { id: 'moonshotai/kimi-k3',                           tier: 'FREE', label: 'Kimi K3 (NIM)',                  brand: 'Moonshot',  supersedes: ['moonshotai/kimi-k2.6'] },
-  { id: 'z-ai/glm-5.3',                                 tier: 'FREE', label: 'GLM 5.3 (NIM)',                  brand: 'Z.AI',      supersedes: ['z-ai/glm-5.2'] },
-  { id: 'deepseek-ai/deepseek-v4.1-flash',              tier: 'FREE', label: 'DeepSeek V4.1 Flash (NIM)',      brand: 'DeepSeek',  supersedes: ['deepseek-ai/deepseek-v4-flash-0731'] },
-  { id: 'nvidia/nemotron-3.5-lightning-30b-a3b',        tier: 'FREE', label: 'Nemotron 3.5 Lightning 30B (NIM)', brand: 'NVIDIA'  },
-  { id: 'openai/gpt-oss-20b',                           tier: 'FREE', label: 'GPT-OSS 20B (NIM)',              brand: 'OpenAI'    },
-  { id: 'mistralai/mistral-large-2-instruct',           tier: 'FREE', label: 'Mistral Large 2 (NIM)',          brand: 'Mistral'   },
-  { id: 'google/gemma-4-31b-it',                        tier: 'FREE', weights: 'gemma-4-31b-it', label: 'Gemma 4 31B (NIM)',              brand: 'Google'    },
-  { id: 'meta/llama-3.2-11b-vision-instruct',           tier: 'FREE', label: 'Llama 3.2 11B Vision (NIM)',     brand: 'Meta',      capabilities: ['vision'] },
+  { id: 'nvidia/nemotron-3.5-super-vl-120b-a12b', tier: 'FREE', label: 'Nemotron 3.5 Super VL (NIM)', brand: 'NVIDIA', capabilities: ['vision'], supersedes: ['nvidia/nemotron-3-super-120b-a12b'] },
+  { id: 'moonshotai/kimi-k3.1-pro', tier: 'FREE', label: 'Kimi K3.1 Pro (NIM)', brand: 'Moonshot', supersedes: ['moonshotai/kimi-k3', 'moonshotai/kimi-k2.6'] },
+  { id: 'z-ai/glm-5.3-flash', tier: 'FREE', label: 'GLM 5.3 Flash (NIM)', brand: 'Z.AI' },
+  { id: 'nvidia/nemotron-3.5-lightning-30b-a3b', tier: 'FREE', label: 'Nemotron 3.5 Lightning 30B (NIM)', brand: 'NVIDIA' },
+  { id: 'mistralai/mistral-large-4-1t-a52b', tier: 'FREE', label: 'Mistral Large 4 (NIM)', brand: 'Mistral', supersedes: ['mistralai/mistral-large-2-instruct'] },
   // RETIRED by NIM in the 2026-10-04 snapshot refresh, no same-family successor served:
   // `openai/gpt-oss-120b` (NIM now serves only 20B — a size downgrade, so no supersession
   // row), `mistralai/mistral-nemotron`, `meta/llama-3.3-70b-instruct`,
@@ -72,7 +65,7 @@ export const nvidiaModule = createOpenAICompatibleVendor({
   attemptTimeoutMs: {
     byModel: {
       'nvidia/nemotron-3-ultra-550b-a55b': 45_000,
-      'nvidia/nemotron-3-super-120b-a12b': 30_000,
+      'nvidia/nemotron-3.5-super-vl-120b-a12b': 30_000,
     },
   },
 });

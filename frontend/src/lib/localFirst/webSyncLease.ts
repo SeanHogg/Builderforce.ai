@@ -9,10 +9,10 @@
  *   - the package's device-store coordinator lease answers within ONE tab and hands the run
  *     a FENCE, so a run that outlives its slot cannot commit and its requests abort.
  *
- * Why not `createIndexedDbSyncLease` (the `lease` on `WebLocalFirstStoreHandle`): that lease
- * holds the store's own partition lease for the whole run, and the coordinator then commits
- * through the SAME partition's `transact`, which waits on that lease — it would starve its
- * own writes. Where Web Locks are missing the in-tab lease alone is used.
+ * Why not `createIndexedDbSyncLease`: that lease holds the store's own partition lease for the
+ * whole run, and the coordinator then commits through the SAME partition's `transact`, which
+ * waits on that lease — it would starve its own writes. This is therefore also the `lease` on
+ * `WebLocalFirstStoreHandle`. Where Web Locks are missing the in-tab lease alone is used.
  */
 
 import { createDeviceStoreCoordinatorLease, type CoordinatorLeaseFence, type SyncLease } from '@builderforce/local-first';

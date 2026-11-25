@@ -25,7 +25,7 @@
  */
 
 import { and, eq } from 'drizzle-orm';
-import type { Db, Tx } from '../../infrastructure/database/connection';
+import { inSavepoint, type Db, type Tx } from '../../infrastructure/database/connection';
 import { creationSessionEvents, creationSessions } from '../../infrastructure/database/schema';
 import { revisionBookkeepingStatements, type RevisionBookkeeping } from './creationGraphWriter';
 
@@ -74,7 +74,7 @@ export async function applyBoardEdit(tx: Tx, edit: BoardEdit): Promise<BoardEdit
 
   const revision = Number(board.revision) + 1;
   try {
-    await tx.transaction(async (savepoint) => {
+    await inSavepoint(tx, async (savepoint) => {
       const db = savepoint as unknown as Db;
       const now = new Date();
       const results: unknown[] = [];
