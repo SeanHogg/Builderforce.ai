@@ -32486,7 +32486,7 @@
       },
       "webContainers": {
         "title": "Web Containers",
-        "tagline": "Eine Ausführungsumgebung für jeden Host",
+        "tagline": "Eine Ausführungsumgebung vom Browser bis zur Cloud",
         "hero": "Echte Anwendungen in einer portablen, isolierten Umgebung bauen und ausführen",
         "description": "Node-, Python-, PHP-, .NET- und Rust-Laufzeiten hinter einem Ausführungsvertrag, beschrieben durch ein builderforce.json-Manifest und ausgeführt im Browser, in der IDE, auf dem Desktop oder in der Cloud.",
         "features": [
@@ -32524,7 +32524,7 @@
           },
           {
             "title": "Betritt den Raum",
-            "description": "Jeder laufende Agent erscheint im 3D-Raum, damit die Arbeit sichtbar ist."
+            "description": "Laufende Agenten erscheinen im 3D-Raum, damit die Arbeit sichtbar ist."
           },
           {
             "title": "Oberfläche zum Definieren",
@@ -32558,8 +32558,8 @@
       },
       "securityShield": {
         "title": "Security Shield",
-        "tagline": "Standardmäßig sicher, in jedem Lauf",
-        "hero": "Jede Umgebung läuft isoliert, überwacht und protokolliert",
+        "tagline": "Standardmäßig sicher, in Browser-Läufen",
+        "hero": "Browser-Läufe sind isoliert, überwacht und protokolliert",
         "description": "Ingress- und Egress-Richtlinien, Isolation und Audit für die Browser-Laufebene, mit Export der Sicherheitsspur an deinen eigenen SIEM-Collector.",
         "features": [
           {
@@ -32572,7 +32572,7 @@
           },
           {
             "title": "Audit-Spur",
-            "description": "Sicherheitsrelevante Ereignisse werden für jeden Lauf aufgezeichnet."
+            "description": "Sicherheitsrelevante Ereignisse werden für jeden Browser-Lauf aufgezeichnet."
           },
           {
             "title": "SIEM-Export",

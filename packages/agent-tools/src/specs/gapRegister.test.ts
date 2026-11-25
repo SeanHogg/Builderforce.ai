@@ -122,8 +122,8 @@ describe('parseSpecAnchors', () => {
   });
 });
 
-describe('the real Builderforce.ai/ROADMAP.md', () => {
-  const markdown = readFileSync(fileURLToPath(new URL('../../../../ROADMAP.md', import.meta.url).href), 'utf8');
+describe('the real Builderforce.ai/docs/roadmap/GAP-REGISTER.md', () => {
+  const markdown = readFileSync(fileURLToPath(new URL('../../../../docs/roadmap/GAP-REGISTER.md', import.meta.url).href), 'utf8');
   const gaps = parseGapRegister(markdown);
 
   it('parses every gap with a stage and a summary, under unique ids', () => {

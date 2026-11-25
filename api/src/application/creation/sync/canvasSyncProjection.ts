@@ -21,7 +21,7 @@
  */
 
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
-import { destinationKey, type EntityDestination } from '@builderforce/local-first';
+import { destinationKey, isLocalId, type EntityDestination } from '@builderforce/local-first';
 import type { Db } from '../../../infrastructure/database/connection';
 import { inTransaction } from '../../../infrastructure/database/connection';
 import {
@@ -265,9 +265,6 @@ export async function projectedRecordsOf(db: Db, tenantId: number, boardIds: rea
   return rows;
 }
 
-const UUID_IN_TEXT = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-const isUuid = (value: unknown): value is string => typeof value === 'string' && UUID_IN_TEXT.test(value) && value.length === 36;
-
 /**
  * Pure: the boards one successful board write may have touched — the first UUID in the request path
  * (`/:id`, `/:id/graph`, …) and the id a creating route answers with (`id`, `sessionId`, `session.id`).
@@ -275,12 +272,12 @@ const isUuid = (value: unknown): value is string => typeof value === 'string' &&
  */
 export function touchedBoardIds(path: string, responseBody: unknown): string[] {
   const ids = new Set<string>();
-  const fromPath = UUID_IN_TEXT.exec(path)?.[0];
+  const fromPath = path.split('/').find(isLocalId);
   if (fromPath) ids.add(fromPath.toLowerCase());
   const body = responseBody && typeof responseBody === 'object' ? responseBody as Record<string, unknown> : {};
   const nested = body.session && typeof body.session === 'object' ? (body.session as Record<string, unknown>).id : undefined;
   for (const candidate of [body.id, body.sessionId, nested]) {
-    if (isUuid(candidate)) ids.add(candidate.toLowerCase());
+    if (isLocalId(candidate)) ids.add(candidate.toLowerCase());
   }
   return [...ids];
 }

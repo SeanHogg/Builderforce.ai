@@ -95,7 +95,7 @@ import { broadcastRoom, creationSessionRoomName } from '../../infrastructure/rel
 import { relayToRoom } from './realtimeRelay';
 import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { sendCreationSessionInviteEmail } from '../../infrastructure/email/EmailService';
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
+import { reportCaughtError, reportedFallback } from '../../application/observability/caughtErrorReporter';
 import { bumpPublicCanvasVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { isOutcomePhase, normalizeOutcomeAction, recordOutcomeEvent } from '../../application/outcomes/outcomeLedger';
 import { buildAttributedOutcomes } from '../../application/outcomes/attributedOutcomes';
@@ -432,8 +432,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const answer = c.res.headers.get('content-type')?.includes('application/json') ? c.res.clone() : null;
     ctx.waitUntil((async () => {
-      // error-logging: an unreadable body only means no id in it; the path id still reconciles.
-      const body = await answer?.json().catch(() => null);
+      // An unreadable body only means no id in it; the path id still reconciles, so the failure is reported and null stands in.
+      const body = await answer?.json().catch(reportedFallback(null, { source: 'creationSessionRoutes', operation: 'canvas-projection-read-response-body' }));
       await reconcileCanvasBoards(db, canvasProjectionScope(tenantId), touchedBoardIds(c.req.path, body));
     })());
   });

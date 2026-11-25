@@ -256,8 +256,8 @@ describe('transactional record store', () => {
       new URL(`../../../clients/vscode/src/${file}`, import.meta.url),
       'utf8',
     );
-    const host = read('localFirstStore.ts');
-    const durable = read('durableLocalFirstStore.ts');
+    const host = read('localFirst/localFirstStore.ts');
+    const durable = read('localFirst/durableLocalFirstStore.ts');
     // G03: the host's `localBrainApplication` is wired to the journal-backed
     // store, so the JSON file is republished from it and is never read back
     // as state. This module is still not the host's store.

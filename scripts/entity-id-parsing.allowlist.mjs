@@ -19,7 +19,7 @@ export const ALLOWLIST = [
     reason: 'Parity snapshot normaliser: REPLACES every UUID in recorded text with a placeholder (a global scan, not an id check). Oracle code (PRD 35 §5.1).',
   },
   {
-    file: 'clients/vscode/src/kimiCodeInstall.ts',
+    file: 'clients/vscode/src/auth/kimiCodeInstall.ts',
     kind: 'integer',
     reason: "TOML scalar reader for Kimi's config.toml: `/^-?\\d+$/` reads an integer config value, not an id.",
   },

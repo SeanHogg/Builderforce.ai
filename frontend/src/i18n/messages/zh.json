@@ -32486,7 +32486,7 @@
       },
       "webContainers": {
         "title": "Web Containers",
-        "tagline": "一个执行环境，适配每个宿主",
+        "tagline": "一个执行环境，从浏览器到云端",
         "hero": "在可移植的隔离环境中构建并运行真实应用",
         "description": "Node、Python、PHP、.NET 和 Rust 运行时共用一份执行契约，由 builderforce.json 清单描述，可在浏览器、IDE、桌面或云端运行。",
         "features": [
@@ -32524,7 +32524,7 @@
           },
           {
             "title": "加入房间",
-            "description": "每个运行中的智能体都会出现在 3D 房间中，工作一目了然。"
+            "description": "运行中的智能体会出现在 3D 房间中，工作一目了然。"
           },
           {
             "title": "智能体定义界面",
@@ -32558,8 +32558,8 @@
       },
       "securityShield": {
         "title": "安全盾",
-        "tagline": "默认安全，贯穿每次运行",
-        "hero": "每个环境都在隔离、受管控并可审计的状态下运行",
+        "tagline": "默认安全，覆盖浏览器运行",
+        "hero": "浏览器运行处于隔离、受管控并可审计的状态",
         "description": "为浏览器运行层提供入站与出站策略、隔离和审计，并把安全记录导出到你自己的 SIEM 收集器。",
         "features": [
           {
@@ -32572,7 +32572,7 @@
           },
           {
             "title": "审计记录",
-            "description": "每次运行中与安全相关的事件都会被记录。"
+            "description": "每次浏览器运行中与安全相关的事件都会被记录。"
           },
           {
             "title": "SIEM 导出",

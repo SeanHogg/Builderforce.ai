@@ -199,6 +199,7 @@ const CACHE_ALLOWED = new Map([
   ['lib/meshPreviewCache.ts', 'Bounded computational geometry memoization, not an API response cache.'],
   ['lib/pendingWork.ts', 'Single-flight for destructive local-draft claims; it stores no HTTP read result.'],
   ['lib/creation/animation/frameDecode.ts', 'A 24-entry LRU of DECODED images (ImageBitmap), not an API response cache: eviction closes the bitmap, which a read-through cache cannot do, and a failed decode is dropped so the next ask retries.'],
+  ['lib/browserRuntime/codeScan.worker.ts', 'A bounded (5000-entry) LRU of code-shield scan verdicts keyed by content sha256 + profile, inside the scanner Worker: computational memoization, not an API response cache.'],
   ['lib/workspace/localFileStore.ts', 'The browser-held workspace store (guest apps): an in-memory working copy plus single-flight IndexedDB loading. It stores no HTTP read result.'],
 ]);
 const CACHE_DECLARATION = /^(?:const|let)\s+\w*(?:cache|cached|inflight|inFlight)\w*\s*=/;

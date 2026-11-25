@@ -42,8 +42,11 @@ const BROUGHT_ALONG_DIR = 'packages/agent-run/test';
  * Skip markers the repository holds today (all outside this program's tests). It may only fall.
  * 21 → 22 (2026-11-17): `qa-e2e/tests/vsix-offline-acceptance.spec.ts` `skip()` — a precondition
  * helper (no VS Code install / VSIX / offline environment on the host), not a disabled assertion.
+ * 22 → 27 (2026-11-25): `qa-e2e/tests/studio-offline-acceptance.spec.ts` — five `test.skip(condition, reason)` precondition
+ * guards (customer-project mode, no signed-in session, no prepared on-device model); each runs its assertion whenever its
+ * environment is present, so none disables one.
  */
-const SKIP_MARKER_BASELINE = 22;
+const SKIP_MARKER_BASELINE = 27;
 
 /** True under CI (GitHub Actions sets `CI=true`). */
 const IN_CI = Boolean(process.env.CI) && !['false', '0'].includes(String(process.env.CI).toLowerCase());

@@ -32486,7 +32486,7 @@
       },
       "webContainers": {
         "title": "Web Containers",
-        "tagline": "Un entorno de ejecución para cada host",
+        "tagline": "Un entorno de ejecución del navegador a la nube",
         "hero": "Crea y ejecuta aplicaciones reales en un entorno portátil y aislado",
         "description": "Runtimes de Node, Python, PHP, .NET y Rust tras un único contrato de ejecución, descritos por un manifiesto builderforce.json y ejecutados en el navegador, el IDE, el escritorio o la nube.",
         "features": [
@@ -32524,7 +32524,7 @@
           },
           {
             "title": "Entran en la Sala",
-            "description": "Cada agente en ejecución aparece en la Sala 3D para que el trabajo sea visible."
+            "description": "Los agentes en ejecución aparecen en la Sala 3D para que el trabajo sea visible."
           },
           {
             "title": "Interfaz para definir agentes",
@@ -32558,8 +32558,8 @@
       },
       "securityShield": {
         "title": "Security Shield",
-        "tagline": "Seguro por defecto, dentro de cada ejecución",
-        "hero": "Cada entorno se ejecuta aislado, vigilado y auditado",
+        "tagline": "Seguro por defecto, en las ejecuciones del navegador",
+        "hero": "Las ejecuciones del navegador son aisladas, vigiladas y auditadas",
         "description": "Política de entrada y salida, aislamiento y auditoría para el nivel de ejecución del navegador, con el rastro de seguridad exportado a tu propio colector SIEM.",
         "features": [
           {
@@ -32572,7 +32572,7 @@
           },
           {
             "title": "Rastro de auditoría",
-            "description": "Los eventos relevantes para la seguridad se registran en cada ejecución."
+            "description": "Los eventos relevantes para la seguridad se registran en cada ejecución del navegador."
           },
           {
             "title": "Exportación a SIEM",

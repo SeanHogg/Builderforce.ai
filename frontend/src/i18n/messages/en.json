@@ -31744,7 +31744,7 @@
       },
       "webContainers": {
         "title": "Web Containers",
-        "tagline": "One execution environment, every host",
+        "tagline": "One execution environment, from browser to cloud",
         "hero": "Build and run real applications in a portable, isolated environment",
         "description": "Node, Python, PHP, .NET and Rust runtimes behind one execution contract, described by a builderforce.json manifest and run in the browser, IDE, desktop or cloud.",
         "features": [
@@ -31782,7 +31782,7 @@
           },
           {
             "title": "Joins the Room",
-            "description": "Every running agent appears in the 3D Room so the work is visible."
+            "description": "Running agents appear in the 3D Room so the work is visible."
           },
           {
             "title": "Define-agents UI",
@@ -31816,8 +31816,8 @@
       },
       "securityShield": {
         "title": "Security Shield",
-        "tagline": "Secure by default, inside every run",
-        "hero": "Every environment runs isolated, policed and audited",
+        "tagline": "Secure by default in browser runs",
+        "hero": "Browser runs are isolated, policed and audited",
         "description": "Ingress and egress policy, isolation and audit for the browser run tier, with the security trail exported to your own SIEM collector.",
         "features": [
           {
@@ -31830,7 +31830,7 @@
           },
           {
             "title": "Audit trail",
-            "description": "Security-relevant events are recorded for every run."
+            "description": "Security-relevant events are recorded for each browser run."
           },
           {
             "title": "SIEM export",

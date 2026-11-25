@@ -32486,7 +32486,7 @@
       },
       "webContainers": {
         "title": "Web Containers",
-        "tagline": "Un seul environnement d'exécution, pour chaque hôte",
+        "tagline": "Un seul environnement d'exécution, du navigateur au cloud",
         "hero": "Construisez et exécutez de vraies applications dans un environnement portable et isolé",
         "description": "Des runtimes Node, Python, PHP, .NET et Rust derrière un contrat d'exécution unique, décrits par un manifeste builderforce.json et exécutés dans le navigateur, l'IDE, le bureau ou le cloud.",
         "features": [
@@ -32524,7 +32524,7 @@
           },
           {
             "title": "Rejoignent la Salle",
-            "description": "Chaque agent en cours d’exécution apparaît dans la Salle 3D pour rendre le travail visible."
+            "description": "Les agents en cours d’exécution apparaissent dans la Salle 3D pour rendre le travail visible."
           },
           {
             "title": "Interface de définition",
@@ -32558,8 +32558,8 @@
       },
       "securityShield": {
         "title": "Security Shield",
-        "tagline": "Sécurisé par défaut, dans chaque exécution",
-        "hero": "Chaque environnement s’exécute isolé, encadré et audité",
+        "tagline": "Sécurisé par défaut, dans les exécutions du navigateur",
+        "hero": "Les exécutions du navigateur sont isolées, encadrées et auditées",
         "description": "Politique d’entrée et de sortie, isolation et audit pour le niveau d’exécution du navigateur, avec la piste de sécurité exportée vers votre propre collecteur SIEM.",
         "features": [
           {
@@ -32572,7 +32572,7 @@
           },
           {
             "title": "Piste d’audit",
-            "description": "Les événements liés à la sécurité sont enregistrés pour chaque exécution."
+            "description": "Les événements liés à la sécurité sont enregistrés pour chaque exécution du navigateur."
           },
           {
             "title": "Export SIEM",
