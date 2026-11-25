@@ -19,7 +19,7 @@ import { useFormat } from "@/i18n/useFormat";
  * a misleading "Free" while loading — so a consumer just drops it in a header
  * without computing entitlement or passing a `canX` prop.
  *
- * Mirrors the VS Code extension's `PlanBadge` (clients/vscode/webview/src/accountPlan.tsx);
+ * Mirrors the VS Code extension's `PlanBadge` (clients/vscode/webview/src/auth/accountPlan.tsx);
  * the two stacks can't share a component, but they read the same endpoint and
  * present the same three states.
  */

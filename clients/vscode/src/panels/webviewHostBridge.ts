@@ -182,7 +182,7 @@ export function respondToWebview(
   void webview.postMessage({ type: "response", id, ok, result, ...(error ? { error } : {}) });
 }
 
-/** A failed API answer relayed by `webview/src/apiFailureRelay.ts`. */
+/** A failed API answer relayed by `webview/src/diagnostics/apiFailureRelay.ts`. */
 interface ApiFailureMessage extends WebviewInbound {
   method?: string;
   path?: string;

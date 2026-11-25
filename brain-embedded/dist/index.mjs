@@ -43,7 +43,7 @@ import {
   servedIdentity,
   servedOnDevice,
   webGpuSupport
-} from "./chunk-PRXY4IDM.mjs";
+} from "./chunk-AU6L4FBN.mjs";
 import {
   PREFLIGHT_PROBE_MS,
   bounded,
@@ -59,7 +59,7 @@ import {
   settledWithin,
   steerMetadata,
   within
-} from "./chunk-P7CQYU5O.mjs";
+} from "./chunk-JSZK5XSV.mjs";
 import {
   BrainRequestError,
   LOCAL_ENGINE_FAILURE_CODES,
@@ -77,7 +77,7 @@ import {
   hasTools,
   memoizedProbe,
   reportPageEngineFailure
-} from "./chunk-SLI7C3HD.mjs";
+} from "./chunk-A5TKRKGR.mjs";
 import {
   ANTHROPIC_RELEASES,
   BACK_TO_BACK_AT,
@@ -411,7 +411,7 @@ import {
   workFiledNotStaffedVerdict,
   workFinishPorts,
   workSupportsRoutingSample
-} from "./chunk-ATUTRIKJ.mjs";
+} from "./chunk-Z6P4OZWG.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -440,13 +440,13 @@ import {
   stripAskUser,
   stripReasoningTagsFromText,
   thoughtTextOf
-} from "./chunk-3DTCUCDH.mjs";
+} from "./chunk-ECIV2BG5.mjs";
 import {
   HELP_COMMAND_ID,
   createComposerCommandRegistry,
   describeComposerProblem,
   parseComposerInput
-} from "./chunk-PPWDNYV2.mjs";
+} from "./chunk-F42QCBU3.mjs";
 
 // src/config.tsx
 import { createContext, useContext, useEffect, useMemo } from "react";

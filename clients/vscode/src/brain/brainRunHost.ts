@@ -13,7 +13,7 @@
  * for a run" and "the webview was told what happened" is deterministic once the
  * gateway is scripted, and is tested that way in `brainRunHost.test.ts`.
  *
- * Contract with the webview (see `webview/src/hostRunDriver.ts`):
+ * Contract with the webview (see `webview/src/run/hostRunDriver.ts`):
  *   - `run.start` carries a {@link WebviewRunStart} — the SERIALIZABLE half of a
  *     `BrainRunRequest`. The functions (stream, tools, persistence, memory) are the
  *     host's own, assembled from the same primitives the native chat participant uses.

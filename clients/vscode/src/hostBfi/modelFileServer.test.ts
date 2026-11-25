@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import type { ModelFileEvent } from "../panels/pageEngineBridgeProtocol";
-import { createHostModelStore } from "../../webview/src/hostModelStore";
+import { createHostModelStore } from "../../webview/src/engines/hostModelStore";
 import { createModelFileServer } from "./modelFileServer";
 import { createFileModelStore } from "./modelFiles";
 

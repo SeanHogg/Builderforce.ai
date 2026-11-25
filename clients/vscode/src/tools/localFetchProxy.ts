@@ -16,7 +16,7 @@ export interface LocalFetchRequest {
 
 /**
  * A completion the HOST performs for a webview against a runtime on this machine. See
- * `hostFetch` in webview/src/hostFetch.ts for why it cannot be done in the webview
+ * `hostFetch` in webview/src/bridge/hostFetch.ts for why it cannot be done in the webview
  * (plain-HTTP localhost is CSP-blocked there, and the runtime would have to allow the
  * `vscode-webview://` origin by CORS besides).
  *

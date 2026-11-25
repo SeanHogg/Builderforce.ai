@@ -52,7 +52,7 @@ export const SHARED_HOST_MESSAGES = [
   /** Run the sign-in command (the webview cannot execute commands). */
   'signin',
   /** A non-2xx API answer the webview received, for the output channel — see
-   *  `webview/src/apiFailureRelay.ts`. Fire-and-forget. */
+   *  `webview/src/diagnostics/apiFailureRelay.ts`. Fire-and-forget. */
   'api.failure',
   /** Choose where models run (`mode`: hybrid · local-only · specific) — the `/` menu's
    *  control and the first-run question. Applied by the host, back in `init`. */
@@ -80,7 +80,7 @@ export const SHARED_HOST_MESSAGES = [
 
 /**
  * The Brain persistence methods a `local.persistence` request may name — ONE list for
- * the webview proxy (`webview/src/hostPersistence.ts`) and the host dispatcher
+ * the webview proxy (`webview/src/bridge/hostPersistence.ts`) and the host dispatcher
  * (`webviewHostBridge.ts`). Every name here is a member of `BrainPersistenceAdapter`
  * (the compile check below), and the host serves it from the SAME adapter the web runs
  * on (`createLocalBrainPersistence`). The 2026.10.57 panel opened on

@@ -85,8 +85,8 @@ vi.mock("./host/hostIngress", async () => {
 });
 
 import { WorkspaceSurface } from "./workspaceSurface";
-import { request } from "../webview/src/bridgeTransport";
-import { createHostPersistence } from "../webview/src/hostPersistence";
+import { request } from "../webview/src/bridge/bridgeTransport";
+import { createHostPersistence } from "../webview/src/bridge/hostPersistence";
 
 /** A surface whose webview delivers each host frame to the webview's `message` listener. */
 function mountSurface(): WorkspaceSurface {

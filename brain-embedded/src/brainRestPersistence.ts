@@ -3,8 +3,8 @@
  *
  * ── WHY THIS EXISTS ─────────────────────────────────────────────────────────
  * This surface was written twice, method for method: `frontend/src/lib/
- * builderforceApi.ts` for the web app and `clients/vscode/webview/src/
- * persistence.ts` for the VS Code webview. Same endpoints, same query-string
+ * builderforceApi.ts` for the web app and `clients/vscode/webview/src/bridge/
+ * hostPersistence.ts` for the VS Code webview. Same endpoints, same query-string
  * building, same `attachEvermindLearn` fold — and they had already drifted:
  * `deleteChat`'s and `markChatRead`'s return types disagreed, and the
  * `evermindLearn` envelope was typed structurally in one copy and by its real

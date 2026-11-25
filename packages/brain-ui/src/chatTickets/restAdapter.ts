@@ -4,7 +4,7 @@
  * ── WHY THIS EXISTS ─────────────────────────────────────────────────────────
  * `ChatTicketsAdapter` was implemented twice against the same endpoints:
  * `frontend/src/components/brain/ChatTicketsPanel.tsx` for the web app and
- * `clients/vscode/webview/src/chatTicketsAdapter.ts` for the VS Code webview.
+ * `clients/vscode/webview/src/chat/chatTicketsAdapter.ts` for the VS Code webview.
  * Same `/api/brain/*`, `/api/tasks`, `/api/approvals`, `/api/workforce` calls —
  * and the copies had drifted where it MATTERED, not just cosmetically:
  *

@@ -83,11 +83,11 @@ describe("post-login auth surface sync", () => {
     // contradicted the host toast.
     expect(app).not.toMatch(/\(!init\.signedIn\s*\|\|\s*!getToken\(\)\)/);
     // Offline-first: signed out is NOT a wall. The decision is the pure `rootGate`
-    // (webview/src/signedOutGate.ts); the root no longer renders a sign-in prompt.
+    // (webview/src/auth/signedOutGate.ts); the root no longer renders a sign-in prompt.
     expect(app).not.toMatch(/if\s*\(!init\.signedIn\s*&&\s*!init\.localRoute\)/);
     expect(app).not.toContain("'app.signInPrompt'");
     expect(app).toMatch(/rootGate\(\{\s*signedIn:\s*init\.signedIn/);
-    const gate = src("..", "webview", "src", "signedOutGate.ts");
+    const gate = src("..", "webview", "src", "auth", "signedOutGate.ts");
     expect(gate).toMatch(/if \(!input\.signedIn \|\| input\.localRoute\) return 'ready'/);
     // The root's late-token path mints (`mintToken` → `await refreshToken()`); the
     // transport's `void refreshToken()` moved to `canvas/CanvasScreenProviders.tsx`.

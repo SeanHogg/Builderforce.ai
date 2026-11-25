@@ -12,7 +12,7 @@
  */
 
 import type { BrainPersistenceAdapter } from "@seanhogg/builderforce-brain-embedded";
-import { adoptChatProject, type AdoptOutcome } from "../../webview/src/adoptChatProject";
+import { adoptChatProject, type AdoptOutcome } from "../../webview/src/project/adoptChatProject";
 
 export interface NativeProjectAdoption {
   /** The local chat's persistence — its record is read for "has no project" and updated. */

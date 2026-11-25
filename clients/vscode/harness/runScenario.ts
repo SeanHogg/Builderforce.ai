@@ -29,7 +29,7 @@ import {
   type BrainMessage,
   type BrainTraceEvent,
 } from '@seanhogg/builderforce-brain-embedded';
-import { buildTranscript } from '../webview/src/transcript';
+import { buildTranscript } from '../webview/src/diagnostics/transcript';
 import { fakeGateway, type GatewayScript, type RecordedRequest } from './fakeGateway';
 import { harnessTools, memoryPersistence, type ToolResponder } from './host';
 

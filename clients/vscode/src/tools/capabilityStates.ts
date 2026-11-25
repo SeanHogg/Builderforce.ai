@@ -4,7 +4,7 @@
  * (`capabilityContextKeys` -> `package.json` `when`), the knowledge host (`workspaceLinked`), the
  * workspace init / session frames and the personality limbic (`networkDenied`) all read THIS, so
  * none of them can disagree. No `vscode` import, so a webview imports it too: the webview realm's
- * ONE read is `useCapability(id)` (`webview/src/useCapability.ts`), fed by the host's pushed policy.
+ * ONE read is `useCapability(id)` (`webview/src/platform/useCapability.ts`), fed by the host's pushed policy.
  *
  * Capability states, not a login gate: understanding a folder, the visualizer, health and
  * Evermind need no account and no network. `account` and `sync` are the only states that do.

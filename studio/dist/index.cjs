@@ -1,13 +1,13 @@
 "use strict";Object.defineProperty(exports, "__esModule", {value: true}); function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } } function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return rhsFn(); } } async function _asyncNullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return await rhsFn(); } } function _optionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = fn(value); } else if (op === 'call' || op === 'optionalCall') { value = fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; } async function _asyncOptionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = await fn(value); } else if (op === 'call' || op === 'optionalCall') { value = await fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; } var _class; var _class2; var _class3; var _class4; var _class5; var _class6;
 
 
-var _chunkVKVEFIZWcjs = require('./chunk-VKVEFIZW.cjs');
+var _chunk2CXFHQCHcjs = require('./chunk-2CXFHQCH.cjs');
 
 // src/engine/diffusion-engine.ts
 var _onnxruntimeweb = require('onnxruntime-web'); var ort4 = _interopRequireWildcard(_onnxruntimeweb); var ort3 = _interopRequireWildcard(_onnxruntimeweb); var ort2 = _interopRequireWildcard(_onnxruntimeweb); var ort = _interopRequireWildcard(_onnxruntimeweb);
 var _transformers = require('@huggingface/transformers');
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/idb.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/idb.js
 var blockedOpens = /* @__PURE__ */ new WeakMap();
 function isBlocked(factory, name) {
   return _nullishCoalesce(_optionalChain([blockedOpens, 'access', _2 => _2.get, 'call', _3 => _3(factory), 'optionalAccess', _4 => _4.has, 'call', _5 => _5(name)]), () => ( false));
@@ -141,7 +141,7 @@ function lazyIdbStore(factory, config) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/inference/modelCache.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/inference/modelCache.js
 function isArrayBuffer(value) {
   return value instanceof ArrayBuffer || Object.prototype.toString.call(value) === "[object ArrayBuffer]";
 }
@@ -193,7 +193,7 @@ function createModelCache(options = {}) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/hardwareProbe.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/hardwareProbe.js
 var SIMD_PROBE = new Uint8Array([
   0,
   97,
@@ -231,7 +231,7 @@ function probeDeviceMemoryBytes() {
   return typeof deviceMemory === "number" && deviceMemory > 0 ? deviceMemory * GIB : void 0;
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/estimates.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/estimates.js
 var DEFAULT_THROUGHPUT = {
   // A RAM hit is not a reload; callers should not ask. Kept non-zero for safety.
   ram: 1e6,
@@ -248,19 +248,19 @@ function estimateReloadCostMs(input) {
   return bytes / throughput;
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/clock.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/shared/clock.js
 function now() {
   const g = globalThis;
   return _nullishCoalesce(_optionalChain([g, 'access', _16 => _16.performance, 'optionalAccess', _17 => _17.now, 'optionalCall', _18 => _18()]), () => ( Date.now()));
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/envProbe.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/envProbe.js
 var DEFAULT_RAM_BYTES = 4 * 1024 * 1024 * 1024;
 function probeRamBytes() {
   return _nullishCoalesce(probeDeviceMemoryBytes(), () => ( DEFAULT_RAM_BYTES));
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/eviction.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/eviction.js
 function byNumber(pick, direction2) {
   const sign = direction2 === "asc" ? 1 : -1;
   return (a, b) => {
@@ -289,7 +289,7 @@ function clamp01(value) {
   return Math.min(1, Math.max(0, value));
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/pressure.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/pressure.js
 function detectPressure(input) {
   const budget = input.byteBudget > 0 ? input.byteBudget : 1;
   const used = Math.max(0, input.usedBytes);
@@ -345,7 +345,7 @@ function clamp012(value) {
   return Math.min(1, Math.max(0, value));
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/spillTier.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/spillTier.js
 function resolveStorageBudget(configured2, storageQuotaBytes, byteBudget) {
   if (configured2 === 0)
     return 0;
@@ -452,7 +452,7 @@ function createSpillTier(options) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/victims.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/victims.js
 function quotaApplies(quota, entry) {
   if (quota.group !== entry.group)
     return false;
@@ -509,7 +509,7 @@ function selectVictims(query) {
   return void 0;
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/workspace.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/workspace.js
 function createWorkspaceController(options) {
   const { bounds, byteBudget } = options;
   const active = bounds.maxBytes > 0 || bounds.minBytes > 0;
@@ -553,7 +553,7 @@ function createWorkspaceController(options) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/manager.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/memory/manager.js
 var DEFAULT_PRESSURE = 0.85;
 var DEFAULT_WATERMARK = 0.7;
 var DEFAULT_EVENT_LIMIT = 256;
@@ -858,7 +858,7 @@ function snapshot(entry) {
   return { ...entry };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/admission.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/admission.js
 function createAdmissionGate(options) {
   const { ledger } = options;
   const counters = ledger.counters;
@@ -891,7 +891,7 @@ function createAdmissionGate(options) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/loadRegistry.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/loadRegistry.js
 function abortErrorOf(signal) {
   const reason = signal.reason;
   if (reason instanceof Error)
@@ -988,7 +988,7 @@ function createLoadRegistry(options) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/predictor.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/predictor.js
 function targetFor(index, id) {
   const known = index.get(id);
   if (known)
@@ -1127,7 +1127,7 @@ function clamp013(value) {
   return Math.min(1, Math.max(0, value));
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/residentStore.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/residentStore.js
 function isUnclaimedPrefetch(entry) {
   return entry.source === "prefetch" && !entry.claimed;
 }
@@ -1202,7 +1202,7 @@ function createResidentStore(options) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/selfTuner.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/selfTuner.js
 function createSelfTuner(options) {
   const maxTracked = Math.max(1, options.maxTrackedLoads);
   let outstanding = [];
@@ -1266,7 +1266,7 @@ function createSelfTuner(options) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/stats.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/stats.js
 function createPrefetchLedger(options) {
   const counters = {
     hits: 0,
@@ -1333,7 +1333,7 @@ function createPrefetchLedger(options) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/targetIndex.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/targetIndex.js
 function createTargetIndex(declared, maxLearned) {
   const index = /* @__PURE__ */ new Map();
   for (const target of declared)
@@ -1358,7 +1358,7 @@ function createTargetIndex(declared, maxLearned) {
   };
 }
 
-// node_modules/.pnpm/@seanhogg+builderforce-webc_2f236333429ed485856b2101f634f00f/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/prefetcher.js
+// node_modules/.pnpm/@seanhogg+builderforce-webc_59e6508e94110350dfb06d799f5a217c/node_modules/@seanhogg/builderforce-webcontainers/dist/prefetch/prefetcher.js
 var DEFAULT_MAX_CONCURRENT = 2;
 var DEFAULT_MAX_TARGETS_PER_REQUEST = 8;
 var DEFAULT_HISTORY_WINDOW = 32;
@@ -4119,7 +4119,7 @@ async function loadWebDitBundle(descriptor, opts) {
     files[rel] = await fetchBundleFile(rel);
   }
   reportProgress(`Building WebDiT bundle (${manifest.backend} backend)\u2026`, onProgress);
-  const { loadBundleFromBuffers } = await Promise.resolve().then(() => _interopRequireWildcard(require("./webdit-runtime-5NWF3I47.cjs")));
+  const { loadBundleFromBuffers } = await Promise.resolve().then(() => _interopRequireWildcard(require("./webdit-runtime-PEHGCXUZ.cjs")));
   const bundle = await loadBundleFromBuffers(manifest, files);
   reportProgress(`WebDiT bundle ready \u2014 ${descriptor.id} (${manifest.architecture}).`, onProgress);
   return bundle;
@@ -4147,7 +4147,7 @@ function collectBundleFilePaths(manifest) {
   return paths;
 }
 async function runWebDitDenoise(bundle, args) {
-  const { runDenoiseLoop } = await Promise.resolve().then(() => _interopRequireWildcard(require("./webdit-runtime-5NWF3I47.cjs")));
+  const { runDenoiseLoop } = await Promise.resolve().then(() => _interopRequireWildcard(require("./webdit-runtime-PEHGCXUZ.cjs")));
   const onProgress = args.onProgress;
   const frameOffset = _nullishCoalesce(args.frameOffset, () => ( 0));
   reportProgress("Running WebDiT denoise loop\u2026", onProgress);
@@ -4248,7 +4248,7 @@ var VideoEngine = class _VideoEngine {
       return _VideoEngine.createWebDit(options, descriptor);
     }
     reportProgress(`Probing hardware (target: ${_nullishCoalesce(options.device, () => ( "auto"))})\u2026`, options.onProgress);
-    const probed = await _chunkVKVEFIZWcjs.probeDevice.call(void 0, _nullishCoalesce(options.device, () => ( "auto")));
+    const probed = await _chunk2CXFHQCHcjs.probeDevice.call(void 0, _nullishCoalesce(options.device, () => ( "auto")));
     if (!probed) return null;
     reportProgress(`Hardware ready: ${probed.label} (${probed.kind}).`, options.onProgress);
     const width = _nullishCoalesce(options.width, () => ( DEFAULT_WIDTH));
@@ -4284,7 +4284,7 @@ var VideoEngine = class _VideoEngine {
    */
   static async createWebDit(options, descriptor) {
     reportProgress("Probing hardware (WebDiT requires WebGPU \u2014 no CPU/WebNN fallback)\u2026", options.onProgress);
-    const probed = await _chunkVKVEFIZWcjs.probeDevice.call(void 0, "webgpu");
+    const probed = await _chunk2CXFHQCHcjs.probeDevice.call(void 0, "webgpu");
     if (!probed) return null;
     if (!descriptor.available || !descriptor.bundleUrl) {
       reportProgress(
@@ -5949,7 +5949,7 @@ var VoiceCloneEngine = class {
    *  CPU always works). Never throws on probe failure — degrades to CPU. */
   async resolveDevice(requested) {
     if (requested) return requested;
-    const probed = await _chunkVKVEFIZWcjs.probeDevice.call(void 0, "auto");
+    const probed = await _chunk2CXFHQCHcjs.probeDevice.call(void 0, "auto");
     return _nullishCoalesce(_optionalChain([probed, 'optionalAccess', _187 => _187.kind]), () => ( "cpu"));
   }
 };
@@ -6004,7 +6004,7 @@ async function resolveVoiceProvider(providers) {
   };
 }
 function preferenceRank(provider) {
-  if (provider.id === "ssm-webgpu") return _chunkVKVEFIZWcjs.hasWebGPUSupport.call(void 0, ) ? 0 : 2;
+  if (provider.id === "ssm-webgpu") return _chunk2CXFHQCHcjs.hasWebGPUSupport.call(void 0, ) ? 0 : 2;
   if (provider.id === "tts-server") return 1;
   return 3;
 }
@@ -6086,5 +6086,5 @@ function writeAscii(view, offset, text) {
 
 
 
-exports.CAMERA_MOVES = CAMERA_MOVES; exports.MODEL_REGISTRY = MODEL_REGISTRY; exports.NeuralCodec = NeuralCodec; exports.SSMAcousticModel = SSMAcousticModel; exports.SSMVoiceProvider = SSMVoiceProvider; exports.TEXT_VOCAB_SIZE = TEXT_VOCAB_SIZE; exports.UnsupportedVideoEncodingError = UnsupportedVideoEncodingError; exports.VideoEngine = VideoEngine; exports.VoiceCloneEngine = VoiceCloneEngine; exports.buildInterpolatedSequence = buildInterpolatedSequence; exports.cameraMoveToMotion = cameraMoveToMotion; exports.composeShotPrompt = composeShotPrompt; exports.configureOnnxRuntime = configureOnnxRuntime; exports.cosineSimilarity = cosineSimilarity; exports.directorPass = directorPass; exports.encodeSpeaker = encodeSpeaker; exports.encodeWav = encodeWav; exports.encodeWavBlob = encodeWavBlob; exports.estimateBlockMotion = estimateBlockMotion; exports.getModelOfflineStatus = getModelOfflineStatus; exports.hasWebGPUSupport = _chunkVKVEFIZWcjs.hasWebGPUSupport; exports.interpolateFrames = interpolateFrames; exports.isModelAvailableOffline = isModelAvailableOffline; exports.luma = luma; exports.melSpectrogram = melSpectrogram; exports.melToWaveform = melToWaveform; exports.normaliseShotBudget = normaliseShotBudget; exports.planKeyframeIndices = planKeyframeIndices; exports.planScene = planScene; exports.prepareModelOffline = prepareModelOffline; exports.probeDevice = _chunkVKVEFIZWcjs.probeDevice; exports.resolveVoiceProvider = resolveVoiceProvider; exports.setOrtWasmBase = setOrtWasmBase; exports.shotPlannerPass = shotPlannerPass; exports.slerp = slerp; exports.storyboardFrameCount = storyboardFrameCount; exports.tokenizeText = tokenizeText; exports.validateFrame = validateFrame; exports.verifySpeaker = verifySpeaker; exports.videoExtensionForMime = videoExtensionForMime;
+exports.CAMERA_MOVES = CAMERA_MOVES; exports.MODEL_REGISTRY = MODEL_REGISTRY; exports.NeuralCodec = NeuralCodec; exports.SSMAcousticModel = SSMAcousticModel; exports.SSMVoiceProvider = SSMVoiceProvider; exports.TEXT_VOCAB_SIZE = TEXT_VOCAB_SIZE; exports.UnsupportedVideoEncodingError = UnsupportedVideoEncodingError; exports.VideoEngine = VideoEngine; exports.VoiceCloneEngine = VoiceCloneEngine; exports.buildInterpolatedSequence = buildInterpolatedSequence; exports.cameraMoveToMotion = cameraMoveToMotion; exports.composeShotPrompt = composeShotPrompt; exports.configureOnnxRuntime = configureOnnxRuntime; exports.cosineSimilarity = cosineSimilarity; exports.directorPass = directorPass; exports.encodeSpeaker = encodeSpeaker; exports.encodeWav = encodeWav; exports.encodeWavBlob = encodeWavBlob; exports.estimateBlockMotion = estimateBlockMotion; exports.getModelOfflineStatus = getModelOfflineStatus; exports.hasWebGPUSupport = _chunk2CXFHQCHcjs.hasWebGPUSupport; exports.interpolateFrames = interpolateFrames; exports.isModelAvailableOffline = isModelAvailableOffline; exports.luma = luma; exports.melSpectrogram = melSpectrogram; exports.melToWaveform = melToWaveform; exports.normaliseShotBudget = normaliseShotBudget; exports.planKeyframeIndices = planKeyframeIndices; exports.planScene = planScene; exports.prepareModelOffline = prepareModelOffline; exports.probeDevice = _chunk2CXFHQCHcjs.probeDevice; exports.resolveVoiceProvider = resolveVoiceProvider; exports.setOrtWasmBase = setOrtWasmBase; exports.shotPlannerPass = shotPlannerPass; exports.slerp = slerp; exports.storyboardFrameCount = storyboardFrameCount; exports.tokenizeText = tokenizeText; exports.validateFrame = validateFrame; exports.verifySpeaker = verifySpeaker; exports.videoExtensionForMime = videoExtensionForMime;
 //# sourceMappingURL=index.cjs.map
