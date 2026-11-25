@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db, Tx } from '../database/connection';
 import type { Env } from '../../env';
-import { getOrSetCached, invalidateCached } from '../cache/readThroughCache';
+import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached } from '../cache/readThroughCache';
 import { segments } from '../database/schema';
 
 /**
@@ -61,7 +61,11 @@ export async function resolveSegment(
   const cacheKey = keyFor(tenantId, accountId, companyId);
   const id = await getOrSetCached(env, cacheKey, () => (accountId && companyId
     ? resolveFederated(db, tenantId, accountId, companyId)
-    : resolveDefault(db, tenantId)), { kvTtlSeconds: CACHE_TTL_SECONDS, l1TtlMs: CACHE_TTL_SECONDS * 1000 });
+    : resolveDefault(db, tenantId)), {
+    kvTtlSeconds: CACHE_TTL_SECONDS,
+    l1TtlMs: CACHE_TTL_SECONDS * 1000,
+    staleOnUnavailableSeconds: OUTAGE_STALE_TTL_SECONDS,
+  });
   const keys = keysBySegment.get(id) ?? new Set<string>();
   keys.add(cacheKey);
   keysBySegment.set(id, keys);

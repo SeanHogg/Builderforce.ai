@@ -5,7 +5,7 @@ import {
   invalidateJwtMembershipCache,
   keyCacheKey,
 } from './keyResolutionCache';
-import { __clearL1CacheForTests } from '../cache/readThroughCache';
+import { __clearL1CacheForTests, OUTAGE_STALE_TTL_SECONDS } from '../cache/readThroughCache';
 import type { Env } from '../../env';
 
 /**
@@ -66,8 +66,13 @@ describe('JWT membership resolution via resolveKeyCached', () => {
 
     await resolveKeyCached(env, 'jwt', jwtMembershipHash(1, 'u'), loader);
 
-    const opts = kv.put.mock.calls[0]![2] as { expirationTtl: number };
-    expect(opts.expirationTtl).toBe(60);
+    // Membership is read with staleOnError: ONE entry lives the stale window, and the
+    // 60 s freshness is carried as `freshUntil` inside the envelope (never 365 days).
+    const [, value, opts] = kv.put.mock.calls[0]! as [string, string, { expirationTtl: number }];
+    const envelope = JSON.parse(value) as { __rtcStale: number; freshUntil: number };
+    expect(envelope.__rtcStale).toBe(1);
+    expect(Math.abs(envelope.freshUntil - (Date.now() + 60_000))).toBeLessThan(5_000);
+    expect(opts.expirationTtl).toBe(OUTAGE_STALE_TTL_SECONDS);
   });
 
   it('serves the in-isolate L1 when KV is unbound, and re-loads once it is invalidated', async () => {

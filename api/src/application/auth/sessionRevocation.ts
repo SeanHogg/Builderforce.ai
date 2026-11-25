@@ -30,7 +30,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authTokens, authUserSessions, users } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
-import { getOrSetCached, invalidateCached, peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
+import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { UnauthorizedError } from '../../domain/shared/errors';
 
 /**
@@ -163,7 +163,10 @@ export function lastSeenWrites(db: Db, row: ActiveTokenRow, now = Date.now()): P
  */
 export const activeTokenCacheKey = (jti: string): string => `auth:active:${jti}`;
 
-const ACTIVE_TOKEN_CACHE = { kvTtlSeconds: 5 * 60, l1TtlMs: 30_000 };
+// `staleOnUnavailableSeconds`: last-known-good through a core-DB outage. Safe because
+// {@link revokeSessionTokens} / {@link invalidateSessionVersion} delete these keys (and
+// with them the stale copy) in the same call that revokes.
+const ACTIVE_TOKEN_CACHE = { kvTtlSeconds: 5 * 60, l1TtlMs: 30_000, staleOnUnavailableSeconds: OUTAGE_STALE_TTL_SECONDS };
 
 /** {@link ActiveTokenRow} as it survives JSON: KV would hand `Date`s back as strings. */
 interface CachedActiveToken {
@@ -204,14 +207,26 @@ export async function findActiveTokenCached(
   userId: string,
   jti: string,
 ): Promise<ActiveTokenRow | null> {
-  const key = activeTokenCacheKey(jti);
-  const hit = await peekCached<CachedActiveToken>(env, key);
-  if (hit && hit.userId === userId) return fromCached(hit);
+  // getOrSet (not peek + set) so a core-DB outage can fall back to the last-known-good
+  // verdict. A non-live row must never be cached, so the loader throws it out instead.
+  try {
+    const cached = await getOrSetCached<CachedActiveToken>(env, activeTokenCacheKey(jti), async () => {
+      const row = await findActiveToken(db, userId, jti);
+      if (row == null || (row.sessionId && !row.sessionRowId)) throw new NotLive(row);
+      return toCached(userId, row);
+    }, ACTIVE_TOKEN_CACHE);
+    // A jti is only ever honoured for the user it names; a mismatch is read directly.
+    if (cached.userId === userId) return fromCached(cached);
+  } catch (error) {
+    if (error instanceof NotLive) return error.row;
+    throw error;
+  }
+  return findActiveToken(db, userId, jti);
+}
 
-  const row = await findActiveToken(db, userId, jti);
-  const live = row != null && !(row.sessionId && !row.sessionRowId);
-  if (live) await setCached(env, key, toCached(userId, row), ACTIVE_TOKEN_CACHE);
-  return row;
+/** Carries a not-live row out of the cache loader so it is returned but never cached. */
+class NotLive extends Error {
+  constructor(readonly row: ActiveTokenRow | null) { super('token is not live'); }
 }
 
 /**

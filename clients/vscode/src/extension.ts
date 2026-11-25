@@ -851,6 +851,7 @@ async function pollAssignedTasks(
   await platformPolicyResolved();
   if (!(await context.secrets.get(SECRET_KEY))) return;
   const assigned = await bfApi.listAssignedTasks(context.secrets);
+  if (assigned === undefined) return; // unreadable (outage) ≠ empty: leave the seen-set alone
   const currentIds = assigned.map((t) => t.id);
   const prev = context.globalState.get<number[]>(ASSIGNED_SEEN_KEY);
   await context.globalState.update(ASSIGNED_SEEN_KEY, currentIds);

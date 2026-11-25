@@ -30,8 +30,9 @@ import { deferPastResponse } from '../../application/shared/requestScope';
  */
 
 import type { Env } from '../../env';
-import { createReadThroughCache } from '@builderforce/read-through-cache';
+import { createReadThroughCache, type CacheTtlOptions } from '@builderforce/read-through-cache';
 import { isKvRateLimit, retryTransient } from '../shared/retryTransient';
+import { isDatabaseUnavailable } from '../database/neonAvailability';
 
 const SOURCE = 'infrastructure/cache/readThroughCache.ts';
 
@@ -98,10 +99,28 @@ export async function getOrSetCached<T>(
   env: CacheEnv,
   key: string,
   loader: () => Promise<T>,
-  opts?: { kvTtlSeconds?: number; l1TtlMs?: number },
+  opts?: CacheOpts,
 ): Promise<T> {
-  return cache.getOrSet(cacheL2Kv(env), key, loader, opts);
+  return cache.getOrSet(cacheL2Kv(env), key, loader, withStaleOnUnavailable(opts));
 }
+
+type CacheOpts = { kvTtlSeconds?: number; l1TtlMs?: number; staleOnUnavailableSeconds?: number };
+
+/** Translate `staleOnUnavailableSeconds` into the core's `staleOnError` — the ONE
+ *  place the "database is refusing" predicate is wired in. */
+function withStaleOnUnavailable(opts: CacheOpts | undefined): CacheTtlOptions | undefined {
+  if (!opts?.staleOnUnavailableSeconds) return opts;
+  const { staleOnUnavailableSeconds, ...ttl } = opts;
+  return { ...ttl, staleOnError: { ttlSeconds: staleOnUnavailableSeconds, when: isDatabaseUnavailable } };
+}
+
+/**
+ * How long the auth/gateway reads keep their last-known-good copy for a core-database
+ * outage (see `staleOnUnavailableSeconds`). The copy is only SERVED when the loader
+ * answers `database_unavailable`; every writer's `invalidateCached` deletes it, so a
+ * revoked key or membership is never served stale. Defined once, here.
+ */
+export const OUTAGE_STALE_TTL_SECONDS = 7 * 24 * 3600;
 
 /**
  * Peek at the cached value for `key` WITHOUT invoking a loader — L1 then L2, no
@@ -124,9 +143,9 @@ export async function setCached<T>(
   env: CacheEnv,
   key: string,
   value: T,
-  opts?: { kvTtlSeconds?: number; l1TtlMs?: number },
+  opts?: { kvTtlSeconds?: number; l1TtlMs?: number; staleOnUnavailableSeconds?: number },
 ): Promise<void> {
-  return cache.set(cacheL2Kv(env), key, value, opts);
+  return cache.set(cacheL2Kv(env), key, value, withStaleOnUnavailable(opts));
 }
 
 /**

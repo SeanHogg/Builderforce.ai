@@ -5,7 +5,7 @@ import { getModels, isModelAllowed } from "./gateway";
 import { isLocalModelRef } from "./localModels";
 import { getSelectedProject } from "./projectState";
 import { explicitRoleModelPin, NATIVE_RUN_ROLE, reviewModelPin, roleModelPin } from "./roleModelPin";
-import { stageModels, type StageModels } from "./stageModels";
+import { stageModels, type ModelPolicy, type StageModels } from "./stageModels";
 
 /**
  * The gateway pin (`project_evermind:<projectId>`) that expands to a project's

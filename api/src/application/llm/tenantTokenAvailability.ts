@@ -265,25 +265,29 @@ export async function resolveSuperadminUnlimited(
  * failure falls back to the normal plan gate rather than accidentally granting bypass.
  */
 export async function tenantHasSuperadminMember(db: Db, tenantId: number, env?: Env): Promise<boolean> {
+  // The loader THROWS on a DB error so the read-through cache stores nothing: caching the
+  // fail-safe `false` for 5 minutes would turn an outage into a wrong verdict that outlives it.
   const compute = async (): Promise<boolean> => {
-    try {
-      const [row] = await db
-        .select({ isSuperadmin: users.isSuperadmin })
-        .from(tenantMembers)
-        .innerJoin(users, eq(users.id, tenantMembers.userId))
-        .where(and(
-          eq(tenantMembers.tenantId, tenantId),
-          eq(tenantMembers.isActive, true),
-          eq(users.isSuperadmin, true),
-        ))
-        .limit(1);
-      return !!row;
-    } catch {
-      return false;
-    }
+    const [row] = await db
+      .select({ isSuperadmin: users.isSuperadmin })
+      .from(tenantMembers)
+      .innerJoin(users, eq(users.id, tenantMembers.userId))
+      .where(and(
+        eq(tenantMembers.tenantId, tenantId),
+        eq(tenantMembers.isActive, true),
+        eq(users.isSuperadmin, true),
+      ))
+      .limit(1);
+    return !!row;
   };
-  if (!env) return compute();
-  return getOrSetCached(env, `tenant:superadmin-member:${tenantId}`, compute, { kvTtlSeconds: 300 });
+  try {
+    return env
+      ? await getOrSetCached(env, `tenant:superadmin-member:${tenantId}`, compute, { kvTtlSeconds: 300 })
+      : await compute();
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/llm/tenantTokenAvailability.ts', operation: 'tenantHasSuperadminMember', context: { tenantId } });
+    return false;
+  }
 }
 
 /** The 429 body an interactive run path returns when the tenant is out of tokens.

@@ -29,12 +29,12 @@ describe("fetchProjectShipPolicy — reads `shipPolicy.local` off the manager re
     await expect(fetchProjectShipPolicy(secrets, 3)).resolves.toMatchObject({ mode: "commit", source: "default" });
   });
 
-  it("is undefined when signed out, or when `local` is missing or malformed", async () => {
+  it("regression: undefined = nothing read (signed out / exchange failed); null = read, but `local` is missing or malformed", async () => {
     authed.mockResolvedValueOnce(undefined);
     await expect(fetchProjectShipPolicy(secrets, 3)).resolves.toBeUndefined();
     authed.mockResolvedValueOnce({ shipPolicy: { cloud: { mode: "pull_request" } } });
-    await expect(fetchProjectShipPolicy(secrets, 3)).resolves.toBeUndefined();
+    await expect(fetchProjectShipPolicy(secrets, 3)).resolves.toBeNull();
     authed.mockResolvedValueOnce(managerBody({ mode: "yolo", source: "project_settings" }));
-    await expect(fetchProjectShipPolicy(secrets, 3)).resolves.toBeUndefined();
+    await expect(fetchProjectShipPolicy(secrets, 3)).resolves.toBeNull();
   });
 });

@@ -20,5 +20,9 @@ export function respondToAccessError(c: Context<HonoEnv>, err: unknown) {
   if (err instanceof TenantAccessError) {
     return c.json({ error: err.message, code: err.code }, err.status);
   }
+  // requireTenantAccess signals a bad/missing credential with a plain `Error` (verifyJwt,
+  // "Missing or malformed...", revoked key) -> 401. Anything typed (ServiceUnavailableError, ...) is
+  // NOT a credential failure: rethrow so the global errorHandler renders it (503 on a DB outage).
+  if (err instanceof Error && err.constructor !== Error) throw err;
   return c.json({ error: (err as Error).message || 'Unauthorized' }, 401);
 }

@@ -28,7 +28,7 @@ import type { Env } from '../../env';
 import { legalDocumentAcceptances, legalDocuments, userLegalAcceptances, userTermsAgreements } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToNullableTenant, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 
 /** Cache key for the platform-wide active terms version. */
 // Bump the key with each migration-published legal release. SQL migrations cannot
@@ -92,7 +92,7 @@ export async function getActiveTermsVersion(db: Db, env?: Env): Promise<string |
     env,
     ACTIVE_TERMS_KEY,
     async () => ({ version: await loadActiveTermsVersion(db) }),
-    { kvTtlSeconds: ACTIVE_TTL_SECONDS },
+    { kvTtlSeconds: ACTIVE_TTL_SECONDS, staleOnUnavailableSeconds: OUTAGE_STALE_TTL_SECONDS },
   );
   return box.version;
 }
@@ -104,7 +104,7 @@ export async function getAcceptedTermsVersion(db: Db, userId: string, env?: Env)
     env,
     acceptedTermsKey(userId),
     async () => ({ version: await loadAcceptedTermsVersion(db, userId) }),
-    { kvTtlSeconds: ACCEPTED_TTL_SECONDS },
+    { kvTtlSeconds: ACCEPTED_TTL_SECONDS, staleOnUnavailableSeconds: OUTAGE_STALE_TTL_SECONDS },
   );
   return box.version;
 }

@@ -38,7 +38,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { ledgerEntries } from '../../infrastructure/database/schema';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { AI_CREDITS } from '../kernel/denominations';
 
 const balanceKey = (tenantId: number) => `ai-credits:balance:t:${tenantId}`;
@@ -71,7 +71,7 @@ export async function aiCreditBalance(db: Db, env: Env | undefined, tenantId: nu
       .from(ledgerEntries)
       .where(creditAccount(tenantId));
     return Math.max(0, Math.round(Number(row?.total ?? 0)));
-  }, { kvTtlSeconds: 60 });
+  }, { kvTtlSeconds: 60, staleOnUnavailableSeconds: OUTAGE_STALE_TTL_SECONDS });
 }
 
 /** Grant credits. `reference` is the redemption's own id, so a retried

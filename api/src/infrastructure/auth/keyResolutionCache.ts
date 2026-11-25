@@ -40,7 +40,7 @@
  */
 
 import type { Env } from '../../env';
-import { getOrSetCached, invalidateCached, peekCached, setCached } from '../cache/readThroughCache';
+import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached, peekCached, setCached } from '../cache/readThroughCache';
 
 /** 365 days. Long-lived because mutations invalidate explicitly. */
 const TTL_SECONDS = 365 * 24 * 60 * 60;
@@ -118,6 +118,9 @@ export async function resolveKeyCached(
     return getOrSetCached(env, keyCacheKey(keyType, hash), loader, {
       kvTtlSeconds: JWT_TTL_SECONDS,
       l1TtlMs: JWT_L1_TTL_MS,
+      // Last-known-good through a core-DB outage; every membership write drops this key
+      // (`membershipChanged` / `invalidateJwtMembershipCache`), so a removal is never served stale.
+      staleOnUnavailableSeconds: OUTAGE_STALE_TTL_SECONDS,
     });
   }
   // The TTL depends on the loaded VALUE (positive = a year, rejection = seconds),

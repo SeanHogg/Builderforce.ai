@@ -9,6 +9,10 @@ vi.mock("./bfApi", () => ({
   fetchProjectShipPolicy: (...a: unknown[]) => fetchProjectShipPolicy(...a),
 }));
 
+// policyGates reads the stored editor key (signed in vs out) through gateway.ts, which needs the vscode host.
+const getApiKey = vi.fn(async (): Promise<string | undefined> => undefined);
+vi.mock("./gateway", () => ({ getApiKey: () => getApiKey() }));
+
 import { POLICY_GATES_FRESH_MS, POLICY_GATES_STALE_MS, configurePolicyGatesPersistence, resetPolicyGatesCache, resolveRunPolicyGates, resolveRunShipPolicy } from "./policyGates";
 import { createPolicyGatesPersistence, loadPolicySnapshot } from "./policySnapshots";
 
@@ -18,6 +22,8 @@ const PR = shipPolicyOf("pull_request", "project_settings");
 beforeEach(() => {
   fetchPolicyGates.mockReset();
   fetchProjectShipPolicy.mockReset();
+  getApiKey.mockReset();
+  getApiKey.mockResolvedValue(undefined);
   resetPolicyGatesCache();
   configurePolicyGatesPersistence(undefined);
 });
@@ -89,5 +95,59 @@ describe("resolveRunShipPolicy", () => {
     resetPolicyGatesCache();
     fetchProjectShipPolicy.mockRejectedValueOnce(new Error("offline"));
     await expect(resolveRunShipPolicy(secrets, 7, vi.fn())).resolves.toEqual(leave);
+  });
+
+  const leave = shipPolicyOf("leave_uncommitted", "project_settings");
+  const persisted = () => {
+    const store = createMemoryLocalFirstStore();
+    configurePolicyGatesPersistence(createPolicyGatesPersistence(store, { deviceId: "d" }));
+    return store;
+  };
+
+  it("regression: signed in + unreadable (undefined) keeps the recorded ship policy and reports the failure", async () => {
+    const store = persisted();
+    getApiKey.mockResolvedValue("bfk_stored");
+    fetchPolicyGates.mockResolvedValueOnce([]);
+    await resolveRunPolicyGates(secrets, 7);
+    fetchProjectShipPolicy.mockResolvedValueOnce(leave);
+    await resolveRunShipPolicy(secrets, 7, vi.fn());
+    resetPolicyGatesCache();
+
+    fetchProjectShipPolicy.mockResolvedValueOnce(undefined);
+    const report = vi.fn();
+    await expect(resolveRunShipPolicy(secrets, 7, report)).resolves.toEqual(leave);
+    expect(report).toHaveBeenCalled();
+    expect((await loadPolicySnapshot(store, "project:7"))?.payload.shipPolicy).toEqual(leave);
+  });
+
+  it("regression: a genuinely unset project (null) still records null and uses the default", async () => {
+    const store = persisted();
+    getApiKey.mockResolvedValue("bfk_stored");
+    fetchPolicyGates.mockResolvedValueOnce([]);
+    await resolveRunPolicyGates(secrets, 7);
+    fetchProjectShipPolicy.mockResolvedValueOnce(leave);
+    await resolveRunShipPolicy(secrets, 7, vi.fn());
+    resetPolicyGatesCache();
+
+    fetchProjectShipPolicy.mockResolvedValueOnce(null);
+    await expect(resolveRunShipPolicy(secrets, 7, vi.fn())).resolves.toBe(DEFAULT_SHIP_POLICY);
+    expect((await loadPolicySnapshot(store, "project:7"))?.payload.shipPolicy ?? null).toBeNull();
+  });
+
+  it("regression: signed out ⇒ the default, nothing cached or recorded", async () => {
+    const store = persisted();
+    fetchPolicyGates.mockResolvedValueOnce([]);
+    await resolveRunPolicyGates(secrets, 7);
+    fetchProjectShipPolicy.mockResolvedValueOnce(leave);
+    getApiKey.mockResolvedValue("bfk_stored");
+    await resolveRunShipPolicy(secrets, 7, vi.fn());
+    resetPolicyGatesCache();
+    getApiKey.mockResolvedValue(undefined);
+
+    fetchProjectShipPolicy.mockResolvedValue(undefined);
+    await expect(resolveRunShipPolicy(secrets, 7, vi.fn())).resolves.toBe(DEFAULT_SHIP_POLICY);
+    await resolveRunShipPolicy(secrets, 7, vi.fn());
+    expect(fetchProjectShipPolicy).toHaveBeenCalledTimes(3); // no cache entry answered the repeat
+    expect((await loadPolicySnapshot(store, "project:7"))?.payload.shipPolicy).toEqual(leave);
   });
 });

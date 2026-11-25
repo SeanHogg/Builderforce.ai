@@ -12,6 +12,7 @@ import type { Context } from 'hono';
 
 import { resolveAgentHostCaller, type CallerTenant } from '../../application/auth/callerTenant';
 import { authMiddleware } from './authMiddleware';
+import { UnauthorizedError } from '../../domain/shared/errors';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv } from '../../env';
 
@@ -29,10 +30,12 @@ export async function resolveCallerTenant(db: Db, c: Context<HonoEnv>): Promise<
 
   try {
     await authMiddleware(c as unknown as Parameters<typeof authMiddleware>[0], async () => {});
-  } catch {
+  } catch (err) {
     // authMiddleware throws UnauthorizedError for a missing/invalid token. That is
     // "no credential", not a failure to report — the host-key door already declined.
-    return null;
+    // Anything else (a database outage, a bug) is a real failure and keeps its status.
+    if (err instanceof UnauthorizedError) return null;
+    throw err;
   }
   const tenantId = c.get('tenantId');
   return typeof tenantId === 'number' ? { tenantId, agentHostId: null } : null;

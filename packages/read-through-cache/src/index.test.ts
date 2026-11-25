@@ -269,3 +269,85 @@ describe('primitives', () => {
     expect(toJsonShape(undefined)).toBeUndefined();
   });
 });
+
+describe('createReadThroughCache · staleOnError (last-known-good)', () => {
+  const outage = new Error('outage');
+  const stale = { ttlSeconds: 7 * 86_400, when: (e: unknown) => e === outage };
+  const opts = { kvTtlSeconds: 60, staleOnError: stale };
+
+  /** Age the stored envelope's fresh window past, leaving it in KV (as expiry would not yet have). */
+  async function expireFresh(kv: ReturnType<typeof memoryKv>, key: string): Promise<void> {
+    const storageKey = await kvStorageKey(key);
+    const envelope = JSON.parse(kv.store.get(storageKey)!);
+    kv.store.set(storageKey, JSON.stringify({ ...envelope, freshUntil: Date.now() - 1 }));
+  }
+
+  it('writes ONE envelope with the stale TTL and serves it while fresh', async () => {
+    const kv = memoryKv();
+    const loader = vi.fn(async () => ({ v: 1 }));
+    await createReadThroughCache().getOrSet(kv, 'k', loader, opts);
+    expect(kv.put).toHaveBeenCalledTimes(1);
+    const [, body, options] = (kv.put as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(options).toEqual({ expirationTtl: stale.ttlSeconds });
+    expect(JSON.parse(body as string)).toMatchObject({ __rtcStale: 1, value: { v: 1 } });
+
+    expect(await createReadThroughCache().getOrSet(kv, 'k', loader, opts)).toEqual({ v: 1 });
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it('an envelope past its fresh window is not a hit: the loader runs again', async () => {
+    const kv = memoryKv();
+    await createReadThroughCache().getOrSet(kv, 'k', async () => 'old', opts);
+    await expireFresh(kv, 'k');
+    const loader = vi.fn(async () => 'new');
+    expect(await createReadThroughCache().getOrSet(kv, 'k', loader, opts)).toBe('new');
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it('serves the stale value when the loader throws and `when` holds', async () => {
+    const kv = memoryKv();
+    await createReadThroughCache().getOrSet(kv, 'k', async () => 'old', opts);
+    await expireFresh(kv, 'k');
+    const cache = createReadThroughCache();
+    const loader = vi.fn(async () => { throw outage; });
+    expect(await cache.getOrSet(kv, 'k', loader, opts)).toBe('old');
+    // L1 now holds it, so a burst does not re-hit the refusing source.
+    expect(await cache.getOrSet(kv, 'k', loader, opts)).toBe('old');
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it('rethrows when `when` is false, and when there is no stale copy', async () => {
+    const kv = memoryKv();
+    await createReadThroughCache().getOrSet(kv, 'k', async () => 'old', opts);
+    await expireFresh(kv, 'k');
+    const other = new Error('bug');
+    await expect(createReadThroughCache().getOrSet(kv, 'k', async () => { throw other; }, opts)).rejects.toBe(other);
+    await expect(createReadThroughCache().getOrSet(memoryKv(), 'cold', async () => { throw outage; }, opts)).rejects.toBe(outage);
+  });
+
+  it('invalidate removes the stale copy, so an outage afterwards rethrows', async () => {
+    const kv = memoryKv();
+    const cache = createReadThroughCache();
+    await cache.getOrSet(kv, 'k', async () => 'old', opts);
+    await expireFresh(kv, 'k');
+    await cache.invalidate(kv, 'k');
+    expect(kv.store.size).toBe(0);
+    await expect(cache.getOrSet(kv, 'k', async () => { throw outage; }, opts)).rejects.toBe(outage);
+  });
+
+  it('a legacy raw KV value is still a normal hit', async () => {
+    const kv = memoryKv();
+    kv.store.set(await kvStorageKey('k'), JSON.stringify({ v: 9 }));
+    const loader = vi.fn(async () => ({ v: 1 }));
+    expect(await createReadThroughCache().getOrSet(kv, 'k', loader, opts)).toEqual({ v: 9 });
+    expect(loader).not.toHaveBeenCalled();
+  });
+
+  it('callers without staleOnError still write the raw value with the plain TTL', async () => {
+    const kv = memoryKv();
+    await createReadThroughCache().getOrSet(kv, 'k', async () => ({ v: 1 }), { kvTtlSeconds: 120 });
+    const [, body, options] = (kv.put as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(JSON.parse(body as string)).toEqual({ v: 1 });
+    expect(options).toEqual({ expirationTtl: 120 });
+  });
+});

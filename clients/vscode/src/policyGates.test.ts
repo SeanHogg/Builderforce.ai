@@ -6,6 +6,9 @@ import { createMemoryLocalFirstStore } from "@builderforce/local-first";
 
 const fetchPolicyGates = vi.fn();
 vi.mock("./bfApi", () => ({ fetchPolicyGates: (...a: unknown[]) => fetchPolicyGates(...a) }));
+// "Signed in" = an editor key is stored. Default: signed out (no key).
+const getApiKey = vi.fn(async (): Promise<string | undefined> => undefined);
+vi.mock("./gateway", () => ({ getApiKey: () => getApiKey() }));
 
 import { POLICY_GATES_FRESH_MS, POLICY_GATES_STALE_MS, PolicyGatesUnavailableError, configurePolicyGatesPersistence, resetPolicyGatesCache, resolveRunPolicyGates } from "./policyGates";
 import { createPolicyGatesPersistence, loadPolicySnapshot, snapshotPermitsOfflineRun } from "./policySnapshots";
@@ -14,6 +17,8 @@ const secrets = {} as never;
 
 beforeEach(() => {
   fetchPolicyGates.mockReset();
+  getApiKey.mockReset();
+  getApiKey.mockResolvedValue(undefined);
   resetPolicyGatesCache();
   configurePolicyGatesPersistence(undefined);
 });
@@ -115,6 +120,49 @@ describe("resolveRunPolicyGates snapshot survives sign-out", () => {
     configurePolicyGatesPersistence(createPolicyGatesPersistence(createMemoryLocalFirstStore(), { deviceId: "device-1" }));
     fetchPolicyGates.mockRejectedValueOnce(new Error("offline"));
     await expect(resolveRunPolicyGates(secrets, 7, readAt)).rejects.toBeInstanceOf(PolicyGatesUnavailableError);
+  });
+});
+
+/**
+ * `fetchPolicyGates` answers `undefined` for BOTH "signed out" and "the key→JWT exchange got a
+ * 503". The outage must not be read as an empty policy: it must neither ungate the run nor
+ * overwrite the tenant's recorded snapshot with `[]`.
+ */
+describe("resolveRunPolicyGates outage vs signed out", () => {
+  const gates = [{ id: "g", tool: "run_command", effect: "block" as const }];
+  const readAt = 1_700_000_000_000;
+  const persistedStore = () => {
+    const store = createMemoryLocalFirstStore();
+    configurePolicyGatesPersistence(createPolicyGatesPersistence(store, { deviceId: "device-1", now: () => new Date(readAt) }));
+    return store;
+  };
+
+  it("regression: signed in + unreadable platform + valid snapshot ⇒ snapshot gates, snapshot not overwritten", async () => {
+    const store = persistedStore();
+    getApiKey.mockResolvedValue("bfk_stored");
+    fetchPolicyGates.mockResolvedValueOnce(gates);
+    await resolveRunPolicyGates(secrets, 7, readAt);
+    resetPolicyGatesCache();
+
+    fetchPolicyGates.mockResolvedValueOnce(undefined);
+    await expect(resolveRunPolicyGates(secrets, 7, readAt + POLICY_GATES_FRESH_MS)).resolves.toEqual(gates);
+    expect((await loadPolicySnapshot(store, "project:7"))?.payload.gates).toEqual(gates);
+  });
+
+  it("regression: signed in + unreadable platform + no snapshot ⇒ PolicyGatesUnavailableError", async () => {
+    persistedStore();
+    getApiKey.mockResolvedValue("bfk_stored");
+    fetchPolicyGates.mockResolvedValueOnce(undefined);
+    await expect(resolveRunPolicyGates(secrets, 7, readAt)).rejects.toBeInstanceOf(PolicyGatesUnavailableError);
+  });
+
+  it("regression: signed out ⇒ [] and nothing cached or persisted", async () => {
+    const store = persistedStore();
+    fetchPolicyGates.mockResolvedValue(undefined);
+    await expect(resolveRunPolicyGates(secrets, 7, readAt)).resolves.toEqual([]);
+    expect(await loadPolicySnapshot(store, "project:7")).toBeUndefined();
+    await resolveRunPolicyGates(secrets, 7, readAt + 1);
+    expect(fetchPolicyGates).toHaveBeenCalledTimes(2); // no cache entry answered the second turn
   });
 });
 

@@ -18,7 +18,7 @@ import { asc, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { tenantLlmProviderKeys } from '../../infrastructure/database/schema';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 
 export interface TenantProviderRow {
   id: string;
@@ -55,7 +55,7 @@ export async function loadTenantProviderRows(
     env,
     tenantProviderRowsCacheKey(tenantId),
     () => selectTenantProviderRows(env, tenantId),
-    { kvTtlSeconds: 3600, l1TtlMs: 15_000 },
+    { kvTtlSeconds: 3600, l1TtlMs: 15_000, staleOnUnavailableSeconds: OUTAGE_STALE_TTL_SECONDS },
   );
 }
 

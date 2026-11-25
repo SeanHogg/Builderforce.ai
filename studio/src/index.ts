@@ -47,6 +47,16 @@ export { VideoEngine } from './engine/video-engine';
 export { probeDevice, hasWebGPUSupport } from './engine/device-router';
 export type { ProbedDevice } from './engine/device-router';
 export { MODEL_REGISTRY } from './engine/diffusion-models';
+export {
+  prepareModelOffline,
+  isModelAvailableOffline,
+  getModelOfflineStatus,
+} from './engine/offline/model-offline';
+export type {
+  PrepareModelOfflineOptions,
+  OfflineProgress,
+  ModelOfflineStatus,
+} from './engine/offline/model-offline';
 export { configureOnnxRuntime, setOrtWasmBase } from './engine/onnx-runtime-config';
 export type { OnnxRuntimeConfigOptions } from './engine/onnx-runtime-config';
 export {

@@ -37,6 +37,30 @@ export interface KvNamespaceLike {
 export interface CacheTtlOptions {
   kvTtlSeconds?: number;
   l1TtlMs?: number;
+  /**
+   * OPT-IN last-known-good fallback for `getOrSet`. The KV entry is then written ONCE
+   * as a {@link StaleEnvelope} that lives `ttlSeconds` but is only FRESH for
+   * `kvTtlSeconds`. Once past fresh, a read calls the loader; if the loader throws and
+   * `when(error)` holds, the old value is served instead of the error. Without this
+   * option the KV format and TTLs are exactly as before.
+   */
+  staleOnError?: { ttlSeconds: number; when: (error: unknown) => boolean };
+}
+
+/** The KV shape of an entry written with `staleOnError`. The marker makes it
+ *  unmistakable next to a raw cached value. */
+export interface StaleEnvelope<T = unknown> {
+  __rtcStale: 1;
+  value: T;
+  /** Epoch ms until which the value is a plain hit. */
+  freshUntil: number;
+}
+
+function isStaleEnvelope(v: unknown): v is StaleEnvelope {
+  return typeof v === 'object' && v !== null
+    && (v as { __rtcStale?: unknown }).__rtcStale === 1
+    && typeof (v as { freshUntil?: unknown }).freshUntil === 'number'
+    && 'value' in v;
 }
 
 /** What went wrong and where — handed to the injected `onError` so the consumer
@@ -217,6 +241,17 @@ export function createReadThroughCache(options: ReadThroughCacheOptions = {}): R
     }
   };
 
+  /** The ONE KV write for a loaded/set value. Always a SINGLE put: with `staleOnError`
+   *  it is the {@link StaleEnvelope}, living the stale window and carrying its own
+   *  fresh deadline; without it, the raw value with the plain TTL (the original format). */
+  const kvWrite = (kv: KvNamespaceLike, key: string, value: unknown, opts: CacheTtlOptions | undefined, operation: string): Promise<void> => {
+    const stale = opts?.staleOnError;
+    if (!stale) return kvPut(kv, key, value, opts?.kvTtlSeconds, operation);
+    const freshSeconds = kvTtl(opts?.kvTtlSeconds);
+    const envelope: StaleEnvelope = { __rtcStale: 1, value, freshUntil: Date.now() + freshSeconds * 1000 };
+    return kvPut(kv, key, envelope, Math.max(stale.ttlSeconds, freshSeconds), operation);
+  };
+
   return {
     async getOrSet<T>(kv: KvNamespaceLike | undefined, key: string, loader: () => Promise<T>, opts?: CacheTtlOptions): Promise<T> {
       const now = Date.now();
@@ -229,23 +264,43 @@ export function createReadThroughCache(options: ReadThroughCacheOptions = {}): R
       const l1Ttl = opts?.l1TtlMs ?? L1_TTL_MS;
       // `let` + definite assignment: the body compares against its OWN promise to
       // tell whether an invalidate overtook it, so it must be able to name itself.
+      const staleOnError = opts?.staleOnError;
       let load!: Promise<T>;
       load = (async (): Promise<T> => {
+        // The last-known-good value of an envelope whose fresh window has passed.
+        let stale: { value: T } | undefined;
         if (kv) {
-          const cached = await kvGet<T>(kv, key, 'getOrSet');
-          if (cached != null) {
+          const raw = await kvGet<unknown>(kv, key, 'getOrSet');
+          if (isStaleEnvelope(raw)) {
+            if (raw.freshUntil > Date.now()) {
+              const value = raw.value as T;
+              if (inFlight.get(key) === load) l1.set(key, { value, expiresAt: Date.now() + l1Ttl });
+              return value;
+            }
+            stale = { value: raw.value as T };
+          } else if (raw != null) {
+            const cached = raw as T;
             if (inFlight.get(key) === load) l1.set(key, { value: cached, expiresAt: Date.now() + l1Ttl });
             return cached;
           }
         }
 
-        const fresh = toJsonShape(await loader());
+        let fresh: T;
+        try {
+          fresh = toJsonShape(await loader());
+        } catch (error) {
+          if (!stale || !staleOnError?.when(error)) throw error;
+          // Source refusing (e.g. DB outage): keep answering from last-known-good, and
+          // hold it in L1 so a burst of requests does not re-hit the refusing source.
+          if (inFlight.get(key) === load) l1.set(key, { value: stale.value, expiresAt: Date.now() + l1Ttl });
+          return stale.value;
+        }
         // Invalidated while loading: the value may predate the write that invalidated
         // it, so it answers THIS caller but is not cached for the next one.
         if (inFlight.get(key) !== load) return fresh;
         l1.set(key, { value: fresh, expiresAt: Date.now() + l1Ttl });
         if (kv) {
-          const write = kvPut(kv, key, fresh, opts?.kvTtlSeconds, 'getOrSet');
+          const write = kvWrite(kv, key, fresh, opts, 'getOrSet');
           if (!defer(write)) await write;
         }
         return fresh;
@@ -264,7 +319,9 @@ export function createReadThroughCache(options: ReadThroughCacheOptions = {}): R
       if (l1Hit) return l1Hit.value as T;
 
       if (kv) {
-        const cached = await kvGet<T>(kv, key, 'peek');
+        const raw = await kvGet<unknown>(kv, key, 'peek');
+        // An envelope past its fresh window is not a hit (peek never serves stale).
+        const cached = (isStaleEnvelope(raw) ? (raw.freshUntil > now ? raw.value : null) : raw) as T | null;
         if (cached != null) {
           l1.set(key, { value: cached, expiresAt: now + L1_TTL_MS });
           return cached;
@@ -275,7 +332,7 @@ export function createReadThroughCache(options: ReadThroughCacheOptions = {}): R
 
     async set<T>(kv: KvNamespaceLike | undefined, key: string, value: T, opts?: CacheTtlOptions): Promise<void> {
       l1.set(key, { value, expiresAt: Date.now() + (opts?.l1TtlMs ?? L1_TTL_MS) });
-      if (kv) await kvPut(kv, key, value, opts?.kvTtlSeconds, 'set');
+      if (kv) await kvWrite(kv, key, value, opts, 'set');
     },
 
     async invalidate(kv: KvNamespaceLike | undefined, key: string): Promise<void> {

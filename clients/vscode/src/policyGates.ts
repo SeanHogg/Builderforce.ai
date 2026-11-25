@@ -19,6 +19,7 @@
 
 import type * as vscode from "vscode";
 import { fetchPolicyGates, fetchProjectShipPolicy } from "./bfApi";
+import { getApiKey } from "./gateway";
 import type { PolicyGate } from "@builderforce/agent-tools";
 import { DEFAULT_SHIP_POLICY, narrowShipPolicy, type ShipPolicy } from "@builderforce/run-guards";
 import { snapshotPermitsOfflineRun, type PolicySnapshotValue } from "./policySnapshots";
@@ -77,6 +78,16 @@ export function resetPolicyGatesCache(): void {
   cache.clear();
 }
 
+/**
+ * A read answered `undefined` ("nothing read") means signed out OR the platform is down or
+ * refusing (the key→JWT exchange answered 503). While an editor key is stored it is a FAILED
+ * read: throw so the caller's failure path (stale cache → durable snapshot → fail closed /
+ * default) governs, and nothing is cached or persisted over the recorded policy.
+ */
+async function throwIfSignedIn(secrets: vscode.SecretStorage, what: string): Promise<void> {
+  if (await getApiKey(secrets)) throw new Error(`${what} unreadable: the platform returned no session`);
+}
+
 /** Effective gates for a run in this editor, or `[]` when signed out. */
 export async function resolveRunPolicyGates(
   secrets: vscode.SecretStorage,
@@ -87,7 +98,14 @@ export async function resolveRunPolicyGates(
   const cached = cachedRead<PolicyGate[]>(key);
   if (cached && now - cached.readAt < POLICY_GATES_FRESH_MS) return cached.value;
   try {
-    const gates = (await fetchPolicyGates(secrets, projectId)) ?? [];
+    const read = await fetchPolicyGates(secrets, projectId);
+    if (read === undefined) {
+      // Signed out: no tenant policy applies this turn, but an empty policy is never cached or
+      // persisted, so it can neither outlive the sign-out nor overwrite the recorded snapshot.
+      await throwIfSignedIn(secrets, "policy gates");
+      return [];
+    }
+    const gates = read;
     cache.set(key, { value: gates, readAt: now });
     // Persist before returning so a sign-out that clears this cache in the same turn
     // still has a snapshot. A failed save must not refuse a turn the read already answered.
@@ -125,7 +143,13 @@ export async function resolveRunShipPolicy(
   const cached = cachedRead<ShipPolicy | null>(key);
   if (cached && now - cached.readAt < POLICY_GATES_FRESH_MS) return cached.value ?? DEFAULT_SHIP_POLICY;
   try {
-    const policy = (await fetchProjectShipPolicy(secrets, projectId)) ?? null;
+    const read = await fetchProjectShipPolicy(secrets, projectId);
+    if (read === undefined) {
+      // Nothing read: signed out ⇒ the default, nothing cached or recorded; signed in ⇒ failure path.
+      await throwIfSignedIn(secrets, `ship policy for project ${projectId}`);
+      return DEFAULT_SHIP_POLICY;
+    }
+    const policy = read; // `null` = read fine, the project has no well-formed local policy
     cache.set(key, { value: policy, readAt: now });
     try {
       await persistence?.saveShipPolicy?.(cacheKey(projectId), policy);

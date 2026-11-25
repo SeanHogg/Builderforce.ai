@@ -20,6 +20,7 @@ import { useTranslations } from 'next-intl';
 import { useViewerSession } from '@/lib/viewerSession';
 import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
 import { templatesApi, type TemplateSummary } from './api';
+import { listWithLastKnownGood } from './lastKnownCatalog';
 import { mergeTemplates, orderTemplates, packEntries, promptEntries, workspaceEntries } from './catalog';
 import type { TemplateEntry } from './contract';
 
@@ -42,7 +43,10 @@ const CACHE_PREFIX = 'template-catalog:';
 
 /** The installable half for one workspace ('none' for a signed-out visitor). */
 export function loadTemplateCatalog(tenantKey: string): Promise<TemplateSummary[]> {
-  return getOrSetClientCached(`${CACHE_PREFIX}${tenantKey}`, async () => (await templatesApi.list()).templates);
+  return getOrSetClientCached(
+    `${CACHE_PREFIX}${tenantKey}`,
+    () => listWithLastKnownGood(tenantKey, async () => (await templatesApi.list()).templates),
+  );
 }
 
 export function useTemplateCatalog(options: TemplateCatalogOptions = {}): TemplateEntry[] {

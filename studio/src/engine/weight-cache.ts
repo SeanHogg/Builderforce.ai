@@ -19,7 +19,16 @@ import type { WeightSource } from '../types';
 import { weightStore } from './residency/weight-store';
 
 const DEFAULT_R2_BASE = 'https://api.builderforce.ai/api/studio/weights';
-const HF_BASE = 'https://huggingface.co';
+export const HF_BASE = 'https://huggingface.co';
+
+/** The default source chain: the authenticated r2-proxy, then Hugging Face. */
+export const DEFAULT_WEIGHT_SOURCES: WeightSource[] = ['r2-proxy', 'huggingface-cdn'];
+
+/** The r2-proxy weights base for a host `baseUrl` (undefined → the package default). */
+export function deriveR2Base(baseUrl: string | undefined): string | undefined {
+  if (!baseUrl) return undefined;
+  return `${baseUrl.replace(/\/$/, '')}/api/studio/weights`;
+}
 
 export interface FetchOptions {
   /** Canonical cache key — typically the model file path like 'lcm-dreamshaper-v7/unet/model.onnx'. */

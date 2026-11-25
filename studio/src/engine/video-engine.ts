@@ -35,7 +35,6 @@ import type {
   StoryboardGenerateResult,
   VideoEngineOptions,
   WebDitModelDescriptor,
-  WeightSource,
 } from '../types';
 import { probeDevice } from './device-router';
 import type { DiffusionEngine } from './diffusion-engine';
@@ -65,10 +64,10 @@ import { validateFrame } from './frame-validator';
 import { expandPrompt } from './llm-bridge';
 import { muxFramesToVideo, pixelsToRgba, type MuxFrame } from './webcodecs-muxer';
 import { generateWebDitClip, loadWebDitBundle, runWebDitDenoise } from './webdit-engine';
+import { DEFAULT_WEIGHT_SOURCES, deriveR2Base } from './weight-cache';
 
 const DEFAULT_WIDTH = 512;
 const DEFAULT_HEIGHT = 512;
-const DEFAULT_WEIGHT_SOURCES: WeightSource[] = ['r2-proxy', 'huggingface-cdn'];
 const DEFAULT_COHERENCE: CoherenceMode = 'prompt-bias';
 const DEFAULT_COHERENCE_STRENGTH = 0.5;
 /**
@@ -1261,11 +1260,6 @@ async function rgbaToDataUrl(
   const bytes = new Uint8Array(buf);
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   return `data:image/jpeg;base64,${btoa(binary)}`;
-}
-
-function deriveR2Base(baseUrl: string | undefined): string | undefined {
-  if (!baseUrl) return undefined;
-  return `${baseUrl.replace(/\/$/, '')}/api/studio/weights`;
 }
 
 /**

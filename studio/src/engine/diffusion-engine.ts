@@ -27,6 +27,7 @@ import { AutoTokenizer, type PreTrainedTokenizer } from '@huggingface/transforme
 import type { ActiveDevice, DiffusionModelId, LcmModelDescriptor, WeightSource } from '../types';
 import type { ProbedDevice } from './device-router';
 import { getOrFetchWeight } from './weight-cache';
+import { loadStoredTokenizer } from './offline/tokenizer-store';
 import { SessionResidency } from './residency/session-residency';
 import { createAdmittedSession, fetchSessionBuffers, type SessionBuffers } from './residency/session-loader';
 import { weightRequest, type WeightFetcher } from './residency/weight-prefetch';
@@ -208,7 +209,9 @@ export class DiffusionEngine {
 
     try {
       reportProgress(`Loading CLIP tokenizer (${d.tokenizerRepo})…`, onProgress);
-      this.tokenizer = await AutoTokenizer.from_pretrained(d.tokenizerRepo);
+      // Stored files (made available offline) win — no network. Else the network loader.
+      this.tokenizer =
+        (await loadStoredTokenizer(d.tokenizerRepo)) ?? (await AutoTokenizer.from_pretrained(d.tokenizerRepo));
       reportProgress('Tokenizer ready.', onProgress);
 
       reportProgress(`Loading ${d.id} weights (UNet + text-encoder + VAE)…`, onProgress);

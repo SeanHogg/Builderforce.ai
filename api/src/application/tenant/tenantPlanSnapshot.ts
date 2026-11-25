@@ -20,7 +20,7 @@ import { eq } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { tenants } from '../../infrastructure/database/schema';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
 import { resolveEffectivePlan, type EffectivePlan } from '../../domain/tenant/effectivePlan';
 import { isCardValidated, type CardValidationStatus } from './cardValidationService';
@@ -122,7 +122,7 @@ export async function loadTenantPlanRow(env: Env | undefined, tenantId: number, 
       trialEndsAt: toIso(row.trialEndsAt),
       cardValidatedAt: toIso(row.cardValidatedAt),
     };
-  }, { kvTtlSeconds: KV_TTL_SECONDS });
+  }, { kvTtlSeconds: KV_TTL_SECONDS, staleOnUnavailableSeconds: OUTAGE_STALE_TTL_SECONDS });
 }
 
 /**

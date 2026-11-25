@@ -13,6 +13,11 @@ import { ServiceUnavailableError } from '../../domain/shared/errors';
  * carrying {@link DATABASE_UNAVAILABLE_CODE}, which the web app renders as
  * "temporarily unavailable" and does not auto-report.
  *
+ * The HTTP driver throws `Server error (HTTP status ${status}): ${body}` for every
+ * non-400 refusal and the bare body for a 400. `402` is matched on its own (observed);
+ * any other 3-digit status matches only when its body is Neon's compute-time / data-transfer
+ * quota text, because the status of the data-transfer refusal is unverified.
+ *
  * Both paths are covered. The HTTP client is wrapped by {@link withDatabaseAvailability};
  * `inTransaction` opens a WebSocket pool that bypasses that wrapper and maps its own
  * errors here. Over WebSocket there is no HTTP status to carry, so the WebSocket
@@ -29,8 +34,18 @@ export const DATABASE_UNAVAILABLE_CODE = 'database_unavailable';
 
 const NEON_UNAVAILABLE = new RegExp(
   '^(?:Server error \\(HTTP status 402\\)'
+  // The driver prefixes every non-400 refusal with its status; the data-transfer quota's
+  // status has not been observed, so any 3-digit status is accepted when the BODY is Neon's
+  // quota text (which may be wrapped in JSON).
+  + '|Server error \\(HTTP status \\d{3}\\): [\\s\\S]*?exceeded the (?:compute time|data transfer) quota'
   + '|Your (?:account or )?project has exceeded the (?:compute time|data transfer) quota)',
 );
+
+/** True for the outage error {@link asDatabaseUnavailable} produces. The ONE predicate
+ *  for "the core database refused to run queries" — cache fallbacks and callers use it. */
+export function isDatabaseUnavailable(error: unknown): boolean {
+  return error instanceof ServiceUnavailableError && error.code === DATABASE_UNAVAILABLE_CODE;
+}
 
 /** The outage error for a Neon quota refusal; any other error is returned untouched. */
 export function asDatabaseUnavailable(error: unknown): unknown {

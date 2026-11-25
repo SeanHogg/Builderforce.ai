@@ -1,7 +1,7 @@
 import {
   hasWebGPUSupport,
   probeDevice
-} from "./chunk-J5TFPZVT.mjs";
+} from "./chunk-Q5Y27QLY.mjs";
 
 // src/engine/diffusion-engine.ts
 import * as ort4 from "onnxruntime-web";
@@ -4072,7 +4072,7 @@ async function loadWebDitBundle(descriptor, opts) {
     files[rel] = await fetchBundleFile(rel);
   }
   reportProgress(`Building WebDiT bundle (${manifest.backend} backend)\u2026`, onProgress);
-  const { loadBundleFromBuffers } = await import("./webdit-runtime-PVZD3PFY.mjs");
+  const { loadBundleFromBuffers } = await import("./webdit-runtime-6GWL2ZAT.mjs");
   const bundle = await loadBundleFromBuffers(manifest, files);
   reportProgress(`WebDiT bundle ready \u2014 ${descriptor.id} (${manifest.architecture}).`, onProgress);
   return bundle;
@@ -4100,7 +4100,7 @@ function collectBundleFilePaths(manifest) {
   return paths;
 }
 async function runWebDitDenoise(bundle, args) {
-  const { runDenoiseLoop } = await import("./webdit-runtime-PVZD3PFY.mjs");
+  const { runDenoiseLoop } = await import("./webdit-runtime-6GWL2ZAT.mjs");
   const onProgress = args.onProgress;
   const frameOffset = args.frameOffset ?? 0;
   reportProgress("Running WebDiT denoise loop\u2026", onProgress);

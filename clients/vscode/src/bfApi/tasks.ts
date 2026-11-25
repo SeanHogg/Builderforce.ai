@@ -1,6 +1,7 @@
 import type * as vscode from "vscode";
 import { isClosedTask } from "@builderforce/agent-loop";
 import { ttlCache } from "../ttlCache";
+import { reportExtensionError } from "../errorReporter";
 import { authed } from "./transport";
 
 export interface BfTask {
@@ -139,14 +140,17 @@ interface BfAssignedTask {
 /**
  * The open tasks assigned to the signed-in user (GET /api/vscode/tasks). Uncached —
  * the caller polls it on the heartbeat cadence to detect newly-assigned work, so a
- * stale cache would defeat the point. Degrades to [] when signed out / not deployed.
+ * stale cache would defeat the point. `[]` is a genuinely empty list; `undefined` means
+ * the list could not be read (signed out, platform down or refusing, not deployed) — the
+ * poller must NOT treat that as "nothing assigned", or the next good read looks all-new.
  */
-export async function listAssignedTasks(secrets: vscode.SecretStorage): Promise<BfAssignedTask[]> {
+export async function listAssignedTasks(secrets: vscode.SecretStorage): Promise<BfAssignedTask[] | undefined> {
   try {
     const r = await authed<{ tasks: BfAssignedTask[] }>(secrets, "/api/vscode/tasks");
-    return r?.tasks ?? [];
-  } catch {
-    return [];
+    return r === undefined ? undefined : r.tasks ?? [];
+  } catch (error) {
+    void reportExtensionError(error, { operation: "tasks:listAssigned" });
+    return undefined;
   }
 }
 

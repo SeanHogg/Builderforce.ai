@@ -32,17 +32,19 @@ export async function fetchPolicyGates(
  * `manager/shipPolicyOf.ts`; written through `PUT /api/manager/:projectId` and the
  * `manager.configure` MCP tool). A VS Code run follows `local`, whose `source` says whether
  * the project set it (`project_settings`) or it is the built-in `default` — kept, so an unset
- * project's run says so. `undefined` = signed out, or no well-formed `local` policy. Throws
+ * project's run says so. `undefined` = NOTHING WAS READ (signed out, or the key→JWT exchange failed — the caller
+ * tells those apart by whether an editor key is stored); `null` = read fine, no well-formed `local` policy. Throws
  * when the read fails — the caller (`policyGates.resolveRunShipPolicy`) falls back to its
  * cache and snapshot.
  */
 export async function fetchProjectShipPolicy(
   secrets: vscode.SecretStorage,
   projectId: number,
-): Promise<ShipPolicy | undefined> {
+): Promise<ShipPolicy | null | undefined> {
   const r = await authed<{ shipPolicy?: { local?: Partial<ShipPolicy> | null } | null }>(secrets, `/api/manager/${projectId}`);
-  const p = r?.shipPolicy?.local;
-  if (!p || !isShipMode(p.mode)) return undefined;
+  if (r === undefined) return undefined; // nothing was read: signed out, or the key→JWT exchange failed
+  const p = r.shipPolicy?.local;
+  if (!p || !isShipMode(p.mode)) return null; // read fine, the project has no well-formed local policy
   return {
     mode: p.mode,
     merge: p.merge === "immediate" || p.merge === "on_green" ? p.merge : "never",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ServiceUnavailableError, statusOf } from '../../domain/shared/errors';
-import { DATABASE_UNAVAILABLE_CODE, asDatabaseUnavailable, withDatabaseAvailability } from './neonAvailability';
+import { DATABASE_UNAVAILABLE_CODE, asDatabaseUnavailable, isDatabaseUnavailable, withDatabaseAvailability } from './neonAvailability';
 
 /** The exact text the Neon HTTP driver throws for a 402 (captured from production, 2026-09-14). */
 const quotaError = () => new Error(
@@ -39,6 +39,32 @@ describe('asDatabaseUnavailable', () => {
     const other = new Error('Server error (HTTP status 500): boom');
     expect(asDatabaseUnavailable(other)).toBe(other);
     expect(asDatabaseUnavailable('string')).toBe('string');
+  });
+});
+
+describe('asDatabaseUnavailable (HTTP driver status variants)', () => {
+  it.each([
+    ['402 compute', 'Server error (HTTP status 402): {"message":"Your account or project has exceeded the compute time quota."}'],
+    ['403 transfer (JSON body)', 'Server error (HTTP status 403): {"message":"Your project has exceeded the data transfer quota. Upgrade your plan."}'],
+    ['429 transfer', 'Server error (HTTP status 429): Your project has exceeded the data transfer quota.'],
+    ['bare 400 body', 'Your account or project has exceeded the compute time quota. Upgrade your plan to increase limits.'],
+  ])('maps %s', (_name, message) => {
+    expect(asDatabaseUnavailable(new Error(message))).toBeInstanceOf(ServiceUnavailableError);
+  });
+
+  it('does not map another vendor\'s "exceeded your quota" or an unrelated 5xx', () => {
+    const vendor = new Error('Server error (HTTP status 429): You exceeded your current quota');
+    expect(asDatabaseUnavailable(vendor)).toBe(vendor);
+    const bare = new Error('You exceeded your current quota');
+    expect(asDatabaseUnavailable(bare)).toBe(bare);
+  });
+});
+
+describe('isDatabaseUnavailable', () => {
+  it('is true only for the database_unavailable outage error', () => {
+    expect(isDatabaseUnavailable(asDatabaseUnavailable(quotaError()))).toBe(true);
+    expect(isDatabaseUnavailable(new ServiceUnavailableError('x', { code: 'other' }))).toBe(false);
+    expect(isDatabaseUnavailable(quotaError())).toBe(false);
   });
 });
 
