@@ -182,6 +182,17 @@ const memoryPackageAliases = {
 };
 
 /**
+ * Packages whose modules only declare exports (no registration, polyfill or global write at
+ * import time), so the server/edge compile may tree-shake whole modules out of their barrels.
+ * Matched on the resolved path, so both `node_modules/<pkg>` and the linked source dirs hit.
+ * Audit (2026-11-25): no module-scope `globalThis`/`self` writes, `customElements.define` or
+ * bare `import './x'` in either package's non-test source. Add a package only after checking
+ * it has no import-time side effects.
+ */
+const SIDE_EFFECT_FREE_SERVER_PACKAGES =
+  /[\\/](?:node_modules[\\/]@seanhogg[\\/]builderforce-memory(?:-engine)?|builderforce-memory[\\/]packages[\\/]memory(?:-engine)?)[\\/]/;
+
+/**
  * Edge alias of the bundled default-locale catalog to its empty stand-in (webpack
  * only; see `src/i18n/catalog.ts` for the reasoning, and the alias below). Keyed by
  * the absolute path, which is how `catalog.ts`'s relative `./messages/en.json`
@@ -505,6 +516,17 @@ const nextConfig = {
       config.module.rules.push({
         test: /[\\/]src[\\/]i18n[\\/]messages[\\/]en\.json$/,
         layer: 'shared',
+      });
+      // Server AND edge only: the memory packages are side-effect free, so webpack may drop
+      // re-exported modules nothing uses. Without this the root barrel of
+      // `-memory-engine` (reached at module scope from brain-embedded's localSuccess
+      // router, which ConditionalAppShell pulls into every route) kept every WGSL kernel
+      // in the shared edge chunk — the bulk of REL-G005's overage. Not stubbed like the
+      // inference runtimes above: localSuccess calls into the engine at module scope.
+      // The client compile is left alone, as with the other server-only rules here.
+      config.module.rules.push({
+        test: SIDE_EFFECT_FREE_SERVER_PACKAGES,
+        sideEffects: false,
       });
     }
     // EVERY compilation — client included. See the class comment for why it may never

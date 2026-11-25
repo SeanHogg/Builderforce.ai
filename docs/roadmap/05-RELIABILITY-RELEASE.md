@@ -110,6 +110,7 @@ acceptance:
 evidence:
   - `frontend/scripts/check-worker-size.mjs` already gates `cf-build`
   - The recorded 10.82 MiB overage is still open, tracked as `REL-G005`
+  - 2026-11-25: `frontend/next.config.js` marks the memory packages side-effect free in the server/edge compile so unused WGSL kernels tree-shake out. Not yet measured (`cf-build` needs the Linux CI `cf-build` job); `done` only once it prints Worker size OK
 blocker: null
 ```
 

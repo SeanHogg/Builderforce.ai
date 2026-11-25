@@ -1,5 +1,7 @@
 # @seanhogg/builderforce-studio
 
+> **Deferred:** video generation is deferred in the [roadmap](https://github.com/SeanHogg/Builderforce.ai/blob/main/docs/roadmap/DEFERRED.md) and this package is not under active development.
+>
 > Headless, fully client-side AI video-generation **engine** for the browser. Runs LCM / SD-Turbo diffusion on WebGPU or WebNN, conditioned on a Mamba SSM state for frame-to-frame temporal coherence, and muxes MP4 via WebCodecs. No React, no UI, no server GPU.
 
 This package is the **engine**. For a ready-made React `<StudioPanel>` component, install [`@seanhogg/builderforce-studio-embedded`](https://www.npmjs.com/package/@seanhogg/builderforce-studio-embedded), which builds on this.

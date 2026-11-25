@@ -150,10 +150,10 @@ describe('no in-app destination points at a marketing page', () => {
     }
   });
 
-  it('splits the reference rows into nine domains and three foundations', () => {
+  it('splits the reference rows into nine domains and eight foundations', () => {
     expect(REFERENCE_DOMAINS).toHaveLength(9);
-    expect(REFERENCE_FOUNDATIONS).toHaveLength(3);
-    expect(REFERENCE_DESTINATIONS).toHaveLength(12);
+    expect(REFERENCE_FOUNDATIONS).toHaveLength(8);
+    expect(REFERENCE_DESTINATIONS).toHaveLength(17);
   });
 
   it('resolves a reference page by its public slug', () => {

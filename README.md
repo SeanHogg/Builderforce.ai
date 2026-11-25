@@ -8,6 +8,43 @@
 
 ---
 
+## Method and strategy
+
+> BuilderForce enables people and autonomous AI workforces to create, execute, test, secure, deploy and operate applications within portable, intelligent execution environments.
+
+Every capability sits in one of five stages, defined in [docs/specs/README.md](docs/specs/README.md). The engineering roadmap is organised by ten programs in [docs/roadmap/00-STRATEGY.md](docs/roadmap/00-STRATEGY.md), where the strategy and its status live.
+
+| Stage | Question |
+|---|---|
+| Idea | What if? |
+| Make | Build it. |
+| Run | Run it as a company. |
+| Measure | Is it working? |
+| Reach | Sell it, be found, grow it. |
+
+| Program | Priority | Objective |
+|---|---|---|
+| WC — WebContainers | P0 | Universal execution environment |
+| AE — Autonomous Execution | P0 | Reliable, independent task completion |
+| AVR — Agent Virtualization | P0 | Self-contained agent workforces |
+| SEC — Security Shield | P0 | Secure code and runtime execution |
+| REL — Reliability and Release | P0 | Verified releases and recoverable runs |
+| HOST — Application Hosting | P1 | Persistent, commercially hosted applications |
+| AI — Local AI Runtime | P1 | Reduce external inference dependency |
+| MEM — Evermind and Knowledge | P1 | Improve agent intelligence and efficiency |
+| UX — Execution Experience | P1 | Visualize and control environments |
+| COM — Commercialization | P1 | Monetize execution and hosting |
+
+### Shipped capabilities
+
+- [Web Containers](https://builderforce.ai/features/web-containers) (Make): Node, Python, PHP, .NET and Rust behind one execution contract and a `builderforce.json` manifest.
+- [Agent Environment](https://builderforce.ai/features/agent-environment) (Make): agents declared on the manifest, running inside the environment and visible in the Room.
+- [Autonomous Execution](https://builderforce.ai/features/autonomous-execution) (Make): ticket admission, evidence before completion, and a ship policy.
+- [Security Shield](https://builderforce.ai/features/security-shield) (Run): isolation, ingress and egress policy, audit and SIEM export.
+- [Knowledge Map](https://builderforce.ai/features/knowledge-map) (Idea): the Visualizer's streamed map of a project.
+
+---
+
 ## What's New
 
 - **2026-10-12 — Sequential batching in the local inference runtime.** `Engine::generate_batch` in [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) runs multiple prompts on one loaded model without a reload (`e4c07ee`). Concurrent token mixing / paged attention is not in this drop. Changelog: [DONE.md](./DONE.md).
@@ -177,7 +214,7 @@ Move off a competitor tracker without fear, or just sync data in — a **staged*
 - **Incidents close the loop** — a Help-Desk / Incident-Manager agent, a Freshdesk connector, on-call rotations, timed escalation, Teams / Slack / email paging, and a per-incident war-room feed. On resolution the RCA is published to Knowledge **and** fed to the project's Evermind, so the workforce learns and stops repeating causes.
 - **A monitoring canvas** — pin heartbeat / HTTP / webhook / metric monitors onto an uploaded architecture diagram; a `*/5` sweep evaluates them and a breach **auto-starts the on-call investigation** (monitor → signal → incident → paging), with reporting on the timeline.
 
-### Meetings & Live Collaboration (mig 0292, 0330)
+### Meetings & Live Collaboration (mig 0292, 0330) (maintenance)
 - **Video / audio meetings with agents in the room** — mesh WebRTC over a `CeremonyRoomDO` relay; agent attendees speak live via a caption / transcript bridge; recording + transcription produce **AI minutes**. Google / Microsoft calendar sync. Surface: `/meetings`.
 
 ### AI Managers — Types & Coaching (mig 0327)
@@ -505,7 +542,7 @@ The biggest cost lever in the stack is an **embedding-keyed semantic cache** tha
 - **L1 (local, free):** in-process cosine match using on-device SSM embeddings — runs in the browser IDE and in each agent.
 - **L2 (shared):** the gateway's `POST /v1/semantic-cache/{lookup,store}` (tenant-scoped, KV-backed). A paraphrase answered in the **web app** is reusable by an **agent**, and vice-versa.
 
-The same portable [`SemanticCache`](https://github.com/SeanHogg/builderforce-memory) from `@builderforce/memory` powers both surfaces — the embedder (on-device SSM) and the L2 backend are injected, so there is no browser/Node fork. On-device embeddings make L1 free; the gateway L2 turns one tenant's cache hits into platform-wide savings.
+The same portable [`SemanticCache`](https://github.com/SeanHogg/builderforce-memory) from `@seanhogg/builderforce-memory` powers both surfaces — the embedder (on-device SSM) and the L2 backend are injected, so there is no browser/Node fork. On-device embeddings make L1 free; the gateway L2 turns one tenant's cache hits into platform-wide savings.
 
 ### Hybrid retrieval & answer evaluation
 

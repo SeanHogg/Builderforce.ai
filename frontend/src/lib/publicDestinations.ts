@@ -114,7 +114,7 @@ export const PUBLIC_DESTINATIONS: PublicDestination[] = [
   // ── Product ▾ · MAKE ─────────────────────────────────────────────────────
   { id: 'ref.productManagement', copyId: 'productManagement', seat: 'CPO', icon: '📦', marketingHref: '/product-management', appHref: '/projects?tab=pm', kind: 'domain', placement: 'make', panel: true, groupId: 'projects' },
   { id: 'ref.agileSurvival', copyId: 'agileSurvival', seat: 'CTO', icon: '⚡', marketingHref: '/survival-focused-agile', appHref: '/projects?tab=ceremonies', kind: 'domain', placement: 'make', panel: true },
-  { id: 'ref.webContainers', copyId: 'webContainers', seat: 'CTO', icon: '⬡', marketingHref: '/features/web-containers', appHref: '/studio', kind: 'foundation', placement: 'make', panel: true },
+  { id: 'ref.webContainers', copyId: 'webContainers', seat: 'CTO', icon: '⬡', marketingHref: '/features/web-containers', appHref: '/create', kind: 'foundation', placement: 'make', panel: true },
   { id: 'ref.agentEnvironment', copyId: 'agentEnvironment', seat: 'Brain', icon: '🧬', marketingHref: '/features/agent-environment', appHref: '/workforce', kind: 'foundation', placement: 'make', panel: true },
   { id: 'ref.autonomousExecution', copyId: 'autonomousExecution', seat: 'CTO', icon: '🤖', marketingHref: '/features/autonomous-execution', appHref: '/projects', kind: 'foundation', placement: 'make', panel: true },
   // ── Product ▾ · RUN — one row per business seat ──────────────────────────

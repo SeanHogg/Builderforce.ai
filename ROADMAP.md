@@ -77,7 +77,7 @@ Progression depends on exit gates, not calendar dates. Weeks are indicative. Sec
 | 5 — Agent Factory and intelligent execution | 17–22 | Agent-generated agents, bounded nested runtimes, local routing, knowledge packs, outcome learning | A parent workforce provisions a child, delegates, verifies and releases the resources |
 | 6 — Scale and commercialization | 21–24 | Multi-tenant load, adversarial and failure-injection testing, cost optimization, billing validation | Commercially viable, secure, repeatable autonomous execution and hosting |
 
-Phase 0 status: `REL-04` and `REL-05` are in progress; `REL-03` (QA secrets), `AE-01` and `REL-10` are blocked on operator actions.
+Phase 0 status: `REL-04` is done; `REL-03` awaits its first green `qa-e2e` run on `main`; `REL-05` is in progress (server/edge side-effect-free fix landed 2026-11-25, size not yet re-measured; last measured 10.82 MiB); `AE-01` and `REL-10` are blocked on operator actions.
 
 ## Key targets
 

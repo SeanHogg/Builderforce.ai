@@ -3,7 +3,7 @@
 A codebase-aware BuilderForce AI coding agent in your editor sidebar.
 
 ## Where this fits
-Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../../docs/specs/README.md)). This package serves **Make** and **Run**: the editor client where agents edit code with your approval and your team’s work runs.
+Part of BuilderForce's **Idea → Make → Run → Measure → Reach** method ([definitions](../../docs/specs/README.md)). This package serves **Make** and **Run**: the editor client where agents edit code with your approval and your team’s work runs. The agents are declared in the [Agent Environment](https://builderforce.ai/features/agent-environment) and their work finishes through [Autonomous Execution](https://builderforce.ai/features/autonomous-execution), so tickets close with verification evidence.
 
 > **Status:** working agent. Sign in, point it at your repo, and ship — it edits code with
 > your approval and runs your team's work without leaving the editor.
