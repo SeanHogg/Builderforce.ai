@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const root = new URL('../', import.meta.url);
+const root = new URL('../../', import.meta.url);
 const read = (name: string) => JSON.parse(readFileSync(new URL(name, root), 'utf8'));
 const manifest = read('package.json');
 

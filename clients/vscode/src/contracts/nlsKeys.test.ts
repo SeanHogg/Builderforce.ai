@@ -17,7 +17,7 @@ import * as path from "node:path";
  */
 
 const here = __dirname;
-const manifestPath = path.join(here, "..", "package.json");
+const manifestPath = path.join(here, "..", "..", "package.json");
 
 /** Every supported locale catalog, including the default. */
 const CATALOGS = [
@@ -55,13 +55,13 @@ describe("manifest localization keys resolve in every locale", () => {
 
   for (const catalog of CATALOGS) {
     it(`${catalog} defines every key the manifest references`, () => {
-      const entries = JSON.parse(fs.readFileSync(path.join(here, "..", catalog), "utf8")) as Record<string, string>;
+      const entries = JSON.parse(fs.readFileSync(path.join(here, "..", "..", catalog), "utf8")) as Record<string, string>;
       const missing = keys.filter((key) => !(key in entries));
       expect(missing).toEqual([]);
     });
 
     it(`${catalog} leaves no key empty`, () => {
-      const entries = JSON.parse(fs.readFileSync(path.join(here, "..", catalog), "utf8")) as Record<string, string>;
+      const entries = JSON.parse(fs.readFileSync(path.join(here, "..", "..", catalog), "utf8")) as Record<string, string>;
       const blank = keys.filter((key) => key in entries && entries[key]!.trim() === "");
       expect(blank).toEqual([]);
     });

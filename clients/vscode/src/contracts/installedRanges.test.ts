@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { installedRangeMismatches, satisfiesRange } from '../../../scripts/check-installed-ranges.mjs';
+import { installedRangeMismatches, satisfiesRange } from '../../../../scripts/check-installed-ranges.mjs';
 
 /**
  * `vscode:prepublish` refuses to package when `node_modules` holds a pinned dependency outside the

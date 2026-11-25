@@ -4,8 +4,8 @@ import { dirname, join } from 'node:path';
 import * as esbuild from 'esbuild';
 import { build as viteBuild, type Plugin } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { pinnedInstallResolve, pinnedInstallVitePlugin } from '../../../scripts/sourcePackages.mjs';
-import webviewConfig from '../webview/vite.config';
+import { pinnedInstallResolve, pinnedInstallVitePlugin } from '../../../../scripts/sourcePackages.mjs';
+import webviewConfig from '../../webview/vite.config';
 
 /**
  * REGRESSION: VSIX 2026.10.174 bundled the consumer's memory 2026.10.81 for its own imports and

@@ -24,7 +24,7 @@ import * as path from "node:path";
  * fail exactly the same way.
  */
 
-const mediaDir = path.join(__dirname, "..", "media", "webview");
+const mediaDir = path.join(__dirname, "..", "..", "media", "webview");
 
 /** The build is a prerequisite, not part of this test — `pnpm compile` produces it.
  *  Skipped rather than failed when absent so a bare `vitest` run is still useful. */

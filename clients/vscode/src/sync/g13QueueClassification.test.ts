@@ -8,7 +8,7 @@ import {
   bindOutboxStorage,
   createDurableOutbox,
   setOutboxScope,
-} from "./sync/outboxStorage";
+} from "./outboxStorage";
 
 /**
  * G13 — every queue that carries USER WORK is durable, every telemetry-class queue is
@@ -159,7 +159,7 @@ describe("G13 — a refused durable row is kept, a refused telemetry row is drop
  * through the shared classifier; a file that builds no queue cannot silently acquire one.
  */
 describe("G13 — no VS Code constructor builds an unclassified queue", () => {
-  const here = path.dirname(fileURLToPath(import.meta.url));
+  const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const source = (name: string): string => readFileSync(path.join(here, name), "utf8");
 
   const NAMED_BY_G13 = [

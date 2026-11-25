@@ -8,7 +8,7 @@ import { join } from "node:path";
  * made Evermind show "Sign in to BuilderForce to start." while the host toasted
  * "BuilderForce: signed in."
  */
-const src = (...parts: string[]) => readFileSync(join(__dirname, ...parts), "utf8");
+const src = (...parts: string[]) => readFileSync(join(__dirname, "..", ...parts), "utf8");
 
 describe("post-login auth surface sync", () => {
   const extension = src("extension.ts");

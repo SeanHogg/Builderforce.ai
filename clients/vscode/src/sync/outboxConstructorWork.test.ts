@@ -8,7 +8,7 @@ import {
   bindOutboxStorage,
   createDurableOutbox,
   setOutboxScope,
-} from "./sync/outboxStorage";
+} from "./outboxStorage";
 
 /**
  * G13 live constructors. The queue table names `activity` and `run-outcomes` as
@@ -18,7 +18,7 @@ import {
  * extension host.
  */
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const source = (name: string): string => readFileSync(path.join(here, name), "utf8");
 
 /** Same stamp the constructors pass, so a table change moves the test with them. */

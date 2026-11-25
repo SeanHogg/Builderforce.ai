@@ -1,9 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
-import { SIGNED_IN_ALLOWLIST, signedInViolations } from "../scripts/check-signed-in-when.mjs";
+import { SIGNED_IN_ALLOWLIST, signedInViolations } from "../../scripts/check-signed-in-when.mjs";
 
-const manifest = JSON.parse(readFileSync(path.join(__dirname, "..", "package.json"), "utf8")) as unknown;
+const manifest = JSON.parse(readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf8")) as unknown;
 
 describe("check-signed-in-when guard (PRD 41 A1)", () => {
   it("passes on today's package.json", () => {
@@ -48,7 +48,7 @@ describe("check-signed-in-when guard (PRD 41 A1)", () => {
 });
 
 describe("no signed-in-derived context key outside the capability source (PRD 41 A1)", () => {
-  const srcDir = __dirname;
+  const srcDir = path.resolve(__dirname, "..");
   const SOURCE_OF_CAPABILITIES = new Set(["tools/capabilityStates.ts", "tools/capabilityContext.ts"]);
   const SET_CONTEXT = /setContext["'`]\s*,\s*["'`](builderforce\.[\w.]+)["'`]\s*,([^)]*)\)/g;
 

@@ -3,10 +3,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { suggestedSubpathTarget, unresolvedNpmSubpaths } from '../../../scripts/lib/npmSubpaths.mjs';
-import { EXTRA_SOURCE_PACKAGE_DIRS, readSourcePackages } from '../../../scripts/sourcePackages.mjs';
-import { sourcePackageGraph } from '../../../scripts/sourcePackageGraph.mjs';
-import webviewConfig from '../webview/vite.config';
+import { suggestedSubpathTarget, unresolvedNpmSubpaths } from '../../../../scripts/lib/npmSubpaths.mjs';
+import { EXTRA_SOURCE_PACKAGE_DIRS, readSourcePackages } from '../../../../scripts/sourcePackages.mjs';
+import { sourcePackageGraph } from '../../../../scripts/sourcePackageGraph.mjs';
+import webviewConfig from '../../webview/vite.config';
 
 /**
  * The source-only shared packages (`packages/*` whose `exports` point at `src/`)
@@ -34,7 +34,7 @@ import webviewConfig from '../webview/vite.config';
  * one there is.)
  */
 const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(here, '../../..');
+const repoRoot = resolve(here, '../../../..');
 
 const sourcePackages = readSourcePackages(repoRoot);
 const specifiers = sourcePackages.map((pkg) => pkg.specifier);

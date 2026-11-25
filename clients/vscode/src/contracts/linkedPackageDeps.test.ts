@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
  * silently in.
  */
 const here = dirname(fileURLToPath(import.meta.url));
-const clientRoot = resolve(here, '..');
+const clientRoot = resolve(here, '../..');
 
 function manifest(dir: string): { name?: string; dependencies?: Record<string, string>; devDependencies?: Record<string, string> } {
   return JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));

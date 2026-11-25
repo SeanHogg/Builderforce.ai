@@ -1,5 +1,5 @@
 {
-  "//allowJs": "`src/sourcePackages.test.ts` imports the source-package registry (`scripts/sourcePackages.mjs`), which is JSDoc-typed JS. allowJs lets tsc read its inferred types instead of demanding a hand-written .d.mts twin of them.",
+  "//allowJs": "`src/contracts/sourcePackages.test.ts` imports the source-package registry (`scripts/sourcePackages.mjs`), which is JSDoc-typed JS. allowJs lets tsc read its inferred types instead of demanding a hand-written .d.mts twin of them.",
   "//memoryPeers": "`@builderforce/knowledge-client` is source-only with `@seanhogg/builderforce-memory` as a PEER and no install of its own (as in frontend/tsconfig.json and clients/chrome/tsconfig.json), so the memory subpaths it reaches are mapped onto THIS package's install. The extension bundle resolves them the same way (`nodePaths` in esbuild.mjs).",
   "compilerOptions": {
     "module": "esnext",

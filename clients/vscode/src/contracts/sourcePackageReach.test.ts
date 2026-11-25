@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { createImportScanner, loadTypeScript } from '../../../scripts/lib/moduleImports.mjs';
-import { findTsconfigProjects, resolveThroughPaths, resolvesTo } from '../../../scripts/lib/tsconfigPaths.mjs';
-import { readSourcePackages } from '../../../scripts/sourcePackages.mjs';
+import { createImportScanner, loadTypeScript } from '../../../../scripts/lib/moduleImports.mjs';
+import { findTsconfigProjects, resolveThroughPaths, resolvesTo } from '../../../../scripts/lib/tsconfigPaths.mjs';
+import { readSourcePackages } from '../../../../scripts/sourcePackages.mjs';
 
 /**
  * The source-package guard counts, as a project's sources, every file OUTSIDE its
@@ -17,7 +17,7 @@ import { readSourcePackages } from '../../../scripts/sourcePackages.mjs';
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(here, '../../..');
+const repoRoot = resolve(here, '../../../..');
 const ts = loadTypeScript(repoRoot);
 
 const fixtureRoot = mkdtempSync(join(tmpdir(), 'bf-reach-'));

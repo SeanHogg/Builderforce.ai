@@ -8,9 +8,9 @@ import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { APP_MANIFEST_SCHEMA_V1 } from "@seanhogg/builderforce-webcontainers-core/manifest";
-import { manifestEditorSchema } from "../scripts/manifest-editor-schema.mjs";
+import { manifestEditorSchema } from "../../scripts/manifest-editor-schema.mjs";
 
-const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as {
   contributes: { jsonValidation: Array<{ fileMatch: string | string[]; url: string }> };
 };
 const entry = pkg.contributes.jsonValidation.find((item) => item.url === "./out/schemas/app.v1.schema.json")!;

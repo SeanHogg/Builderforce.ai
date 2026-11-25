@@ -12,10 +12,10 @@ import {
   type EntityDestination,
   type LocalFirstStore,
 } from "@builderforce/local-first";
-import { chatClientIdOf, readRailFromFacts } from "./chatRail/buildRail";
-import { resolveChat } from "./chatRail/resolveChat";
-import { resolveLocalReference } from "./localFirst/localEntityRefs";
-import { ticketServerIdLookup } from "./tickets/localTicketIdBridge";
+import { chatClientIdOf, readRailFromFacts } from "./buildRail";
+import { resolveChat } from "./resolveChat";
+import { resolveLocalReference } from "../localFirst/localEntityRefs";
+import { ticketServerIdLookup } from "../tickets/localTicketIdBridge";
 
 const A: EntityDestination = { kind: "bound", platformInstance: "https://api.example", tenantId: "7" };
 const B: EntityDestination = { kind: "bound", platformInstance: "https://api.example", tenantId: "8" };
