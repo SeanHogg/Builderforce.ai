@@ -415,10 +415,14 @@ jobs:
 
       # Publishing is version-gated: re-running the workflow on an unbumped
       # version must be a no-op, not a hard failure, because this job shares a
-      # trigger with the deploys below.
+      # trigger with the deploys below. The listing can lag a version the
+      # Marketplace already owns (an earlier run's upload still validating), so
+      # vsce's "already exists" answer is the same no-op; any other failure fails.
       - name: Publish to the Visual Studio Marketplace
         working-directory: clients/vscode
         run: |
+          # The default shell is `bash -e` without pipefail; without it the publish's status is tee's.
+          set -o pipefail
           version=$(unzip -p builderforce.vsix extension/package.json | jq -er .version)
           listing=$(npx --yes @vscode/vsce@4.1.1 show builderforce.builderforce-ai --json)
           if jq -e --arg version "$version" \
@@ -427,7 +431,15 @@ jobs:
             echo "Marketplace already has the universal VSIX for $version."
             exit 0
           fi
-          npx --yes @vscode/vsce@4.1.1 publish --oidc --no-dependencies --packagePath builderforce.vsix --allow-proposed-apis chatSessionsProvider
+          log=$(mktemp)
+          if npx --yes @vscode/vsce@4.1.1 publish --oidc --no-dependencies --packagePath builderforce.vsix --allow-proposed-apis chatSessionsProvider 2>&1 | tee "$log"; then
+            exit 0
+          fi
+          if grep -qF "builderforce.builderforce-ai v$version already exists" "$log"; then
+            echo "::notice::Marketplace already owns builderforce.builderforce-ai v$version; skipping publish."
+            exit 0
+          fi
+          exit 1
 
       - name: Publish to Open VSX
         working-directory: clients/vscode
