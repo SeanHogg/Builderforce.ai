@@ -13,6 +13,10 @@
 .primary:disabled,.secondary:disabled { opacity:.5; cursor:not-allowed; }
 .linkButton { border:0; background:transparent; color:var(--canvas-muted); font:600 var(--font-size-small) var(--font-sans); text-decoration:underline; cursor:pointer; padding:6px 0; min-height:32px; }
 
+.offline { display:flex; flex-direction:column; align-items:flex-start; gap:6px; min-width:0; }
+.offlineRow { display:flex; align-items:center; gap:8px; width:100%; min-width:0; }
+.offlineBar { flex:1; min-width:0; height:8px; accent-color:var(--bf-accent); }
+
 .hint { margin:0; color:var(--canvas-muted); font-size:var(--font-size-small); line-height:1.45; }
 .status { margin:0; color:var(--canvas-ink); font-size:var(--font-size-small); }
 .error { margin:0; color:var(--error-text); font-size:var(--font-size-small); }

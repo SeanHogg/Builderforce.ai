@@ -43,6 +43,11 @@ export type SyncImporterName =
   | 'importSyncedUsage'
   | 'importSyncedChatTicketLink'
   | 'importSyncedRunOutcome'
+  | 'importSyncedCanvasBoard'
+  | 'importSyncedCanvasObject'
+  | 'importSyncedCanvasEdge'
+  | 'importSyncedCanvasTimeline'
+  | 'importSyncedCanvasMedia'
   | 'importMirrorRecord';
 
 /** Entity type → its owning importer. Data, not branches: a new owner is a new row. */
@@ -57,6 +62,13 @@ const OWNED_BY: Readonly<Record<string, SyncImporterName>> = {
   'chat-ticket-link': 'importSyncedChatTicketLink',
   // PRD 41 §D1: a run's features, commit attribution and labels land in the run-outcomes tables.
   'run-outcome': 'importSyncedRunOutcome',
+  // Studio local-first: a board, its objects and edges, its transcript and its media manifests
+  // are written by the canvas context (`application/creation/sync`), never by the sync folder.
+  'canvas-board': 'importSyncedCanvasBoard',
+  'canvas-object': 'importSyncedCanvasObject',
+  'canvas-edge': 'importSyncedCanvasEdge',
+  'canvas-timeline': 'importSyncedCanvasTimeline',
+  'canvas-media': 'importSyncedCanvasMedia',
 };
 
 /**

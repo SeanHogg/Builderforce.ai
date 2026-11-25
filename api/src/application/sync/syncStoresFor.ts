@@ -23,6 +23,9 @@ import { chatOwnedBy } from '../brain/brainChatGuards';
 import { projectInTenant } from '../project/projectOwnership';
 import { isActiveTenantMember } from '../tenant/tenantRoles';
 import { namedSyncImporters } from './importers/namedSyncImporters';
+import { boardSnapshotScheduler } from '../creation/boardSnapshotWriter';
+import type { CanvasSyncPorts } from '../creation/sync/canvasSyncPorts';
+import { creationSessionQuota } from '../creation/sessionQuota';
 import type { SyncReferenceReader, SyncStores } from './syncPorts';
 
 export function syncReferenceReader(db: Db): SyncReferenceReader {
@@ -40,9 +43,15 @@ export function syncStoresFor(db: Db, env: Env): SyncStores {
   const runOutcomes = syncRunOutcomeStore(db);
   // PRD 41 §C14: the run-delta evidence blob goes to R2; the read caches are bumped after commit.
   const runDelta = { evidence: runDeltaEvidenceStore(env), invalidate: (tenantId: number) => bumpRunDeltaReads(env, tenantId) };
+  // Studio local-first: the plan check reads `env`; the snapshot of a board an edit moved is
+  // written on THIS request's handle after the chunk commits, once per board per chunk.
+  const canvas: CanvasSyncPorts = {
+    sessionQuota: (handle, tenantId, userId) => creationSessionQuota(handle, env, { tenantId, userId }),
+    scheduleSnapshot: boardSnapshotScheduler(db),
+  };
   return createSyncRepository(
     db,
-    (tx) => namedSyncImporters(tx, usage, steps, runOutcomes, runDelta),
+    (tx) => namedSyncImporters(tx, usage, steps, runOutcomes, runDelta, canvas),
     syncReferenceReader(db),
     // A push batch is ONE transaction: a chat an earlier event created is only visible on it.
     (tx) => syncReferenceReader(tx as unknown as Db),

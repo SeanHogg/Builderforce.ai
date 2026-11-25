@@ -30,6 +30,12 @@ import { importSyncedUsage } from './importSyncedUsage';
 import { importSyncedRunOutcome, type SyncRunOutcomeStore } from '../../runOutcomes/importSyncedRunOutcome';
 import type { RunDeltaImportPorts } from '../../runDelta/runDeltaPorts';
 import { runDeltaWriter } from '../../runDelta/runDeltaStore';
+import type { CanvasSyncPorts } from '../../creation/sync/canvasSyncPorts';
+import { importSyncedCanvasBoard } from '../../creation/sync/importSyncedCanvasBoard';
+import { importSyncedCanvasEdge } from '../../creation/sync/importSyncedCanvasEdge';
+import { importSyncedCanvasMedia } from '../../creation/sync/importSyncedCanvasMedia';
+import { importSyncedCanvasObject } from '../../creation/sync/importSyncedCanvasObject';
+import { importSyncedCanvasTimeline } from '../../creation/sync/importSyncedCanvasTimeline';
 
 export function namedSyncImporters(
   tx: Tx,
@@ -38,6 +44,8 @@ export function namedSyncImporters(
   runOutcomes: SyncRunOutcomeStore,
   /** PRD 41 §C14: the run-delta mirror's evidence blob store and cache bump; its rows ride `tx`. */
   runDelta: Omit<RunDeltaImportPorts, 'writer'>,
+  /** Studio local-first: the canvas importers' plan check and once-per-chunk snapshot; their rows ride `tx`. */
+  canvas: CanvasSyncPorts,
 ): SyncNamedImporters {
   const runDeltaPorts: RunDeltaImportPorts = { ...runDelta, writer: runDeltaWriter(tx) };
   return {
@@ -48,6 +56,11 @@ export function namedSyncImporters(
     importSyncedUsage: (event, ctx, stores) => importSyncedUsage(event, ctx, stores, usage),
     importSyncedChatTicketLink: (event, ctx, stores) => importSyncedChatTicketLink(event, ctx, stores, tx),
     importSyncedRunOutcome: (event, ctx, stores) => importSyncedRunOutcome(event, ctx, stores, runOutcomes),
+    importSyncedCanvasBoard: (event, ctx, stores) => importSyncedCanvasBoard(event, ctx, stores, tx, canvas),
+    importSyncedCanvasObject: (event, ctx, stores) => importSyncedCanvasObject(event, ctx, stores, tx, canvas),
+    importSyncedCanvasEdge: (event, ctx, stores) => importSyncedCanvasEdge(event, ctx, stores, tx, canvas),
+    importSyncedCanvasTimeline: (event, ctx, stores) => importSyncedCanvasTimeline(event, ctx, stores, tx),
+    importSyncedCanvasMedia: (event, ctx, stores) => importSyncedCanvasMedia(event, ctx, stores, tx),
     importMirrorRecord: (event, ctx, stores) => importMirrorRecord(event, ctx, stores, runDeltaPorts),
   };
 }

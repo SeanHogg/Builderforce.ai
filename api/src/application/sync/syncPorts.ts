@@ -24,6 +24,12 @@ export interface SyncAuthContext {
   tenantId: number;
   userId: string;
   role: string;
+  /**
+   * The request's workspace segment (the isolation tier below the tenant), when auth resolved one.
+   * Only the canvas board importer reads it: a NEW board is created in the caller's segment, the
+   * same way `POST /claim` stamps `scope(c).segmentId`. Absent = the board cannot be created.
+   */
+  segmentId?: string | null;
 }
 
 /** One event of a push batch, exactly as the wire contract carries it. */
@@ -282,6 +288,16 @@ export interface SyncNamedImporters {
    * for a missing importer) rather than failing to compile.
    */
   importSyncedRunOutcome?: SyncMutationImporter;
+  /**
+   * Studio local-first: a canvas board, its objects, edges, transcript and media manifests
+   * (`application/creation/sync`). Optional for the same reason as the run outcome: a unit
+   * of work built without them answers `canvas-*` events `entity_type_rejected`.
+   */
+  importSyncedCanvasBoard?: SyncMutationImporter;
+  importSyncedCanvasObject?: SyncMutationImporter;
+  importSyncedCanvasEdge?: SyncMutationImporter;
+  importSyncedCanvasTimeline?: SyncMutationImporter;
+  importSyncedCanvasMedia?: SyncMutationImporter;
 }
 
 /**

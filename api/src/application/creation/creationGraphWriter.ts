@@ -169,6 +169,168 @@ export interface CreationGraphWrite {
 }
 
 /**
+ * The `creation_session_objects` row for one graph object — THE mapping from the wire
+ * shape to the row, shared by the whole-graph write, the new-board write and the
+ * per-object sync write, so a column added to the row is added once.
+ */
+export function objectInsertRow(sessionId: string, object: GraphObjectInput, authorUserId: string | null) {
+  return {
+    id: object.id,
+    sessionId,
+    kind: object.kind.slice(0, 48),
+    resourceType: object.resourceType?.slice(0, 64) || null,
+    resourceId: object.resourceId?.slice(0, 128) || null,
+    resourceRevision: object.resourceRevision?.slice(0, 128) || null,
+    canvasData: object.canvasData ?? {},
+    content: object.content ?? null,
+    searchText: creationObjectSearchText(object.content),
+    createdBy: authorUserId,
+    updatedBy: authorUserId,
+  };
+}
+
+/** The `creation_session_connections` row for one graph connection — the twin of {@link objectInsertRow}. */
+export function connectionInsertRow(sessionId: string, edge: GraphConnectionInput, authorUserId: string | null) {
+  return {
+    id: edge.id,
+    sessionId,
+    sourceObjectId: edge.sourceObjectId,
+    targetObjectId: edge.targetObjectId,
+    kind: (edge.kind || 'reference').slice(0, 24),
+    label: edge.label?.slice(0, 255) || null,
+    metadata: edge.metadata ?? null,
+    createdBy: authorUserId,
+  };
+}
+
+/**
+ * PRD 39 §2: a comment's pin lives at anchor.canvasObjectId, which has no FK, so the
+ * old table's ON DELETE SET NULL obligation lives here: drop the pin on comments pinned
+ * to an object the board no longer carries. `objectId` is the kernel registry id. Run
+ * AFTER the object rows it reads have been removed — by a whole-graph replace (every
+ * object) and by a single object's delete (that object).
+ */
+export function unpinRemovedObjectComments(db: Db, tenantId: number, sessionId: string, now: Date) {
+  return db.update(annotations)
+    .set({ anchor: sql`${annotations.anchor} - 'canvasObjectId'`, updatedAt: now })
+    .where(and(
+      eq(annotations.tenantId, tenantId),
+      sql`${annotations.objectId} = (select id from objects
+              where tenant_id = ${tenantId}
+                and kind = 'creation_session'
+                and ref_id = ${sessionId}
+              limit 1)`,
+      sql`${annotations.anchor}->>'canvasObjectId' not in (select id::text from creation_session_objects where session_id = ${sessionId})`,
+    ));
+}
+
+/** What a revision bump records: who, what happened, and the idempotency key that serialises a retry. */
+export interface RevisionBookkeeping {
+  sessionId: string;
+  tenantId: number;
+  /** The revision the board will be AT once these statements commit. */
+  revision: number;
+  actorType: 'user' | 'agent' | 'api';
+  actorRef: string;
+  authorUserId: string | null;
+  eventType: string;
+  eventPayload: unknown;
+  idempotencyKey: string | null;
+  /** The object the event is ABOUT, when it is about one (a per-object write). */
+  eventObjectId?: string | null;
+  /** Further `creation_sessions` columns this write sets (viewport + preview, title, status ...). */
+  sessionSet?: Partial<typeof creationSessions.$inferInsert>;
+  now: Date;
+}
+
+/**
+ * The two statements EVERY board write ends its content with: move the session row to
+ * the new revision, then append the event that names it. The event is last because its
+ * unique constraints (`uq_creation_events_revision`, `uq_creation_events_idempotency`)
+ * are what serialise two writers onto one revision and make a retry a no-op — shared by
+ * the whole-graph write and the per-object sync write so neither can skip one.
+ */
+export function revisionBookkeepingStatements(db: Db, write: RevisionBookkeeping): [unknown, unknown] {
+  const { sessionId, tenantId, revision, authorUserId, now } = write;
+  return [
+    db.update(creationSessions).set({
+      canvasRevision: revision,
+      updatedBy: authorUserId,
+      updatedAt: now,
+      lastActivityAt: now,
+      ...(write.sessionSet ?? {}),
+    }).where(and(eq(creationSessions.id, sessionId), eq(creationSessions.tenantId, tenantId))),
+    db.insert(creationSessionEvents).values({
+      sessionId,
+      revision,
+      actorType: write.actorType,
+      actorRef: write.actorRef,
+      eventType: write.eventType,
+      ...(write.eventObjectId ? { objectId: write.eventObjectId } : {}),
+      payload: write.eventPayload,
+      idempotencyKey: write.idempotencyKey,
+    }),
+  ];
+}
+
+/**
+ * The statements that put ONE object on a board: insert it, or replace it when the id is
+ * already there. The conflict update is scoped to THIS session, so an id that names an
+ * object of another board writes nothing (the caller sees no returned row) instead of
+ * overwriting somebody else's card.
+ */
+export function objectUpsertStatement(db: Db, sessionId: string, object: GraphObjectInput, authorUserId: string | null) {
+  const row = objectInsertRow(sessionId, object, authorUserId);
+  return db.insert(creationSessionObjects).values(row).onConflictDoUpdate({
+    target: creationSessionObjects.id,
+    set: {
+      kind: row.kind,
+      resourceType: row.resourceType,
+      resourceId: row.resourceId,
+      resourceRevision: row.resourceRevision,
+      canvasData: row.canvasData,
+      content: row.content,
+      searchText: row.searchText,
+      updatedBy: authorUserId,
+      updatedAt: new Date(),
+    },
+    setWhere: eq(creationSessionObjects.sessionId, sessionId),
+  }).returning({ id: creationSessionObjects.id });
+}
+
+/** The statements that take ONE object off a board (its connections go with it by FK cascade). */
+export function objectDeleteStatements(db: Db, tenantId: number, sessionId: string, objectId: string, now: Date): unknown[] {
+  return [
+    db.delete(creationSessionObjects).where(and(eq(creationSessionObjects.id, objectId), eq(creationSessionObjects.sessionId, sessionId)))
+      .returning({ id: creationSessionObjects.id }),
+    unpinRemovedObjectComments(db, tenantId, sessionId, now),
+  ];
+}
+
+/** The statement that adds ONE connection to a board, or replaces it when the id is already there (scoped to this session, like {@link objectUpsertStatement}). */
+export function connectionUpsertStatement(db: Db, sessionId: string, edge: GraphConnectionInput, authorUserId: string | null) {
+  const row = connectionInsertRow(sessionId, edge, authorUserId);
+  return db.insert(creationSessionConnections).values(row).onConflictDoUpdate({
+    target: creationSessionConnections.id,
+    set: {
+      sourceObjectId: row.sourceObjectId,
+      targetObjectId: row.targetObjectId,
+      kind: row.kind,
+      label: row.label,
+      metadata: row.metadata,
+    },
+    setWhere: eq(creationSessionConnections.sessionId, sessionId),
+  }).returning({ id: creationSessionConnections.id });
+}
+
+/** The statement that removes ONE connection from a board. */
+export function connectionDeleteStatement(db: Db, sessionId: string, connectionId: string) {
+  return db.delete(creationSessionConnections)
+    .where(and(eq(creationSessionConnections.id, connectionId), eq(creationSessionConnections.sessionId, sessionId)))
+    .returning({ id: creationSessionConnections.id });
+}
+
+/**
  * Build the ordered statement list that replaces a board's graph at a new revision.
  * The caller runs them — batched with whatever else must commit atomically alongside.
  */
@@ -179,50 +341,15 @@ export function creationGraphStatements(db: Db, write: CreationGraphWrite): unkn
   const statements: unknown[] = [
     db.delete(creationSessionConnections).where(eq(creationSessionConnections.sessionId, sessionId)),
     db.delete(creationSessionObjects).where(eq(creationSessionObjects.sessionId, sessionId)),
-    // PRD 39 §2: the pin lives at anchor.canvasObjectId, which has no FK, so the
-    // old table's ON DELETE SET NULL obligation moves here — every graph save
-    // replaces all object rows, so drop the pin on comments pinned to objects the
-    // new graph no longer carries. `objectId` is the kernel registry id.
-    db.update(annotations)
-      .set({ anchor: sql`${annotations.anchor} - 'canvasObjectId'`, updatedAt: now })
-      .where(and(
-        eq(annotations.tenantId, tenantId),
-        sql`${annotations.objectId} = (select id from objects
-              where tenant_id = ${tenantId}
-                and kind = 'creation_session'
-                and ref_id = ${sessionId}
-              limit 1)`,
-        sql`${annotations.anchor}->>'canvasObjectId' not in (select id::text from creation_session_objects where session_id = ${sessionId})`,
-      )),
+    unpinRemovedObjectComments(db, tenantId, sessionId, now),
   ];
 
   if (objects.length) {
-    statements.push(db.insert(creationSessionObjects).values(objects.map((object) => ({
-      id: object.id,
-      sessionId,
-      kind: object.kind.slice(0, 48),
-      resourceType: object.resourceType?.slice(0, 64) || null,
-      resourceId: object.resourceId?.slice(0, 128) || null,
-      resourceRevision: object.resourceRevision?.slice(0, 128) || null,
-      canvasData: object.canvasData ?? {},
-      content: object.content ?? null,
-      searchText: creationObjectSearchText(object.content),
-      createdBy: authorUserId,
-      updatedBy: authorUserId,
-    }))));
+    statements.push(db.insert(creationSessionObjects).values(objects.map((object) => objectInsertRow(sessionId, object, authorUserId))));
   }
 
   if (connections.length) {
-    statements.push(db.insert(creationSessionConnections).values(connections.map((edge) => ({
-      id: edge.id,
-      sessionId,
-      sourceObjectId: edge.sourceObjectId,
-      targetObjectId: edge.targetObjectId,
-      kind: (edge.kind || 'reference').slice(0, 24),
-      label: edge.label?.slice(0, 255) || null,
-      metadata: edge.metadata ?? null,
-      createdBy: authorUserId,
-    }))));
+    statements.push(db.insert(creationSessionConnections).values(connections.map((edge) => connectionInsertRow(sessionId, edge, authorUserId))));
   }
 
   const snapshot = db.insert(creationSessionSnapshots).values({
@@ -234,22 +361,18 @@ export function creationGraphStatements(db: Db, write: CreationGraphWrite): unkn
   });
 
   statements.push(
-    db.update(creationSessions).set({
-      canvasRevision: revision,
-      viewport: write.viewport,
-      updatedBy: authorUserId,
-      updatedAt: now,
-      lastActivityAt: now,
-      preview: buildPreview(objects),
-    }).where(and(eq(creationSessions.id, sessionId), eq(creationSessions.tenantId, tenantId))),
-    db.insert(creationSessionEvents).values({
+    ...revisionBookkeepingStatements(db, {
       sessionId,
+      tenantId,
       revision,
+      authorUserId,
       actorType: write.actorType,
       actorRef: write.actorRef,
       eventType: write.eventType,
-      payload: write.eventPayload,
+      eventPayload: write.eventPayload,
       idempotencyKey: write.idempotencyKey,
+      sessionSet: { viewport: write.viewport, preview: buildPreview(objects) },
+      now,
     }),
     write.snapshotOnConflictDoNothing ? snapshot.onConflictDoNothing() : snapshot,
   );
@@ -353,19 +476,7 @@ export function newCreationSessionStatements(db: Db, input: NewCreationSession):
     writes.push({
       table: 'creation_session_objects',
       rows: objects.length,
-      statement: db.insert(creationSessionObjects).values(objects.map((object) => ({
-        id: object.id,
-        sessionId,
-        kind: object.kind.slice(0, 48),
-        resourceType: object.resourceType?.slice(0, 64) || null,
-        resourceId: object.resourceId?.slice(0, 128) || null,
-        resourceRevision: object.resourceRevision?.slice(0, 128) || null,
-        canvasData: object.canvasData ?? {},
-        content: object.content ?? null,
-        searchText: creationObjectSearchText(object.content),
-        createdBy: authorUserId,
-        updatedBy: authorUserId,
-      }))),
+      statement: db.insert(creationSessionObjects).values(objects.map((object) => objectInsertRow(sessionId, object, authorUserId))),
     });
   }
 
@@ -373,16 +484,7 @@ export function newCreationSessionStatements(db: Db, input: NewCreationSession):
     writes.push({
       table: 'creation_session_connections',
       rows: connections.length,
-      statement: db.insert(creationSessionConnections).values(connections.map((edge) => ({
-        id: edge.id,
-        sessionId,
-        sourceObjectId: edge.sourceObjectId,
-        targetObjectId: edge.targetObjectId,
-        kind: (edge.kind || 'reference').slice(0, 24),
-        label: edge.label?.slice(0, 255) || null,
-        metadata: edge.metadata ?? null,
-        createdBy: authorUserId,
-      }))),
+      statement: db.insert(creationSessionConnections).values(connections.map((edge) => connectionInsertRow(sessionId, edge, authorUserId))),
     });
   }
 
@@ -437,9 +539,13 @@ export const CREATION_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab
  */
 export const uuidKey = (id: string) => id.toLowerCase();
 
+/** The size a board may reach — read by the whole-graph validator below and by the per-edit sync importers. */
+export const MAX_CREATION_OBJECTS = 1_000;
+export const MAX_CREATION_CONNECTIONS = 4_000;
+
 export function validCreationGraph(objects: GraphObjectInput[], connections: GraphConnectionInput[]): string | null {
-  if (objects.length > 1_000) return 'A session may contain at most 1,000 objects';
-  if (connections.length > 4_000) return 'A session may contain at most 4,000 connections';
+  if (objects.length > MAX_CREATION_OBJECTS) return 'A session may contain at most 1,000 objects';
+  if (connections.length > MAX_CREATION_CONNECTIONS) return 'A session may contain at most 4,000 connections';
   const ids = new Set<string>();
   for (const object of objects) {
     if (!CREATION_UUID_RE.test(object.id)) return `Invalid object id: ${object.id}`;

@@ -26,7 +26,7 @@ import {
 } from './records.js';
 
 /** Creation sites this guard is for. Audit is `audit-run`; a run is `execution`. */
-export const CREATION_ENTITY_TYPES = ['project', 'ticket', 'chat', 'audit-run', 'execution'] as const;
+export const CREATION_ENTITY_TYPES = ['project', 'ticket', 'chat', 'audit-run', 'execution', 'canvas-board'] as const;
 
 export type CreationEntityType = (typeof CREATION_ENTITY_TYPES)[number];
 

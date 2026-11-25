@@ -26,7 +26,7 @@
  * Pure. No store, no network (`loadMappedEntities` reads the store facts it needs up front).
  */
 
-import { destinationKey, type JournalEvent, type LocalEntityType } from './records.js';
+import { CANVAS_ENTITY_TYPES, destinationKey, type JournalEvent, type LocalEntityType } from './records.js';
 import type { LocalFirstTransaction, PendingLookup } from './storeContract.js';
 import { RECORD_PAYLOAD_FENCE_KEY, isRecordPayloadFence } from './recordPayloadMarker.js';
 
@@ -46,7 +46,7 @@ export const SYNC_PASS_BIND_TYPES: ReadonlySet<LocalEntityType> = new Set<LocalE
 const KNOWN_TYPES: ReadonlySet<string> = new Set<LocalEntityType>([
   'project', 'ticket', 'chat', 'message', 'execution', 'step', 'approval', 'audit-definition', 'audit-run',
   'audit-finding', 'change-set', 'memory-fact', 'attachment-manifest', 'policy-snapshot', 'remediation',
-  'usage', 'run-outcome', 'chat-ticket-link', 'run-delta',
+  'usage', 'run-outcome', 'chat-ticket-link', 'run-delta', ...CANVAS_ENTITY_TYPES,
 ]);
 
 /** Journal order: oldest write first. */

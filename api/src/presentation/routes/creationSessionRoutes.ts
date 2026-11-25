@@ -27,7 +27,6 @@ import {
   creationSessionSnapshots,
   creationSessionTimeline,
   creationSessions,
-  ceremonySessions,
   ideAgents,
   ideProjects,
   agentRegistrations,
@@ -157,7 +156,9 @@ import { boundedIntParam, limitParam, offsetParam } from '../../domain/shared/bo
 // already started to differ between the two copies; the public `/api/v1` item CRUD is
 // the third caller. See `creationGraphWriter.ts` for why it returns statements rather
 // than executing them.
-import { partitionAgentRefs } from '../../application/creation/agentRefPartition';
+import { validateResourceAccess as validateCreationResourceAccess } from '../../application/creation/resourceAccess';
+import { sanitizeTimelineMetadata, timelineRole } from '../../application/creation/timelineMetadata';
+import { appendTimelineMessage } from '../../application/creation/timelineWriter';
 import {
   buildPreview,
   creationGraphStatements,
@@ -567,107 +568,13 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
    * Validate every authoritative reference against the active tenant before a
    * graph replacement is committed. Canvas-native drafts have no resource ref.
    */
-  async function validateResourceAccess(
+  function validateResourceAccess(
     objects: GraphObjectInput[],
     tenantId: number,
     segmentId: string | null,
     userId: string,
   ): Promise<string | null> {
-    if (!segmentId) return 'This session is missing its workspace segment';
-    const refs = objects.filter((object) => object.resourceType && object.resourceId);
-    const ids = (type: string) => [...new Set(refs.filter((object) => object.resourceType === type).map((object) => object.resourceId as string))];
-    const numericIds = (type: string) => ids(type).map(Number).filter((id) => Number.isInteger(id) && id > 0);
-
-    const projectIds = numericIds('project');
-    if (projectIds.length !== ids('project').length) return 'A Project reference is invalid';
-    if (projectIds.length) {
-      const found = await db.select({ id: projects.id }).from(projects).where(and(
-        eq(projects.tenantId, tenantId), eq(projects.segmentId, segmentId), inArray(projects.id, projectIds),
-      ));
-      if (found.length !== projectIds.length) return 'A Project is unavailable or belongs to another workspace';
-    }
-
-    const taskIds = numericIds('task');
-    if (taskIds.length !== ids('task').length) return 'A Task reference is invalid';
-    if (taskIds.length) {
-      const found = await db.select({ id: tasks.id }).from(tasks)
-        .innerJoin(projects, eq(projects.id, tasks.projectId))
-        .where(and(eq(projects.tenantId, tenantId), eq(tasks.segmentId, segmentId), inArray(tasks.id, taskIds)));
-      if (found.length !== taskIds.length) return 'A Task is unavailable or belongs to another workspace';
-    }
-
-    const workflowIds = ids('workflow');
-    if (workflowIds.length) {
-      if (workflowIds.some((id) => !UUID_RE.test(id))) return 'A Workflow reference is invalid';
-      const [definitions, executions] = await Promise.all([
-        db.select({ id: workflowDefinitions.id }).from(workflowDefinitions).where(and(
-          eq(workflowDefinitions.tenantId, tenantId), eq(workflowDefinitions.segmentId, segmentId), inArray(workflowDefinitions.id, workflowIds),
-        )),
-        db.select({ id: workflows.id }).from(workflows).where(and(
-          eq(workflows.tenantId, tenantId), eq(workflows.segmentId, segmentId), inArray(workflows.id, workflowIds),
-        )),
-      ]);
-      if (new Set([...definitions, ...executions].map((row) => row.id)).size !== workflowIds.length) return 'A Workflow is unavailable or belongs to another workspace';
-    }
-
-    for (const chatId of ids('chat')) {
-      const numeric = Number(chatId);
-      if (!Number.isInteger(numeric) || !(await resolveChatAccess(db, { chatId: numeric, userId, tenantId }))) {
-        return 'A Chat is unavailable or belongs to another workspace';
-      }
-    }
-
-    const agentIds = ids('agent');
-    if (agentIds.length) {
-      // Numeric refs → `legacy_agent_id`; text refs → `ide_agents.id` (workforce and
-      // built-in agents); only UUID-shaped text refs may reach the uuid column
-      // `agent_registrations.id`. A ref neither finds is reported unavailable.
-      const partition = partitionAgentRefs(agentIds);
-      if (!partition) return 'An Agent is unavailable or belongs to another workspace';
-      const { numeric, text, uuid: uuidRefs } = partition;
-      const [byLegacy, workforce, byUuid] = await Promise.all([
-        numeric.length
-          ? db.select({ id: agentRegistrations.legacyAgentId }).from(agentRegistrations).where(and(
-              eq(agentRegistrations.tenantId, tenantId),
-              eq(agentRegistrations.segmentId, segmentId),
-              inArray(agentRegistrations.legacyAgentId, numeric),
-            ))
-          : Promise.resolve([]),
-        text.length
-          ? db.select({ id: ideAgents.id }).from(ideAgents).where(and(eq(ideAgents.tenantId, tenantId), inArray(ideAgents.id, text)))
-          : Promise.resolve([]),
-        uuidRefs.length
-          ? db.select({ id: agentRegistrations.id }).from(agentRegistrations).where(and(
-              eq(agentRegistrations.tenantId, tenantId),
-              eq(agentRegistrations.segmentId, segmentId),
-              inArray(agentRegistrations.id, uuidRefs),
-            ))
-          : Promise.resolve([]),
-      ]);
-      const found = new Set<string>();
-      for (const row of byLegacy) if (row.id != null) found.add(String(row.id));
-      for (const row of workforce) found.add(row.id);
-      for (const row of byUuid) found.add(row.id);
-      if (agentIds.some((id) => !found.has(id))) return 'An Agent is unavailable or belongs to another workspace';
-    }
-
-    const ceremonyIds = ids('ceremony');
-    if (ceremonyIds.length) {
-      if (ceremonyIds.some((id) => !UUID_RE.test(id))) return 'A ceremony reference is invalid';
-      const found = await db.select({ id: ceremonySessions.id }).from(ceremonySessions).where(and(
-        eq(ceremonySessions.tenantId, tenantId), eq(ceremonySessions.segmentId, segmentId), inArray(ceremonySessions.id, ceremonyIds),
-      ));
-      if (found.length !== ceremonyIds.length) return 'A ceremony is unavailable or belongs to another workspace';
-    }
-
-    const staffIds = ids('staff');
-    if (staffIds.length) {
-      const found = await db.select({ userId: tenantMembers.userId }).from(tenantMembers).where(and(
-        eq(tenantMembers.tenantId, tenantId), inArray(tenantMembers.userId, staffIds),
-      ));
-      if (found.length !== staffIds.length) return 'A staff member is unavailable or belongs to another workspace';
-    }
-    return null;
+    return validateCreationResourceAccess(db, objects, tenantId, segmentId, userId);
   }
 
   router.get('/', async (c) => {
@@ -1445,34 +1352,15 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!access) return c.json({ error: 'Session not found or prompting is not allowed' }, 404);
     const input = await parseOptionalBody(c, TimelineBody);
     const clientMessageId = typeof input.clientMessageId === 'string' ? input.clientMessageId.trim().slice(0, 128) : '';
-    const role = input.role === 'assistant' || input.role === 'system' ? input.role : 'user';
+    const role = timelineRole(input.role);
     const body = typeof input.body === 'string' ? input.body.trim().slice(0, 50_000) : '';
     if (!clientMessageId || !body) return c.json({ error: 'clientMessageId and body are required' }, 400);
-    const rawMeta = input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata) ? input.metadata as Record<string, unknown> : {};
     const userId = c.get('userId') as string;
     const [human] = role === 'user' ? await db.select({ name: users.displayName }).from(users).where(eq(users.id, userId)).limit(1) : [];
-    const metadata = {
-      ...(typeof rawMeta.scope === 'string' ? { scope: rawMeta.scope.slice(0, 32) } : {}),
-      ...(Array.isArray(rawMeta.objectIds) ? { objectIds: rawMeta.objectIds.filter((id): id is string => typeof id === 'string' && UUID_RE.test(id)).slice(0, 100) } : {}),
-      ...(typeof rawMeta.model === 'string' ? { model: rawMeta.model.slice(0, 120) } : {}),
-      ...(typeof rawMeta.error === 'boolean' ? { error: rawMeta.error } : {}),
-      ...(role === 'user' ? { authoredBy: { kind: 'human', ref: userId, name: human?.name || 'Collaborator' } } : rawMeta.authoredBy && typeof rawMeta.authoredBy === 'object' && !Array.isArray(rawMeta.authoredBy) ? {
-        authoredBy: {
-          kind: (rawMeta.authoredBy as Record<string, unknown>).kind === 'agent' ? 'agent' : 'brain',
-          ref: String((rawMeta.authoredBy as Record<string, unknown>).ref || '').slice(0, 128),
-          name: String((rawMeta.authoredBy as Record<string, unknown>).name || '').slice(0, 160),
-        },
-      } : {}),
-    };
-    const [inserted] = await db.insert(creationSessionTimeline).values({
-      sessionId: access.session.id, clientMessageId, messageRole: role, body, metadata, createdBy: userId,
-    }).onConflictDoNothing({ target: [creationSessionTimeline.sessionId, creationSessionTimeline.clientMessageId] }).returning();
-    const message = inserted ?? (await db.select().from(creationSessionTimeline).where(and(
-      eq(creationSessionTimeline.sessionId, access.session.id), eq(creationSessionTimeline.clientMessageId, clientMessageId),
-    )).limit(1))[0];
-    await db.update(creationSessions).set({ lastActivityAt: new Date(), updatedAt: new Date(), updatedBy: c.get('userId') as string }).where(and(
-      eq(creationSessions.id, access.session.id), eq(creationSessions.tenantId, access.session.tenantId),
-    ));
+    const metadata = sanitizeTimelineMetadata(input.metadata, role, { userId, name: human?.name });
+    const { message, inserted } = await appendTimelineMessage(db, {
+      sessionId: access.session.id, tenantId: access.session.tenantId, clientMessageId, role, body, metadata, createdBy: userId,
+    });
     c.executionCtx.waitUntil(broadcastRoom(
       c.env?.SESSION_ROOM,
       creationSessionRoomName(access.session.tenantId, access.session.id),

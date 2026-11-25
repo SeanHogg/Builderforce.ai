@@ -21,6 +21,7 @@ import {
 } from '@builderforce/local-first/indexed-db';
 import { readLocal, writeLocal } from '../storage';
 import { createLocalWorkManagement, type LocalWorkManagement } from './workManagement';
+import { createWebSyncDriver, type WebSyncDriver, type WebSyncDriverOptions } from './webSyncDriver';
 
 /** Same database the web local-first store opens, so the two do not fork. */
 export const WEB_LOCAL_WORK_DB_NAME = 'builderforce-local-first';
@@ -38,12 +39,21 @@ export interface LocalWorkBootOptions {
   dbName?: string;
   deviceId?: string;
   newId?: () => string;
+  /**
+   * Adopt the web sync driver (`webSyncDriver.ts`): this work is then PUSHED, not only journalled.
+   * Opt-in, because a composer that boots work only to read or file it must not open a request path;
+   * the app's composition root passes `{}` (the page's policy, fetch and auth headers) once it
+   * wants the journal to leave the device. Only a bound destination can be pushed.
+   */
+  sync?: Omit<WebSyncDriverOptions, 'store' | 'deviceId' | 'destination'>;
 }
 
 export interface LocalWorkManagementBoot {
   /** Present only when `storage` is `durable`. */
   work?: LocalWorkManagement;
   store?: IndexedDbLocalFirstStore;
+  /** The running sync driver, when `sync` was requested for a bound destination. */
+  sync?: WebSyncDriver;
   deviceId: string;
   destination: EntityDestination;
   storage: LocalWorkStorageState;
@@ -94,6 +104,11 @@ export async function bootLocalWorkManagement(options: LocalWorkBootOptions = {}
     return closed(deviceId, destination, storageState(error));
   }
 
+  const sync = options.sync && destination.kind === 'bound'
+    ? createWebSyncDriver({ ...options.sync, store, deviceId, destination: () => destination })
+    : undefined;
+  sync?.start();
+
   return {
     work: createLocalWorkManagement({
       store,
@@ -102,10 +117,12 @@ export async function bootLocalWorkManagement(options: LocalWorkBootOptions = {}
       newId: options.newId,
     }),
     store,
+    ...(sync ? { sync } : {}),
     deviceId,
     destination,
     storage: 'durable',
     close() {
+      sync?.stop();
       store.close();
     },
   };

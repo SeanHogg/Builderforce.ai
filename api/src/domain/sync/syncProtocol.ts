@@ -18,6 +18,7 @@
  */
 
 import {
+  CANVAS_ENTITY_TYPES,
   SYNC_PROTOCOL_VERSION,
   destinationKey,
   type EntityDestination,
@@ -26,6 +27,8 @@ import {
 
 export {
   SYNC_PROTOCOL_VERSION,
+  /** The canvas entity types — declared ONCE in the package, read here (never restated). */
+  CANVAS_ENTITY_TYPES,
   /** The ticket kinds in the task table: the ONE list the device's link payload and the importer share. */
   TASK_TABLE_KINDS,
   destinationKey,
@@ -52,7 +55,7 @@ export type SyncReceiptStatus = 'accepted' | 'duplicate' | 'conflict' | 'rejecte
  * Every other accepted `LocalEntityType` lands in the mirror as client-reported
  * history (see `application/sync/importers/importMirrorRecord`).
  */
-export const DOMAIN_IMPORTED_ENTITY_TYPES = ['ticket', 'project', 'chat', 'message', 'usage', 'chat-ticket-link', 'run-outcome'] as const satisfies readonly LocalEntityType[];
+export const DOMAIN_IMPORTED_ENTITY_TYPES = ['ticket', 'project', 'chat', 'message', 'usage', 'chat-ticket-link', 'run-outcome', ...CANVAS_ENTITY_TYPES] as const satisfies readonly LocalEntityType[];
 
 /** The highest event `schemaVersion` this build understands. */
 export const MAX_SUPPORTED_SCHEMA_VERSION = 1;

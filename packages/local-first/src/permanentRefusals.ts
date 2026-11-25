@@ -48,6 +48,21 @@ export const PERMANENT_REFUSALS: ReadonlySet<string> = new Set([
   'server_id_invalid',
   'destination_mismatch',
   'base_version_required',
+  // The canvas importers (`api/src/application/creation/sync`): a payload that can never be valid,
+  // and a board the caller may not write (a viewer, or a deleted board) — the client dead-letters
+  // these visibly. `canvas_plan_limit` and `canvas_write_failed` are deliberately absent: a plan
+  // upgrade or a retry fixes them, so they are holds.
+  'canvas_board_id_invalid',
+  'canvas_board_id_conflict',
+  'canvas_board_title_invalid',
+  'canvas_board_forbidden',
+  'canvas_board_deleted',
+  'canvas_resource_denied',
+  'canvas_object_invalid',
+  'canvas_edge_invalid',
+  'canvas_timeline_invalid',
+  'canvas_timeline_immutable',
+  'canvas_media_invalid',
 ]);
 
 /**

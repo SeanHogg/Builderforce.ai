@@ -18,7 +18,7 @@ export {
   type SyncId,
 } from './entityId.js';
 export { entityIdResolver, type EntityIdResolver, type SyncEntityType } from './entityIdResolver.js';
-export { TERMINAL_EXECUTION_STATUSES, UNBOUND_DESTINATION, accountScopeOf, compareMappingAge, destinationKey, earliestMapping, inEntityScope, isTerminalExecutionStatus, normalizeServerMapping } from './records.js';
+export { CANVAS_ENTITY_TYPES, TERMINAL_EXECUTION_STATUSES, UNBOUND_DESTINATION, accountScopeOf, compareMappingAge, destinationKey, earliestMapping, inEntityScope, isTerminalExecutionStatus, normalizeServerMapping } from './records.js';
 export type {
   AuditFindingValue,
   ChatTicketLinkType,
@@ -134,7 +134,9 @@ export {
   HTTP_SYNC_PULL_PATH,
   HTTP_SYNC_PUSH_PATH,
   HttpSyncTransportError,
+  MAX_RETRY_AFTER_MS,
   createHttpSyncTransport,
+  parseRetryAfter,
   type HttpSyncFetch,
   type HttpSyncHeaders,
   type HttpSyncRequest,
@@ -184,6 +186,14 @@ export {
   type LinkChatTicketInput,
 } from './chatTicketLink.js';
 export { stableEntityId } from './stableEntityId.js';
+export {
+  DESTINATION_FORGED,
+  DESTINATION_REQUIRED,
+  guardCreationBinding,
+  type CreationBindingInput,
+  type CreationBindingReason,
+  type CreationBindingResult,
+} from './creationBinding.js';
 export {
   ingestServerRecords,
   type IngestServerRecordsOptions,

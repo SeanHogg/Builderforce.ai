@@ -39,6 +39,7 @@ export function createSyncRoutes(storesFor: SyncStoresFor): Hono<HonoEnv> {
     tenantId: c.get('tenantId') as number,
     userId: c.get('userId') as string,
     role: String(c.get('role') ?? ''),
+    segmentId: (c.get('segmentId') as string | null | undefined) ?? null,
   });
 
   r.post('/push', async (c) => {

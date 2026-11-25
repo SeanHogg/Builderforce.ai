@@ -3,6 +3,8 @@ import type { CanvasSceneSpec } from '@builderforce/creation-canvas-contract';
 import { ModelPicker, ProgressFeedback, VideoPreview } from '@seanhogg/builderforce-studio-embedded';
 import type { DiffusionModelId } from '@seanhogg/builderforce-studio';
 import { useSceneGeneration } from '@/hooks/useSceneGeneration';
+import { useOfflineModel } from '@/hooks/useOfflineModel';
+import { OfflineModelAction } from './OfflineModelAction';
 import styles from '../styles/world.module.css';
 import sceneStyles from './Scene.module.css';
 
@@ -20,6 +22,7 @@ export function SceneDeviceBody({ objectId, spec, onChange }: {
   const tCommon = useTranslations('common');
   const generation = useSceneGeneration(objectId, spec, onChange);
   const editable = Boolean(onChange);
+  const offline = useOfflineModel(generation.modelId || 'lcm-tiny-sd');
 
   return (
     <>
@@ -46,6 +49,8 @@ export function SceneDeviceBody({ objectId, spec, onChange }: {
           onChange={(next) => generation.setModelId(next)}
           disabled={!editable || generation.isGenerating}
         />
+
+        <OfflineModelAction offline={offline} />
 
         <div className={styles.sceneGeneratorRow}>
           <label className={styles.sceneGeneratorField}>
