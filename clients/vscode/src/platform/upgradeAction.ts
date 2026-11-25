@@ -1,0 +1,81 @@
+import { chatErrorAction, type ChatErrorAction } from "@seanhogg/builderforce-brain-embedded/chatError";
+import * as vscode from "vscode";
+import { getWebBaseUrl } from "../gateway/gateway";
+import { noLocalModelMessage } from "../models/noLocalModelPrompt";
+import { messageOf } from "../messageOf";
+
+/**
+ * Turn an entitlement failure into somewhere the user can actually GO — the host
+ * half of the webview's `<ChatErrorBanner>`.
+ *
+ * The native `@builderforce` chat participant streams markdown, not React, so it
+ * can't render the banner's button; without this it printed "**Error:** Premium
+ * models … require a validated card on file. Add and validate a card in Settings
+ * ▸ Billing to unlock." and left the user to find Settings ▸ Billing themselves,
+ * in a product they may only ever have used inside the editor.
+ *
+ * Classification is the SHARED {@link chatErrorAction} (a React-free subpath of
+ * brain-embedded), so both surfaces agree on what a given failure means and where
+ * it should send the user.
+ */
+
+/** Where each verdict lands in the web app. Mirrors `UPGRADE_PATHS` in the webview's
+ *  `accountPlan.tsx` — `/pricing` is the billing console, and `?upgrade=pro`
+ *  pre-opens the upgrade form. */
+const PATHS = {
+  upgrade: "/pricing?upgrade=pro",
+  validate_card: "/pricing",
+} as const;
+
+/** A rendered call-to-action, or null when the failure isn't an entitlement one. */
+export interface UpgradeAction {
+  label: string;
+  url: string;
+}
+
+/**
+ * The same call-to-action, from an ALREADY-CLASSIFIED verdict.
+ *
+ * The shared run loop classifies a failure once (on the run cell's `errorAction`) and
+ * surfaces the sentence separately — the original thrown value is gone by the time a
+ * host reads it. Rendering from the verdict keeps that path on the SAME mapping as the
+ * throw-carrying one instead of re-deriving it from error prose.
+ */
+export function upgradeActionForVerdict(action: ChatErrorAction | null): UpgradeAction | null {
+  // Only a verdict with a pricing page gets a call-to-action here. Every other kind —
+  // `auth`/`sign_in` (the host signs in), the model verdicts (`noLocalModelPrompt`'s
+  // remedies) and `platform_refused` (a mode/switch remedy) — has none. Matching each
+  // kind by name means a new verdict kind can never index a page that doesn't exist.
+  if (action?.kind === "validate_card") {
+    return { label: vscode.l10n.t("Add a card"), url: `${getWebBaseUrl()}${PATHS.validate_card}` };
+  }
+  if (action?.kind !== "upgrade") return null;
+
+  const url = `${getWebBaseUrl()}${PATHS.upgrade}`;
+  const plan = action.requiredPlan
+    ? action.requiredPlan.replace(/^./, (ch) => ch.toUpperCase())
+    : null;
+  return {
+    label: plan ? vscode.l10n.t("Upgrade to {0}", plan) : vscode.l10n.t("Upgrade"),
+    url,
+  };
+}
+
+/**
+ * An error formatted for a markdown chat stream, with the fix appended as a link
+ * when there is one. Returns just the message otherwise, so a plain failure reads
+ * exactly as it did before.
+ */
+export function formatChatError(error: unknown): string {
+  const message = messageOf(error);
+  return formatChatErrorVerdict(message, chatErrorAction(error));
+}
+
+/** {@link formatChatError} for a message whose verdict was classified elsewhere (the
+ *  shared run loop's `errorAction`). One renderer for both entry points. */
+export function formatChatErrorVerdict(message: string, action: ChatErrorAction | null): string {
+  // The raw `no_local_model` / `no_specific_model` sentinel is never what a person reads.
+  if (action?.kind === "no_local_model" || action?.kind === "no_specific_model") return noLocalModelMessage(action.kind);
+  const cta = upgradeActionForVerdict(action);
+  return cta ? `${message}\n\n[${cta.label}](${cta.url})` : message;
+}

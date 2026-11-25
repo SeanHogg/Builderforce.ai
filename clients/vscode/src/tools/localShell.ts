@@ -1,0 +1,212 @@
+/**
+ * The editor's ONE local shell runner — what `run_command` and the `git_*` tools run
+ * through (via `localCapabilities.ts`) and what the workspace's `.builderforce/hooks.json`
+ * commands run through (via `hooks/runHooks.ts`). One runner, so a hook command and an
+ * agent's command behave identically: the same POSIX-script routing on Windows, the same
+ * timeout and output bound, the same result shape.
+ *
+ * A pipeline runs under `pipefail` (`withPipefail`), so a failing stage is not exit 0. Within
+ * a run (a `jobOwner`) the shell also keeps each command's FULL output for `output_filter`
+ * (`localShellOutputs.ts`) and hands back the earlier result of an unchanged verification
+ * command (`localShellCache.ts`).
+ */
+
+import * as path from "path";
+import type { ChildProcess } from "child_process";
+import type { ShellJobStart, ShellJobStatus, ShellResult } from "@builderforce/agent-tools";
+import { posixRoute, runRouted, withPipefail } from "@builderforce/agent-tools/node-posix-shell";
+import { resolveShellCwd } from "@builderforce/agent-tools/node-path";
+import { spawnCommand, stopCommand } from "../processTree";
+import { killJob, pollJob, startJob, type JobOwner } from "./localShellJobs";
+import { readOutput, retainOutput } from "./localShellOutputs";
+import { cachedResult, invalidateRunCache, rememberResult, shellCacheEffect, workspaceFingerprint } from "./localShellCache";
+import { withScratchEnv } from "../scratchDir";
+import { messageOf } from "../messageOf";
+
+// Bound a command's wall-clock + the output handed back to the model. Matches the cloud
+// Container's COMMAND_TIMEOUT_MS (api/container/server.mjs) — a build/type-check/test
+// step may legitimately take minutes (e.g. `tsc --noEmit` or `npm test` on a large
+// monorepo), and the old 120s ceiling was killing those runs mid-compile well before
+// they could finish.
+export const RUN_TIMEOUT_MS = 10 * 60 * 1000;
+const RUN_MAX_BUFFER = 4 * 1024 * 1024;
+const RUN_MAX_OUTPUT = 60_000;
+
+/** Within a run the full text stays retained under the result's `outputId` (`output_filter`). */
+function clamp(text: string, max: number): string {
+  return text.length <= max ? text : `${text.slice(0, max)}\n…(${text.length - max} more chars truncated)`;
+}
+
+interface Exited { stdout: string; stderr: string; code: number | null; signal: NodeJS.Signals | null; error?: Error }
+
+/**
+ * Wait for `child` to exit. Never rejects. A stream past {@link RUN_MAX_BUFFER} calls
+ * `onOverflow` once and keeps no more: an unbounded producer (`yes`, `tail -f`, a
+ * watcher run in the foreground) is stopped there, not left to the 10-minute bound.
+ */
+function collect(child: ChildProcess, onOverflow: () => void): Promise<Exited> {
+  return new Promise((resolve) => {
+    const out = { stdout: "", stderr: "" };
+    let overflowed = false;
+    for (const key of ["stdout", "stderr"] as const) {
+      child[key]?.on("data", (chunk: string) => {
+        if (out[key].length < RUN_MAX_BUFFER) out[key] += chunk;
+        else if (!overflowed) {
+          overflowed = true;
+          onOverflow();
+        }
+      });
+    }
+    let error: Error | undefined;
+    child.on("error", (e) => {
+      error = e;
+      // A child that never started emits no `close`.
+      if (child.pid === undefined) resolve({ ...out, code: null, signal: null, error: e });
+    });
+    child.on("close", (code, signal) => resolve({ ...out, code, signal, ...(error ? { error } : {}) }));
+  });
+}
+
+export interface LocalShellOptions {
+  /**
+   * The directory this command runs in: a workspace-relative path (already validated by the
+   * tool: no `..`, not absolute). The command is spawned WITH that working directory — it is
+   * never prefixed with a `cd`, which `cmd.exe` and Windows PowerShell 5.1 do not share a
+   * grammar for. Omitted ⇒ the shell's root.
+   */
+  cwd?: string;
+  /** Run it even when an unchanged verification command's cached result exists (`localShellCache.ts`). */
+  fresh?: boolean;
+  /** Wall-clock bound for this command; defaults to {@link RUN_TIMEOUT_MS}. */
+  timeoutMs?: number;
+  /** Extra environment for this command, layered over the editor's own. */
+  env?: Record<string, string>;
+  /**
+   * Stop. Aborting kills the command's whole process tree (see `processTree.ts`) and
+   * the result is `{ ok: false, aborted: true }`; the cmd→bash retry never runs after it.
+   */
+  signal?: AbortSignal;
+}
+
+export interface LocalShell {
+  run(command: string, options?: LocalShellOptions): Promise<ShellResult>;
+  /** Start a background job (`run_command` background / yieldMs) owned by this shell's run;
+   *  it dies when that run settles, and with `signal` when one is given. */
+  start(command: string, options?: LocalShellOptions): Promise<ShellJobStart>;
+  /** Aborting `signal` ends the WAIT (the status so far); the job runs on. */
+  poll(id: string, opts?: { waitMs?: number; signal?: AbortSignal }): Promise<ShellJobStatus>;
+  kill(id: string): Promise<ShellJobStatus>;
+  /** A retained full output of this run's, by the `outputId` a result carried (`output_filter`). */
+  output(outputId: string): Promise<string | undefined>;
+}
+
+const aborted = (out: string): ShellResult => ({
+  ok: false,
+  aborted: true,
+  error: "stopped — the command and everything it started were killed",
+  ...(out ? { stdout: clamp(out, RUN_MAX_OUTPUT) } : {}),
+});
+
+/** A shell rooted at `root` (every command's working directory). `jobOwner` is the run
+ *  its background jobs belong to (see `localShellJobs.ts`). */
+export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {}): LocalShell {
+  const cwd = path.resolve(root);
+  const owner = opts.jobOwner;
+
+  /** Execute once, in a named interpreter. `bash` null ⇒ the platform default shell. */
+  async function execOnce(command: string, bash: string | null, options: LocalShellOptions, dir: string): Promise<ShellResult> {
+    const timeout = options.timeoutMs ?? RUN_TIMEOUT_MS;
+    const signal = options.signal;
+    if (signal?.aborted) return aborted("");
+    // A POSIX script goes to bash EXPLICITLY (`bash -c <script>`), not through the
+    // platform shell with an override: the one thing that must not vary between
+    // machines is which interpreter parses `set -e`. A one-liner keeps the default.
+    // `spawnCommand` puts it in its own process group, so Stop can kill the group.
+    let child: ChildProcess;
+    try {
+      // Every command sees the run's scratch directory (`$BF_SCRATCH_DIR`, `scratchDir.ts`): throwaway scripts go there, not the repo.
+      child = spawnCommand(withPipefail(command, bash, process.platform), bash, { cwd: dir, env: { ...process.env, ...withScratchEnv(owner, options.env) } });
+    } catch (e) {
+      return { ok: false, exitCode: 1, stdout: messageOf(e) };
+    }
+    let overflowed = false;
+    const exited = collect(child, () => {
+      overflowed = true;
+      stopCommand(child);
+    });
+    // Stop kills the TREE, never just the shell: that orphans the real process — on
+    // Windows before `taskkill /T` can walk to it (see `processTree.ts`).
+    const onAbort = (): void => stopCommand(child);
+    // The wall-clock bound kills the TREE too, for the same reason.
+    let timedOut = false;
+    const onTimeout = setTimeout(() => {
+      timedOut = true;
+      stopCommand(child);
+    }, timeout);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    try {
+      const r = await exited;
+      const out = [r.stdout, r.stderr].filter((s) => s.trim()).join("\n").trim();
+      const settled = ((): ShellResult => {
+        if (signal?.aborted) return aborted(out);
+        if (overflowed) {
+          return { ok: false, error: `stopped — it printed more than ${RUN_MAX_BUFFER / (1024 * 1024)}MB of output`, stdout: clamp(out, RUN_MAX_OUTPUT) };
+        }
+        if (r.code === 0 && !r.error) return { ok: true, exitCode: 0, stdout: clamp(out || "(no output)", RUN_MAX_OUTPUT) };
+        if (timedOut || r.signal === "SIGTERM") {
+          return { ok: false, error: `timed out after ${timeout / 1000}s`, stdout: clamp(out, RUN_MAX_OUTPUT) };
+        }
+        return { ok: false, exitCode: r.code ?? 1, stdout: clamp(out || r.error?.message || "(no output)", RUN_MAX_OUTPUT) };
+      })();
+      // Within a run, the FULL output is kept for `output_filter`, and the result says where.
+      return owner !== undefined && out ? { ...settled, outputId: retainOutput(owner, out) } : settled;
+    } finally {
+      clearTimeout(onTimeout);
+      signal?.removeEventListener("abort", onAbort);
+    }
+  }
+
+  return {
+    async run(command: string, options: LocalShellOptions = {}): Promise<ShellResult> {
+      const where = resolveShellCwd(cwd, options.cwd);
+      if (!where.ok) return { ok: false, error: where.error };
+      // Which interpreter, and the one cmd→bash retry, are THE shared routing rule.
+      const exec = (): Promise<ShellResult> => runRouted(command, (bash) => execOnce(command, bash, options, where.dir), options.signal);
+      // Only a run's verification commands are cached; a read-only one leaves the cache alone, one that may write drops it.
+      const effect = owner === undefined ? "keep" : shellCacheEffect(command);
+      if (owner === undefined || effect !== "cache") {
+        const r = await exec();
+        if (owner !== undefined && effect === "drop") invalidateRunCache(owner);
+        return r;
+      }
+      if (!options.fresh) {
+        const hit = await cachedResult(owner, where.dir, command);
+        if (hit) return hit;
+      }
+      const startedAt = new Date();
+      const before = workspaceFingerprint(where.dir);
+      const r = await exec();
+      await rememberResult(owner, where.dir, command, r, before, startedAt);
+      return r;
+    },
+    async start(command: string, options: LocalShellOptions = {}): Promise<ShellJobStart> {
+      const route = posixRoute(command);
+      if ("error" in route) return { ok: false, error: route.error };
+      const where = resolveShellCwd(cwd, options.cwd);
+      if (!where.ok) return { ok: false, error: where.error };
+      // A background job may write at any time: the run's cached results are no longer safe.
+      if (owner !== undefined) invalidateRunCache(owner);
+      return startJob(withPipefail(command, route.bash, process.platform), {
+        cwd: where.dir,
+        bash: route.bash,
+        maxOutput: RUN_MAX_OUTPUT,
+        ...(owner !== undefined ? { owner } : {}),
+        env: withScratchEnv(owner, options.env),
+        ...(options.signal ? { signal: options.signal } : {}),
+      });
+    },
+    poll: (id, poll) => pollJob(id, poll?.waitMs ?? 0, { owner, ...(poll?.signal ? { signal: poll.signal } : {}) }),
+    kill: (id) => killJob(id, owner),
+    output: async (outputId) => readOutput(owner, outputId),
+  };
+}

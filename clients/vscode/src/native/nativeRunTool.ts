@@ -1,0 +1,207 @@
+/**
+ * How the native participant runs a tool call: the one-line labels the approval modal and
+ * the progress lines show, the tool defs advertised to the model, the confirm predicate, and
+ * the dispatcher that enforces the governance gates at the tool seam. No `vscode` import.
+ */
+
+import { resolveCallName, toolNameSet } from "@builderforce/agent-tools";
+import { toolSpecsFor, type BrainAction, type BrainToolSpec } from "@seanhogg/builderforce-brain-embedded";
+import { describeTool, type ToolDef } from "../tools/fileTools";
+import { evaluatePolicyGate, toolCallPaths, type PolicyGate } from "@builderforce/agent-tools";
+import { publishAllowed, publishVerbOf, type ShipPolicy } from "@builderforce/run-guards";
+import type { RunHooks } from "../hooks/runHooks";
+import type { NativeApprovalRequest, NativeRunEvents, NativeRunLabels } from "./nativeRunTypes";
+import { messageOf } from "../messageOf";
+
+/** Coerce a tool-call argument bag to a plain record. */
+export function argsRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * A human one-liner for a tool call — the text that reaches the approval modal and the
+ * `✓`/`✗` progress lines.
+ *
+ * Local tools get {@link describeTool}'s path-aware phrasing; a REMOTE (gateway MCP)
+ * tool is named by its verb plus whatever subject its arguments carry. Both used to be
+ * re-derived inside the deleted SDK adapter; this is the one definition.
+ */
+export function toolLabel(defs: readonly ToolDef[], name: string, args: Record<string, unknown>): string {
+  const def = defs.find((candidate) => candidate.name === name);
+  if (!def?.remote) return describeTool(name, args);
+  const verb = name.replace(/^builtin_/, "").replace(/_/g, " ");
+  const subject =
+    (typeof args.title === "string" && args.title) ||
+    (typeof args.name === "string" && args.name) ||
+    (typeof args.id !== "undefined" && `#${String(args.id)}`) ||
+    "";
+  return subject ? `${verb}: ${subject}` : verb;
+}
+
+/**
+ * The extension's `ToolDef` shape expressed as the brain core's {@link BrainAction} —
+ * the ONE place that mapping lives, so the model is shown identical names, descriptions
+ * and schemas whether the run is a real chat turn or an offline harness scenario.
+ * `run` is supplied by the caller because WHO executes differs (the real dispatcher
+ * here, a canned responder in the harness) while WHAT is advertised must not.
+ */
+export function toolDefActions(
+  defs: readonly ToolDef[],
+  run: (name: string, args: unknown) => Promise<unknown>,
+): BrainAction[] {
+  return defs.map((def) => ({
+    name: def.name,
+    description: def.description,
+    parameters: def.parameters,
+    mutates: def.mutating,
+    run: (args: unknown) => run(def.name, args),
+  }));
+}
+
+/** Advertise the host's tool defs to the model, through the ONE shared mapping. */
+export function nativeToolSpecs(defs: readonly ToolDef[]): BrainToolSpec[] {
+  // Execution goes through `createNativeRunTool`, never the action's own `run` — the
+  // action shape exists here only so the spec mapping stays shared with every host.
+  return toolSpecsFor(toolDefActions(defs, async () => ({ ok: false, error: "not dispatched here" })));
+}
+
+/** The host's own declaration for a tool of its (`mutating`), handed to the gate so a declared-read tool is not judged a mutation by a class gate; the catalog still wins. */
+function declaredOf(defs: readonly ToolDef[], name: string): { mutates: boolean } | undefined {
+  const def = defs.find((candidate) => candidate.name === name);
+  return def ? { mutates: def.mutating } : undefined;
+}
+
+/**
+ * Whether a pending call must pause for a human. In `ask` mode a governance
+ * `require-approval` gate pauses the call and a mutating tool pauses too. In
+ * `acceptEdits` (Auto) mode nothing pauses: the governance gates are still evaluated
+ * (for observability / the dispatcher's `block` refusals) but a `require-approval`
+ * verdict is non-blocking — the user's Auto preference overrides it. Only the local
+ * agent reaches this host predicate; cloud agents are bound by governance regardless.
+ *
+ * A publish (commit / push / pull request) the run's SHIP POLICY allows (PRD 48) is not
+ * confirmed in `ask` mode either: the project's ship policy IS the standing approval, and
+ * the run already refused every publish it does not allow before this predicate
+ * (`callPreflight`). A governance `require-approval` gate on the call still shows the card,
+ * and a `block` gate keeps the usual rule (the dispatcher refuses it) — tenant governance
+ * outranks the ship policy.
+ *
+ * Pure, so the loop can consult it synchronously; the actual modal is resolved
+ * asynchronously off the run's pending-confirm channel.
+ */
+export function nativeNeedsConfirm(
+  defs: readonly ToolDef[],
+  permissionMode: "ask" | "acceptEdits",
+  gates: readonly PolicyGate[] | undefined,
+): (req: { name: string; args: unknown; shipPolicy?: ShipPolicy }) => boolean {
+  return ({ name, args, shipPolicy }) => {
+    if (permissionMode === "acceptEdits") return false;
+    const gate = evaluatePolicyGate(gates, name, toolCallPaths(argsRecord(args)), undefined, declaredOf(defs, name)).action;
+    if (gate === "require-approval") return true;
+    if (gate !== "block" && shipPolicy && publishVerbOf(name, args) && publishAllowed(shipPolicy, name, args).ok) return false;
+    const def = defs.find((candidate) => candidate.name === name);
+    // Fail safe: a tool we don't recognise is treated as mutating.
+    return def ? def.mutating : true;
+  };
+}
+
+/** What to ask the human about a paused call. */
+export function approvalRequestFor(
+  defs: readonly ToolDef[],
+  gates: readonly PolicyGate[] | undefined,
+  name: string,
+  args: unknown,
+  /** The ship gate's evidence line the paused call carries (`pendingConfirm.evidence`). */
+  evidence?: string,
+): NativeApprovalRequest {
+  const record = argsRecord(args);
+  const decision = evaluatePolicyGate(gates, name, toolCallPaths(record), undefined, declaredOf(defs, name));
+  return {
+    name,
+    args: record,
+    label: toolLabel(defs, name, record),
+    ...(decision.action === "require-approval" ? { gateReason: decision.reason } : {}),
+    ...(evidence ? { evidence } : {}),
+  };
+}
+
+/**
+ * A tool result the loop can reason about. The host's `ToolDef.execute` returns a JSON
+ * STRING; handing that straight to the loop would hide `{ ok:false }` from the failure
+ * detector and defeat the deterministic chat↔work auto-link, which reads the created
+ * row's `id` off an OBJECT. Parse when it parses, keep the text when it doesn't.
+ */
+export function parseToolOutput(raw: string): unknown {
+  const text = raw?.trim() ?? "";
+  if (!text || (text[0] !== "{" && text[0] !== "[")) return raw;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * The loop's tool dispatcher for this host: enforce the governance gates at the tool
+ * seam, run the real implementation, and narrate both ends onto the chat stream.
+ *
+ * A `block` gate never reaches the implementation — the model gets a refusal it can
+ * recover from, exactly as the cloud loop's seam behaves. `require-approval` is not
+ * handled here: it is a PAUSE, and pausing is the run store's confirm channel.
+ */
+export function createNativeRunTool(opts: {
+  defs: readonly ToolDef[];
+  root: string;
+  gates?: readonly PolicyGate[];
+  /** The workspace's tool hooks (`.builderforce/hooks.json`): a preTool refusal, postTool feedback. */
+  hooks?: Pick<RunHooks, "beforeTool" | "afterTool">;
+  events: Pick<NativeRunEvents, "onToolStart" | "onToolResult">;
+  labels: Pick<NativeRunLabels, "blockedByPolicy">;
+  /** The run's default checkout, read per call (resolved after the run started). */
+  defaultRepo?: () => string | undefined;
+  /** The run's key — the owner of the background jobs its calls start. */
+  runKey?: number;
+}): (name: string, args: unknown, signal?: AbortSignal) => Promise<unknown> {
+  return async (name, args, signal) => {
+    // A synonym remapped, then a catalog id written as the name (`tasks.archive_many`) resolved to the advertised tool — the same
+    // `resolveCallName` the Brain's preflight uses. Unresolved ⇒ the alias, so an unknown name keeps its error below.
+    const resolved = resolveCallName(name, toolNameSet(opts.defs, (d) => d.name));
+    const record = argsRecord(args);
+    const label = toolLabel(opts.defs, resolved, record);
+    const decision = evaluatePolicyGate(opts.gates, resolved, toolCallPaths(record), undefined, declaredOf(opts.defs, resolved));
+    if (decision.action === "block") {
+      const message = opts.labels.blockedByPolicy(decision.reason);
+      opts.events.onToolResult(label, false);
+      return { ok: false, error: message };
+    }
+    const def = opts.defs.find((candidate) => candidate.name === resolved);
+    if (!def) return { ok: false, error: `Unknown tool: ${name}` };
+    // A workspace preTool hook is a gate the repository set for itself — refused the same
+    // recoverable way a governance block is.
+    const refused = await opts.hooks?.beforeTool(resolved, record);
+    if (refused) {
+      opts.events.onToolResult(label, false);
+      return { ok: false, error: refused };
+    }
+    opts.events.onToolStart(label);
+    try {
+      // The call's Stop and the run's default checkout — only when there is one, so a
+      // surface that passes neither calls the tool exactly as before.
+      const defaultRepo = opts.defaultRepo?.();
+      const runKey = opts.runKey;
+      const run = signal || defaultRepo || runKey !== undefined
+        ? { ...(signal ? { signal } : {}), ...(defaultRepo ? { defaultRepo } : {}), ...(runKey !== undefined ? { runKey } : {}) }
+        : undefined;
+      const out = run ? await def.execute(record, opts.root, run) : await def.execute(record, opts.root);
+      opts.events.onToolResult(label, true);
+      const parsed = parseToolOutput(out);
+      return opts.hooks ? opts.hooks.afterTool(resolved, record, parsed) : parsed;
+    } catch (e) {
+      const message = messageOf(e);
+      opts.events.onToolResult(`${label} — ${message}`, false);
+      return { ok: false, error: message };
+    }
+  };
+}

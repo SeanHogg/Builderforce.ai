@@ -1,0 +1,167 @@
+import * as vscode from "vscode";
+import { logLine } from "../errorReporter";
+import { getBaseUrl } from "../gateway/gateway";
+import { makeNonce, renderBundleShell } from "./webviewBundleShell";
+import { handleSharedHostMessage, postToWebview, respondToWebview, type WebviewInbound } from "./webviewHostBridge";
+import { messageOf } from "../messageOf";
+
+// Re-exported for the board panel, which builds its own (non-bundle) shell.
+export { makeNonce };
+
+/**
+ * The shared HTML shell for the bundled-React webview panels (the workspace —
+ * board and chat — plus Project 360 and the project pages). Identical CSP
+ * (`default-src 'none'`, a nonce'd module script, and the gateway origin allowed in
+ * `connect-src` with an `https:` fallback) and asset wiring across all of them, so
+ * only the `<title>` differs.
+ *
+ * There is ONE bundle now. `assetDir` used to choose between a chat bundle and a
+ * canvas bundle; the two merged when chat became a SURFACE of the board rather than
+ * a place of its own, so there is nothing left to choose between. The capabilities
+ * the board needs are therefore always granted: any panel can now BE the board.
+ */
+export function renderWebviewHtml(
+  webview: vscode.Webview,
+  ctx: vscode.ExtensionContext,
+  opts: { title: string },
+): string {
+  // The gateway/API origin the app fetches directly; allowed in connect-src.
+  let apiOrigin = "https://api.builderforce.ai";
+  try {
+    apiOrigin = new URL(getBaseUrl()).origin;
+  } catch {
+    /* keep default */
+  }
+  return renderBundleShell({
+    cspSource: webview.cspSource,
+    nonce: makeNonce(),
+    apiOrigin,
+    assetUrl: (f) => webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "media", "webview", f)).toString(),
+    title: opts.title,
+    bootLabel: vscode.l10n.t("Connecting…"),
+    // The root error fallback's copy: a crash can come before (or take down) the label bundle.
+    bootStrings: {
+      title: vscode.l10n.t("BuilderForce hit an error"),
+      body: vscode.l10n.t("This panel stopped drawing. The error was sent to the BuilderForce output log."),
+      reload: vscode.l10n.t("Reload panel"),
+      copy: vscode.l10n.t("Copy details"),
+    },
+  });
+}
+
+// The inbound envelope is declared once, beside the bridge that consumes it.
+// Re-exported here because the panel subclasses import it from their base.
+export type { WebviewInbound } from "./webviewHostBridge";
+
+/**
+ * Shared lifecycle for the bundled-React webview panels. Creates the panel with the
+ * standard options, installs the HTML shell, pumps messages (handling the two
+ * host-owned cases every panel shares — `token.refresh` and `signin` — centrally),
+ * and tears down on dispose. Subclasses supply only their unique message handling
+ * ({@link onMessage}) and registry cleanup ({@link onDispose}); those that re-pull on
+ * refocus opt in via {@link onDidBecomeVisible}.
+ */
+export abstract class WebviewPanelBase<M extends WebviewInbound = WebviewInbound> {
+  protected readonly panel: vscode.WebviewPanel;
+  /** The panel's webview, captured ONCE. `panel.webview` THROWS ("Webview is disposed")
+   *  once the panel closes, while `postMessage` on this captured object just resolves
+   *  false — so async continuations (a knowledge run, a late reply) must use this. */
+  protected readonly webview: vscode.Webview;
+  protected readonly disposables: vscode.Disposable[] = [];
+  private readonly htmlTitle: string;
+  /** Set FIRST on teardown: a closed panel's chrome setters throw, and a message still in
+   *  flight must not reach a subclass whose surface is gone. */
+  private disposed = false;
+
+  protected constructor(
+    protected readonly ctx: vscode.ExtensionContext,
+    init: {
+      viewType: string;
+      title: string;
+      htmlTitle: string;
+      localResourceRoots?: vscode.Uri[];
+      /** Where the panel opens. Default: the active column, taking focus. */
+      show?: { viewColumn: vscode.ViewColumn; preserveFocus?: boolean };
+    },
+  ) {
+    this.htmlTitle = init.htmlTitle;
+    this.panel = vscode.window.createWebviewPanel(
+      init.viewType,
+      init.title,
+      init.show ?? vscode.ViewColumn.Active,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: init.localResourceRoots ?? [vscode.Uri.joinPath(ctx.extensionUri, "media")],
+      },
+    );
+    this.webview = this.panel.webview;
+    this.panel.iconPath = vscode.Uri.joinPath(ctx.extensionUri, "media", "icon.png");
+    // Listener before html — same race as EvermindViewProvider: the bundle posts
+    // `ready` at module load, and a dropped ready leaves the panel on the sign-in wall.
+    this.webview.onDidReceiveMessage((m) => void this.dispatchMessage(m as M), undefined, this.disposables);
+    this.webview.html = this.renderHtml(this.webview);
+    this.panel.onDidDispose(() => this.teardown(), undefined, this.disposables);
+  }
+
+  /** The panel's HTML. Defaults to the shared bundled-React shell (Brain / Project 360 /
+   *  project pages); panels with a bespoke self-contained UI — the native Kanban board —
+   *  override this to supply their own document while still sharing the lifecycle above. */
+  protected renderHtml(webview: vscode.Webview): string {
+    return renderWebviewHtml(webview, this.ctx, { title: this.htmlTitle });
+  }
+
+  /** Re-pull the screen when the panel regains focus (Project 360 / project pages). */
+  protected onDidBecomeVisible(cb: () => void): void {
+    this.panel.onDidChangeViewState(
+      (e) => {
+        if (e.webviewPanel.visible) cb();
+      },
+      undefined,
+      this.disposables,
+    );
+  }
+
+  /** Route the shared, host-owned cases; delegate everything else to the subclass.
+   *  The shared set lives in `webviewHostBridge` because the Evermind SIDEBAR VIEW
+   *  answers the same messages and cannot extend this panel base. */
+  private async dispatchMessage(msg: M): Promise<void> {
+    if (this.disposed) return;
+    if (await handleSharedHostMessage(this.ctx, this.webview, msg, this.panel)) return;
+    await this.onMessage(msg);
+  }
+
+  /** Fire-and-forget post to the webview. */
+  protected post(msg: unknown): void {
+    postToWebview(this.webview, msg, this.panel);
+  }
+
+  /** Reply to a webview `request` round-trip; a no-op without an id (fire-and-forget). */
+  protected respond(id: string | undefined, ok: boolean, result?: unknown, error?: string): void {
+    respondToWebview(this.webview, id, ok, result, error);
+  }
+
+  /** True once the panel closed — for subclasses that write panel chrome from callbacks. */
+  protected get isDisposed(): boolean {
+    return this.disposed;
+  }
+
+  private teardown(): void {
+    this.disposed = true;
+    this.onDispose();
+    for (const d of this.disposables) {
+      try {
+        d.dispose();
+      } catch (error) {
+        // Reported, then the rest still dispose.
+        logLine(`[webview] panel teardown: a disposable threw: ${messageOf(error)}`);
+      }
+    }
+  }
+
+  /** This surface's unique message handling (the shared cases are already handled). */
+  protected abstract onMessage(msg: M): void | Promise<void>;
+
+  /** Drop this panel from its subclass registry (static `current` / `panels` map). */
+  protected abstract onDispose(): void;
+}
