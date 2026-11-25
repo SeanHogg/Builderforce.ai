@@ -64,7 +64,7 @@ describe("live outbox constructors — work kind", () => {
   it("stamps that work kind on each live constructor", () => {
     const activity = source("diagnostics/activity.ts");
     const gateway = source("gateway/gateway.ts");
-    const reporter = source("errorReporter.ts");
+    const reporter = source("diagnostics/errorReporter.ts");
     expect(activity).toContain(
       'work: classifyQueue("activity")?.retention === "best-effort" ? "telemetry" : "history"',
     );

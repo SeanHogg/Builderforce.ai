@@ -54,9 +54,9 @@ function harness() {
 
 describe("localWorkRepository", () => {
   it("does not import bfApi, vscode, or fetch", () => {
-    for (const file of ["localWorkRepository", "localWork/localWorkShared", "localProjectRepository", "tickets/localTicketRepository", "localWork/localWorkOwnership"]) {
+    for (const file of ["localWorkRepository", "localWorkShared", "../project/localProjectRepository", "../tickets/localTicketRepository", "localWorkOwnership"]) {
       const source = readFileSync(new URL(`./${file}.ts`, import.meta.url), "utf8");
-      expect(source, file).not.toMatch(/from\s+["']\.\/bfApi["']/);
+      expect(source, file).not.toMatch(/from\s+["']\.{1,2}\/bfApi["']/);
       expect(source, file).not.toMatch(/from\s+["']vscode["']/);
       expect(source, file).not.toMatch(/\bfetch\s*\(/);
     }

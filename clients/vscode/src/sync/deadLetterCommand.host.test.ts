@@ -82,7 +82,7 @@ describe("a person can reach the dead-letter export command", () => {
   it("imports the command from the landed module rather than redeclaring it", () => {
     const source = read(HOST_FILE);
     expect(source).toMatch(
-      /import\s*\{[^}]*EXPORT_DEAD_LETTERS_COMMAND[^}]*\}\s*from\s*"\.\.\/deadLetterCommand"/,
+      /import\s*\{[^}]*EXPORT_DEAD_LETTERS_COMMAND[^}]*\}\s*from\s*"\.\/deadLetterCommand"/,
     );
     expect(source).not.toMatch(/registerCommand\(\s*"builderforce\.exportDeadLetters"/);
   });

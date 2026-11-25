@@ -165,7 +165,7 @@ describe("G13 — no VS Code constructor builds an unclassified queue", () => {
   const NAMED_BY_G13 = [
     "sync/outboxStorage.ts",
     "audit/localAuditStore.ts",
-    "runRecovery.ts",
+    "run/runRecovery.ts",
     "sessions/sessionsSnapshotStore.ts",
     "audit/auditExecution.ts",
   ];

@@ -126,7 +126,7 @@ describe("the run host installs the local domain tools", () => {
   it("calls installLocalDomainTools on the tool-dispatch path", () => {
     const source = readFileSync(new URL(HOST_FILE, import.meta.url), "utf8");
     // Imported by the host…
-    expect(source).toMatch(/import\s*\{[^}]*installLocalDomainTools[^}]*\}\s*from\s*"\.\.\/installLocalDomainTools"/);
+    expect(source).toMatch(/import\s*\{[^}]*installLocalDomainTools[^}]*\}\s*from\s*"\.\.\/tools\/installLocalDomainTools"/);
     // …bound to this host's store…
     expect(source).toMatch(/installLocalDomainTools\(\s*ctx\s*,\s*\{[^}]*localFirstStore/);
     // …and actually executed on the dispatch path, verbatim.
