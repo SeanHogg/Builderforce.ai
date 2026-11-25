@@ -1,0 +1,17 @@
+{
+  "name": "@builderforce/code-shield",
+  "version": "2026.11.1",
+  "private": true,
+  "type": "module",
+  "description": "THE code-scanning engine shared by the WebContainers Security Shield, the Visualizer, the PR security gate and the skill installer: one rule registry (secrets, insecure code, malicious behaviour, obfuscation, package-manifest heuristics), SHA-256 signatures, risk scoring and SARIF output. Pure TypeScript with no I/O beyond crypto.subtle, so it runs in a Web Worker, the browser and Node. Detectors are registry rows (rule sets, profiles, SignatureSource), so YARA-X/WASM, OSV or taint analysis plug in without changing callers. Source-only: its tests run in the API suite (api/vitest.config.ts collects every source-only package's src).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

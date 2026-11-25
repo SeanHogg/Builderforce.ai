@@ -14,6 +14,7 @@
     "noEmit": true,
     "paths": {
       "@builderforce/agent-stall": ["../agent-stall/src/index.ts"],
+      "@builderforce/code-shield": ["../code-shield/src/index.ts"],
       "@builderforce/sarif": ["../sarif/src/index.ts"],
       "@builderforce/agent-tools": ["../agent-tools/src/index.ts"],
       "@builderforce/learned-routing": ["../learned-routing/src/index.ts"],

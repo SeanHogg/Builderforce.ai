@@ -38802,6 +38802,7 @@
       "claims": "论断",
       "links": "链接",
       "unused": "未使用",
+      "security": "安全",
       "knowledge": "知识",
       "live": "实时",
       "compare": "对比"
@@ -38813,6 +38814,7 @@
       "claims": "文档中的论断，以及相互矛盾之处。",
       "links": "链接和引用，包括失效的链接。",
       "unused": "没有被任何地方使用的文件、导出和依赖。",
+      "security": "代码扫描器判定有风险的文件：密钥、不安全或恶意的代码模式。",
       "knowledge": "挂在来源上的事实和实体；已过期的会被标记。",
       "live": "本次运行中变更了什么，以及哪些一起变更。",
       "compare": "前后对比：哪些变好了，哪些变差了。"
@@ -38835,6 +38837,7 @@
       "contradicts": "矛盾",
       "agrees": "一致",
       "unused": "未使用",
+      "securityRisk": "安全风险",
       "changed": "已变更",
       "edge": "引用",
       "area": "区域",
@@ -38985,6 +38988,7 @@
       "unusedExport": "未使用的导出",
       "unusedDependency": "未使用的依赖",
       "unused": "未使用的代码",
+      "securityRisk": "安全风险",
       "contradiction": "矛盾",
       "duplicateCopy": "项目的多余副本",
       "other": "发现"
@@ -39011,6 +39015,7 @@
       "unusedFile": "在确认没有任何地方动态加载后，删除未使用的文件 {items}。",
       "unusedExport": "删除 {items} 中未使用的导出。",
       "unusedDependency": "删除 {items} 中列出的未使用依赖。",
+      "securityRisk": "检查 {items} 中的恶意或不安全代码：移除或修复代码扫描器标记的内容，并轮换任何已暴露的凭据。",
       "brokenLink": "修复 {file} 中的失效链接：{items}。",
       "orphan": "从应当引用这些孤立文档的文档中链接它们，或将其归档：{items}。",
       "contradiction": "调和 {fileA}[[ 的 §{sectionA}]] 与 {fileB}[[ 的 §{sectionB}]] 之间的矛盾。",
@@ -39926,7 +39931,8 @@
         "system": "系统",
         "class": "类",
         "method": "方法",
-        "code": "代码"
+        "code": "代码",
+        "hint": "在地图上滚动滚轮缩放 · 按 Esc 返回 · 双击方法进入"
       },
       "code": {
         "aria": "{name} 的代码，第 {from} 至 {to} 行",

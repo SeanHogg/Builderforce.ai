@@ -29,6 +29,8 @@ export interface StageProxiesProps {
     onSelect(key: string): void;
     /** Escape / Backspace: out of a drilled level. Absent = nothing to go out of. */
     onOut?: (() => void) | undefined;
+    /** Enter on the selected stop: go inside it (the first Enter selects). */
+    onDrill?: ((key: string) => void) | undefined;
 }
 
 const BOX: CSSProperties = {
@@ -55,7 +57,7 @@ function useStops(bus: StageBus, keep: readonly number[]): { stops: Stop[]; of: 
     return built;
 }
 
-export function StageProxies({ bus, selected, disabled = false, description, onSelect, onOut }: StageProxiesProps) {
+export function StageProxies({ bus, selected, disabled = false, description, onSelect, onOut, onDrill }: StageProxiesProps) {
     const roving = useRoving();
     const [focused, setFocused] = useState(-1);
     const { stops, of } = useStops(bus, [bus.slotOf(selected), focused]);
@@ -74,8 +76,8 @@ export function StageProxies({ bus, selected, disabled = false, description, onS
     }, [bus, stops, of, disabled]);
 
     const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>, key: string) => {
-        // Enter selects here (the default click is cancelled, so it selects once); Space stays the button's own click.
-        if (e.key === 'Enter') { e.preventDefault(); onSelect(key); return; }
+        // Enter selects here (the default click is cancelled, so it selects once) and, on the selected stop, goes inside; Space stays the button's own click.
+        if (e.key === 'Enter') { e.preventDefault(); if (onDrill && selected === key) onDrill(key); else onSelect(key); return; }
         if ((e.key === 'Escape' || e.key === 'Backspace') && onOut) { e.preventDefault(); onOut(); return; }
         roving.onArrow(e);
     };

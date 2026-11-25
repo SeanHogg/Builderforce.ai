@@ -96,6 +96,19 @@ describe('a11y proxies (PRD 43 B5)', () => {
         act(() => proxy.focus());
         expect(reveal).toHaveBeenCalledWith(right);
     });
+
+    it('Enter selects an unselected stop; Enter on the selected stop goes inside it', () => {
+        const slot = map.a11y[0]!.slot;
+        const onSelect = vi.fn(), onDrill = vi.fn();
+        const { rerender } = render(<StageProxies bus={settledBus()} selected={null} onSelect={onSelect} onDrill={onDrill} />);
+        const enter = () => fireEvent.keyDown(document.querySelector<HTMLButtonElement>(`[data-slot="${slot}"]`)!, { key: 'Enter' });
+        enter();
+        expect(onSelect).toHaveBeenCalledWith(keys[slot]);
+        expect(onDrill).not.toHaveBeenCalled();
+        rerender(<StageProxies bus={settledBus()} selected={keys[slot]!} onSelect={onSelect} onDrill={onDrill} />);
+        enter();
+        expect(onDrill).toHaveBeenCalledWith(keys[slot]);
+    });
 });
 
 describe('picking on the stage bus (PRD 43 B5)', () => {

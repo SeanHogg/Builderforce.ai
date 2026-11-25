@@ -38802,6 +38802,7 @@
       "claims": "Afirmaciones",
       "links": "Enlaces",
       "unused": "Sin usar",
+      "security": "Seguridad",
       "knowledge": "Conocimiento",
       "live": "En vivo",
       "compare": "Comparar"
@@ -38813,6 +38814,7 @@
       "claims": "Lo que afirman los documentos y dónde discrepan.",
       "links": "Enlaces y referencias, incluidos los rotos.",
       "unused": "Archivos, exportaciones y dependencias que nada usa.",
+      "security": "Archivos que el escáner de código considera de riesgo: secretos, patrones inseguros o maliciosos.",
       "knowledge": "Hechos y entidades sobre sus fuentes; los obsoletos, marcados.",
       "live": "Qué cambió en esta ejecución y qué cambió a la vez.",
       "compare": "Antes y después: qué mejoró o empeoró."
@@ -38835,6 +38837,7 @@
       "contradicts": "Contradice",
       "agrees": "Coincide",
       "unused": "Sin usar",
+      "securityRisk": "Riesgo de seguridad",
       "changed": "Cambiado",
       "edge": "Referencia",
       "area": "Área",
@@ -38985,6 +38988,7 @@
       "unusedExport": "Exportaciones sin usar",
       "unusedDependency": "Dependencias sin usar",
       "unused": "Código sin usar",
+      "securityRisk": "Riesgo de seguridad",
       "contradiction": "Contradicción",
       "duplicateCopy": "Copia suelta de un proyecto",
       "other": "Hallazgo"
@@ -39011,6 +39015,7 @@
       "unusedFile": "Elimina los archivos sin usar {items}, tras comprobar que nada los carga dinámicamente.",
       "unusedExport": "Elimina las exportaciones sin usar en {items}.",
       "unusedDependency": "Elimina las dependencias sin usar indicadas en {items}.",
+      "securityRisk": "Revisa {items} en busca de código malicioso o inseguro: elimina o corrige lo que marcó el escáner de código y rota cualquier credencial expuesta.",
       "brokenLink": "Repara los enlaces rotos en {file}: {items}.",
       "orphan": "Enlaza estos documentos huérfanos desde los documentos que deberían referenciarlos, o archívalos: {items}.",
       "contradiction": "Concilia [[§{sectionA} de ]]{fileA} con [[§{sectionB} de ]]{fileB}.",
@@ -39926,7 +39931,8 @@
         "system": "Sistemas",
         "class": "Clases",
         "method": "Métodos",
-        "code": "Código"
+        "code": "Código",
+        "hint": "Rueda sobre el mapa para hacer zoom · Esc para salir · doble clic en un método para entrar"
       },
       "code": {
         "aria": "Código de {name}, líneas {from} a {to}",

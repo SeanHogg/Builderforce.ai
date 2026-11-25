@@ -27,6 +27,7 @@
       "@testing-library/react": ["../../frontend/node_modules/@testing-library/react"],
       "vitest": ["../../frontend/node_modules/vitest"],
       "@builderforce/run-delta": ["../run-delta/src/index.ts"],
+      "@builderforce/code-shield": ["../code-shield/src/index.ts"],
       "@builderforce/sarif": ["../sarif/src/index.ts"],
       "@builderforce/run-delta/contract": ["../run-delta/src/contract.ts"],
       "@builderforce/run-delta/predict": ["../run-delta/src/predict/index.ts"],

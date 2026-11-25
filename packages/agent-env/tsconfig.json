@@ -16,6 +16,7 @@
     "paths": {
       "@builderforce/agent-run": ["../agent-run/src/index.ts"],
       "@builderforce/secret-redaction": ["../secret-redaction/src/index.ts"],
+      "@builderforce/code-shield": ["../code-shield/src/index.ts"],
       "@builderforce/sarif": ["../sarif/src/index.ts"],
       "@builderforce/agent-loop": ["../agent-loop/src/index.ts"],
       "@builderforce/agent-stall": ["../agent-stall/src/index.ts"],

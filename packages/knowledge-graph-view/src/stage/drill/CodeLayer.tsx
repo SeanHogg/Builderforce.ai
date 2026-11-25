@@ -47,6 +47,10 @@ export interface CodeLayerProps {
 /** One code row's height (px), and the rows a virtualized panel renders before it has measured itself. */
 export const ROW_PX = 18;
 const VIEW_ROWS = 16;
+// The mockup's tints: the reading line a faint neutral band, a hovered symbol's lines the stronger accent, the rest of the file dimmed.
+const READING_TINT = `color-mix(in srgb, ${cssVar('text')} 5%, transparent)`;
+const MARKED_TINT = `color-mix(in srgb, ${cssVar('accent')} 14%, transparent)`;
+const OUTSIDE_OPACITY = 0.3;
 
 /** A name in running text that acts (a drillable method, a trail crumb): underlined, otherwise the text. */
 export const LINK_BUTTON: CSSProperties = { border: 0, padding: 0, font: 'inherit', color: 'inherit', background: 'transparent', cursor: 'pointer', textDecoration: 'underline' };
@@ -149,7 +153,7 @@ export function CodeLayer({ target, reader, labels, onOpenSource, onClose, onOut
             {read.state === 'ready' && (
                 <div
                     ref={linesRef} data-code-lines tabIndex={0} onScroll={(e) => { setScrollTop(e.currentTarget.scrollTop); setViewPx(e.currentTarget.clientHeight); }}
-                    onKeyDown={onOut ? (e) => { if (e.key === 'Escape') { e.stopPropagation(); onOut(); } } : undefined}
+                    onKeyDown={onOut ? (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onOut(); } } : undefined}
                     style={{ ...TYPE.mono, minHeight: 0, overflow: 'auto', background: cssVar('panel'), borderRadius: 6, padding: '4px 0' }}
                 >
                     <div style={{ position: 'relative', height: virtual ? lines.length * ROW_PX : undefined, minWidth: 'max-content' }}>
@@ -165,8 +169,8 @@ export function CodeLayer({ target, reader, labels, onOpenSource, onClose, onOut
                                     key={n} data-code-line={n1} data-reading={isReading ? '' : undefined} data-marked={isMarked ? '' : undefined} data-call-site={isCall ? '' : undefined}
                                     style={{
                                         display: 'flex', height: ROW_PX, lineHeight: `${ROW_PX}px`, whiteSpace: 'pre', ...(virtual ? { position: 'absolute', top: n * ROW_PX, left: 0, right: 0 } : {}),
-                                        background: isCall ? `color-mix(in srgb, ${cssVar('partner')} 16%, transparent)` : isReading ? `color-mix(in srgb, ${cssVar('accent')} 14%, transparent)` : isMarked ? `color-mix(in srgb, ${cssVar('accent')} 7%, transparent)` : undefined,
-                                        boxShadow: isCall ? `inset 2px 0 0 ${cssVar('partner')}` : undefined, opacity: outside ? 0.45 : undefined,
+                                        background: isCall ? `color-mix(in srgb, ${cssVar('partner')} 16%, transparent)` : isReading ? READING_TINT : isMarked ? MARKED_TINT : undefined,
+                                        boxShadow: isCall ? `inset 2px 0 0 ${cssVar('partner')}` : undefined, opacity: outside ? OUTSIDE_OPACITY : undefined,
                                     }}
                                 >
                                     <span aria-hidden="true" style={{ flex: `0 0 ${gutter}`, textAlign: 'right', paddingRight: 8, color: cssVar('muted') }}>{n1}</span>

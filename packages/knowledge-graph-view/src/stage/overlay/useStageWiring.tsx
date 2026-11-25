@@ -46,6 +46,8 @@ export interface StageWiring {
     zoom: SemanticZoom;
     selected: string | null;
     onSelect(key: string): void;
+    /** Double-click or Enter on a mark: a station goes inside, a method opens its code. */
+    onDrill(key: string): void;
     onOut: (() => void) | undefined;
     /** The Map placement with the unfold patch applied (memoized: the same placement in, the same out). */
     patchMap(p: Placement | null): Placement | null;
@@ -118,6 +120,13 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
         if (station) { if (drill.view) drill.select(station.id); else surface.selectStation(station.id); return; }
         if (key.startsWith('node:')) p.onSelect(key.slice('node:'.length));
     }, [map, drill, surface, p]);
+
+    const onDrill = useCallback((key: string) => {
+        // A method is a station too (the method band's marks), so a station that cannot be entered falls through to its code.
+        const station = map.stationOfKey(key);
+        if (station && drill.canEnter(station.id).can) { zoom.zoomInto(station.id); return; }
+        if (key.startsWith('node:')) zoom.enterCode(key.slice('node:'.length));
+    }, [map, drill, zoom]);
 
     const patched = useMemo(() => new WeakMap<Placement, Placement>(), [map.patch, zoom.nest]);
     const patchMap = useCallback((pl: Placement | null) => {
@@ -235,7 +244,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
             />
         ),
     } : null;
-    return { map, zoom, selected, onSelect, onOut: out, patchMap, card, code };
+    return { map, zoom, selected, onSelect, onDrill, onOut: out, patchMap, card, code };
 }
 
 /** The band's symbols being read (the lazy load on entering the class band), in the existing words. */

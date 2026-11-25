@@ -12,12 +12,14 @@
  * - Egress (control 6). `previewEgress` is the app's declared external APIs: none yet, because
  *   nothing declares them (ROADMAP.md › W10 gap); the runtime adds its own package CDN.
  *   `workerPolicy` reads the signed policy minted before the app started (`previewWorkerPolicies`).
+ * - Code scanning. `security.scanner` binds the runtime's `CodeScanner` port to `@builderforce/code-shield`.
  * - Telemetry. CSP violations go to the API's `/api/runtime/csp-report`; shield events that
  *   stopped something go to the API through {@link createShieldSink}.
  */
 import type { PreviewOriginOption } from '@seanhogg/builderforce-webcontainers';
 import { API_ORIGIN, PRODUCTION_API_ORIGIN } from '@/lib/apiOrigin';
 import { prepareWorkerPolicy, workerPolicyFor } from './previewWorkerPolicies';
+import { createWorkerCodeScanner } from './codeScanner';
 import { createShieldSink } from './shieldSink';
 
 /** Per-application preview origins: on unless the build sets `NEXT_PUBLIC_PREVIEW_PER_APP_ORIGINS=false`. */
@@ -78,6 +80,7 @@ export function previewShieldOptions(relayUrl: string, currentProjectId: () => s
     cspReportUrl: CSP_REPORT_URL,
     previewEgress: [] as readonly string[],
     workerPolicy: (applicationId: string) => workerPolicyFor(applicationId),
-    security: { sink: createShieldSink({ projectId: currentProjectId }) },
+    // The scanner is the Shield's code scanning (installs, writes, spawns), run in a Worker (`codeScan.worker.ts`).
+    security: { sink: createShieldSink({ projectId: currentProjectId }), scanner: createWorkerCodeScanner() },
   };
 }

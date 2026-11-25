@@ -24,10 +24,11 @@
 import { knowledgeFacts, runKnowledgeRules, type Finding, type FindingRule, type KnowledgeGraph, type KnowledgeRule } from '@seanhogg/builderforce-memory/knowledge';
 import { unusedDependencyRule } from './rules/unusedDependency.js';
 import { unusedExportRule } from './rules/unusedExport.js';
+import { securityRiskRule } from './rules/securityRisk.js';
 import { unusedFileRule } from './rules/unusedFile.js';
 
 /** The code pack's FactRules, in emission order. Global, reading the knowledge input alone (hash it with `knowledgeInputHash`). */
-export const CODE_FACT_RULES: readonly KnowledgeRule[] = Object.freeze([unusedFileRule, unusedExportRule, unusedDependencyRule]);
+export const CODE_FACT_RULES: readonly KnowledgeRule[] = Object.freeze([unusedFileRule, unusedExportRule, unusedDependencyRule, securityRiskRule]);
 
 export const unusedCodeRule: FindingRule = {
     id: 'code.unused',

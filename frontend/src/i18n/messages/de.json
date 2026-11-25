@@ -38802,6 +38802,7 @@
       "claims": "Aussagen",
       "links": "Links",
       "unused": "Ungenutzt",
+      "security": "Sicherheit",
       "knowledge": "Wissen",
       "live": "Live",
       "compare": "Vergleich"
@@ -38813,6 +38814,7 @@
       "claims": "Was die Dokumente behaupten und wo sie sich widersprechen.",
       "links": "Links und Verweise, auch die defekten.",
       "unused": "Dateien, Exporte und Abhängigkeiten, die nichts nutzt.",
+      "security": "Dateien, die der Code-Scanner als riskant einstuft: Geheimnisse, unsichere oder bösartige Muster.",
       "knowledge": "Fakten und Entitäten an ihren Quellen; veraltete markiert.",
       "live": "Was sich in diesem Lauf geändert hat und was sich gemeinsam geändert hat.",
       "compare": "Vorher und nachher: was besser oder schlechter wurde."
@@ -38835,6 +38837,7 @@
       "contradicts": "Widerspricht",
       "agrees": "Stimmt überein",
       "unused": "Ungenutzt",
+      "securityRisk": "Sicherheitsrisiko",
       "changed": "Geändert",
       "edge": "Verweis",
       "area": "Bereich",
@@ -38985,6 +38988,7 @@
       "unusedExport": "Ungenutzte Exporte",
       "unusedDependency": "Ungenutzte Abhängigkeiten",
       "unused": "Ungenutzter Code",
+      "securityRisk": "Sicherheitsrisiko",
       "contradiction": "Widerspruch",
       "duplicateCopy": "Verwaiste Kopie eines Projekts",
       "other": "Befund"
@@ -39011,6 +39015,7 @@
       "unusedFile": "Entferne die ungenutzten Dateien {items}, nachdem du geprüft hast, dass nichts sie dynamisch lädt.",
       "unusedExport": "Entferne die ungenutzten Exporte in {items}.",
       "unusedDependency": "Entferne die in {items} aufgeführten ungenutzten Abhängigkeiten.",
+      "securityRisk": "Prüfe {items} auf bösartigen oder unsicheren Code: Entferne oder überarbeite, was der Code-Scanner markiert hat, und rotiere jedes offengelegte Zugangsdatum.",
       "brokenLink": "Repariere die defekten Links in {file}: {items}.",
       "orphan": "Verlinke diese verwaisten Dokumente aus den Dokumenten, die auf sie verweisen sollten, oder archiviere sie: {items}.",
       "contradiction": "Gleiche [[§{sectionA} von ]]{fileA} mit [[§{sectionB} von ]]{fileB} ab.",
@@ -39926,7 +39931,8 @@
         "system": "Systeme",
         "class": "Klassen",
         "method": "Methoden",
-        "code": "Code"
+        "code": "Code",
+        "hint": "Mausrad auf der Karte zum Zoomen · Esc zum Verlassen · Doppelklick auf eine Methode, um hineinzugehen"
       },
       "code": {
         "aria": "Code von {name}, Zeilen {from} bis {to}",

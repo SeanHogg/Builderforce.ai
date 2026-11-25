@@ -35,6 +35,7 @@
       "@builderforce/run-delta": ["../../packages/run-delta/src/index.ts"],
       "@builderforce/run-delta/contract": ["../../packages/run-delta/src/contract.ts"],
       "@builderforce/run-delta/predict": ["../../packages/run-delta/src/predict/index.ts"],
+      "@builderforce/code-shield": ["../../packages/code-shield/src/index.ts"],
       "@builderforce/sarif": ["../../packages/sarif/src/index.ts"],
       "@builderforce/agent-tools/code-mask": ["../../packages/agent-tools/src/knowledge/codeMask.ts"],
       "@builderforce/agent-tools/sampling": ["../../packages/agent-tools/src/sampling.ts"],

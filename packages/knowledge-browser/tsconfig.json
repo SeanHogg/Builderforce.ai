@@ -23,6 +23,7 @@
       "@builderforce/run-delta/contract": ["../run-delta/src/contract.ts"],
       "@builderforce/run-delta/predict": ["../run-delta/src/predict/index.ts"],
       "@builderforce/run-delta": ["../run-delta/src/index.ts"],
+      "@builderforce/code-shield": ["../code-shield/src/index.ts"],
       "@builderforce/sarif": ["../sarif/src/index.ts"],
       "@builderforce/secret-redaction": ["../secret-redaction/src/index.ts"],
       "@builderforce/agent-tools/code-mask": ["../agent-tools/src/knowledge/codeMask.ts"],

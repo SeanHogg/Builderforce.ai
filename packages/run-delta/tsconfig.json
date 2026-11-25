@@ -19,6 +19,7 @@
       "@builderforce/agent-tools/sampling": ["../agent-tools/src/sampling.ts"],
       "@builderforce/agent-tools/glob": ["../agent-tools/src/glob.ts"],
       "@builderforce/secret-redaction": ["../secret-redaction/src/index.ts"],
+      "@builderforce/code-shield": ["../code-shield/src/index.ts"],
       "@builderforce/sarif": ["../sarif/src/index.ts"]
     }
   },

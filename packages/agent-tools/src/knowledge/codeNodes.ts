@@ -58,6 +58,10 @@ export const CODE_BADGES = {
     externals: 'externals',
     /** Comma-joined concurrency the file starts (`durable-object:ChatRoom,poller`), from `codeConcurrency.ts` (deterministic). */
     concurrency: 'concurrency',
+    /** `@builderforce/code-shield`'s 0..100 risk score for the file (deterministic); present only above 0. */
+    securityRisk: 'securityRisk',
+    /** The rule ids behind `securityRisk`, sorted and comma-joined, capped: ids only, never matched text. */
+    securityRules: 'securityRules',
 } as const;
 
 /**

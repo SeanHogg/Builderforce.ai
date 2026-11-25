@@ -9,7 +9,7 @@ export interface SceneLabels {
      */
     mind: Record<`${'moreFolders' | 'moreFoldersAria'}${'One' | 'Other'}`, string>;
     /** The semantic-zoom bands (PRD 43 B1a rules 9–10): the control's group name and one word per band. */
-    zoom: Record<'group' | 'system' | 'class' | 'method' | 'code', string>;
+    zoom: Record<'group' | 'system' | 'class' | 'method' | 'code' | 'hint', string>;
     /**
      * The code band's panel (B1a rule 9): its accessible name (`{name}`, `{from}`, `{to}`), the read in progress, the
      * note when the host has no file contents (the panel then shows `path:line` and "Open at line"), and the note when
@@ -50,6 +50,7 @@ export const SCENE_DEFAULTS: SceneLabels = {
         class: 'Classes',
         method: 'Methods',
         code: 'Code',
+        hint: 'Wheel on the map to zoom · Esc to go out · double-click a method to go inside',
     },
     code: {
         aria: 'Code of {name}, lines {from} to {to}',

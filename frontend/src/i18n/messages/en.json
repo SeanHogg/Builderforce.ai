@@ -38060,6 +38060,7 @@
       "claims": "Claims",
       "links": "Links",
       "unused": "Unused",
+      "security": "Security",
       "knowledge": "Knowledge",
       "live": "Live",
       "compare": "Compare"
@@ -38071,6 +38072,7 @@
       "claims": "What the documents claim, and where they disagree.",
       "links": "Links and references, with the broken ones.",
       "unused": "Files, exports and dependencies nothing uses.",
+      "security": "Files the code scanner rates risky: secrets, insecure or malicious patterns.",
       "knowledge": "Facts and entities on their sources; stale ones marked.",
       "live": "What changed in this run, and what changed together.",
       "compare": "Before and after: what got better or worse."
@@ -38093,6 +38095,7 @@
       "contradicts": "Contradicts",
       "agrees": "Agrees",
       "unused": "Unused",
+      "securityRisk": "Security risk",
       "changed": "Changed",
       "edge": "Reference",
       "area": "Area",
@@ -38243,6 +38246,7 @@
       "unusedExport": "Unused exports",
       "unusedDependency": "Unused dependencies",
       "unused": "Unused code",
+      "securityRisk": "Security risk",
       "contradiction": "Contradiction",
       "duplicateCopy": "Stray copy of a project",
       "other": "Finding"
@@ -38269,6 +38273,7 @@
       "unusedFile": "Remove the unused files {items}, after checking nothing loads them dynamically.",
       "unusedExport": "Remove the unused exports in {items}.",
       "unusedDependency": "Remove the unused dependencies listed in {items}.",
+      "securityRisk": "Review {items} for malicious or insecure code: remove or rework what the code scanner flagged, and rotate any credential it exposed.",
       "brokenLink": "Repair the broken links in {file}: {items}.",
       "orphan": "Link these orphan documents from the documents that should reference them, or archive them: {items}.",
       "contradiction": "Reconcile [[§{sectionA} of ]]{fileA} with [[§{sectionB} of ]]{fileB}.",
@@ -39013,7 +39018,8 @@
         "system": "Systems",
         "class": "Classes",
         "method": "Methods",
-        "code": "Code"
+        "code": "Code",
+        "hint": "Wheel on the map to zoom · Esc to go out · double-click a method to go inside"
       },
       "code": {
         "aria": "Code of {name}, lines {from} to {to}",

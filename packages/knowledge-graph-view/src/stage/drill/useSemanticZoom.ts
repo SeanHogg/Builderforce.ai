@@ -35,6 +35,8 @@ export interface SemanticZoom {
     nest(p: Placement): Placement;
     /** "Go inside": fly to the station at the next band's threshold (the zoom crossing enters it). */
     zoomInto(stationId: string): void;
+    /** The Map's ladder: go back out to band `target` (0 system … CODE-1 method). Bands at or past the current one stay. */
+    outToBand(target: number): void;
     /** The Sequence's band control: fly to band `band`'s threshold (0 = Fit). */
     zoomToBand(band: number): void;
     /** The code band's method, when it is open. */
@@ -181,6 +183,19 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         rig.flyTo(p.position[slot * 3]!, p.position[slot * 3 + 2]!, (ZOOM_BANDS[CODE]!.exitPx * 0.85) / (2 * scale), now(), ms);
     }, [bus, ms]);
 
+    const outToBand = useCallback((target: number) => {
+        const s = state.current;
+        if (target >= s.band) return;
+        if (s.band === CODE) {
+            if (target === CODE - 1) { leaveCode(); return; }
+            s.codeKey = null; s.trail = []; setTrail([]);
+        }
+        pending.current = true;
+        s.drill.climb(target);
+        // The camera is still zoomed in: fit it, or the crossing would go straight back in.
+        rigOf(bus)?.fit(now(), ms);
+    }, [bus, ms, leaveCode]);
+
     const closeCode = useCallback(() => {
         const s = state.current;
         if (s.trail.length > 1) codeBack(s.trail.length - 2); else leaveCode();
@@ -219,7 +234,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
     }), [trail, drill.symbols]);
 
     return {
-        band: bandOf(band), sequenceLod: sequenceLodOf(seqBand), nest, zoomInto, zoomToBand, code, closeCode, leaveCode, enterCode,
+        band: bandOf(band), sequenceLod: sequenceLodOf(seqBand), nest, zoomInto, zoomToBand, outToBand, code, closeCode, leaveCode, enterCode,
         trail: crumbs, codeBack,
     };
 }

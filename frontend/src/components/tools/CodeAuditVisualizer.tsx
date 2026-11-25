@@ -15,7 +15,7 @@ import { useKnowledgeGraphLabels } from '@/lib/knowledge/labels';
 
 export const CODE_AUDIT_KEYS = ['title', 'graph', 'duplicates', 'unused', 'comparison', 'before', 'after', 'incomparable', 'unknown', 'localChanges', 'complete', 'failed'] as const;
 
-const AUDIT_LENSES: readonly LensId[] = ['structure', 'duplication', 'unused', 'compare'];
+const AUDIT_LENSES: readonly LensId[] = ['structure', 'duplication', 'unused', 'security', 'compare'];
 
 export function CodeAuditVisualizer({ analysis, openSource }: { analysis: CodeAnalysisComparison; openSource?: (location: AnalysisLocation, historicalCommit?: string) => void }) {
   const t = useTranslations('codeAudit');

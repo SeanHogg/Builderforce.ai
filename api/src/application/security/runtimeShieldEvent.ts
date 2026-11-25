@@ -44,6 +44,8 @@ export const SHIELD_REASON_CODES = [
   'agent.tool_not_allowed',
   'agent.path_invalid',
   'agent.service_not_allowed',
+  'code.blocked',
+  'code.scan_incomplete',
 ] as const;
 export type ShieldReasonCode = (typeof SHIELD_REASON_CODES)[number];
 
@@ -108,6 +110,9 @@ export const SHIELD_REASON_POLICY: { readonly [C in ShieldReasonCode]: ShieldRea
   'agent.tool_not_allowed': { severity: 'medium', ruleId: 'shield.agent.tool-allowlist' },
   'agent.path_invalid': { severity: 'high', ruleId: 'shield.agent.workspace-path' },
   'agent.service_not_allowed': { severity: 'high', ruleId: 'shield.agent.own-services' },
+  // The code scanner refused malicious code (client-attested, so high, never critical); `code.scan_incomplete` is monitor-only telemetry.
+  'code.blocked': { severity: 'high', ruleId: 'shield.code.blocked' },
+  'code.scan_incomplete': { severity: 'low', ruleId: 'shield.code.scan-incomplete' },
 };
 
 /**

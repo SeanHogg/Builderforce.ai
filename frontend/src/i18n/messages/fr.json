@@ -38802,6 +38802,7 @@
       "claims": "Affirmations",
       "links": "Liens",
       "unused": "Inutilisé",
+      "security": "Sécurité",
       "knowledge": "Connaissances",
       "live": "En direct",
       "compare": "Comparer"
@@ -38813,6 +38814,7 @@
       "claims": "Ce qu’affirment les documents, et où ils se contredisent.",
       "links": "Liens et références, y compris les liens cassés.",
       "unused": "Fichiers, exports et dépendances que rien n’utilise.",
+      "security": "Fichiers que l’analyseur de code juge à risque : secrets, motifs non sécurisés ou malveillants.",
       "knowledge": "Faits et entités rattachés à leurs sources ; les obsolètes sont signalés.",
       "live": "Ce qui a changé pendant cette exécution, et ce qui a changé ensemble.",
       "compare": "Avant et après : ce qui s’est amélioré ou dégradé."
@@ -38835,6 +38837,7 @@
       "contradicts": "Contredit",
       "agrees": "Concorde",
       "unused": "Inutilisé",
+      "securityRisk": "Risque de sécurité",
       "changed": "Modifié",
       "edge": "Référence",
       "area": "Zone",
@@ -38985,6 +38988,7 @@
       "unusedExport": "Exports inutilisés",
       "unusedDependency": "Dépendances inutilisées",
       "unused": "Code inutilisé",
+      "securityRisk": "Risque de sécurité",
       "contradiction": "Contradiction",
       "duplicateCopy": "Copie parasite d'un projet",
       "other": "Constat"
@@ -39011,6 +39015,7 @@
       "unusedFile": "Supprime les fichiers inutilisés {items}, après avoir vérifié que rien ne les charge dynamiquement.",
       "unusedExport": "Supprime les exports inutilisés dans {items}.",
       "unusedDependency": "Supprime les dépendances inutilisées listées dans {items}.",
+      "securityRisk": "Examinez {items} à la recherche de code malveillant ou non sécurisé : supprimez ou corrigez ce que l’analyseur de code a signalé, et renouvelez tout identifiant exposé.",
       "brokenLink": "Répare les liens cassés dans {file} : {items}.",
       "orphan": "Relie ces documents orphelins depuis les documents qui devraient les citer, ou archive-les : {items}.",
       "contradiction": "Résous la contradiction entre [[§{sectionA} de ]]{fileA} et [[§{sectionB} de ]]{fileB}.",
@@ -39926,7 +39931,8 @@
         "system": "Systèmes",
         "class": "Classes",
         "method": "Méthodes",
-        "code": "Code"
+        "code": "Code",
+        "hint": "Molette sur la carte pour zoomer · Échap pour sortir · double-clic sur une méthode pour y entrer"
       },
       "code": {
         "aria": "Code de {name}, lignes {from} à {to}",

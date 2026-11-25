@@ -73,6 +73,8 @@ const dimUnless = (hit: boolean, n: KNode, tone?: ThemeTone): NodeStyle =>
     hit ? { tone: tone ?? kindTone(n), emphasis: 'strong', shape: nodeShape(n) } : { tone: kindTone(n), emphasis: 'dim', shape: nodeShape(n) };
 const isJudged = (n: KNode): boolean => n.origin !== 'extracted';
 const isChanged = (n: KNode): boolean => n.badges?.added !== undefined || n.badges?.removed !== undefined || n.badges?.changed !== undefined;
+/** A file whose code-shield risk score reaches the lens's threshold (the Findings list starts higher: `security-risk`). */
+const isRisky = (n: KNode): boolean => Number(n.badges?.securityRisk ?? 0) >= 20;
 const isUnused = (n: KNode): boolean =>
     n.badges?.unused !== undefined || Number(n.badges?.unusedExports ?? 0) > 0 || Number(n.badges?.unusedDependencies ?? 0) > 0;
 
@@ -87,12 +89,15 @@ const KIND_LEGEND: ReadonlyArray<{ tone: ThemeTone; key: string; shape?: NodeSha
     { tone: 'nodeArea', key: 'area', shape: typeShape('source') }, { tone: 'stale', key: 'stale' },
 ];
 
+// The symbol-level kinds (PRD 43 P0b: memory's SYMBOL_EDGE_KINDS, the code pack's file rollup) are the class/method
+// bands' link families, not the import picture the structure and security lenses draw.
+const structureEdges = (e: KEdge): boolean =>
+    e.origin === 'extracted' && e.kind !== 'duplicate' && e.kind !== 'near-duplicate' && !isSymbolEdgeKind(e.kind);
+
 export const LENSES: Record<LensId, LensDef> = {
     structure: {
         id: 'structure', packs: 'all',
-        // The symbol-level kinds (PRD 43 P0b: memory's SYMBOL_EDGE_KINDS, the code pack's file rollup) are the class/method
-        // bands' link families, not the import picture this lens draws.
-        edgeFilter: (e) => e.origin === 'extracted' && e.kind !== 'duplicate' && e.kind !== 'near-duplicate' && !isSymbolEdgeKind(e.kind),
+        edgeFilter: structureEdges,
         nodeStyle: (n) => base(n),
         legend: [...CATEGORY_LEGEND, { tone: 'edge', key: 'edge' }],
         insights: ['cycle', 'stale'],
@@ -134,6 +139,13 @@ export const LENSES: Record<LensId, LensDef> = {
         legend: [{ tone: 'unused', key: 'unused' }],
         insights: ['unused', 'unused-file', 'unused-export', 'unused-dependency'],
     },
+    security: {
+        id: 'security', packs: ['code'],
+        edgeFilter: structureEdges,
+        nodeStyle: (n) => dimUnless(isRisky(n), n, 'violation'),
+        legend: [{ tone: 'violation', key: 'securityRisk' }],
+        insights: ['security-risk'],
+    },
     knowledge: {
         id: 'knowledge', packs: 'all',
         edgeFilter: (e) => e.kind === 'about' || e.kind === 'mentions' || e.kind === 'supersedes',
@@ -159,7 +171,7 @@ export const LENSES: Record<LensId, LensDef> = {
 };
 
 export const LENS_ORDER: readonly LensId[] = [
-    'structure', 'partitions', 'duplication', 'claims', 'links', 'unused', 'knowledge', 'live', 'compare',
+    'structure', 'partitions', 'duplication', 'claims', 'links', 'unused', 'security', 'knowledge', 'live', 'compare',
 ];
 
 export function lensApplies(lens: LensDef, graph: Pick<KnowledgeGraph, 'scope'>): boolean {

@@ -78,7 +78,7 @@ describe('scrolling the code moves the stage', () => {
         const { container } = render(<Pane records={withCalls} method="src:sys::order.ts#place" onFocusSymbol={onFocusSymbol} />);
         await screen.findByText('// line 1');
         expect([...container.querySelectorAll('[data-code-step]')].map((b) => b.getAttribute('data-code-step'))).toEqual(['1', '2']);
-        expect((container.querySelector('[data-code-line="5"]') as HTMLElement).style.opacity).toBe('0.45');
+        expect((container.querySelector('[data-code-line="5"]') as HTMLElement).style.opacity).toBe('0.3');
         scrollTo(container, 13);
         expect(container.querySelector('[data-code-step="2"]')?.hasAttribute('data-current')).toBe(true);
         expect(container.querySelector('[data-code-line="13"]')?.hasAttribute('data-call-site')).toBe(true);

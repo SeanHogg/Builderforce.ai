@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { hasErrnoCode } from "../infra/errors.js";
 import { isPathInside } from "./scan-paths.js";
+import { scanText, type FindingSeverity } from "@builderforce/code-shield";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,87 +56,18 @@ export function isScannable(filePath: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Rule definitions
+// Rules
 // ---------------------------------------------------------------------------
+// The rule tables live ONCE, in `@builderforce/code-shield` (profile "skill-install": behaviour +
+// obfuscation rules, shared with the WebContainers Shield and the Visualizer). This file maps their
+// findings onto the installer's three-level severity and keeps its once-per-rule-per-file dedupe.
 
-type LineRule = {
-  ruleId: string;
-  severity: SkillScanSeverity;
-  message: string;
-  pattern: RegExp;
-  /** If set, the rule only fires when the *full source* also matches this pattern. */
-  requiresContext?: RegExp;
+const SEVERITY_MAP: Record<FindingSeverity, SkillScanSeverity> = {
+  CRITICAL: "critical",
+  HIGH: "warn",
+  MEDIUM: "warn",
+  LOW: "info",
 };
-
-type SourceRule = {
-  ruleId: string;
-  severity: SkillScanSeverity;
-  message: string;
-  /** Primary pattern tested against the full source. */
-  pattern: RegExp;
-  /** Secondary context pattern; both must match for the rule to fire. */
-  requiresContext?: RegExp;
-};
-
-const LINE_RULES: LineRule[] = [
-  {
-    ruleId: "dangerous-exec",
-    severity: "critical",
-    message: "Shell command execution detected (child_process)",
-    pattern: /\b(exec|execSync|spawn|spawnSync|execFile|execFileSync)\s*\(/,
-    requiresContext: /child_process/,
-  },
-  {
-    ruleId: "dynamic-code-execution",
-    severity: "critical",
-    message: "Dynamic code execution detected",
-    pattern: /\beval\s*\(|new\s+Function\s*\(/,
-  },
-  {
-    ruleId: "crypto-mining",
-    severity: "critical",
-    message: "Possible crypto-mining reference detected",
-    pattern: /stratum\+tcp|stratum\+ssl|coinhive|cryptonight|xmrig/i,
-  },
-  {
-    ruleId: "suspicious-network",
-    severity: "warn",
-    message: "WebSocket connection to non-standard port",
-    pattern: /new\s+WebSocket\s*\(\s*["']wss?:\/\/[^"']*:(\d+)/,
-  },
-];
-
-const STANDARD_PORTS = new Set([80, 443, 8080, 8443, 3000]);
-
-const SOURCE_RULES: SourceRule[] = [
-  {
-    ruleId: "potential-exfiltration",
-    severity: "warn",
-    message: "File read combined with network send — possible data exfiltration",
-    pattern: /readFileSync|readFile/,
-    requiresContext: /\bfetch\b|\bpost\b|http\.request/i,
-  },
-  {
-    ruleId: "obfuscated-code",
-    severity: "warn",
-    message: "Hex-encoded string sequence detected (possible obfuscation)",
-    pattern: /(\\x[0-9a-fA-F]{2}){6,}/,
-  },
-  {
-    ruleId: "obfuscated-code",
-    severity: "warn",
-    message: "Large base64 payload with decode call detected (possible obfuscation)",
-    pattern: /(?:atob|Buffer\.from)\s*\(\s*["'][A-Za-z0-9+/=]{200,}["']/,
-  },
-  {
-    ruleId: "env-harvesting",
-    severity: "critical",
-    message:
-      "Environment variable access combined with network send — possible credential harvesting",
-    pattern: /process\.env/,
-    requiresContext: /\bfetch\b|\bpost\b|http\.request/i,
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Core scanner
@@ -149,95 +81,26 @@ function truncateEvidence(evidence: string, maxLen = 120): string {
 }
 
 export function scanSource(source: string, filePath: string): SkillScanFinding[] {
-  const findings: SkillScanFinding[] = [];
   const lines = source.split("\n");
-  const matchedLineRules = new Set<string>();
-
-  // --- Line rules ---
-  for (const rule of LINE_RULES) {
-    if (matchedLineRules.has(rule.ruleId)) {
+  const seen = new Set<string>();
+  const findings: SkillScanFinding[] = [];
+  for (const finding of scanText({ path: filePath, content: source }, "skill-install")) {
+    // One finding per rule (and message, for a rule id with several variants) per file.
+    const key = `${finding.ruleId}::${finding.title}`;
+    if (seen.has(key)) {
       continue;
     }
-
-    // Skip rule entirely if context requirement not met
-    if (rule.requiresContext && !rule.requiresContext.test(source)) {
-      continue;
-    }
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const match = rule.pattern.exec(line);
-      if (!match) {
-        continue;
-      }
-
-      // Special handling for suspicious-network: check port
-      if (rule.ruleId === "suspicious-network") {
-        const port = parseInt(match[1], 10);
-        if (STANDARD_PORTS.has(port)) {
-          continue;
-        }
-      }
-
-      findings.push({
-        ruleId: rule.ruleId,
-        severity: rule.severity,
-        file: filePath,
-        line: i + 1,
-        message: rule.message,
-        evidence: truncateEvidence(line.trim()),
-      });
-      matchedLineRules.add(rule.ruleId);
-      break; // one finding per line-rule per file
-    }
-  }
-
-  // --- Source rules ---
-  const matchedSourceRules = new Set<string>();
-  for (const rule of SOURCE_RULES) {
-    // Allow multiple findings for different messages with the same ruleId
-    // but deduplicate exact (ruleId+message) combos
-    const ruleKey = `${rule.ruleId}::${rule.message}`;
-    if (matchedSourceRules.has(ruleKey)) {
-      continue;
-    }
-
-    if (!rule.pattern.test(source)) {
-      continue;
-    }
-    if (rule.requiresContext && !rule.requiresContext.test(source)) {
-      continue;
-    }
-
-    // Find the first matching line for evidence + line number
-    let matchLine = 0;
-    let matchEvidence = "";
-    for (let i = 0; i < lines.length; i++) {
-      if (rule.pattern.test(lines[i])) {
-        matchLine = i + 1;
-        matchEvidence = lines[i].trim();
-        break;
-      }
-    }
-
-    // For source rules, if we can't find a line match the pattern might span
-    // lines. Report line 0 with truncated source as evidence.
-    if (matchLine === 0) {
-      matchLine = 1;
-      matchEvidence = source.slice(0, 120);
-    }
-
+    seen.add(key);
+    const line = finding.line ?? 1;
     findings.push({
-      ruleId: rule.ruleId,
-      severity: rule.severity,
+      ruleId: finding.ruleId ?? "unknown",
+      severity: SEVERITY_MAP[finding.severity],
       file: filePath,
-      line: matchLine,
-      message: rule.message,
-      evidence: truncateEvidence(matchEvidence),
+      line,
+      message: finding.title,
+      evidence: truncateEvidence((lines[line - 1] ?? "").trim()),
     });
-    matchedSourceRules.add(ruleKey);
   }
-
   return findings;
 }
 

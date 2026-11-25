@@ -16,7 +16,7 @@
  * No WebGL, or a context lost for good: the List (the registry's `fallback` row) instead (B8).
  */
 
-import { useCallback, useContext, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { fillTemplate } from '../../labels';
 import { useComputed } from '../../compute/useComputed';
 import { viewportBandOf } from '../../compute/tasks/placement/request';
@@ -34,6 +34,7 @@ import { useStageWiring } from '../overlay/useStageWiring';
 import type { StageRenderer } from '../renderer';
 import { legendTypesOf } from '../rig/stageLegend';
 import { Stage } from '../Stage';
+import { ZOOM_BANDS, type ZoomBand } from '../labels/lod';
 import { useStageRenderer } from '../stageHooks';
 import { StageBusContext, stageBus } from '../anchor/stageBus';
 import type { PlacementCamera } from '../types';
@@ -65,6 +66,8 @@ export default function StageHost({ fallback: Fallback, ...p }: StageHostProps) 
 
 /** The Sequence's semantic-zoom band (`req.lod`): 0 system, 1 class, 2 method (B1a rule 10). */
 const BANDS = ['system', 'class', 'method'] as const;
+/** The Map's ladder: the same bands plus the code. Going in stays with the wheel, double-click and Enter. */
+const MAP_BANDS: readonly ZoomBand[] = ZOOM_BANDS.map((b) => b.band);
 
 function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: PlacementCamera; renderer: StageRenderer; onLost(): void }) {
     const box = useRef<HTMLDivElement>(null);
@@ -126,6 +129,23 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
     const levelNote = camera !== 'map' ? null
         : drill.notice ? fillTemplate(labels.surface.map.drillReset, { name: drill.notice }) : drill.view?.noSymbols ? labels.surface.map.noSymbolsNote : null;
     const caption = ready ? placement.caption : null;
+    const mapBand = MAP_BANDS.indexOf(wiring.zoom.band);
+
+    // Esc goes out from anywhere over the map (not while typing, and not when a pane already took it).
+    const onOut = wiring.onOut;
+    useEffect(() => {
+        const el = box.current;
+        if (!el || !onOut) return undefined;
+        const key = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape' || e.defaultPrevented) return;
+            if ((e.target as HTMLElement | null)?.closest('input, textarea, [contenteditable="true"]')) return;
+            if (!el.matches(':hover') && !el.contains(document.activeElement)) return;
+            e.preventDefault();
+            onOut();
+        };
+        window.addEventListener('keydown', key);
+        return () => window.removeEventListener('keydown', key);
+    }, [onOut]);
 
     return (
         <div ref={box} style={BOX} data-stage-host data-stage-camera={camera}>
@@ -137,18 +157,25 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
             {code && <div style={{ position: 'absolute', top: 0, left: codeWidth, width }}>{code.bar}</div>}
             <div data-map-pane style={{ position: 'absolute', top: boxHeight - height, left: codeWidth, width, height }}>
                 {/* Over the stage's top-left corner, so the stage box (and every projection into it) starts at the map's origin. */}
-                {(camera === 'sequence' || levelNote) && (
+                {(camera === 'sequence' || camera === 'map' || levelNote) && (
                     <div style={{ position: 'absolute', zIndex: 1, insetBlockStart: 8, insetInlineStart: 8, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, maxWidth: 'calc(100% - 16px)' }}>
                         {camera === 'sequence' && (
                             <Segmented label={zoom.group} value={BANDS[seqBand]!} onChange={(id) => setSeqBand(Math.max(0, BANDS.indexOf(id as typeof BANDS[number])))} items={BANDS.map((b) => ({ id: b, label: zoom[b] }))} />
                         )}
+                        {camera === 'map' && (
+                            <Segmented
+                                label={zoom.group} value={MAP_BANDS[mapBand]!} onChange={(id) => wiring.zoom.outToBand(MAP_BANDS.indexOf(id as ZoomBand))}
+                                items={MAP_BANDS.map((b, i) => ({ id: b, label: zoom[b], disabled: i > mapBand }))}
+                            />
+                        )}
+                        {camera === 'map' && <p data-stage-hint style={{ margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'), ...TYPE.bodyMuted }}>{zoom.hint}</p>}
                         {levelNote && <p data-level-note style={{ margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'),...TYPE.bodyMuted }}>{levelNote}</p>}
                     </div>
                 )}
                 {marks && (
                     <Stage
                         renderer={renderer} marks={marks} paint={paint} placement={placement ?? null} colors={colors}
-                        width={width} height={height} reducedMotion={p.reducedMotion} selected={selected} onSelect={wiring.onSelect}
+                        width={width} height={height} reducedMotion={p.reducedMotion} selected={selected} onSelect={wiring.onSelect} onDrill={wiring.onDrill}
                         depthLabel={labels.surface.scene.depth} nav={nav} description={labels.regionLabel} legend={{ types: legendTypesOf(marks.type), labels }} {...(wiring.onOut ? { onOut: wiring.onOut } : {})}
                         {...(camera === 'map' ? { tilt: surface.towers ? 1 : 0, onTilt } : {})} onContextLost={onLost}
                     />

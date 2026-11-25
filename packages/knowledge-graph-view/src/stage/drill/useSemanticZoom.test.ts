@@ -16,7 +16,7 @@ const [place, reserve, charge] = records.map((r) => r.ref) as [string, string, s
 
 /** No placement and no rig: nothing flies, only the trail moves. */
 const bus = { placement: null, projector: null, tweening: false, slotOf: (k: string | null) => (k ? keys.indexOf(k) : -1), onFrame: () => () => {}, onSettle: () => () => {} } as unknown as StageBus;
-const drill = { stack: [{}, {}], view: null, symbols: records, canEnter: () => ({ can: false }), enter: vi.fn(), out: vi.fn() } as unknown as DrillModel;
+const drill = { stack: [{}, {}], view: null, symbols: records, canEnter: () => ({ can: false }), enter: vi.fn(), out: vi.fn(), climb: vi.fn() } as unknown as DrillModel;
 const mapAt = (level: string) => ({ drill: level, symbols: records, stations: { stations: [], byId: new Map() }, keyOfStation: () => '' }) as unknown as StageMap;
 
 function setup() {
@@ -63,5 +63,29 @@ describe('the code band keeps a trail of drilled methods', () => {
         rerender({ map: mapAt('class:b') });
         expect(result.current.trail).toEqual([]);
         expect(result.current.code).toBeNull();
+    });
+});
+
+describe('the Map ladder goes back out to a band', () => {
+    it('climbs the drill to a shallower band; a band at or past the current one does nothing', () => {
+        const { result } = setup();
+        act(() => { result.current.outToBand(2); });
+        act(() => { result.current.outToBand(3); });
+        expect(drill.climb).not.toHaveBeenCalled();
+        act(() => { result.current.outToBand(0); });
+        expect(drill.climb).toHaveBeenCalledWith(0);
+    });
+
+    it('from the code band, the method band leaves the code without climbing; a shallower one clears the trail and climbs', () => {
+        const { result } = setup();
+        act(() => { result.current.enterCode(place); });
+        vi.mocked(drill.climb).mockClear();
+        act(() => { result.current.outToBand(2); });
+        expect(result.current.code).toBeNull();
+        expect(drill.climb).not.toHaveBeenCalled();
+        act(() => { result.current.enterCode(place); });
+        act(() => { result.current.outToBand(1); });
+        expect(result.current.trail).toEqual([]);
+        expect(drill.climb).toHaveBeenCalledWith(1);
     });
 });

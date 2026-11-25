@@ -29,6 +29,8 @@ export interface StageInteractionProps {
     description?: string | undefined;
     onSelect(key: string): void;
     onOut?: (() => void) | undefined;
+    /** Double-click on a mark, or Enter on the selected one: go inside it. */
+    onDrill?: ((key: string) => void) | undefined;
 }
 
 /** A press that moved more than this is a drag (the rig's), not a click. */
@@ -41,11 +43,13 @@ function useBusOptions(bus: StageBus): StageBus['options'] {
     return options;
 }
 
-export function StageInteraction({ bus, renderer, keys, placement, tweening, selected, description, onSelect, onOut }: StageInteractionProps) {
+export function StageInteraction({ bus, renderer, keys, placement, tweening, selected, description, onSelect, onOut, onDrill }: StageInteractionProps) {
     const options = useBusOptions(bus);
     const own = useRef<HTMLDivElement>(null);
     const select = useRef(onSelect);
     select.current = onSelect;
+    const drill = useRef(onDrill);
+    drill.current = onDrill;
 
     // The bus reads the renderer at a settle: the depth (towers at their drawn height), the MarkSet's importance (the
     // tie-break `nearestHit` uses) and the live keys (appended slots included).
@@ -100,20 +104,25 @@ export function StageInteraction({ bus, renderer, keys, placement, tweening, sel
             if (hit?.kind === 'mark') { const key = bus.keys[hit.slot]; if (key) select.current(key); }
             else if (hit?.kind === 'link') bus.options.onLink?.(hit, p);
         };
+        const dbl = (e: MouseEvent) => {
+            const rect = box.getBoundingClientRect(), hit = bus.pick(e.clientX - rect.left, e.clientY - rect.top);
+            if (hit?.kind === 'mark') { const key = bus.keys[hit.slot]; if (key) drill.current?.(key); }
+        };
         const leave = () => { bus.setHover(-1); box.style.cursor = ''; };
         box.addEventListener('pointermove', move);
         box.addEventListener('pointerdown', press);
         box.addEventListener('pointerup', release);
         box.addEventListener('pointerleave', leave);
+        box.addEventListener('dblclick', dbl);
         return () => {
             box.removeEventListener('pointermove', move); box.removeEventListener('pointerdown', press);
-            box.removeEventListener('pointerup', release); box.removeEventListener('pointerleave', leave);
+            box.removeEventListener('pointerup', release); box.removeEventListener('pointerleave', leave); box.removeEventListener('dblclick', dbl);
         };
     }, [bus]);
 
     return (
         <div ref={own} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} data-stage-interaction>
-            <StageProxies bus={bus} selected={selected} disabled={tweening} description={description} onSelect={onSelect} onOut={onOut} />
+            <StageProxies bus={bus} selected={selected} disabled={tweening} description={description} onSelect={onSelect} onOut={onOut} onDrill={onDrill} />
         </div>
     );
 }

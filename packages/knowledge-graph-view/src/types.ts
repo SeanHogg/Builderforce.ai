@@ -42,7 +42,7 @@ export type {
 } from './runPorts';
 
 export type LensId =
-    | 'structure' | 'partitions' | 'duplication' | 'claims' | 'links' | 'unused' | 'knowledge' | 'live' | 'compare';
+    | 'structure' | 'partitions' | 'duplication' | 'claims' | 'links' | 'unused' | 'security' | 'knowledge' | 'live' | 'compare';
 
 /**
  * How the graph is drawn: the transit map (`transit`, flat or as 2.5D towers and pipes: a look

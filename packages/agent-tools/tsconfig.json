@@ -11,6 +11,7 @@
     "noEmit": true,
     "types": ["node"],
     "paths": {
+      "@builderforce/code-shield": ["../code-shield/src/index.ts"],
       "@builderforce/sarif": ["../sarif/src/index.ts"]
     }
   },

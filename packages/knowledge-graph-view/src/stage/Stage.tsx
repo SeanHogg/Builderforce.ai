@@ -61,6 +61,8 @@ export interface StageProps {
     description?: string;
     /** Escape / Backspace on a proxy: out of a drilled level. */
     onOut?: () => void;
+    /** Double-click on a mark, or Enter on the selected one: go inside it. */
+    onDrill?: (key: string) => void;
     /**
      * A tilt asked for from outside (Show in towers: 1; back to the flat map: 0). Applied when it changes and the depth is
      * not already on that side of flat, so the person's own drag is never snapped back.
@@ -253,7 +255,7 @@ export function Stage(p: StageProps) {
                     )
                     : <NoCanvas {...scene} bus={bus} />}
                 {placement && <CaptionLayer ref={captions} captions={placement.captions} names={names} hidden={tweening} />}
-                {placement && <StageInteraction bus={bus} renderer={renderer} keys={keys} placement={placement} tweening={tweening} selected={p.selected} description={p.description} onSelect={p.onSelect} onOut={p.onOut} />}
+                {placement && <StageInteraction bus={bus} renderer={renderer} keys={keys} placement={placement} tweening={tweening} selected={p.selected} description={p.description} onSelect={p.onSelect} onOut={p.onOut} onDrill={p.onDrill} />}
                 {placement && (
                     <StageCorner boxHeight={height} legend={legend}>
                         {p.nav && <NavControl rig={rig} panZoom={panZoom} labels={p.nav} onSettle={settle} />}

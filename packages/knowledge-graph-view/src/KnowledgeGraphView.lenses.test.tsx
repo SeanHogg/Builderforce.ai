@@ -73,6 +73,7 @@ describe('lens effects on the drawn set and its tones', () => {
       claims: { count: 4, kinds: ['about', 'contradicts'] },
       links: { count: 2, kinds: ['links'] },
       unused: { count: 6, kinds: ['references'] },
+      security: { count: 9, kinds: ['contains', 'links', 'references'] },
       knowledge: { count: 3, kinds: ['about'] },
       live: { count: 0, kinds: [] },
       compare: { count: graph.edges.length, kinds: kinds(graph.edges) },

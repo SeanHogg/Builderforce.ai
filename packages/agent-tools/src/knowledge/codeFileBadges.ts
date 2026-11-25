@@ -6,6 +6,7 @@
  * entry) and the layer rule come from `codeRootSignals` / `codeGraph`.
  */
 
+import { riskScore, scanText } from '@builderforce/code-shield';
 import { extractSymbols, MAX_SYMBOLS_PER_FILE, type CodeSymbol } from '../symbols.js';
 import { cyclomaticComplexity } from './codeComplexity.js';
 import { concurrencyBadge } from './codeConcurrency.js';
@@ -15,6 +16,11 @@ import { baseOf } from './systemPaths.js';
 import { importSpecifiers, patternsBadge } from './codePatterns.js';
 import { routesBadge } from './codeRoutes.js';
 import { externalsBadge, runtimeSpecifiers } from './externalServices.js';
+
+/** Files longer than this (characters) are not security-scanned: the graph worker's budget, not a verdict. */
+const MAX_SECURITY_SCAN_CHARS = 1_000_000;
+/** Rule ids kept in the `securityRules` badge. */
+const MAX_SECURITY_RULES = 20;
 
 /** Route registrations only exist in JS/TS-family sources. */
 const ROUTE_LANGUAGES: ReadonlySet<string> = new Set(['js']);
@@ -31,6 +37,16 @@ export const lineCountOf = (text: string): number => {
     const n = text.split('\n').length;
     return text.endsWith('\n') ? n - 1 : n;
 };
+
+/** The code-shield risk of one file: the score and the (sorted, capped) rule ids behind it, or nothing when it is clean. */
+function securityBadges(path: string, text: string): Record<string, number | string> {
+    if (text.length > MAX_SECURITY_SCAN_CHARS) return {};
+    const findings = scanText({ path, content: text }, 'visualizer');
+    const risk = riskScore(findings);
+    if (risk <= 0) return {};
+    const rules = [...new Set(findings.map((f) => f.ruleId ?? ''))].filter(Boolean).sort().slice(0, MAX_SECURITY_RULES);
+    return { [CODE_BADGES.securityRisk]: risk, [CODE_BADGES.securityRules]: rules.join(',') };
+}
 
 export function contentBadges(path: string, text: string, symbols: readonly CodeSymbol[]): Record<string, number | string> {
     const language = codeLanguageOf(path);
@@ -62,5 +78,6 @@ export function contentBadges(path: string, text: string, symbols: readonly Code
         path, base: baseNameOf(path), lines, exported, imports, text: code, maxComplexity: complexity.max,
     });
     if (patterns) badges[CODE_BADGES.patterns] = patterns;
+    Object.assign(badges, securityBadges(path, text));
     return badges;
 }
