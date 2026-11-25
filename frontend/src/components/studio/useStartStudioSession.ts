@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { faultMessage } from '@/lib/apiClient';
 import { startCreationSession } from '@/lib/canvas/startCreationSession';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
-import { studioSessionPath } from '@/lib/studio/studioHost';
+import { isBrowserOnline, studioBoardHref } from '@/lib/studio/studioHost';
 
 /**
  * Turn a Studio prompt into a creation session and open it through the Studio lens.
@@ -36,7 +36,8 @@ export function useStartStudioSession(failedMessage: string) {
   const run = useCallback(async (prompt: string) => {
     try {
       const { sessionId } = await startCreationSession({ prompt, isAuthenticated, hasTenant, surface: 'studio' });
-      router.push(studioSessionPath(sessionId));
+      // A fresh board made offline has no server page yet: the device shell opens it from the replica.
+      router.push(studioBoardHref(sessionId, isBrowserOnline()));
     } catch (cause) {
       if (isPlanLimitError(cause)) setPlanError(cause);
       else setError(faultMessage(cause, failedMessage));

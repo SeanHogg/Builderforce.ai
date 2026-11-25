@@ -11,6 +11,8 @@ import { bindLocalBoard, rememberLastCanvas } from '@/lib/pendingWork';
 import { reportLocalFirstFailure } from '@/lib/localFirst/reportLocalFirstFailure';
 import { StudioSyncIndicator } from '@/components/studio/StudioSyncStatus';
 import { BoardConflictsPanel } from './BoardConflictsPanel';
+import { BoardMediaIssues } from './BoardMediaIssues';
+import { useBoardMediaIssues } from './useBoardMediaIssues';
 import { useBoardConflicts } from './useBoardConflicts';
 import { useBoardSyncOutcome } from './useBoardSyncOutcome';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
@@ -110,6 +112,7 @@ export default function CreationSessionClient({ sessionId, lens = 'canvas' }: { 
     [planDismissed, planLimited, t],
   );
   const { conflicts, resolve } = useBoardConflicts(sessionId, !legacy);
+  const { issues: mediaIssues, retry: retryMedia } = useBoardMediaIssues(sessionId, !legacy);
 
   return <>
     <UpgradeModal
@@ -120,6 +123,7 @@ export default function CreationSessionClient({ sessionId, lens = 'canvas' }: { 
     <div style={{ position: 'fixed', zIndex: 60, top: 76, right: 12, maxWidth: 'calc(100vw - 24px)', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, pointerEvents: 'none' }}>
       <div style={{ pointerEvents: 'auto' }}><StudioSyncIndicator /></div>
       <div style={{ pointerEvents: 'auto' }}><BoardConflictsPanel conflicts={conflicts} resolve={resolve} /></div>
+      <div style={{ pointerEvents: 'auto' }}><BoardMediaIssues issues={mediaIssues} retry={retryMedia} /></div>
     </div>
     {/* Theme tokens, not literals: this rides on the guest→sign-in path, which
         renders in whichever theme the visitor arrived from. */}

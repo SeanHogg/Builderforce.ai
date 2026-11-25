@@ -115,6 +115,29 @@ describe('SyncRepository — pull reads', () => {
     expect(await stores.changesAfter(7, 'k', { txid: '0', seq: 0 }, 10)).toEqual({ rows: [], xmin: '900' });
   });
 
+  it('filters Canvas rows of a delta page to the boards the reader may read, and passes other entities through', async () => {
+    const { db, stores } = repo([rowsResult([{ xmin: '900', txid: null, seq: null, record: null }])]);
+    await stores.changesAfter(7, 'k', { txid: '0', seq: 0 }, 10, 'user-1');
+    const text = sqlText(db.calls[0]?.args[0]);
+    expect(text).toContain('NOT IN (');
+    expect(text).toContain("'boardId'");
+    expect(text).toContain('SELECT');
+    // The reader's membership, active, on the registry object of the board: the one readable-boards subquery.
+    expect(whereColumns(db.calls[0]?.args[0])).toEqual(expect.arrayContaining(['member_ref', 'state', 'ref_id']));
+  });
+
+  it('adds no board filter to a delta page when no reader is named', async () => {
+    const { db, stores } = repo([rowsResult([{ xmin: '900', txid: null, seq: null, record: null }])]);
+    await stores.changesAfter(7, 'k', { txid: '0', seq: 0 }, 10);
+    expect(sqlText(db.calls[0]?.args[0])).not.toContain("'boardId'");
+  });
+
+  it('filters the snapshot to readable Canvas boards when a reader is named', async () => {
+    const { db, stores } = repo([[]]);
+    await stores.snapshotAfter(7, 'k', null, 25, 'user-1');
+    expect(whereColumns(db.calls[0]?.where)).toEqual(expect.arrayContaining(['entity_type', 'member_ref', 'ref_id']));
+  });
+
   it('keysets the snapshot after the last served pair, tenant- and destination-scoped', async () => {
     const { db, stores } = repo([[]]);
     await stores.snapshotAfter(7, 'k', { entityType: 'chat', clientEntityId: 'b' }, 25);

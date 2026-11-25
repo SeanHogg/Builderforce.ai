@@ -54,7 +54,7 @@ export async function packRootGraph(entry: KnowledgePackEntry, query: PackGraphQ
 function targetRoot(call: KnowledgeCall, lastRoot: string | undefined): string | undefined {
   switch (call.op) {
     case "plan": return call.req.rootId;
-    case "remember": case "pinpoint": case "history": case "syncStatus": case "applyFix": case "excludeFromReview": return call.rootId;
+    case "remember": case "pinpoint": case "history": case "syncStatus": case "applyFix": case "excludeFromReview": case "organizeDomains": return call.rootId;
     case "deleteFact": return lastRoot;
     default: return undefined;
   }

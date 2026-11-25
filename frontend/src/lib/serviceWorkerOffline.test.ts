@@ -15,6 +15,7 @@ describe('offline service worker', () => {
         addAll: async (urls: string[]) => {
           if (name.startsWith('bf-shell-')) precachedUrls.push(...urls);
         },
+        add: async () => {},
         match: async () => undefined,
         put: vi.fn(),
       })),
@@ -31,6 +32,7 @@ describe('offline service worker', () => {
     const source = readFileSync(resolve(process.cwd(), 'public/sw.js'), 'utf8');
     runInNewContext(source, {
       URL,
+      Request,
       Response,
       caches,
       fetch: fetchFromNetwork,
@@ -77,6 +79,10 @@ describe('offline service worker: offline-capable routes', () => {
         match: async (r: any) => store(name).get(keyOf(r)),
         put: async (r: any, res: Response) => { store(name).set(keyOf(r), res); },
         addAll: async () => {},
+        add: async (path: string) => {
+          if (failShellPrecache) throw new TypeError('shell fetch failed');
+          store(name).set(keyOf(path), new Response('shell'));
+        },
       }),
       match: async (r: any, o?: { cacheName?: string }) =>
         o?.cacheName ? store(o.cacheName).get(keyOf(r)) : undefined,
@@ -84,13 +90,16 @@ describe('offline service worker: offline-capable routes', () => {
       delete: async (k: string) => stores.delete(k),
     };
     let online = true;
+    let failShellPrecache = false;
+    let serverStatus = 200;
     const network = vi.fn(async (req: { url: string }) => {
       if (!online) throw new TypeError('Failed to fetch');
+      if (serverStatus !== 200) return new Response('down', { status: serverStatus });
       return new Response(`html:${req.url}`, { status: 200, headers: { 'Cross-Origin-Opener-Policy': 'same-origin' } });
     });
     const source = readFileSync(resolve(process.cwd(), 'public/sw.js'), 'utf8');
     runInNewContext(source, {
-      URL, Response, caches, fetch: network,
+      URL, Request, Response, caches, fetch: network,
       self: {
         location: { origin: 'https://builderforce.ai' },
         clients: { claim: vi.fn() },
@@ -109,7 +118,17 @@ describe('offline service worker: offline-capable routes', () => {
       listeners.get('fetch')!({ request: req, respondWith: (p: Promise<Response>) => { out = p; } });
       return out;
     };
-    return { stores, dispatch, request, setOnline: (v: boolean) => { online = v; } };
+    const install = async () => {
+      let installation: Promise<unknown> = Promise.resolve();
+      listeners.get('install')!({ waitUntil: (p: Promise<unknown>) => { installation = p; } });
+      await installation;
+    };
+    return {
+      stores, dispatch, request, install,
+      setOnline: (v: boolean) => { online = v; },
+      failShell: () => { failShellPrecache = true; },
+      setServerStatus: (v: number) => { serverStatus = v; },
+    };
   }
 
   it('serves a visited /studio page from cache offline, headers intact', async () => {
@@ -126,6 +145,66 @@ describe('offline service worker: offline-capable routes', () => {
     sw.setOnline(false);
     const res = await sw.dispatch(sw.request('/studio/never', { navigate: true }))!;
     expect(res.status).toBe(503);
+  });
+
+  describe('device-board shell', () => {
+    const BOARD = '0f8fad5b-d9cb-469f-a165-70867728950e';
+
+    it('precaches the shell on install, and a failed shell fetch does not fail the install', async () => {
+      const ok = boot();
+      await ok.install();
+      expect([...ok.stores.entries()].some(([name, entries]) => name.startsWith('bf-pages-') && entries.has('https://builderforce.ai/studio/local'))).toBe(true);
+      const failing = boot();
+      failing.failShell();
+      await expect(failing.install()).resolves.toBeUndefined();
+    });
+
+    it('redirects an offline, never-visited /studio/<uuid> to the shell with the board id', async () => {
+      const sw = boot();
+      await sw.install();
+      sw.setOnline(false);
+      const res = await sw.dispatch(sw.request(`/studio/${BOARD}`, { navigate: true }))!;
+      expect(res.status).toBe(302);
+      expect(res.headers.get('Location')).toBe(`https://builderforce.ai/studio/local?board=${BOARD}`);
+    });
+
+    it('falls back to the offline page when the shell was never cached', async () => {
+      const sw = boot();
+      sw.setOnline(false);
+      const res = await sw.dispatch(sw.request(`/studio/${BOARD}`, { navigate: true }))!;
+      expect(res.status).toBe(503);
+    });
+
+    it('redirects an unvisited board during a server outage, but passes the 5xx through without a shell', async () => {
+      const withShell = boot();
+      await withShell.install();
+      withShell.setServerStatus(503);
+      const redirected = await withShell.dispatch(withShell.request(`/studio/${BOARD}`, { navigate: true }))!;
+      expect(redirected.status).toBe(302);
+      const bare = boot();
+      bare.setServerStatus(503);
+      const passed = await bare.dispatch(bare.request(`/studio/${BOARD}`, { navigate: true }))!;
+      expect(passed.status).toBe(503);
+      expect(await passed.text()).toBe('down');
+    });
+
+    it('never redirects a non-board /studio path', async () => {
+      const sw = boot();
+      await sw.install();
+      sw.setOnline(false);
+      for (const path of ['/studio/project/x', `/studio/${BOARD}/extra`, '/studio/not-a-uuid']) {
+        const res = await sw.dispatch(sw.request(path, { navigate: true }))!;
+        expect(res.status).toBe(503);
+      }
+    });
+
+    it('serves every /studio/local?board=<id> from the one bare-path entry', async () => {
+      const sw = boot();
+      await sw.install();
+      sw.setOnline(false);
+      const res = await sw.dispatch(sw.request(`/studio/local?board=${BOARD}`, { navigate: true }))!;
+      expect(await res.text()).toBe('shell');
+    });
   });
 
   it('caches RSC payloads per URL and fails the fetch on a miss', async () => {

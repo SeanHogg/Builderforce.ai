@@ -19,7 +19,7 @@ export default {
       'request’s budget. This table is the durable half and its writer is the chunk sweep, ' +
       'which is not written yet. Adjudicated rather than baselined because it is not a ' +
       'domain awaiting migration — it is one feature awaiting its second half, tracked in ' +
-      'ROADMAP.md. The verdict leaves this file the day the sweep lands.',
+      'docs/roadmap/GAP-REGISTER.md. The verdict leaves this file the day the sweep lands.',
   replay_segments:
     'PRD 33 Insights definitions created with the data plane (S1, migration 1216) so the schema lands in one reviewed migration, while their writers are later slices of the same PRD: S4c `replaySegments` (saved filters). Registered in growth/entities.ts (read-only; site-keyed with no tenant column, so the generic layer can neither list nor edit them). The verdict leaves this file the day that writer lands.',
   replay_smart_events:

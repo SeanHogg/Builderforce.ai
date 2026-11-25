@@ -34016,6 +34016,7 @@
     }
   },
   "templates": {
+    "offlineUnavailable": "Las plantillas necesitan conexión. Los tableros que ya creaste se abren sin conexión.",
     "title": "Plantillas",
     "subtitle": "Puntos de partida listos que se configuran solos. Responde unas preguntas y en tu espacio aparecerán una automatización que funciona, su calendario y el trabajo que necesita de ti.",
     "searchPlaceholder": "Buscar plantillas",
@@ -37019,6 +37020,17 @@
     "ssoNotFound": "Esa dirección no usa inicio de sesión único. Inicia sesión con tu contraseña."
   },
   "studio": {
+    "media": {
+      "failedTitle": "Subidas que necesitan atención",
+      "retry": "Reintentar",
+      "retrying": "Se reintentará en breve",
+      "quotaFull": "Este dispositivo no tiene espacio para los archivos multimedia de este espacio de trabajo. Elimina archivos o libera espacio e inténtalo de nuevo.",
+      "tooLarge": "Ese archivo supera el tamaño que permite el espacio de trabajo (10 MB; 100 MB para vídeo)."
+    },
+    "library": {
+      "availableOffline": "Disponible sin conexión",
+      "offlineNotice": "Estás sin conexión. Se muestran los tableros guardados en este dispositivo."
+    },
     "meta": {
       "title": "Builderforce Studio",
       "description": "Describe una app y Studio la crea, la ejecuta en tu navegador y la publica."
@@ -38909,6 +38921,23 @@
     "panelResolve": "Cola de correcciones",
     "panelSimulate": "Simular",
     "panelAgentRuns": "Ejecuciones de agentes",
+    "panelDomains": "Dominios",
+    "domainsTitle": "Organizar por dominio",
+    "domainsFolder": "Carpeta",
+    "domainsApply": "Mover la selección",
+    "domainsUndo": "Deshacer",
+    "domainsUnassigned": "Se quedan donde están",
+    "domainsConflicts": "Omitido: el destino ya existe",
+    "domainsNew": "nuevo",
+    "domainsReasonName": "por nombre",
+    "domainsReasonImports": "por importaciones",
+    "domainsReasonTest": "prueba de su módulo",
+    "domainsReasonFolder": "coincide con una carpeta existente",
+    "domainsCross": "Vínculos entre dominios: {before} ahora, {after} después",
+    "domainsEmpty": "No hay nada que organizar en esta carpeta.",
+    "domainsNotSetUp": "Organizar requiere la extensión del editor.",
+    "domainsNote": "Las importaciones relativas se reescriben. Los documentos, el markdown y los alias de ruta no.",
+    "domainsDone": "Listo: {count} archivos modificados.",
     "viewGraph": "Grafo",
     "viewMap": "Mapa mental",
     "viewTransit": "Mapa",

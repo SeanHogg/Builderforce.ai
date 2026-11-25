@@ -31,6 +31,7 @@ import type {
     CallSite, Finding, KEdge, KNode, KnowledgeGraph, ReviewPlan, ReviewProgress as MemoryReviewProgress, ReviewReport,
 } from '@seanhogg/builderforce-memory/knowledge';
 
+import type { DomainLayout } from './domainsPort';
 import type { AppliedFix, FixCheckResult, FixCheckUpdate, FixPreview, FixStepRequest, RecordedRun } from './fixPorts';
 import type { LoadTrace } from './loadTraceTypes';
 import type { AgentRunsPort, ReplicaState, ReviewRunsPort } from './runPorts';
@@ -244,6 +245,12 @@ export interface KnowledgeGraphSource {
     markResolved?(finding: Finding): Promise<void>;
     /** Reverts an applied fix. Absent ⇒ the step goes to the agent. */
     undoFix?(req: FixStepRequest): Promise<void>;
+    /** Organize by domain: the proposed folder layout of one root-relative folder. Absent ⇒ no Domains drawer. */
+    domains?(rootId: string, folder: string): Promise<DomainLayout>;
+    /** Applies the named domains of the host's own proposal (ids, never paths); the host branches, records and gates it on trust. */
+    organizeDomains?(rootId: string, folder: string, accept: string[]): Promise<AppliedFix>;
+    /** Reverts what `organizeDomains` returned (its `fixId`). */
+    undoOrganize?(rootId: string, fixId: string): Promise<void>;
     /** The values recorded along a path's stops (arguments, returns, payload sizes) and argument presets. Absent ⇒ Simulate edits nothing. */
     recordedValues?(rootId: string, stopIds: string[]): Promise<RecordedRun | null>;
     /**

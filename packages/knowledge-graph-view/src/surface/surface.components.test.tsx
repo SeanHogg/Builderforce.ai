@@ -241,17 +241,17 @@ describe('registries', () => {
         expect(ids({ webgl: true })).toEqual(['transit', 'system', 'graph', 'map', '3d', 'heat', 'style', 'features', 'sequence', 'list']);
     });
 
-    it('holds the seven drawers (the Reviews drawer comes first, with no header button), and a toggle with no panel available draws nothing', () => {
-        expect(PANELS.map((p) => p.id)).toEqual(['run', 'coverage', 'patterns', 'api', 'resolve', 'simulate', 'agentRuns']);
+    it('holds the eight drawers (the Reviews drawer comes first, with no header button), and a toggle with no panel available draws nothing', () => {
+        expect(PANELS.map((p) => p.id)).toEqual(['run', 'coverage', 'patterns', 'api', 'domains', 'resolve', 'simulate', 'agentRuns']);
         const { container } = render(<PanelToggle graph={graph} env={env} labels={L} panel={null} onPanel={vi.fn()} panels={[]} />);
         expect(container.innerHTML).toBe('');
     });
 
-    it('the header shows Coverage, Patterns, API, Agent runs in that order; Resolve and Simulate have no button', () => {
+    it('the header shows Coverage, Patterns, API, Domains, Agent runs in that order; Resolve and Simulate have no button', () => {
         const all = PANELS.map((p) => ({ ...p, available: () => true }));
         render(<PanelToggle graph={graph} env={env} labels={L} panel={null} onPanel={vi.fn()} panels={all} />);
         const names = within(screen.getByRole('group', { name: L.surface.panelsLabel })).getAllByRole('button').map((b) => b.textContent);
-        expect(names).toEqual([L.panelCoverage, L.panelPatterns, L.panelApi, L.panelAgentRuns]);
+        expect(names).toEqual([L.panelCoverage, L.panelPatterns, L.panelApi, L.panelDomains, L.panelAgentRuns]);
     });
 
     it('draws a button and a controlled drawer (with its subtitle) for each available panel row', () => {

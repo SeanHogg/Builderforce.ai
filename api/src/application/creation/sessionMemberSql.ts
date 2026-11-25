@@ -11,7 +11,7 @@
  * resurrect somebody who was removed.
  */
 
-import { and, eq, sql, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { creationSessions, memberships, objects } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { SESSION_ROLE_RANK } from './sessionRoles';
@@ -20,6 +20,24 @@ import { SESSION_ROLE_RANK } from './sessionRoles';
 export const SESSION_OBJECT_KIND = 'creation_session';
 /** A board member is a person; agents reach a board through dispatch, not membership. */
 export const SESSION_MEMBER_KIND = 'user';
+
+/**
+ * The boards a person may READ in a workspace: a scalar-list subquery of their ids (the registry
+ * `ref_id`), from the person's own ACTIVE membership with a role the gate knows. One spelling of
+ * "may read" for every set-based reader (sync pull filters Canvas rows by it), written beside the
+ * predicates the per-board gate uses so the two cannot drift. A role the gate does not know grants nothing.
+ */
+export function readableBoardIdsSql(tenantId: number, userId: string): SQL {
+  return sql`(SELECT ${objects.refId} FROM ${objects} INNER JOIN ${memberships} ON ${memberships.objectId} = ${objects.id} WHERE ${scopedToTenant(
+    memberships,
+    tenantId,
+    eq(objects.kind, SESSION_OBJECT_KIND),
+    eq(memberships.memberKind, SESSION_MEMBER_KIND),
+    eq(memberships.memberRef, userId),
+    eq(memberships.state, 'active'),
+    inArray(memberships.role, Object.keys(SESSION_ROLE_RANK)),
+  )})`;
+}
 
 /** The two fields of a board that address its members. */
 export type SessionKey = { id: string; tenantId: number };

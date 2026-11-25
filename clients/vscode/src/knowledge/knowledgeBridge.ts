@@ -9,7 +9,7 @@
 
 import * as vscode from "vscode";
 import { factKeyOf, type Finding, type KnowledgeGraph, type NodeRef } from "@seanhogg/builderforce-memory/knowledge";
-import { factRightsCache, humanFactBatch, readSystems, type FactRightsCache } from "@builderforce/agent-tools/knowledge";
+import { factRightsCache, humanFactBatch, proposeDomainLayout, readSystems, type FactRightsCache } from "@builderforce/agent-tools/knowledge";
 import { knowledgeBaseline } from "./knowledgeBaseline";
 import { openWorkspace } from "../workspace/openWorkspace";
 import { SELECTED_TENANT_KEY } from "../project/projectState";
@@ -33,6 +33,8 @@ import { KnowledgeReviewSessions } from "./knowledgeReviewSessions";
 import { excludeFromReview } from "./knowledgeExclude";
 import { rootIgnoreFile } from "./knowledgeFs";
 import { duringReview, isRootReviewing } from "./knowledgeReplica";
+import { nodeDomainPorts, organizeDomains, planDomainMoves, rootDomainInput, rootDomainLayout } from "./knowledgeDomains";
+import { fixText } from "./knowledgeFixText";
 import { subscribeLiveGraph } from "./knowledgeLive";
 import { LastBuiltCounts } from "./lastBuiltCounts";
 import { visualizerSessions } from "./visualizerSession";
@@ -205,6 +207,11 @@ export class KnowledgeBridge implements vscode.Disposable {
         }
         return null;
       }
+      case "domains": {
+        const root = this.rootOf(call.rootId);
+        return rootDomainLayout(await this.wholeGraph(call.rootId), call.rootId, call.folder, root.rootPath);
+      }
+      case "organizeDomains": return this.organizeDomains(call.rootId, call.folder, call.accept);
       case "symbols": {
         const rootPath = this.rootOf(call.rootId).rootPath;
         // Traced, so the alias load (`aliases`) is a named phase of the call.
@@ -282,6 +289,27 @@ export class KnowledgeBridge implements vscode.Disposable {
     const root = rootById(rootId, workspaceFolders());
     if (!root) throw new Error(vscode.l10n.t("This folder is not open in the workspace."));
     return root;
+  }
+
+  /** The root's whole stored graph (no node cap: a truncated graph would propose a partial layout). */
+  private async wholeGraph(rootId: string): Promise<KnowledgeGraph> {
+    const graph = await loadGraph(this.secrets, rootId);
+    if (!graph) throw new Error(fixText.domainsNoGraph());
+    return graph;
+  }
+
+  /** Applies the accepted domains of the host's own recomputed proposal; undone by `undoFix`. */
+  private async organizeDomains(rootId: string, folder: string, accept: string[]): Promise<KnowledgeFixResult> {
+    const root = this.rootOf(rootId);
+    if (isRootReviewing(rootId)) throw new Error(vscode.l10n.t("A review of this folder is already running."));
+    const input = await rootDomainInput(await this.wholeGraph(rootId), rootId, folder, root.rootPath);
+    const plan = planDomainMoves(input, proposeDomainLayout(input), accept);
+    const files = new Set(input.files);
+    return this.fixes.applyMoves(rootId, root.rootPath, input.folder, plan.wanted, async (ports) => {
+      const move = ports.move;
+      if (!move) throw new Error(fixText.gitFailed("mv", ""));
+      await organizeDomains(nodeDomainPorts(root.rootPath, move), plan, files);
+    });
   }
 
   private applyFix(rootId: string, finding: Finding): Promise<KnowledgeFixResult> {

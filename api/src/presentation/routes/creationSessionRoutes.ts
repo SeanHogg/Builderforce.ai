@@ -12,7 +12,7 @@ import {
   type CreationCommentAnchor, type PlannedClaimWrite,
 } from '../../application/creation/creationSessionModel';
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { scope } from './requestScope';
 import {
   creationSessionConnections,
@@ -77,7 +77,9 @@ import {
 } from '../../application/creation/sessionMembers';
 import { listActivePresenceMembers, parseKnownPresence, presenceDelta } from '../../application/creation/presenceDelta';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
-import { TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
+import { TenantBillingStatus, TenantPlan, TenantRole } from '../../domain/shared/types';
+import { backfillCanvasSyncPage } from '../../application/creation/sync/backfillCanvasSyncRecords';
+import { canvasProjectionScope, reconcileCanvasBoards, touchedBoardIds } from '../../application/creation/sync/canvasSyncProjection';
 import { notify } from '../../application/notifications/notify';
 import {
   isConfidentialityLevel,
@@ -245,6 +247,13 @@ const PatchSessionBody = z.object({
   preview: z.unknown().optional(),
   mode: z.string().optional(),
 });
+const BackfillProjectionBody = z.object({
+  afterId: z.string().optional(),
+  limit: z.number().int().positive().optional(),
+  dryRun: z.boolean().optional(),
+});
+/** The methods that can change a board: a successful one reconciles the board into the pull projection. */
+const BOARD_WRITE_METHODS: ReadonlySet<string> = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const SaveGraphBody = z.object({
   objects: zGraphObjects.optional(),
   connections: zGraphConnections.optional(),
@@ -408,6 +417,30 @@ async function ensureResumeObject(db: Db, env: Env, access: { session: SessionRe
 export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
+
+  // Server-originated board changes (these routes, other members, agent commands, template apply) reach
+  // the sync pull projection: after a SUCCESSFUL write, reconcile the board(s) it touched, off the request
+  // path. A device's own push does not come through here (its importers project it themselves).
+  router.use('*', async (c, next) => {
+    await next();
+    if (!BOARD_WRITE_METHODS.has(c.req.method) || c.res.status >= 400) return;
+    const tenantId = c.get('tenantId') as number;
+    const answer = c.res.headers.get('content-type')?.includes('application/json') ? c.res.clone() : null;
+    c.executionCtx.waitUntil((async () => {
+      const body = await answer?.json().catch(() => null);
+      await reconcileCanvasBoards(db, canvasProjectionScope(tenantId), touchedBoardIds(c.req.path, body));
+    })());
+  });
+
+  /** Admin: backfill the tenant's boards into the pull projection, one page per call (`afterId` pages; `dryRun` only counts). */
+  router.post('/sync-projection/backfill', requireRole(TenantRole.ADMIN), async (c) => {
+    const body = await parseOptionalBody(c, BackfillProjectionBody);
+    if (body.afterId && !UUID_RE.test(body.afterId)) return c.json({ error: 'Invalid afterId' }, 400);
+    const page = await backfillCanvasSyncPage(db, canvasProjectionScope(c.get('tenantId') as number), {
+      afterId: body.afterId, limit: body.limit, dryRun: body.dryRun === true,
+    });
+    return c.json(page);
+  });
 
   /** Delegated to `sessionAccess.ts`, which the sell-motion routes read too. A second
    *  copy of an authorization check is the copy that keeps granting after the original
@@ -2075,7 +2108,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       }
     }
 
-    // D1 batch is atomic: replacement graph + revision/event commit together, so
+    // The batch is one transaction: replacement graph + revision/event commit together, so
     // a failed insert cannot leave the session empty after the deletes. The seven
     // statements themselves are `creationGraphWriter`'s — see that module for why
     // the ORDER is the part that must not be re-typed per caller.

@@ -24,8 +24,8 @@
  * Because the tree was clean, HEAD IS the state before, so nothing of the person's is lost.
  */
 
-import { readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { knipRemoveFilesCommand } from "@builderforce/agent-tools";
 import { sourcePathOf } from "@builderforce/agent-tools/knowledge";
 import { runGit } from "@builderforce/agent-tools/node-git-history";
@@ -103,6 +103,8 @@ export interface FixPorts {
   unstage?(paths: string[]): Promise<void>;
   /** Deletes files the codemod created; rejects on failure. */
   remove(paths: string[]): Promise<void>;
+  /** `git mv from to` (the target's folder is made first); both stay inside the root; rejects on failure. */
+  move?(from: string, to: string): Promise<void>;
 }
 
 export const isFixableKind = (kind: string): boolean => kind in CODEMODS;
@@ -160,6 +162,11 @@ export function applyCodemod(ports: FixPorts, rootId: string, finding: Finding, 
     return Promise.reject(error);
   }
   return serialized(rootId, () => fix(ports, wanted, apply, fixBranchName(finding, wanted, new Date()), record));
+}
+
+/** Applies a planned change of `wanted` paths (an organize-by-domain move): the same guard, branch, scoping and undo record as a codemod. */
+export function applyPlanned(ports: FixPorts, rootId: string, wanted: ReadonlySet<string>, branchName: string, apply: (ports: FixPorts) => Promise<void>, record?: (snapshot: FixSnapshot) => string): Promise<KnowledgeFixResult> {
+  return serialized(rootId, () => fix(ports, wanted, apply, branchName, record));
 }
 
 /**
@@ -297,7 +304,7 @@ async function settle(ports: FixPorts, wanted: ReadonlySet<string>, saved: Reado
 }
 
 /** The git, file and shell ports of a folder; the editor-bound ones (`dirtyBuffers`, `watchSaves`) come from the caller. */
-export function nodeFixPorts(rootPath: string): Required<Pick<FixPorts, "status" | "hasHead" | "createBranch" | "currentBranch" | "switchTo" | "deleteBranch" | "run" | "removeExport" | "restore" | "remove" | "headSha" | "hashObjects" | "inHead" | "unstage">> {
+export function nodeFixPorts(rootPath: string): Required<Pick<FixPorts, "status" | "hasHead" | "createBranch" | "currentBranch" | "switchTo" | "deleteBranch" | "run" | "removeExport" | "restore" | "remove" | "headSha" | "hashObjects" | "inHead" | "unstage" | "move">> {
   const orThrow = async (args: string[]): Promise<string> => {
     const run = await runGit(rootPath, args);
     if (run.stdout === undefined) throw new Error(fixText.gitFailed(args[0] ?? "", run.stderr ? `: ${run.stderr.trim().slice(0, 300)}` : ""));
@@ -365,6 +372,12 @@ export function nodeFixPorts(rootPath: string): Required<Pick<FixPorts, "status"
       const run = await runGit(rootPath, ["--literal-pathspecs", "ls-tree", "-r", "--name-only", "-z", "HEAD", "--", ...paths]);
       if (run.stdout === undefined) throw new Error(fixText.lsTreeFailed());
       return new Set(run.stdout.split("\0").filter((x) => x !== ""));
+    },
+    async move(from, to) {
+      await assertInsideRoot(rootPath, from);
+      await assertInsideRoot(rootPath, to);
+      await mkdir(dirname(join(rootPath, to)), { recursive: true });
+      await orThrow(["--literal-pathspecs", "mv", "--", from, to]);
     },
     async unstage(paths) {
       await orThrow(["--literal-pathspecs", "rm", "-r", "-f", "--cached", "--ignore-unmatch", "--", ...paths]);

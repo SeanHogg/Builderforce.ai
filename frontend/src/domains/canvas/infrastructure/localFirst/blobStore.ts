@@ -44,6 +44,12 @@ export class BlobQuotaError extends Error {
   }
 }
 
+/** Which `studio.media` message a refusal is told with: a size over the workspace's limit, or no room left on the device. */
+export function mediaRefusalKey(error: unknown): 'tooLarge' | 'quotaFull' | undefined {
+  if (!(error instanceof BlobQuotaError)) return undefined;
+  return error.reason === 'file-too-large' || error.reason === 'video-too-large' ? 'tooLarge' : 'quotaFull';
+}
+
 export interface StorageEstimate { quota?: number; usage?: number }
 
 /** Whether a blob of `bytes` may be added, given what this partition already holds. Pure. */

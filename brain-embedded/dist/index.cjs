@@ -36,6 +36,8 @@ __export(src_exports, {
   API_VERSION_TTL_MS: () => API_VERSION_TTL_MS,
   ASK_USER_TOOL: () => ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC: () => ASK_USER_TOOL_SPEC,
+  ASSET_MAX_BYTES: () => ASSET_MAX_BYTES,
+  ASSET_MAX_VIDEO_BYTES: () => ASSET_MAX_VIDEO_BYTES,
   AUTHORED_BY_META_KEY: () => AUTHORED_BY_META_KEY,
   AUTONOMY_DIRECTIVE: () => AUTONOMY_DIRECTIVE,
   AttachmentRefusedError: () => AttachmentRefusedError,
@@ -22875,6 +22877,8 @@ function signedBrainFileUrl(baseUrl, key, signed) {
 }
 var BRAIN_UPLOAD_SIGN_PATH = "/api/brain/uploads/sign";
 var BRAIN_UPLOAD_PATH = "/api/brain/upload";
+var ASSET_MAX_BYTES = 10 * 1024 * 1024;
+var ASSET_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 // src/evermindMemory.ts
 var MAX_CITED_ANCHORS = 16;
@@ -43930,6 +43934,8 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   API_VERSION_TTL_MS,
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
+  ASSET_MAX_BYTES,
+  ASSET_MAX_VIDEO_BYTES,
   AUTHORED_BY_META_KEY,
   AUTONOMY_DIRECTIVE,
   AttachmentRefusedError,

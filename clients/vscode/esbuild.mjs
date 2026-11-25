@@ -260,7 +260,7 @@ function copyLauncherAssets() {
 /**
  * The analyzers the VSIX ships (PRD 41 A3): `analyzers/package.json` pins dependency-cruiser, jscpd,
  * knip and the `typescript@5.6.3` they share; they are installed into `out/analyzers/node_modules`
- * (`out/` ships in the .vsix) and `src/bundledAnalyzers.ts` resolves their entry scripts at activation,
+ * (`out/` ships in the .vsix) and `src/diagnostics/bundledAnalyzers.ts` resolves their entry scripts at activation,
  * so no analysis ever downloads from npm. `npm ci` when `analyzers/package-lock.json` exists. Skipped when
  * the install is already there AND its stamp (`out/analyzers/.install-stamp`, the hash of the copied
  * package.json + lockfile) matches, so a changed pin reinstalls; a failed install fails the build, since a VSIX without its

@@ -34016,6 +34016,7 @@
     }
   },
   "templates": {
+    "offlineUnavailable": "Vorlagen benötigen eine Verbindung. Bereits erstellte Boards öffnen sich offline.",
     "title": "Vorlagen",
     "subtitle": "Fertige Startpunkte, die sich selbst einrichten. Beantworten Sie ein paar Fragen, und eine laufende Automatisierung, ihr Zeitplan und die Aufgaben, die sie Ihnen überlässt, landen in Ihrem Arbeitsbereich.",
     "searchPlaceholder": "Vorlagen durchsuchen",
@@ -37019,6 +37020,17 @@
     "ssoNotFound": "Diese Adresse nutzt kein Single Sign-on. Melde dich stattdessen mit deinem Passwort an."
   },
   "studio": {
+    "media": {
+      "failedTitle": "Uploads, die Aufmerksamkeit brauchen",
+      "retry": "Erneut versuchen",
+      "retrying": "Wird in Kürze erneut versucht",
+      "quotaFull": "Auf diesem Gerät ist kein Platz mehr für die Medien dieses Arbeitsbereichs. Entferne Medien oder schaffe Speicherplatz und versuche es erneut.",
+      "tooLarge": "Diese Datei ist größer als der Arbeitsbereich erlaubt (10 MB; 100 MB für Video)."
+    },
+    "library": {
+      "availableOffline": "Offline verfügbar",
+      "offlineNotice": "Du bist offline. Es werden die Boards auf diesem Gerät angezeigt."
+    },
     "meta": {
       "title": "Builderforce Studio",
       "description": "Beschreibe eine App, und Studio baut sie, führt sie in deinem Browser aus und veröffentlicht sie."
@@ -38909,6 +38921,23 @@
     "panelResolve": "Korrekturliste",
     "panelSimulate": "Simulieren",
     "panelAgentRuns": "Agentenläufe",
+    "panelDomains": "Domänen",
+    "domainsTitle": "Nach Domäne ordnen",
+    "domainsFolder": "Ordner",
+    "domainsApply": "Auswahl verschieben",
+    "domainsUndo": "Rückgängig",
+    "domainsUnassigned": "Bleiben, wo sie sind",
+    "domainsConflicts": "Übersprungen: Das Ziel existiert bereits",
+    "domainsNew": "neu",
+    "domainsReasonName": "nach Name",
+    "domainsReasonImports": "nach Importen",
+    "domainsReasonTest": "Test seines Moduls",
+    "domainsReasonFolder": "passt zu einem vorhandenen Ordner",
+    "domainsCross": "Verbindungen zwischen Domänen: jetzt {before}, danach {after}",
+    "domainsEmpty": "In diesem Ordner gibt es nichts zu ordnen.",
+    "domainsNotSetUp": "Das Ordnen benötigt die Editor-Erweiterung.",
+    "domainsNote": "Relative Importe werden angepasst. Dokumente, Markdown und Pfad-Aliase nicht.",
+    "domainsDone": "Fertig: {count} Dateien geändert.",
     "viewGraph": "Graph",
     "viewMap": "Mindmap",
     "viewTransit": "Karte",

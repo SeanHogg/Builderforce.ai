@@ -33,6 +33,9 @@ export default [
   // Its rule's own test runs next to it (plain node:test).
   ['check:run-delta-layers', '../../scripts/check-run-delta-layers.mjs'],
   ['check:run-delta-layers-rule', '../../scripts/lib/runDeltaLayers.test.mjs'],
+  // Also repo-level: docs/roadmap/ is data. Ids unique and prefixed by program, dependencies real and acyclic, `blocked`
+  // names a blocker, the execution order cites real ids, every gap-register line is addressable.
+  ['check:roadmap-entries', '../../scripts/check-roadmap-entries.mjs'],
   // Also repo-level: `packages/bfi-web` is a VENDORED wasm-pack build (PRD 34 §4). This
   // holds its bytes to the commit + hashes in its SOURCE.json — no Rust needed — so a
   // hand-edited or half-replaced engine fails here instead of in a browser.

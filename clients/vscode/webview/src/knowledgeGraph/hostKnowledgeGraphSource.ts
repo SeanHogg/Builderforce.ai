@@ -28,7 +28,7 @@ import type {
   ReviewControl, ReviewRequest, ReviewTarget, SourceRange, SourceText, SymbolRecord, SyncStatus, TryRequest, TryResponse,
 } from '@builderforce/knowledge-graph-view';
 import type {
-  KnowledgeCall, KnowledgeCheckReply, KnowledgeEvent, KnowledgeFixPreview, KnowledgeFixResult, KnowledgeHistoryResult, KnowledgeLoadTrace, KnowledgePlanReply, KnowledgeTargetRow,
+  KnowledgeCall, KnowledgeCheckReply, KnowledgeEvent, KnowledgeDomainLayout, KnowledgeFixPreview, KnowledgeFixResult, KnowledgeHistoryResult, KnowledgeLoadTrace, KnowledgePlanReply, KnowledgeTargetRow,
 } from '../../../src/knowledge/knowledgeProtocol';
 import { hostReviewRuns } from './hostReviewRuns';
 import { hostAgentRuns } from './hostAgentRuns';
@@ -251,6 +251,10 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
     applyFix(finding: Finding): Promise<KnowledgeFixResult> {
       try { return t.call<KnowledgeFixResult>({ op: 'applyFix', rootId: rootOfFinding(finding), finding }); } catch (error) { return Promise.reject(error); }
     },
+    // Organize by domain: the host recomputes the layout from its stored graph; the view names a folder and domain ids, never paths.
+    domains: (rootId: string, folder: string) => t.call<KnowledgeDomainLayout>({ op: 'domains', rootId, folder }),
+    organizeDomains: (rootId: string, folder: string, accept: string[]) => t.call<KnowledgeFixResult>({ op: 'organizeDomains', rootId, folder, accept }),
+    undoOrganize: async (rootId: string, fixId: string) => { await t.call({ op: 'undoFix', rootId, fixId }); },
     // The kinds the extension's knip codemod fixes.
     applyFixKinds: ['unused-export', 'unused-file'],
     // The staged fix flow. Each check runs in the extension (the project's own script, or knip's re-scan) and reports as it

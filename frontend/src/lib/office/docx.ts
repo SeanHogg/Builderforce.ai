@@ -396,20 +396,20 @@ async function uploadDocumentMedia(
   const ids = [...new Set([...documentXml.matchAll(/<a:blip\b[^>]*>/g)]
     .map((match) => attribute(match[0], 'r:embed') ?? attribute(match[0], 'r:link'))
     .filter((id): id is string => !!id))].slice(0, MAX_MEDIA_PARTS);
-  const urls: Record<string, string> = {};
-  for (const id of ids) {
+  // Every figure goes up at once: a report with twenty charts is one round of requests, not twenty in a row.
+  const uploaded = await Promise.all(ids.map(async (id): Promise<[string, string] | null> => {
     const target = relationships[id];
     const path = target ? docxPartPath(target) : null;
-    if (!path) continue;
+    if (!path) return null;
     const mimeType = MEDIA_MIME[(path.split('.').pop() ?? '').toLowerCase()];
-    if (!mimeType) continue;
+    if (!mimeType) return null;
     const raw = await archive.read(path);
-    if (!raw?.length || raw.length > MAX_MEDIA_BYTES) continue;
+    if (!raw?.length || raw.length > MAX_MEDIA_BYTES) return null;
     const name = path.split('/').pop() || 'image';
     const url = await upload(new File([raw as unknown as BlobPart], name, { type: mimeType })).catch(() => null);
-    if (url) urls[id] = withDocxRelationship(url, id);
-  }
-  return urls;
+    return url ? [id, withDocxRelationship(url, id)] : null;
+  }));
+  return Object.fromEntries(uploaded.filter((entry): entry is [string, string] => entry !== null));
 }
 
 const HEADER_PART = /^word\/header\d*\.xml$/;

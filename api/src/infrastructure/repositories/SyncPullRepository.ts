@@ -12,9 +12,11 @@
  * `idx_sync_changes_destination_txid (tenant_id, destination_key, txid, seq)`.
  */
 
-import { and, asc, eq, gt, or, sql } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
+import { and, asc, eq, gt, notInArray, or, sql } from 'drizzle-orm';
 import type { SyncChangeRow, SyncPullStore, SyncRecordRow } from '../../application/sync/syncPorts';
-import type { LocalEntityType, LocalRecord } from '../../domain/sync/syncProtocol';
+import { readableBoardIdsSql } from '../../application/creation/sessionMemberSql';
+import { CANVAS_ENTITY_TYPES, type LocalEntityType, type LocalRecord } from '../../domain/sync/syncProtocol';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import type { Db } from '../database/connection';
 import { syncChanges, syncRecords } from '../database/schema/sync';
@@ -52,6 +54,26 @@ const XMIN_AGE_WARN_XIDS = 10_000;
 const XMIN_REPORT_INTERVAL_MS = 60_000;
 let lastXminReportAt = 0;
 
+/**
+ * A Canvas row is only for the people who may READ its board (the tenant is not enough: a board is
+ * shared by explicit membership). The board is the row's own id for a board and `payload.boardId` for
+ * its children; a Canvas row naming no board reads as nobody's. Every other entity passes through.
+ * With no reader the filter is absent (a caller that has no person, such as a migration).
+ */
+function canvasReadableRecords(tenantId: number, readerUserId: string | undefined): SQL | undefined {
+  if (!readerUserId) return undefined;
+  return or(
+    notInArray(syncRecords.entityType, [...CANVAS_ENTITY_TYPES]),
+    sql`CASE WHEN ${syncRecords.entityType} = 'canvas-board' THEN ${syncRecords.clientEntityId} ELSE ${syncRecords.payload} ->> 'boardId' END IN ${readableBoardIdsSql(tenantId, readerUserId)}`,
+  );
+}
+
+/** The same gate over `sync_changes`, whose board lives in the stored record's payload. */
+function canvasReadableChanges(tenantId: number, readerUserId: string | undefined): SQL {
+  if (!readerUserId) return sql`TRUE`;
+  return sql`(${syncChanges.entityType} NOT IN (${sql.join(CANVAS_ENTITY_TYPES.map((type) => sql`${type}`), sql`, `)}) OR CASE WHEN ${syncChanges.entityType} = 'canvas-board' THEN ${syncChanges.clientEntityId} ELSE ${syncChanges.record} -> 'payload' ->> 'boardId' END IN ${readableBoardIdsSql(tenantId, readerUserId)})`;
+}
+
 interface DeltaRow {
   xmin: string;
   xmin_age?: string | number | null;
@@ -79,7 +101,7 @@ export function createSyncPullStore(db: Db, options: { xminWarnAge?: number } = 
       return row && seq !== null ? { txid: String(row.txid), seq } : null;
     },
 
-    async changesAfter(tenantId, destinationKey, after, limit) {
+    async changesAfter(tenantId, destinationKey, after, limit, readerUserId) {
       // ONE statement: the xmin row is always returned (the LEFT JOIN keeps it when the page is
       // empty) and `txid < x.xmin` is evaluated against that very snapshot.
       const result = await db.execute(sql`
@@ -94,6 +116,7 @@ export function createSyncPullStore(db: Db, options: { xminWarnAge?: number } = 
             AND ${syncChanges.destinationKey} = ${destinationKey}
             AND (${syncChanges.txid}, ${syncChanges.seq}) > (${after.txid}::xid8, ${after.seq}::bigint)
             AND ${syncChanges.txid} < x.xmin
+            AND ${canvasReadableChanges(tenantId, readerUserId)}
           ORDER BY ${syncChanges.txid}, ${syncChanges.seq}
           LIMIT ${limit}
         ) c ON true
@@ -119,7 +142,7 @@ export function createSyncPullStore(db: Db, options: { xminWarnAge?: number } = 
       return { rows, xmin };
     },
 
-    async snapshotAfter(tenantId, destinationKey, after, limit): Promise<SyncRecordRow[]> {
+    async snapshotAfter(tenantId, destinationKey, after, limit, readerUserId): Promise<SyncRecordRow[]> {
       const afterKeyset = after
         ? or(
           gt(syncRecords.entityType, after.entityType),
@@ -129,7 +152,7 @@ export function createSyncPullStore(db: Db, options: { xminWarnAge?: number } = 
       const rows = await db
         .select(RECORD_COLUMNS)
         .from(syncRecords)
-        .where(scopedToTenant(syncRecords, tenantId, eq(syncRecords.destinationKey, destinationKey), afterKeyset))
+        .where(scopedToTenant(syncRecords, tenantId, eq(syncRecords.destinationKey, destinationKey), afterKeyset, canvasReadableRecords(tenantId, readerUserId)))
         .orderBy(asc(syncRecords.entityType), asc(syncRecords.clientEntityId))
         .limit(limit);
       return rows.map((row) => ({

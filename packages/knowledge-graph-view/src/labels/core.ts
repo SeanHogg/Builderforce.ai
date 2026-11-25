@@ -58,6 +58,24 @@ export interface CoreLabels extends LoadLabels, ReviewRunLabels {
     panelSimulate: string;
     /** The Agent runs drawer (PRD 46). */
     panelAgentRuns: string;
+    /** The Domains drawer: propose and apply a domain/usage folder layout. */
+    panelDomains: string;
+    domainsTitle: string;
+    domainsFolder: string;
+    domainsApply: string;
+    domainsUndo: string;
+    domainsUnassigned: string;
+    domainsConflicts: string;
+    domainsNew: string;
+    domainsReasonName: string;
+    domainsReasonImports: string;
+    domainsReasonTest: string;
+    domainsReasonFolder: string;
+    domainsCross: string;
+    domainsEmpty: string;
+    domainsNotSetUp: string;
+    domainsNote: string;
+    domainsDone: string;
     viewGraph: string;
     /** The folder mind map. */
     viewMap: string;
@@ -299,6 +317,23 @@ panelApi: 'API',
 panelResolve: 'Fix queue',
 panelSimulate: 'Simulate',
 panelAgentRuns: 'Agent runs',
+panelDomains: 'Domains',
+domainsTitle: 'Organize by domain',
+domainsFolder: 'Folder',
+domainsApply: 'Move selected',
+domainsUndo: 'Undo',
+domainsUnassigned: 'Left where they are',
+domainsConflicts: 'Skipped: the target already exists',
+domainsNew: 'new',
+domainsReasonName: 'by name',
+domainsReasonImports: 'by imports',
+domainsReasonTest: 'test of its module',
+domainsReasonFolder: 'matches an existing folder',
+domainsCross: 'Links across domains: {before} now, {after} after',
+domainsEmpty: 'Nothing to organize in this folder.',
+domainsNotSetUp: 'Organizing needs the editor extension.',
+domainsNote: 'Relative imports are rewritten. Docs, markdown and path aliases are not.',
+domainsDone: 'Done: {count} files changed.',
 viewGraph: 'Graph',
 viewMap: 'Mind map',
 viewTransit: 'Map',

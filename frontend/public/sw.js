@@ -41,6 +41,29 @@ function isOfflineCapable(pathname) {
   return OFFLINE_CAPABLE_ROUTES.some((r) => pathname === r || pathname.startsWith(r + '/'));
 }
 
+// A board held on this device has no server page until it syncs, and a board
+// never opened here has no cached `/studio/<id>` page. One static shell
+// (`/studio/local`, which reads `?board=<id>`) opens any held board offline: it
+// is precached, kept under its BARE path (one entry for every `?board=`), and a
+// `/studio/<uuid>` navigation that has no cached page is redirected to it.
+const DEVICE_BOARD_SHELL = '/studio/local';
+const DEVICE_BOARD_PATH = /^\/studio\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
+function deviceBoardIdOf(pathname) {
+  const match = DEVICE_BOARD_PATH.exec(pathname);
+  return match ? match[1].toLowerCase() : null;
+}
+
+// The shell, when it is cached, as a same-origin redirect to a FIXED path with a
+// regex-constrained id; otherwise `otherwise()` (the offline page, or the server's 5xx).
+function deviceBoardFallback(boardId, otherwise) {
+  return caches.open(PAGES_CACHE)
+    .then((cache) => cache.match(DEVICE_BOARD_SHELL))
+    .then((shell) => (shell
+      ? Response.redirect(self.location.origin + DEVICE_BOARD_SHELL + '?board=' + encodeURIComponent(boardId), 302)
+      : otherwise()));
+}
+
 // Next's client-side navigation fetches a flight payload, not HTML.
 function isRscRequest(request, url) {
   return request.headers.get('RSC') === '1' || url.searchParams.has('_rsc');
@@ -50,21 +73,22 @@ function isRscRequest(request, url) {
 // is cached (clone), so the COOP/COEP headers middleware sets on /studio/* come
 // back verbatim when served from cache. Redirected responses are never stored
 // (a redirected response can't answer a navigation); a 5xx answers from cache
-// when there is one (platform outage), else is passed through.
-function networkFirstWithCache(request, cacheName, fallback) {
+// when there is one (platform outage), else `onServerError(res)` (default: the 5xx
+// itself). `cacheKey` is the entry the response is stored and matched under.
+function networkFirstWithCache(request, cacheName, fallback, cacheKey = request, onServerError = (res) => res) {
   return caches.open(cacheName).then((cache) =>
     fetch(request).then(
       (res) => {
         if (res.ok && !res.redirected) {
-          cache.put(request, res.clone());
+          cache.put(cacheKey, res.clone());
           return res;
         }
         if (res.status >= 500) {
-          return cache.match(request).then((hit) => hit ?? res);
+          return cache.match(cacheKey).then((hit) => hit ?? onServerError(res));
         }
         return res;
       },
-      () => cache.match(request).then((hit) => hit ?? fallback())
+      () => cache.match(cacheKey).then((hit) => hit ?? fallback())
     )
   );
 }
@@ -87,8 +111,13 @@ const PRECACHE_URLS = [
 // ---------------------------------------------------------------------------
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE)
-      .then((cache) => cache.addAll(PRECACHE_URLS).catch(() => { /* non-fatal */ }))
+    Promise.all([
+      caches.open(SHELL_CACHE)
+        .then((cache) => cache.addAll(PRECACHE_URLS).catch(() => { /* non-fatal */ })),
+      // Best effort: a failed shell fetch must not fail the install (it is cached again on the first visit).
+      caches.open(PAGES_CACHE)
+        .then((cache) => cache.add(DEVICE_BOARD_SHELL).catch(() => { /* non-fatal */ })),
+    ])
     // Intentionally no self.skipWaiting() — let the update banner drive activation
   );
 });
@@ -130,7 +159,15 @@ self.addEventListener('fetch', (event) => {
       return;
     }
     if (request.mode === 'navigate') {
-      event.respondWith(networkFirstWithCache(request, PAGES_CACHE, offlinePage));
+      const boardId = deviceBoardIdOf(url.pathname);
+      const isShell = url.pathname === DEVICE_BOARD_SHELL;
+      event.respondWith(networkFirstWithCache(
+        request,
+        PAGES_CACHE,
+        boardId ? () => deviceBoardFallback(boardId, offlinePage) : offlinePage,
+        isShell ? new Request(url.origin + DEVICE_BOARD_SHELL) : request,
+        boardId ? (res) => deviceBoardFallback(boardId, () => res) : undefined,
+      ));
       return;
     }
   }

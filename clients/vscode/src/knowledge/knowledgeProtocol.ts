@@ -18,11 +18,11 @@
  * Types only, plus the frame names: no `vscode`, no React.
  */
 
-import type { PinpointMatchResult, ReplicaState } from "@builderforce/agent-tools/knowledge";
+import type { DomainLayout, PinpointMatchResult, ReplicaState } from "@builderforce/agent-tools/knowledge";
 import type { CallSite, Finding, KEdge, KNode, KnowledgeGraph, ReviewPlan, ReviewFailure, ReviewProgress, ReviewReport, ReviewRun } from "@seanhogg/builderforce-memory/knowledge";
 import type { IndexLevelStatus } from "./indexLevels";
 
-export type { IndexLevelStatus };
+export type { IndexLevelStatus, DomainLayout as KnowledgeDomainLayout };
 
 export const KNOWLEDGE_CALL = "knowledge.call";
 export const KNOWLEDGE_EVENT = "knowledge.event";
@@ -101,6 +101,10 @@ export type KnowledgeCall =
   // Agent-run findings (PRD 46 §3.4): the recent local chats that ran tools, and one run's report.
   | { op: "agentRuns" }
   | { op: "agentRunReport"; id: string; rootId?: string }
+  // Organize by domain: the proposed folder layout of one root-relative folder (read-only; the host recomputes it from the stored graph).
+  | { op: "domains"; rootId: string; folder: string }
+  // Apply it: `accept` names domain ids of the host's OWN recomputed proposal, never paths. Trust-gated; undone by `undoFix`.
+  | { op: "organizeDomains"; rootId: string; folder: string; accept: string[] }
   // First-load triage: the timings of the recent scopes / lastSeen / load / baseline / syncStatus calls and the phase a load is in now.
   | { op: "loadTrace" };
 

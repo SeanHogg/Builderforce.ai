@@ -33274,6 +33274,7 @@
     }
   },
   "templates": {
+    "offlineUnavailable": "Templates need a connection. Boards you already made open offline.",
     "title": "Templates",
     "subtitle": "Packaged starting points that set themselves up. Answer a few questions and a working automation, its schedule and the work it needs from you all land in your workspace.",
     "searchPlaceholder": "Search templates",
@@ -36277,6 +36278,17 @@
     "ssoNotFound": "That address doesn't use single sign-on. Sign in with your password instead."
   },
   "studio": {
+    "media": {
+      "failedTitle": "Uploads that need attention",
+      "retry": "Retry",
+      "retrying": "Will retry shortly",
+      "quotaFull": "This device has no room left for this workspace's media. Remove some media or free space, then try again.",
+      "tooLarge": "That file is larger than the workspace allows (10 MB; 100 MB for video)."
+    },
+    "library": {
+      "availableOffline": "Available offline",
+      "offlineNotice": "You are offline. Showing the boards held on this device."
+    },
     "meta": {
       "title": "Builderforce Studio",
       "description": "Describe an app and Studio builds it, runs it in your browser and publishes it."
@@ -38167,6 +38179,23 @@
     "panelResolve": "Fix queue",
     "panelSimulate": "Simulate",
     "panelAgentRuns": "Agent runs",
+    "panelDomains": "Domains",
+    "domainsTitle": "Organize by domain",
+    "domainsFolder": "Folder",
+    "domainsApply": "Move selected",
+    "domainsUndo": "Undo",
+    "domainsUnassigned": "Left where they are",
+    "domainsConflicts": "Skipped: the target already exists",
+    "domainsNew": "new",
+    "domainsReasonName": "by name",
+    "domainsReasonImports": "by imports",
+    "domainsReasonTest": "test of its module",
+    "domainsReasonFolder": "matches an existing folder",
+    "domainsCross": "Links across domains: {before} now, {after} after",
+    "domainsEmpty": "Nothing to organize in this folder.",
+    "domainsNotSetUp": "Organizing needs the editor extension.",
+    "domainsNote": "Relative imports are rewritten. Docs, markdown and path aliases are not.",
+    "domainsDone": "Done: {count} files changed.",
     "viewGraph": "Graph",
     "viewMap": "Mind map",
     "viewTransit": "Map",

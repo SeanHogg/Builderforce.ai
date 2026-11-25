@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { indexedDB } from 'fake-indexeddb';
 import { afterEach, describe, expect, it } from 'vitest';
-import { BLOB_CAPS, BlobQuotaError, admitBlob, createBlobStore, type BlobStore, type OpfsDirectory } from './blobStore';
+import { ASSET_MAX_BYTES, ASSET_MAX_VIDEO_BYTES } from '@seanhogg/builderforce-brain-embedded';
+import { BLOB_CAPS, BlobQuotaError, admitBlob, createBlobStore, mediaRefusalKey, type BlobStore, type OpfsDirectory } from './blobStore';
 import { uuid } from './boardTestkit';
 
 const open: BlobStore[] = [];
@@ -64,6 +65,25 @@ describe('blob store', () => {
     expect(await store.get('three')).toBeUndefined();
     await store.put('one', bytes(10));
     expect(await store.usage()).toBe(20);
+  });
+
+  it('counts usage per workspace partition: one workspace never uses the room of another', async () => {
+    const store = makeStore({ caps: small });
+    await store.put('a1', bytes(10), { partition: 'tenant-a' });
+    await store.put('a2', bytes(10), { partition: 'tenant-a' });
+    await expect(store.put('a3', bytes(10), { partition: 'tenant-a' })).rejects.toMatchObject({ reason: 'partition-full' });
+    // Another workspace still has its whole partition.
+    await expect(store.put('b1', bytes(10), { partition: 'tenant-b' })).resolves.toMatchObject({ partition: 'tenant-b' });
+    expect(await store.usage('tenant-a')).toBe(20);
+    expect(await store.usage('tenant-b')).toBe(10);
+  });
+
+  it('admits against the limits of the workspace asset store (the device never accepts what the server refuses)', () => {
+    expect(BLOB_CAPS.fileBytes).toBe(ASSET_MAX_BYTES);
+    expect(BLOB_CAPS.videoBytes).toBe(ASSET_MAX_VIDEO_BYTES);
+    expect(mediaRefusalKey(new BlobQuotaError('file-too-large'))).toBe('tooLarge');
+    expect(mediaRefusalKey(new BlobQuotaError('partition-full'))).toBe('quotaFull');
+    expect(mediaRefusalKey(new Error('x'))).toBeUndefined();
   });
 
   it('refuses when the browser says there is no room', async () => {

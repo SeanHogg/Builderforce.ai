@@ -105,6 +105,8 @@ jobs:
       # Runs even when the job is cancelled or times out (the runner's own cleanup is skipped when it is killed
       # outright): end every process the agent's shell user left, drop the checkout's shell-written .git, and give the
       # checkout back to the runner user so the later steps and the job's post-steps never run the agent's files.
+      # fail-open by design: every `|| true` below is best-effort teardown of a user that may already be gone; a
+      # cleanup that aborts half way would leave the checkout owned by the agent, which is the failure this step prevents.
       - name: Clean up the agent's shell user
         if: always()
         run: |

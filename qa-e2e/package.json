@@ -8,7 +8,7 @@
     "pull": "tsx src/pull-tests.ts",
     "test": "playwright test",
     "report": "tsx src/report.ts",
-    "ci": "tsx src/pull-tests.ts && (playwright test; true) && tsx src/report.ts",
+    "ci": "tsx src/pull-tests.ts && (playwright test; code=$?; tsx src/report.ts; exit $code)",
     "explore": "tsx src/explore.ts",
     "canvas:release": "playwright test tests/creation-canvas*.spec.ts",
     "canvas:capacity": "tsx src/canvas-capacity.ts",

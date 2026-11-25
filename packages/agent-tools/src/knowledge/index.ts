@@ -25,6 +25,12 @@ export {
     type RouterFiles,
 } from './facts/resolveFacts.js';
 export { CODE_BADGES, CODE_PACK_ID, ROOT_OUTPUT_HASH_PREFIX, codeFileNode } from './codeNodes.js';
+// Organize by domain: the proposed folder layout of loose files, and the import rewrite that follows their move.
+export {
+    AFFINITY_MIN, DOMAIN_ID, KEEP_AT_ROOT, MAX_VOTE_PASSES, MIN_DOMAIN_SIZE, domainInputOf, proposeDomainLayout, stemOf,
+    type DomainFileEdge, type DomainGroup, type DomainLayout, type DomainLayoutInput, type DomainMove, type DomainReason,
+} from './domainLayout.js';
+export { rewriteRelativeImports } from './importRewrite.js';
 export {
     LAYER_RULE_PREFIX, toDependencyCruiserRules,
     type DependencyCruiserPathMatch, type DependencyCruiserRule,

@@ -57,7 +57,7 @@ async function snapshotPage(
   issuedAt: number,
   limit: number,
 ): Promise<SyncPullResponse> {
-  const rows = await deps.stores.snapshotAfter(deps.auth.tenantId, bound.key, after, limit);
+  const rows = await deps.stores.snapshotAfter(deps.auth.tenantId, bound.key, after, limit, deps.auth.userId);
   const records = rows.map((row) => rowToRecord(row, bound.destination));
   const last = rows[rows.length - 1];
   if (rows.length === limit && last) {
@@ -105,7 +105,7 @@ async function deltaPage(
   if (deltaCursorExpired(cursor, expiryPosition, { now: deps.now, retentionDays: SYNC_CHANGE_RETENTION_DAYS, destinationMin })) {
     return resnapshot();
   }
-  const { rows, xmin } = await deps.stores.changesAfter(tenantId, bound.key, position, limit);
+  const { rows, xmin } = await deps.stores.changesAfter(tenantId, bound.key, position, limit, deps.auth.userId);
   const next = nextDeltaCursor({ rows, limit, prior: position, xmin });
   return page({
     records: rows.map((change) => copyRecord(change.record)),

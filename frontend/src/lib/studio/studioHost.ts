@@ -18,6 +18,40 @@ export function studioSessionPath(sessionId: string): string {
   return `${STUDIO_ROUTE}/${encodeURIComponent(sessionId)}`;
 }
 
+/**
+ * The static page that opens a board HELD ON THIS DEVICE with no server page behind it
+ * (`?board=<id>`): the service worker precaches it and redirects an offline `/studio/<id>`
+ * to it (`public/sw.js` keeps its own copy of this route and of {@link isDeviceBoardId}).
+ */
+export const DEVICE_BOARD_ROUTE = `${STUDIO_ROUTE}/local`;
+export const DEVICE_BOARD_PARAM = 'board';
+
+const DEVICE_BOARD_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A board id the device shell may open: a plain UUID (a legacy `local-<uuid>` is re-keyed first). */
+export function isDeviceBoardId(value: string | null | undefined): value is string {
+  return typeof value === 'string' && DEVICE_BOARD_ID_RE.test(value);
+}
+
+/** The board opened from the device shell (`/studio/local?board=<id>`). */
+export function deviceBoardPath(sessionId: string): string {
+  return `${DEVICE_BOARD_ROUTE}?${DEVICE_BOARD_PARAM}=${encodeURIComponent(sessionId)}`;
+}
+
+/**
+ * Where a link to a board should go: its server page while online, the device shell while
+ * offline (a fresh `/studio/<id>` URL has no cached page, the shell always does). The ONE
+ * rule for every "open this board" link.
+ */
+export function studioBoardHref(sessionId: string, online: boolean): string {
+  return online || !isDeviceBoardId(sessionId) ? studioSessionPath(sessionId) : deviceBoardPath(sessionId);
+}
+
+/** True unless the browser says it is offline (server rendering and unknown count as online). */
+export function isBrowserOnline(): boolean {
+  return typeof navigator === 'undefined' || navigator.onLine !== false;
+}
+
 /** The Studio IDE page for a durable project (legacy links and project-chat deep links). */
 export function studioProjectPath(projectId: number | string): string {
   return `${STUDIO_ROUTE}/project/${projectId}`;

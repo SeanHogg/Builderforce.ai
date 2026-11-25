@@ -472,6 +472,7 @@ jobs:
 
           work=$(mktemp -d)
           cp -R actions/dispatch-agent/. "$work"/
+          # fail-open by design: the mirror ships without a LICENSE copy rather than not at all.
           cp LICENSE "$work"/ 2>/dev/null || true
           cd "$work"
           git init -q
@@ -520,6 +521,8 @@ jobs:
           # Together they prove the route is mounted, discovery works, and tool
           # calls stay behind the challenge server.json documents. Retried
           # because the API deploy this job waits on has only just propagated.
+          # fail-open by design: every `|| true` on a curl below keeps its status code in a variable that the
+          # checks after the loop read, so a transport failure becomes `000` and fails the gate there.
           code=000
           : >body.txt; : >headers.txt; : >curl-error.txt
           for attempt in 1 2 3; do
@@ -545,6 +548,7 @@ jobs:
               exit 0
             fi
             echo "::error::anonymous tools/call answered $call_code, expected 401 — tool calls must stay behind sign-in. Not publishing."
+            # fail-open by design: diagnostics only, the step exits 1 on the next line.
             head -c 2000 call-body.txt || true
             exit 1
           fi
@@ -556,6 +560,7 @@ jobs:
           # whole diagnosis.
           echo "::group::What https://api.builderforce.ai/mcp answered"
           echo "status: $code"
+          # fail-open by design: diagnostics only; the verdict is the status code printed above.
           cat curl-error.txt || true
           cat headers.txt || true
           head -c 2000 body.txt || true
@@ -611,7 +616,7 @@ jobs:
               echo "\`\`\`"
               echo
               echo "Needs a token scoped to the \`builderforce.ai\` zone with Zone Settings:Edit + WAF:Edit."
-              echo "Tracked in \`ROADMAP.md\` → Platform → *Cloudflare serves a managed challenge to every datacenter caller*."
+              echo "Tracked in \`docs/roadmap/GAP-REGISTER.md\` → Infrastructure and cost → *Cloudflare serves a managed challenge to every datacenter caller*."
             } >>"$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -1186,6 +1191,51 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         # GIT_SHA → the frontend's GET /health `commit` (see deploy-api).
         run: wrangler deploy --no-bundle --var "GIT_SHA:${{ github.sha }}"
+
+  # REL-03: the authenticated Playwright suite against what deploy-frontend just shipped. Fail closed: no
+  # continue-on-error, and qa-e2e's `ci` script now exits with Playwright's own status after it has reported.
+  # Needs the BF_QA_EMAIL / BF_QA_PASSWORD secrets (docs/roadmap/OPERATOR-DECISIONS.md); without them this job fails by design.
+  qa-e2e:
+    name: QA end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [plan, deploy-frontend]
+    if: >-
+      ${{ !cancelled() && needs.plan.outputs.frontend == 'true' && github.event_name != 'pull_request'
+      && needs.deploy-frontend.result == 'success' }}
+    env:
+      BF_BASE_URL: https://builderforce.ai
+      BF_API_URL: https://api.builderforce.ai
+      BF_QA_EMAIL: ${{ secrets.BF_QA_EMAIL }}
+      BF_QA_PASSWORD: ${{ secrets.BF_QA_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install qa-e2e
+        working-directory: qa-e2e
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Run the suite
+        working-directory: qa-e2e
+        run: pnpm run ci
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-e2e-report
+          path: qa-e2e/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
 
   deploy-help:
     name: Deploy help

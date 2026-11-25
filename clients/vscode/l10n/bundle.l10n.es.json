@@ -1555,5 +1555,9 @@
   "Ran commands ({count})": "Comandos ejecutados ({count})",
   "Used {tools} ({count})": "Se usó {tools} ({count})",
   "{count} failed": "{count} fallaron",
-  "BuilderForce refused your editor key, so your workspace policy could not be read. Sign in again.": "BuilderForce rechazó tu clave del editor, por lo que no se pudo leer la política de tu espacio de trabajo. Inicia sesión de nuevo."
+  "BuilderForce refused your editor key, so your workspace policy could not be read. Sign in again.": "BuilderForce rechazó tu clave del editor, por lo que no se pudo leer la política de tu espacio de trabajo. Inicia sesión de nuevo.",
+  "\"{0}\" is not a domain of the proposed layout, so nothing was moved.": "«{0}» no es un dominio de la distribución propuesta, así que no se movió nada.",
+  "None of the chosen domains has a file to move.": "Ninguno de los dominios elegidos tiene un archivo que mover.",
+  "That is {0} files to move; the limit is {1}, so nothing was moved.": "Son {0} archivos por mover; el límite es {1}, así que no se movió nada.",
+  "Review this folder first: there is no graph to organize from.": "Revisa primero esta carpeta: no hay un grafo desde el que organizar."
 }

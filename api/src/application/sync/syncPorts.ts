@@ -177,14 +177,18 @@ export interface SyncPullStore {
    * Delta page: this destination's COMMITTED-AND-FINAL changes after `after` in `(txid, seq)`
    * order, at most `limit` — only rows with `txid < xmin`, with that `xmin` returned from the
    * same statement so the caller holds one consistent snapshot.
+   *
+   * `readerUserId` is the person pulling: Canvas rows are returned only for the boards that person may
+   * READ (explicit board membership), every other entity as before. Absent, no board filter applies.
    */
-  changesAfter(tenantId: number, destinationKey: string, after: SyncWatermark, limit: number): Promise<SyncChangePage>;
+  changesAfter(tenantId: number, destinationKey: string, after: SyncWatermark, limit: number, readerUserId?: string): Promise<SyncChangePage>;
   /** Snapshot page: projection rows keyset-paginated by (entityType, clientEntityId). */
   snapshotAfter(
     tenantId: number,
     destinationKey: string,
     after: { entityType: string; clientEntityId: string } | null,
     limit: number,
+    readerUserId?: string,
   ): Promise<SyncRecordRow[]>;
 }
 

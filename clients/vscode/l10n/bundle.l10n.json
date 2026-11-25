@@ -1555,5 +1555,9 @@
   "Ran commands ({count})": "Ran commands ({count})",
   "Used {tools} ({count})": "Used {tools} ({count})",
   "{count} failed": "{count} failed",
-  "BuilderForce refused your editor key, so your workspace policy could not be read. Sign in again.": "BuilderForce refused your editor key, so your workspace policy could not be read. Sign in again."
+  "BuilderForce refused your editor key, so your workspace policy could not be read. Sign in again.": "BuilderForce refused your editor key, so your workspace policy could not be read. Sign in again.",
+  "\"{0}\" is not a domain of the proposed layout, so nothing was moved.": "\"{0}\" is not a domain of the proposed layout, so nothing was moved.",
+  "None of the chosen domains has a file to move.": "None of the chosen domains has a file to move.",
+  "That is {0} files to move; the limit is {1}, so nothing was moved.": "That is {0} files to move; the limit is {1}, so nothing was moved.",
+  "Review this folder first: there is no graph to organize from.": "Review this folder first: there is no graph to organize from."
 }

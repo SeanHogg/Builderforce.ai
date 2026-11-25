@@ -37,7 +37,7 @@ import {
   convertDiagramSource, convertGraph, diagramNotation, notationForFileName,
   type DiagramConversion, type DiagramNotation,
 } from '@/lib/diagramNotations';
-import type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
+import type { CanvasVideoCaptureKind, CreationObjectKind } from '@builderforce/creation-canvas-contract';
 import { diagramGraphStats } from '@/lib/diagramGraph';
 
 /** Text attachments Brain can read directly once they are on the canvas. */
@@ -156,6 +156,25 @@ export const fileToDataUrl = dataUrl;
  */
 export type AttachmentBytesReference = { sourceFileKey: string } | { sourceDataUrl: string };
 export type AttachmentBytesStrategy = (file: File) => Promise<AttachmentBytesReference | null>;
+
+/**
+ * Where a dropped or pasted file's BYTES go: this device's blob store (`storeCanvasMedia`), which hands
+ * back the `media:<id>` URL the object carries until the upload queue replaces it. A port, so the
+ * application layer imports no infrastructure; it may throw (a storage cap), and the caller tells the person.
+ * No byte of a file is ever written into a board as a data URL.
+ */
+export type CanvasMediaSink = (file: File, kind: CanvasVideoCaptureKind) => Promise<{ url: string }>;
+
+/** What an import may be handed besides the file: the sink for its bytes, and the docx figure uploader. */
+export interface ImportMediaOptions {
+  mediaSink?: CanvasMediaSink;
+  uploadMedia?: DocxMediaUploader;
+}
+
+/** The URL a file's bytes are held under, or null when the caller gave no sink (the object then carries no copy of them). */
+async function heldUrl(file: File, media: ImportMediaOptions): Promise<string | null> {
+  return media.mediaSink ? (await media.mediaSink(file, 'import')).url : null;
+}
 
 /**
  * Where a figure extracted from a dropped `.docx` goes when the caller named no
@@ -457,9 +476,9 @@ export async function importCanvasFile(
   file: File,
   t: ImportTranslator,
   retainAttachmentBytes?: AttachmentBytesStrategy,
-  uploadMedia?: DocxMediaUploader,
+  media: ImportMediaOptions = {},
 ): Promise<CanvasFileImport> {
-  const objects = await deriveObjects(file, t, retainAttachmentBytes, uploadMedia);
+  const objects = await deriveObjects(file, t, retainAttachmentBytes, media);
   const resolved = objects.length ? objects : [attachmentObject(file, t)];
   return {
     objects: resolved,
@@ -472,7 +491,7 @@ async function deriveObjects(
   file: File,
   t: ImportTranslator,
   retainAttachmentBytes?: AttachmentBytesStrategy,
-  uploadMedia?: DocxMediaUploader,
+  media: ImportMediaOptions = {},
 ): Promise<ImportedCanvasObject[]> {
   const extension = fileExtension(file.name);
   const oversized = file.size > MAX_PARSEABLE_BYTES;
@@ -496,7 +515,7 @@ async function deriveObjects(
   }
 
   if (file.type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif'].includes(extension)) {
-    const url = await dataUrl(file);
+    const url = await heldUrl(file, media);
     return [{
       kind: 'image',
       data: {
@@ -518,7 +537,7 @@ async function deriveObjects(
   const meshFormat = !oversized ? meshFormatFromHint(file.name) : null;
   if (meshFormat) {
     const triangles = parseMeshTriangles(await file.arrayBuffer(), meshFormat);
-    const url = await dataUrl(file);
+    const url = triangles.length ? await heldUrl(file, media) : null;
     const preview = triangles.length ? meshPreviewSvg(triangles) : null;
     if (url && triangles.length) {
       return [{
@@ -547,7 +566,7 @@ async function deriveObjects(
   if (!oversized && extension === 'dxf') {
     const source = await file.text();
     const preview = dxfPreviewSvg(source);
-    const url = await dataUrl(file);
+    const url = preview ? await heldUrl(file, media) : null;
     if (preview && url) {
       return [{
         kind: 'cad',
@@ -571,7 +590,7 @@ async function deriveObjects(
   try {
     if (!oversized && extension === 'docx') {
       const read = await readDocx(await bytes(file), {
-        uploadMedia: uploadMedia ?? defaultMediaUploader,
+        uploadMedia: media.uploadMedia ?? defaultMediaUploader,
         labels: { pageFurniture: t('docxPageFurniture'), header: t('docxHeader'), footer: t('docxFooter') },
       });
       if (read?.markdown) {

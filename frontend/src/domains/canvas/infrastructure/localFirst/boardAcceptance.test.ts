@@ -124,7 +124,7 @@ describe('studio local-first acceptance (library level)', () => {
     expect(mapping?.serverVersion).toBe(1);
 
     const queue = createMediaUploadQueue({
-      ctx, blobs, canUpload: () => true,
+      ctx, blobs, activeTenantId: () => 'tenant-1',
       upload: async () => ({ url: 'https://files.example/k1', storageKey: 'tenant/private/media/k1' }),
     });
     expect((await queue.drain()).uploaded).toEqual([photo.mediaId]);

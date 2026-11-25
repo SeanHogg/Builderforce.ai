@@ -18,7 +18,7 @@ import type { Finding } from "@seanhogg/builderforce-memory/knowledge";
 import { sourcePathOf } from "@builderforce/agent-tools/knowledge";
 import { ExportRemovalRefusal } from "@builderforce/agent-tools/node-symbols";
 import { PathRefusal } from "./knowledgeFixPaths";
-import { applyCodemod, exportNameOf, isFixableKind, nodeFixPorts, serialized, type FixPorts } from "./knowledgeFixes";
+import { applyCodemod, applyPlanned, exportNameOf, fixBranchName, isFixableKind, nodeFixPorts, serialized, type FixPorts } from "./knowledgeFixes";
 import { execCheck, resolveCheck } from "./knowledgeFixSteps";
 import { fixText } from "./knowledgeFixText";
 import { undoSnapshot, UndoPartial, type FixSnapshot } from "./knowledgeFixUndo";
@@ -105,11 +105,27 @@ export class KnowledgeFixSession {
     this.gate();
     await this.allowScripts(rootId);
     this.forgetPreviews(rootId);
-    return applyCodemod(this.host.fixPorts(rootPath), rootId, finding, (snapshot) => {
+    return applyCodemod(this.host.fixPorts(rootPath), rootId, finding, this.recorder(rootId)).catch((error: unknown) => { throw worded(error); });
+  }
+
+  /**
+   * Organize by domain: runs `moves` (git moves and the import rewrites) over exactly the `wanted` paths, under the
+   * same trust gate, clean-tree guard, fix branch and undo record as a codemod. It runs no project script, so it asks nothing.
+   */
+  async applyMoves(rootId: string, rootPath: string, folder: string, wanted: ReadonlySet<string>, moves: (ports: FixPorts) => Promise<void>): Promise<KnowledgeFixResult> {
+    this.gate();
+    this.forgetPreviews(rootId);
+    const branch = fixBranchName({ id: `domains:${folder}`, kind: "organize-domains" }, wanted, new Date());
+    return applyPlanned(this.host.fixPorts(rootPath), rootId, wanted, branch, moves, this.recorder(rootId)).catch((error: unknown) => { throw worded(error); });
+  }
+
+  /** Stores a fix's snapshot and returns the id undo takes. */
+  private recorder(rootId: string): (snapshot: FixSnapshot) => string {
+    return (snapshot) => {
       const fixId = randomUUID();
       this.records.set(fixId, { rootId, snapshot });
       return fixId;
-    }).catch((error: unknown) => { throw worded(error); });
+    };
   }
 
   /** Reverts a recorded fix. An id is spent when the undo succeeds; a refused undo (diverged files) can be retried after the person sorts it out. */

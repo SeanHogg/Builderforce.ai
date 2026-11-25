@@ -24,7 +24,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const ROADMAP = path.resolve('..', 'ROADMAP.md');
+const GAP_REGISTER_FILE = 'GAP-REGISTER.md';
+const GAP_REGISTER = path.resolve('..', 'docs', 'roadmap', GAP_REGISTER_FILE);
 const sourceRoot = path.resolve('src');
 
 const testFiles = [];
@@ -53,9 +54,9 @@ for (const filePath of testFiles) {
 
 let roadmap = '';
 try {
-  roadmap = fs.readFileSync(ROADMAP, 'utf8');
+  roadmap = fs.readFileSync(GAP_REGISTER, 'utf8');
 } catch {
-  console.error(`check-pinned-defects: cannot read ${ROADMAP}. The gap register is the ledger for pinned defects.`);
+  console.error(`check-pinned-defects: cannot read ${GAP_REGISTER}. The gap register is the ledger for pinned defects.`);
   process.exit(1);
 }
 
@@ -63,8 +64,8 @@ const problems = [];
 for (const p of pinned) {
   if (!roadmap.includes(p.file)) {
     problems.push(
-      `${p.rel} pins ${p.count} known-broken invariant(s) with \`it.fails\`, but ROADMAP.md's `
-      + `Consolidated Gap Register never names \`${p.file}\`. Add an entry stating the defect, `
+      `${p.rel} pins ${p.count} known-broken invariant(s) with \`it.fails\`, but ${GAP_REGISTER_FILE} `
+      + `never names \`${p.file}\`. Add an entry stating the defect, `
       + 'the evidence, and the blocker — a pinned defect that is not on the register is an '
       + 'untracked one.',
     );
@@ -89,7 +90,7 @@ for (const line of roadmap.split(/\r?\n/)) {
     if (pinnedNames.has(name)) continue;
     if (!testFiles.some((f) => path.basename(f) === name)) continue; // file gone entirely
     problems.push(
-      `ROADMAP.md still cites \`${name}\` as PINNING a defect, but that file has no \`it.fails\` `
+      `${GAP_REGISTER_FILE} still cites \`${name}\` as PINNING a defect, but that file has no \`it.fails\` `
       + 'left — the defect was fixed and the register entry was not moved to DONE.md.',
     );
   }

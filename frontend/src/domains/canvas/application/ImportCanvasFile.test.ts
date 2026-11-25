@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { importCanvasFile, type ImportTranslator } from './ImportCanvasFile';
 import { PAGE_BREAK_MARKER } from '@/lib/officeFormats';
 import { zipFiles } from '@/lib/zipFiles';
@@ -285,5 +285,24 @@ describe('HTML files land as documents, not as source code', () => {
     const file = new File(['export const a = 1;\n'], 'a.ts', { type: 'text/plain' });
     const result = await importCanvasFile(file, t);
     expect(result.objects[0]!.kind).toBe('code');
+  });
+
+  it('hands a dropped image to the media sink and carries the media URL, never a data URL', async () => {
+    const sink = vi.fn(async () => ({ url: 'media:11111111-1111-4111-8111-111111111111' }));
+    const result = await importCanvasFile(new File([new Uint8Array([1, 2, 3])], 'p.png', { type: 'image/png' }), t, undefined, { mediaSink: sink });
+    expect(sink).toHaveBeenCalledWith(expect.any(File), 'import');
+    expect(result.objects[0]).toMatchObject({ kind: 'image', data: { thumbnailUrl: 'media:11111111-1111-4111-8111-111111111111', outputUrl: 'media:11111111-1111-4111-8111-111111111111' } });
+    expect(JSON.stringify(result.objects)).not.toContain('data:');
+  });
+
+  it('writes no bytes into the object when no sink is given', async () => {
+    const result = await importCanvasFile(new File([new Uint8Array([1, 2, 3])], 'p.png', { type: 'image/png' }), t);
+    expect(result.objects[0]!.data).not.toHaveProperty('outputUrl');
+    expect(JSON.stringify(result.objects)).not.toContain('data:');
+  });
+
+  it('lets a storage refusal reach the caller, so the person is told why', async () => {
+    const sink = vi.fn(async () => { throw new Error('quota-exceeded: partition-full'); });
+    await expect(importCanvasFile(new File([new Uint8Array([1])], 'p.png', { type: 'image/png' }), t, undefined, { mediaSink: sink })).rejects.toThrow('quota-exceeded');
   });
 });

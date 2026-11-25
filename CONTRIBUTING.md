@@ -166,7 +166,7 @@ This shipped five times, most expensively in `kanban/signoffRequest.ts` — the 
 
 ### 6. Pin a defect you are not fixing — never park it
 
-`it.fails` states the invariant, keeps the suite green while the defect is open, and turns it RED the moment someone fixes it. That is strictly better than deleting the test or writing a comment. It is also a failing assertion that CI reports as success, so: every `it.fails` must be named in ROADMAP.md's Consolidated Gap Register, and fixing it flips the test to a plain `it` and moves the entry to `DONE.md`. Both directions are enforced by `api/scripts/check-pinned-defects.mjs`.
+`it.fails` states the invariant, keeps the suite green while the defect is open, and turns it RED the moment someone fixes it. That is strictly better than deleting the test or writing a comment. It is also a failing assertion that CI reports as success, so: every `it.fails` must be named in `docs/roadmap/GAP-REGISTER.md`, and fixing it flips the test to a plain `it` and moves the entry to `DONE.md`. Both directions are enforced by `api/scripts/check-pinned-defects.mjs`.
 
 ### 7. Verify a new test by breaking the code
 

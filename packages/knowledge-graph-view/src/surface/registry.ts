@@ -30,6 +30,8 @@ export interface SurfaceEnv {
     hasRun?: boolean;
     /** The source records agent runs (`source.agentRuns`), so the Agent runs drawer has something to show. */
     hasAgentRuns?: boolean;
+    /** The source proposes and applies a domain layout (`source.domains`, `source.organizeDomains`), so the Domains drawer has something to do. */
+    hasDomains?: boolean;
 }
 
 /** Everything a camera is handed; a camera takes what it draws from here. */

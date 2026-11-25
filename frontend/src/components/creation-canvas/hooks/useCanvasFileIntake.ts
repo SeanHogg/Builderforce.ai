@@ -6,10 +6,12 @@ import type { CreationNodeData, CreationObjectKind } from '../types';
 import { IMPORT_COLUMN_GAP, IMPORT_ROW_GAP, MAX_DROPPED_FILES, nextPaint } from '../canvasFileDrop';
 import { newNode } from '../canvasNodeHelpers';
 import { useCanvasImportTranslation } from './useCanvasImportTranslation';
-import { type AttachmentBytesStrategy, type ImportedCanvasObject, importCanvasFile } from '@/domains/canvas/application/ImportCanvasFile';
+import { type AttachmentBytesStrategy, type CanvasMediaSink, type ImportedCanvasObject, importCanvasFile } from '@/domains/canvas/application/ImportCanvasFile';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 import { trackActivity } from '@/lib/activity/tracker';
+import { useTranslations as useIntl } from 'next-intl';
 import type { useTranslations } from 'next-intl';
+import { mediaRefusalKey } from '@/domains/canvas/infrastructure/localFirst/blobStore';
 import type { Edge, ReactFlowInstance } from '@xyflow/react';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
@@ -38,6 +40,7 @@ export interface UseCanvasFileIntakeDeps {
 
 export function useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canEdit, flowRef, importLabel, journalRef, openBrainDock, placeAppendedRef, seatTeammate, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, stageActive, t }: UseCanvasFileIntakeDeps) {
   // The "Translate to <locale>" offer for each imported document (PRD 42 · E2).
+  const mediaT = useIntl('studio.media');
   const importTranslation = useCanvasImportTranslation(setNodes, placeAppendedRef);
   const { offerFor: onImported } = importTranslation;
   // The keyboard half of §3.3. Only the board actually on the stage answers —
@@ -68,6 +71,11 @@ export function useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canE
    * there as an icon.
    */
   const addFilesToCanvas = useCallback(async (files: File[], origin?: { x: number; y: number }, source = 'canvas_drop') => {
+    // Dropped and pasted bytes go to this device's blob store (and the upload queue), never into the board as a data URL.
+    const mediaSink: CanvasMediaSink = async (file, kind) => {
+      const { storeCanvasMedia } = await import('@/lib/canvasMediaStore');
+      return storeCanvasMedia(file, kind, sessionId);
+    };
     if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
     if (!files.length) return;
     const start = origin ?? flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 300 };
@@ -111,7 +119,7 @@ export function useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canE
       // explains why the agent could not read it.
       const importDone = journalRef.current.begin('user', 'file.import', `${file.name} · ${Math.max(1, Math.round(file.size / 1024))}KB`);
       try {
-        const imported = await importCanvasFile(file, importLabel, attachmentBytesStrategy);
+        const imported = await importCanvasFile(file, importLabel, attachmentBytesStrategy, { mediaSink });
         const [first, ...rest] = imported.objects;
         if (!first) throw new Error('The file produced no object');
         importDone({ ok: true, detail: `→ ${imported.objects.map((object) => object.kind).join(', ')}` });
@@ -141,7 +149,9 @@ export function useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canE
         setNodes((current) => current.map((node) => node.id === stub.id
           ? { ...node, data: { ...node.data, status: importLabel('statusUnreadable'), importPending: false } as CreationNodeData }
           : node));
-        notices.push(importLabel('failed', { name: file.name }));
+        // A storage refusal says WHY (too large for the workspace, or this device is full); anything else is the generic failure.
+        const refusal = mediaRefusalKey(error);
+        notices.push(refusal ? mediaT(refusal) : importLabel('failed', { name: file.name }));
       }
       // Each file's result paints before the next one takes the thread back.
       await nextPaint();
@@ -151,7 +161,7 @@ export function useCanvasFileIntake({ addAtCenter, attachmentBytesStrategy, canE
     // Never overwrite something the person is part-way through typing.
     if (suggestion) setPrompt((current) => current.trim() ? current : suggestion);
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds, source } });
-  }, [attachmentBytesStrategy, canEdit, flowRef, importLabel, journalRef, onImported, openBrainDock, placeAppendedRef, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, t]);
+  }, [attachmentBytesStrategy, canEdit, flowRef, importLabel, journalRef, mediaT, onImported, openBrainDock, placeAppendedRef, sessionId, setNodes, setNotice, setPrompt, setSelectedId, setSelectedIds, t]);
 
   const attachCanvasArtifact = useCallback(
     (file: File) => addFilesToCanvas([file], undefined, 'composer_attachment'),

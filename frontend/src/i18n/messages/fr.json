@@ -34016,6 +34016,7 @@
     }
   },
   "templates": {
+    "offlineUnavailable": "Les modèles nécessitent une connexion. Les tableaux déjà créés s'ouvrent hors ligne.",
     "title": "Modèles",
     "subtitle": "Des points de départ prêts à l’emploi qui se configurent seuls. Répondez à quelques questions et une automatisation opérationnelle, son planning et les tâches qu’elle vous confie arrivent dans votre espace.",
     "searchPlaceholder": "Rechercher un modèle",
@@ -37019,6 +37020,17 @@
     "ssoNotFound": "Cette adresse n’utilise pas l’authentification unique. Connectez-vous plutôt avec votre mot de passe."
   },
   "studio": {
+    "media": {
+      "failedTitle": "Envois nécessitant votre attention",
+      "retry": "Réessayer",
+      "retrying": "Nouvelle tentative sous peu",
+      "quotaFull": "Cet appareil n'a plus de place pour les médias de cet espace de travail. Supprimez des médias ou libérez de l'espace, puis réessayez.",
+      "tooLarge": "Ce fichier dépasse la taille autorisée par l'espace de travail (10 Mo ; 100 Mo pour la vidéo)."
+    },
+    "library": {
+      "availableOffline": "Disponible hors ligne",
+      "offlineNotice": "Vous êtes hors ligne. Les tableaux conservés sur cet appareil sont affichés."
+    },
     "meta": {
       "title": "Builderforce Studio",
       "description": "Décrivez une application et Studio la crée, l’exécute dans votre navigateur et la publie."
@@ -38909,6 +38921,23 @@
     "panelResolve": "File de corrections",
     "panelSimulate": "Simuler",
     "panelAgentRuns": "Exécutions d'agents",
+    "panelDomains": "Domaines",
+    "domainsTitle": "Organiser par domaine",
+    "domainsFolder": "Dossier",
+    "domainsApply": "Déplacer la sélection",
+    "domainsUndo": "Annuler",
+    "domainsUnassigned": "Restent où ils sont",
+    "domainsConflicts": "Ignoré : la cible existe déjà",
+    "domainsNew": "nouveau",
+    "domainsReasonName": "par nom",
+    "domainsReasonImports": "par imports",
+    "domainsReasonTest": "test de son module",
+    "domainsReasonFolder": "correspond à un dossier existant",
+    "domainsCross": "Liens entre domaines : {before} maintenant, {after} après",
+    "domainsEmpty": "Rien à organiser dans ce dossier.",
+    "domainsNotSetUp": "L'organisation nécessite l'extension de l'éditeur.",
+    "domainsNote": "Les imports relatifs sont réécrits. Les documents, le markdown et les alias de chemin ne le sont pas.",
+    "domainsDone": "Terminé : {count} fichiers modifiés.",
     "viewGraph": "Graphe",
     "viewMap": "Carte mentale",
     "viewTransit": "Carte",

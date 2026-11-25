@@ -1,3 +1,19 @@
+## ✅ RESOLVED 2026-11-25 — Studio media isolation and recovery, and the project link on offline creation (WC-G008 in part, WC-G010)
+
+- **Media is scoped to the workspace.** `mediaUploadQueue` takes `activeTenantId` and only uploads media whose destination is that workspace. It re-checks before the request and before it writes the result, and `uploadCanvasFile(file, { tenantId })` throws `tenant_switched` when the stored tenant differs. The blob store counts usage per workspace partition (`put(id, blob, { partition })`; rows from before partitions count against every partition).
+- **One size rule.** `ASSET_MAX_BYTES` (10 MiB) and `ASSET_MAX_VIDEO_BYTES` (100 MiB) are exported from brain-embedded and are the blob store's caps. The API's `tenantAssetStore.ts` keeps its own copy of the two numbers (api does not depend on brain-embedded); a comment names the pair.
+- **Failures are visible and recoverable.** A failed upload waits `30 s × 2^(n-1)` up to 30 min (`nextAttemptAt`, never synced). After five attempts it is `failed`; `BoardMediaIssues` lists failed and backing-off items with a Retry, and drop/paste intake tells the person when a file is too large or the device is full (`studio.media.*`, five locales).
+- **Dropped and pasted media goes through the blob store.** `importCanvasFile` takes `{ mediaSink }`; images, meshes and DXF files carry `media:<id>`, never a data URL. DOCX figures now upload in parallel.
+- **Project link survives offline creation.** `createLocalCreationSession('', undefined, project)` seeds a project card (`projectCardObject`, `project:<id>`) that syncs as an ordinary object; the API already checks it (`validateResourceAccess`: tenant, segment). The server-first branch and the `projectTieDropped` message are gone from `SessionList.tsx`, and the device list matches boards to the project from their cards (`projectTiesByBoard`, one scan).
+- **Pull reads respect board membership.** `SyncPullStore` takes the reader; Canvas rows come back only for boards the caller may read (`readableBoardIdsSql`).
+- Covered by: frontend `localFirst` and canvas suites (428 tests), `SessionList` 5, `ImportCanvasFile` 28 with the project card tests; API `SyncRepository` and `handleSyncPull` 34 (plus 1 new handler test). Typechecks: api clean; frontend and brain-embedded show only errors in `codeScanner.ts` and `code-shield/signatures.ts`, which this change does not touch.
+
+## ✅ RESOLVED 2026-11-25 — Roadmap restructured into ten programs; `qa-e2e` job added (REL-03, blocked on QA secrets)
+
+- **Roadmap.** `ROADMAP.md` is the executive summary; the ten programs, entry registers and dispositions are in `docs/roadmap/`. Every line of the previous gap register is in `docs/roadmap/GAP-REGISTER.md` with a program ID. `scripts/check-roadmap-entries.mjs` runs in `api`'s `npm test`.
+- **REL-03.** `release.yml` has a `qa-e2e` job after `deploy-frontend`. Not yet run in Actions: it needs the `BF_QA_EMAIL` / `BF_QA_PASSWORD` secrets (`docs/roadmap/OPERATOR-DECISIONS.md`).
+- **REL-04 (part).** `qa-e2e`'s `ci` script exits with Playwright's status after reporting instead of swallowing it. The remaining `|| true` and `continue-on-error` lines each carry a stated reason; the VS Code publish `|| echo` is still open (`REL-G003`).
+
 ## ✅ RESOLVED 2026-11-25 — Web Container: models and the manifest tools reach the agents' services
 
 - **A (`ai` resource in manifest v1).** The `ai` resource (`{ type: "ai", models?: string[] }`) is in the schema, validator, `toApplicationSpec` and the capability matrix; an agent service stays `role: "backend"` with `uses`. No role `agent`.

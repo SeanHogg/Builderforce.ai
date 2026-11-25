@@ -312,6 +312,13 @@ describe('handleSyncPull — request and destination checks', () => {
     expect(snapshotAfter.mock.calls[0]?.[3]).toBe(500);
   });
 
+  it('names the authenticated person to the stores, so Canvas rows are filtered to the boards they may read', async () => {
+    const h = harness();
+    const snapshotAfter = vi.spyOn(h.stores, 'snapshotAfter');
+    await h.pull({ destination: A, limit: 10 });
+    expect(snapshotAfter.mock.calls[0]?.[4]).toBe(AUTH.userId);
+  });
+
   it('lets any member read, and refuses a project the tenant does not own', async () => {
     const stores = createMemorySyncStores({ importers: IMPORTERS, references: { projectInTenant: async () => false } });
     const viewer = { ...AUTH, role: 'viewer' };

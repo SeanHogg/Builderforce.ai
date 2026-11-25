@@ -32,6 +32,11 @@ export const fixText = {
   rescanStill: (files: string): string => t("knip still reports: {0}", files),
   // the codemod
   noAutomaticFix: (kind: string): string => t("There is no automatic fix for \"{0}\".", kind),
+  // organize by domain
+  domainUnknown: (id: string): string => t("\"{0}\" is not a domain of the proposed layout, so nothing was moved.", id),
+  domainsNoGraph: (): string => t("Review this folder first: there is no graph to organize from."),
+  domainsNothing: (): string => t("None of the chosen domains has a file to move."),
+  domainsTooMany: (count: number, max: number): string => t("That is {0} files to move; the limit is {1}, so nothing was moved.", count, max),
   noFileOfFolder: (): string => t("The finding names no file of this folder."),
   noCommit: (): string => t("This repository has no commit yet, so a fix cannot be undone safely. Make a first commit, then try again."),
   statusUnreadable: (): string => t("Git status could not be read, so nothing was changed."),

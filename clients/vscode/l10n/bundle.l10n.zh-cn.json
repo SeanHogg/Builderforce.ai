@@ -1555,5 +1555,9 @@
   "Ran commands ({count})": "运行了命令（{count}）",
   "Used {tools} ({count})": "使用了 {tools}（{count}）",
   "{count} failed": "{count} 次失败",
-  "BuilderForce refused your editor key, so your workspace policy could not be read. Sign in again.": "BuilderForce 拒绝了你的编辑器密钥，因此无法读取你的工作区策略。请重新登录。"
+  "BuilderForce refused your editor key, so your workspace policy could not be read. Sign in again.": "BuilderForce 拒绝了你的编辑器密钥，因此无法读取你的工作区策略。请重新登录。",
+  "\"{0}\" is not a domain of the proposed layout, so nothing was moved.": "“{0}”不是建议布局中的领域，因此未移动任何内容。",
+  "None of the chosen domains has a file to move.": "所选领域中没有可移动的文件。",
+  "That is {0} files to move; the limit is {1}, so nothing was moved.": "共有 {0} 个文件需要移动；上限为 {1}，因此未移动任何内容。",
+  "Review this folder first: there is no graph to organize from.": "请先审查此文件夹：没有可用于整理的图。"
 }

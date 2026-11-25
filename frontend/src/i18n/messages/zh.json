@@ -34016,6 +34016,7 @@
     }
   },
   "templates": {
+    "offlineUnavailable": "模板需要网络连接。已创建的画布可离线打开。",
     "title": "模板",
     "subtitle": "可自行完成配置的现成起点。回答几个问题，一套可运行的自动化流程、它的执行计划以及需要你处理的事项就会一并进入你的工作区。",
     "searchPlaceholder": "搜索模板",
@@ -37019,6 +37020,17 @@
     "ssoNotFound": "该地址未使用单点登录。请改用密码登录。"
   },
   "studio": {
+    "media": {
+      "failedTitle": "需要处理的上传",
+      "retry": "重试",
+      "retrying": "稍后将重试",
+      "quotaFull": "此设备没有足够空间存放该工作区的媒体。请删除部分媒体或释放空间后重试。",
+      "tooLarge": "该文件超过工作区允许的大小（10 MB；视频 100 MB）。"
+    },
+    "library": {
+      "availableOffline": "可离线使用",
+      "offlineNotice": "你已离线。正在显示此设备上保存的画布。"
+    },
     "meta": {
       "title": "Builderforce Studio",
       "description": "描述一个应用，Studio 会构建它、在你的浏览器中运行并发布。"
@@ -38909,6 +38921,23 @@
     "panelResolve": "待修复队列",
     "panelSimulate": "模拟",
     "panelAgentRuns": "智能体运行",
+    "panelDomains": "领域",
+    "domainsTitle": "按领域整理",
+    "domainsFolder": "文件夹",
+    "domainsApply": "移动所选",
+    "domainsUndo": "撤销",
+    "domainsUnassigned": "保留原位",
+    "domainsConflicts": "已跳过：目标已存在",
+    "domainsNew": "新",
+    "domainsReasonName": "按名称",
+    "domainsReasonImports": "按导入",
+    "domainsReasonTest": "其模块的测试",
+    "domainsReasonFolder": "匹配现有文件夹",
+    "domainsCross": "跨领域链接：现在 {before}，之后 {after}",
+    "domainsEmpty": "此文件夹中没有可整理的内容。",
+    "domainsNotSetUp": "整理需要编辑器扩展。",
+    "domainsNote": "相对导入会被改写；文档、Markdown 和路径别名不会。",
+    "domainsDone": "完成：已更改 {count} 个文件。",
     "viewGraph": "图谱",
     "viewMap": "思维导图",
     "viewTransit": "线路图",

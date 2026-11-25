@@ -54,6 +54,7 @@ function panelGlyph(id: string): ReactNode {
     if (id === 'patterns') return <Glyph><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3zM9 9h4v4H9z" /></Glyph>;
     if (id === 'api') return <Glyph><path d="M6 3c-1 0-1.5.5-1.5 1.5v2C4.5 7.5 4 8 3 8c1 0 1.5.5 1.5 1.5v2C4.5 12.5 5 13 6 13M10 3c1 0 1.5.5 1.5 1.5v2c0 1 .5 1.5 1.5 1.5-1 0-1.5.5-1.5 1.5v2c0 1-.5 1.5-1.5 1.5" /></Glyph>;
     if (id === 'agentRuns') return <Glyph><rect x="3.5" y="5.5" width="9" height="7" rx="1.5" /><path d="M8 5.5V3.3M6 8.5v1M10 8.5v1" /><circle cx="8" cy="2.5" r="0.8" /></Glyph>;
+    if (id === 'domains') return <Glyph><path d="M2.5 4.5c0-.6.4-1 1-1h3l1.5 1.5h4.5c.6 0 1 .4 1 1v5.5c0 .6-.4 1-1 1h-9c-.6 0-1-.4-1-1z" /></Glyph>;
     if (id === 'run') return <Glyph><path d="M6 4.5v7l6-3.5-6-3.5z" /></Glyph>;
     return <Glyph><path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h10v4H3z" /></Glyph>;
 }
