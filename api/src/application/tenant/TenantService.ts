@@ -13,7 +13,7 @@ import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
 import type { PaymentProvider, WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
 import { PLAN_LIMITS } from '../../domain/tenant/PlanLimits';
 import { SEAT_KIND, type SeatKind } from '../../domain/tenant/SeatKind';
-import { membershipChanged } from './membershipChanged';
+import { membershipChanged, type MembershipChange } from './membershipChanged';
 import type { Env } from '../../env';
 import { invalidateTenantPlan } from './tenantPlanCache';
 import { tenantRoleForListing } from './tenantRoles';
@@ -54,9 +54,9 @@ export class TenantService {
   }
 
   /** Every membership use case ends here — see `membershipChanged`. */
-  private async announceMembership(tenantId: number, userIds: readonly string[] = []): Promise<void> {
+  private async announceMembership(tenantId: number, userIds: readonly string[], change: MembershipChange): Promise<void> {
     if (!this.env) return;
-    await membershipChanged(this.env, tenantId, userIds);
+    await membershipChanged(this.env, tenantId, userIds, change);
   }
 
   static readonly PRICING = {
@@ -170,7 +170,7 @@ export class TenantService {
     // A workspace's FIRST member is created here, inside provisioning — which is
     // why "there is no insert(tenantMembers) outside the demo seeder" was true
     // and the roster still went stale.
-    await this.announceMembership(saved.id as number, [dto.ownerUserId]);
+    await this.announceMembership(saved.id as number, [dto.ownerUserId], 'grant');
     return saved;
   }
 
@@ -206,7 +206,7 @@ export class TenantService {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.addMember(actorUserId, newUserId, role, seatKind);
     const persisted = await this.persist(updated);
-    await this.announceMembership(tenantId, [newUserId]);
+    await this.announceMembership(tenantId, [newUserId], 'grant');
     return persisted;
   }
 
@@ -215,7 +215,7 @@ export class TenantService {
   async admitCollaborator(tenantId: number, newUserId: string, role: TenantRole): Promise<Tenant> {
     const tenant = await this.getTenant(tenantId);
     const persisted = await this.persist(tenant.admitCollaborator(newUserId, role));
-    await this.announceMembership(tenantId, [newUserId]);
+    await this.announceMembership(tenantId, [newUserId], 'grant');
     return persisted;
   }
 
@@ -227,7 +227,7 @@ export class TenantService {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.removeMember(actorUserId, targetUserId);
     const persisted = await this.persist(updated);
-    await this.announceMembership(tenantId, [targetUserId]);
+    await this.announceMembership(tenantId, [targetUserId], 'revoke');
     return persisted;
   }
 
@@ -240,7 +240,7 @@ export class TenantService {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.changeMemberRole(actorUserId, targetUserId, role);
     const persisted = await this.persist(updated);
-    await this.announceMembership(tenantId, [targetUserId]);
+    await this.announceMembership(tenantId, [targetUserId], 'revoke'); // may be a demotion
     return persisted;
   }
 
@@ -257,7 +257,7 @@ export class TenantService {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.upgradeMember(actorUserId, targetUserId, role, seatKind);
     const persisted = await this.persist(updated);
-    await this.announceMembership(tenantId, [targetUserId]);
+    await this.announceMembership(tenantId, [targetUserId], 'grant');
     return persisted;
   }
 
@@ -266,7 +266,7 @@ export class TenantService {
     await this.tenants.delete(asTenantId(id));
     // Every member's cached membership goes with the workspace, so an outstanding
     // workspace token stops on its next request rather than after the cache TTL.
-    await this.announceMembership(id, tenant.members.map((m) => m.userId));
+    await this.announceMembership(id, tenant.members.map((m) => m.userId), 'revoke');
   }
 
   async getSubscription(tenantId: number): Promise<{

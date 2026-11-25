@@ -43,7 +43,7 @@
  */
 
 import { createTranslator } from 'next-intl';
-import { defaultMessages } from '@/i18n/catalog';
+import { defaultCatalog } from '@/i18n/catalog';
 
 /** One value interpolated into a verdict: a literal, a nested verdict, or a list of either. */
 export type SpecVerdictValue = string | number | SpecVerdict | readonly (string | SpecVerdict)[];
@@ -124,10 +124,11 @@ export function formatSpecVerdict(
 }
 
 /** The English translator the model-facing path formats with. Built once, lazily: the
- *  default catalog is already in the bundle, so this costs a function, not a fetch. */
+ *  default catalog is already in hand (bundled, or primed on the edge), so this costs a
+ *  function, not a fetch. */
 let englishTranslate: SpecVerdictTranslate | null = null;
 function englishTranslator(): SpecVerdictTranslate {
-  englishTranslate ??= createTranslator({ locale: 'en', messages: defaultMessages as never }) as unknown as SpecVerdictTranslate;
+  englishTranslate ??= createTranslator({ locale: 'en', messages: defaultCatalog() as never }) as unknown as SpecVerdictTranslate;
   return englishTranslate;
 }
 

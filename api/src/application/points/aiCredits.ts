@@ -38,7 +38,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { ledgerEntries } from '../../infrastructure/database/schema';
-import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { INVALIDATE_WITH_LKG, OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { AI_CREDITS } from '../kernel/denominations';
 
 const balanceKey = (tenantId: number) => `ai-credits:balance:t:${tenantId}`;
@@ -94,7 +94,7 @@ export async function grantAiCredits(
   }).onConflictDoNothing().returning({ id: ledgerEntries.id });
 
   if (inserted.length === 0) return false;
-  await invalidateCached(env, balanceKey(input.tenantId));
+  await invalidateCached(env, balanceKey(input.tenantId), INVALIDATE_WITH_LKG);
   return true;
 }
 
@@ -137,7 +137,7 @@ export async function reconcileAiCreditMonth(
   }).onConflictDoNothing().returning({ id: ledgerEntries.id });
 
   if (inserted.length === 0) return 0;
-  await invalidateCached(env, balanceKey(input.tenantId));
+  await invalidateCached(env, balanceKey(input.tenantId), INVALIDATE_WITH_LKG);
   return debit;
 }
 

@@ -56,7 +56,7 @@ describe('changeMemberRole — one use case, manager and platform-admin scopes',
     const result = await changeMemberRole(db, env, { kind: 'platform_admin', ipAddress: '1.2.3.4' }, input);
     expect(result).toEqual({ ok: true, tenant: null });
     expect(updates).toEqual([{ role: 'manager' }]);
-    expect(m.membershipChanged).toHaveBeenCalledWith(env, 7, ['u9']);
+    expect(m.membershipChanged).toHaveBeenCalledWith(env, 7, ['u9'], 'revoke');
     expect(m.writeAdminAudit).toHaveBeenCalledWith(db, 'USER_PERSONA_CHANGED', 'actor', {
       targetUserId: 'u9', tenantId: 7, metadata: { newRole: 'manager' }, ipAddress: '1.2.3.4',
     });

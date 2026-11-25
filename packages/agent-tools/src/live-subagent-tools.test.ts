@@ -17,6 +17,12 @@ describe("childReportText", () => {
 
   it("adds nothing for a clean report", () => {
     expect(childReportText(report)).not.toContain("Open issues");
+    expect(childReportText(report)).not.toContain("Unverified claims");
+  });
+
+  it("tells the owner to check each unverified claim before relaying it", () => {
+    const text = childReportText({ ...report, unverifiedClaims: ["X does not exist.", "Y is impossible."] });
+    expect(text).toContain("Unverified claims — check each with one search before relaying or acting on it: X does not exist. | Y is impossible.");
   });
 });
 

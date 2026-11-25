@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import JsonLd from '@/components/JsonLd';
 import { pageMetadata } from '@/lib/seo';
-import { defaultCopy } from '@/lib/content/defaultCopy';
+import { serverDefaultCopy } from '@/lib/content/defaultCopy';
 import { projectsTasksSchema } from '@/lib/structured-data';
 
 // The Projects / Tasks page is a client component, so per-page SEO metadata lives
@@ -15,10 +15,12 @@ export const metadata: Metadata = pageMetadata({
   path: '/projects',
 });
 
-export default function ProjectsTasksLayout({ children }: { children: React.ReactNode }) {
+// Async: `/projects/[id]` and friends render on the edge, where the default catalog is
+// read on demand rather than bundled (see `serverDefaultCopy`).
+export default async function ProjectsTasksLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <JsonLd data={projectsTasksSchema(defaultCopy)} />
+      <JsonLd data={projectsTasksSchema(await serverDefaultCopy())} />
       {children}
     </>
   );

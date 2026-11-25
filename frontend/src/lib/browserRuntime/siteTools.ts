@@ -10,13 +10,14 @@ import type { BuiltFile, FlatFiles } from '@seanhogg/builderforce-webcontainers'
 import type { Checker, CheckDiagnostic } from '@seanhogg/builderforce-webcontainers/check';
 import type { CheckPorts } from './projectChecks';
 import { measureFiles, timeWrite } from './writeTiming';
+import { loadWebcontainers, loadWebcontainersCheck } from './webcontainersPackage';
 
 /** A relative base, so the site works at `<sub>.builderforce.ai/` AND under the `/api/sites/<sub>/` path form. */
 const SITE_BASE = './';
 
 /** `npm run build`, in the browser: a deployable static site (`index.html`, hashed `assets/`, `public/`). */
 export async function buildSite(files: FlatFiles): Promise<BuiltFile[]> {
-  const { buildProject, createEsbuildWasmBundler, createCdnComponentCompilers, createCdnStyleCompilers } = await import('@seanhogg/builderforce-webcontainers');
+  const { buildProject, createEsbuildWasmBundler, createCdnComponentCompilers, createCdnStyleCompilers } = await loadWebcontainers();
   const result = await buildProject({
     files,
     bundler: await createEsbuildWasmBundler(),
@@ -32,7 +33,7 @@ let checker: Promise<Checker> | null = null;
 
 /** One checker per page: its worker caches TypeScript and dependency types between checks. */
 function sharedChecker(): Promise<Checker> {
-  checker ??= import('@seanhogg/builderforce-webcontainers/check')
+  checker ??= loadWebcontainersCheck()
     .then(({ createChecker }) => createChecker())
     .catch((error: unknown) => {
       checker = null;
@@ -48,7 +49,7 @@ export interface TypecheckOutcome {
 }
 
 export async function typecheckFiles(files: FlatFiles): Promise<TypecheckOutcome> {
-  const [{ formatDiagnostic }, check] = await Promise.all([import('@seanhogg/builderforce-webcontainers/check'), sharedChecker()]);
+  const [{ formatDiagnostic }, check] = await Promise.all([loadWebcontainersCheck(), sharedChecker()]);
   const result = await check.check(files);
   return {
     errors: result.diagnostics.filter((d) => d.category === 'error'),
@@ -67,7 +68,7 @@ export function hasTypeScript(files: FlatFiles): boolean {
  * which a caller treats as "not ours to judge", not as a failed build.
  */
 export async function projectSupport(files: FlatFiles): Promise<{ supported: boolean; reason?: string }> {
-  const { VirtualFileSystem, detectProject } = await import('@seanhogg/builderforce-webcontainers');
+  const { VirtualFileSystem, detectProject } = await loadWebcontainers();
   const fs = new VirtualFileSystem();
   timeWrite('writeTree', () => measureFiles(files), () => fs.writeTree(files));
   const { supported, reason } = detectProject(fs);

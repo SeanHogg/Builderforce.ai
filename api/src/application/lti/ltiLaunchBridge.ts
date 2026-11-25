@@ -183,7 +183,7 @@ async function ensureWorkspaceMembership(db: Db, tenantId: number, userId: strin
     .limit(1);
   if (member) return;
   await db.insert(tenantMembers).values({ tenantId, userId, role: 'viewer' });
-  if (env) await membershipChanged(env, tenantId, [userId]);
+  if (env) await membershipChanged(env, tenantId, [userId], 'grant');
 }
 
 // ---------------------------------------------------------------------------

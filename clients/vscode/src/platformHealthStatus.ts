@@ -1,13 +1,13 @@
 /**
  * The ONE status-bar item for platform health. Hidden while the platform is online; shown when it is
- * degraded or unreachable. A non-online state must persist for {@link SHOW_DELAY_MS} before it shows
- * (so a single blip does not flap the bar); recovery hides it immediately. Click runs Diagnose.
+ * degraded or unreachable. It paints the hysteresis-STABLE state of the health signal (shown after 2
+ * non-online answers in 30s or one sustained 5s; hidden after 30s of continuous online answers — see
+ * `bfApi/platformHealth.ts`), so it carries no timing of its own. Click runs Diagnose.
  */
 
 import * as vscode from "vscode";
 import { platformHealth, type PlatformHealthSignal, type PlatformHealthState } from "./bfApi/platformHealth";
 
-export const SHOW_DELAY_MS = 5000;
 const DIAGNOSE_COMMAND = "builderforce.diagnose";
 
 function paint(item: vscode.StatusBarItem, state: Exclude<PlatformHealthState, "online">): void {
@@ -30,37 +30,19 @@ function paint(item: vscode.StatusBarItem, state: Exclude<PlatformHealthState, "
 export function registerPlatformHealthStatus(
   context: vscode.ExtensionContext,
   health: PlatformHealthSignal = platformHealth,
-  delayMs: number = SHOW_DELAY_MS,
 ): void {
   const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 95);
   item.name = vscode.l10n.t("BuilderForce platform status");
   item.command = DIAGNOSE_COMMAND;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let shown = false;
 
-  const clearTimer = (): void => {
-    if (timer !== undefined) clearTimeout(timer);
-    timer = undefined;
-  };
+  // No debounce of its own: `health.state()` is already the hysteresis-stable state, so the
+  // item simply shows it (a per-response timer here is what made the bar flap).
   const apply = (): void => {
     const state = health.state();
-    if (state === "online") {
-      clearTimer();
-      shown = false;
-      item.hide();
-      return;
-    }
-    if (shown) return paint(item, state); // already visible: switch degraded/offline at once
-    if (timer !== undefined) return; // already waiting for the state to persist
-    timer = setTimeout(() => {
-      timer = undefined;
-      const current = health.state();
-      if (current === "online") return;
-      shown = true;
-      paint(item, current);
-    }, delayMs);
+    if (state === "online") item.hide();
+    else paint(item, state);
   };
 
-  context.subscriptions.push(item, { dispose: health.subscribe(apply) }, { dispose: clearTimer });
+  context.subscriptions.push(item, { dispose: health.subscribe(apply) });
   apply();
 }

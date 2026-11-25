@@ -30,7 +30,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authTokens, authUserSessions, users } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
-import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCachedStrict, setCached } from '../../infrastructure/cache/readThroughCache';
+import { LATE_WRITE_RECHECK_MS, OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCachedStrict, invalidateCachedStrictInBackground, setCached } from '../../infrastructure/cache/readThroughCache';
 import { UnauthorizedError } from '../../domain/shared/errors';
 
 /**
@@ -218,7 +218,11 @@ export async function findActiveTokenCached(
     // A jti is only ever honoured for the user it names; a mismatch is read directly.
     if (cached.userId === userId) return fromCached(cached);
   } catch (error) {
-    if (error instanceof NotLive) return error.row;
+    if (error instanceof NotLive) {
+      // Not live: drop any last-known-good copy a racing load wrote before the revoke landed.
+      invalidateCachedStrictInBackground(env, activeTokenCacheKey(jti));
+      return error.row;
+    }
     throw error;
   }
   return findActiveToken(db, userId, jti);
@@ -380,5 +384,11 @@ export async function revokeSessionTokens(
     invalidateCachedStrict(env, sessionIntrospectCacheKey(jti)),
     invalidateCachedStrict(env, activeTokenCacheKey(jti)),
   ]));
+  // A load that began before the revoke can write its verdict back just after the deletes above
+  // (cross-isolate); delete again a moment later so that late write is not served as last-known-good.
+  for (const jti of revokedJtis) {
+    invalidateCachedStrictInBackground(env, sessionIntrospectCacheKey(jti), LATE_WRITE_RECHECK_MS);
+    invalidateCachedStrictInBackground(env, activeTokenCacheKey(jti), LATE_WRITE_RECHECK_MS);
+  }
   return { revokedJtis };
 }

@@ -13,7 +13,7 @@ import type { Context, Env as HonoBaseEnv } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { InternalError, RequestValidationError, ServiceUnavailableError, StatusError, isClientError, statusOf } from '../../domain/shared/errors';
 import { reportCaughtError, type CaughtErrorDetails } from '../../application/observability/caughtErrorReporter';
-import { databaseUnavailableCause, isDatabaseUnavailable } from '../../infrastructure/database/neonAvailability';
+import { databaseUnavailableCause } from '../../application/shared/databaseAvailability';
 import type { HonoEnv } from '../../env';
 
 /** What a 500 says. The real message went to the reporter, not to the caller. */
@@ -65,14 +65,16 @@ export interface ErrorResponseBody {
 export function errorResponseBody(thrown: unknown, errorId?: string): { status: number; body: ErrorResponseBody } {
   // drizzle wraps the driver's failure (`DrizzleQueryError`), so a database outage arrives
   // as a `.cause`. Unwrapped HERE, once, so every renderer answers it as the 503 it is.
-  const error = databaseUnavailableCause(thrown) ?? thrown;
+  const outage = databaseUnavailableCause(thrown);
+  const error = outage ?? thrown;
   const status = statusOf(error);
   // An InternalError's / StatusError's message was written for the caller; any other 5xx text is a diagnostic.
   if (status >= 500) {
     const body: ErrorResponseBody = { error: error instanceof InternalError || error instanceof StatusError ? error.message : GENERIC_SERVER_ERROR };
     // An outage's code lets the client say "temporarily unavailable" instead of "something broke".
     if (error instanceof ServiceUnavailableError && error.code) body.code = error.code;
-    return { status, body: errorId ? referenced(body, errorId) : body };
+    // An outage is never stored (the reporter skips it), so it has no row for a reference to find.
+    return { status, body: errorId && !outage ? referenced(body, errorId) : body };
   }
   const message = error instanceof Error ? error.message : String(error);
   const body: ErrorResponseBody = { error: message };
@@ -98,8 +100,7 @@ export function failResponse(
   details: CaughtErrorDetails,
   extra?: Record<string, unknown>,
 ): Response {
-  // A database outage is not reported: the durable sink is a write to that same database.
-  const errorId = isClientError(statusOf(error)) || isDatabaseUnavailable(error) ? undefined : reportServerError(c, error, details);
+  const errorId = isClientError(statusOf(error)) ? undefined : reportServerError(c, error, details);
   const { status, body } = errorResponseBody(error, errorId);
   return c.json(extra ? { ...body, ...extra } : body, status as ContentfulStatusCode);
 }

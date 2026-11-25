@@ -332,7 +332,7 @@ describe('createReadThroughCache · staleOnError (last-known-good)', () => {
     const cache = createReadThroughCache();
     await cache.getOrSet(kv, 'k', async () => 'old', opts);
     await expireFresh(kv, 'k');
-    await cache.invalidate(kv, 'k');
+    await cache.invalidate(kv, 'k', { lkg: true });
     expect(kv.store.size).toBe(0);
     await expect(cache.getOrSet(kv, 'k', async () => { throw outage; }, opts)).rejects.toBe(outage);
   });
@@ -368,12 +368,15 @@ describe('createReadThroughCache · staleOnError (last-known-good)', () => {
     expect(await createReadThroughCache().peek(kv, 'k', { staleOnError: stale })).toBeNull();
   });
 
-  it('invalidate deletes BOTH spellings', async () => {
+  it('invalidate { lkg } deletes BOTH spellings; without it only the plain key (one delete)', async () => {
     const kv = memoryKv();
     kv.store.set(await kvStorageKey('k'), JSON.stringify({ v: 9 }));
     await createReadThroughCache().set(kv, 'k', { v: 1 }, opts);
     expect(kv.store.size).toBe(2);
     await createReadThroughCache().invalidate(kv, 'k');
+    expect([...kv.store.keys()]).toEqual(['cache:lkg:k']);
+    expect(kv.delete).toHaveBeenCalledTimes(1);
+    await createReadThroughCache().invalidate(kv, 'k', { lkg: true });
     expect(kv.store.size).toBe(0);
   });
 
@@ -401,15 +404,17 @@ describe('createReadThroughCache · staleOnError (last-known-good)', () => {
       delete: vi.fn(async () => { throw new Error('KV DELETE failed'); }),
     });
 
-    it('rethrows once retryDelete is exhausted, after still reporting', async () => {
+    it('rethrows once retryDelete is exhausted, WITHOUT reporting (the receiver of the throw reports it)', async () => {
       const onError = vi.fn();
       const cache = createReadThroughCache({ onError });
       await expect(cache.invalidate(failingKv(), 'k', { strict: true })).rejects.toThrow('KV DELETE failed');
-      expect(onError).toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
     });
 
-    it('default (non-strict) swallows the failure as before', async () => {
-      await expect(createReadThroughCache().invalidate(failingKv(), 'k')).resolves.toBeUndefined();
+    it('default (non-strict) reports and swallows the failure', async () => {
+      const onError = vi.fn();
+      await expect(createReadThroughCache({ onError }).invalidate(failingKv(), 'k')).resolves.toBeUndefined();
+      expect(onError).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -6,30 +6,27 @@
  *                  THE shared vision request (`pinpointVisionRequest`: no pinned model, the
  *                  gateway picks a vision-capable one, or answers `model_input_unsupported`,
  *                  which surfaces as the error);
- *   catalogKeys  - the catalogs are in the bundle: a screen string is looked up as a catalog
- *                  VALUE, in English and in the active locale, giving its key(s).
+ *   catalogKeys  - the app's own catalogs (through `@/i18n/catalog`): a screen string is looked
+ *                  up as a catalog VALUE, in English and in the active locale, giving its key(s).
  */
 
 import { keysOfValue, pinpointVisionRequest } from '@builderforce/agent-tools/knowledge';
 import type { PinpointHost } from '@builderforce/knowledge-browser';
-import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
+import { loadCatalog } from '@/i18n/catalog';
+import { DEFAULT_LOCALE, isLocale, type Locale } from '@/i18n/config';
 import { llmChat } from '@/lib/builderforceApi';
 
-const CATALOGS: Record<string, () => Promise<unknown>> = {
-  en: () => import('@/i18n/messages/en.json').then((m) => m.default),
-  es: () => import('@/i18n/messages/es.json').then((m) => m.default),
-  fr: () => import('@/i18n/messages/fr.json').then((m) => m.default),
-  de: () => import('@/i18n/messages/de.json').then((m) => m.default),
-  zh: () => import('@/i18n/messages/zh.json').then((m) => m.default),
-};
-
-/** A catalog is session-lived: the read-through cache holds it (and shares one in-flight load). */
-const catalog = (locale: string): Promise<unknown> => getOrSetClientCached(`knowledge-pinpoint:catalog:${locale}`, () => CATALOGS[locale]!());
+/**
+ * A catalog through THE one loader (`@/i18n/catalog`): the bundled default, or a
+ * published catalog read once and held by its read-through cache. Never an `import()`
+ * of the JSON — that put all five catalogs (~8 MB) into the build as chunks.
+ */
+const catalog = (locale: Locale): Promise<unknown> => loadCatalog(locale);
 
 /** English plus the page's active locale (when it is another catalog we ship). */
-function activeLocales(): string[] {
-  const lang = typeof document === 'undefined' ? 'en' : document.documentElement.lang.slice(0, 2).toLowerCase();
-  return lang !== 'en' && lang in CATALOGS ? ['en', lang] : ['en'];
+function activeLocales(): Locale[] {
+  const lang = typeof document === 'undefined' ? DEFAULT_LOCALE : document.documentElement.lang.slice(0, 2).toLowerCase();
+  return lang !== DEFAULT_LOCALE && isLocale(lang) ? [DEFAULT_LOCALE, lang] : [DEFAULT_LOCALE];
 }
 
 export const webPinpointHost: PinpointHost = {

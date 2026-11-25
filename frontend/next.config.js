@@ -84,6 +84,85 @@ const knowledgeWorkerFactoryServerAlias = {
 };
 
 /**
+ * ONE copy of the memory packages in every bundle (webpack only).
+ *
+ * `@seanhogg/builderforce-memory` and `-memory-engine` are dependencies of the
+ * frontend AND of the linked packages it bundles (`brain-embedded` above all), and
+ * each linked package carries its own install (`ensure-linked-deps`). With
+ * `symlinks:false` webpack resolves a bare import from the importer's own
+ * `node_modules`, so the same version shipped twice: once from
+ * `frontend/node_modules`, once from `brain-embedded/node_modules` — two copies of
+ * the engine, its WGSL kernels included, in the shared edge chunk every Worker
+ * route carries (and in the browser bundle too). Two module instances of one
+ * package also means two of every module-level registry it keeps.
+ * (`CanonicalPackagePathsPlugin` below only merges IDENTICAL real directories; a
+ * separate install of the same version is a different directory, which this pins.)
+ *
+ * Every entry the packages export is pinned here to the frontend's installed copy —
+ * the one `package.json` declares and the lockfile pins — exactly (`$`), one key per
+ * `exports` subpath, so nothing about which subpath resolves to which file changes.
+ * Their exports are `import`-only, so there is no condition to choose between.
+ *
+ * This collapses EVERY consumer onto that one copy — `brain-embedded` and the linked
+ * `packages/*` alike — which is only sound while they all declare the same range
+ * (they do: one version pinned across the workspace, bumped together), so a linked
+ * package whose own install drifts is reported at build time rather than silently
+ * running the frontend's version.
+ */
+function pinnedPackageAliases(name) {
+  const root = path.join(__dirname, 'node_modules', ...name.split('/'));
+  const manifestFile = path.join(root, 'package.json');
+  if (!fs.existsSync(manifestFile)) {
+    console.warn(`[next.config] ${name} is not installed in frontend/node_modules; its copies are not deduplicated.`);
+    return {};
+  }
+  const { exports: exportMap, version } = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  // Drift report: a linked package with its own install of a DIFFERENT version.
+  const workspace = path.join(__dirname, '..');
+  const packagesDir = path.join(workspace, 'packages');
+  const linkedRoots = [
+    path.join(workspace, 'brain-embedded'),
+    ...(fs.existsSync(packagesDir)
+      ? fs.readdirSync(packagesDir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => path.join(packagesDir, entry.name))
+      : []),
+  ];
+  for (const linkedRoot of linkedRoots) {
+    const nested = path.join(linkedRoot, 'node_modules', ...name.split('/'), 'package.json');
+    if (!fs.existsSync(nested)) continue;
+    const nestedVersion = JSON.parse(fs.readFileSync(nested, 'utf8')).version;
+    if (nestedVersion !== version) {
+      console.warn(`[next.config] ${path.relative(workspace, linkedRoot)} installs ${name}@${nestedVersion}; the bundle uses the frontend's ${version}.`);
+    }
+  }
+  const aliases = {};
+  for (const [subpath, target] of Object.entries(exportMap ?? {})) {
+    const file = typeof target === 'string' ? target : target?.import ?? target?.default;
+    if (typeof file !== 'string' || subpath.includes('*')) continue;
+    aliases[`${name}${subpath === '.' ? '' : subpath.slice(1)}$`] = path.join(root, file);
+  }
+  return aliases;
+}
+const memoryPackageAliases = {
+  ...pinnedPackageAliases('@seanhogg/builderforce-memory'),
+  ...pinnedPackageAliases('@seanhogg/builderforce-memory-engine'),
+};
+
+/**
+ * Edge alias of the bundled default-locale catalog to its empty stand-in (webpack
+ * only; see `src/i18n/catalog.ts` for the reasoning, and the alias below). Keyed by
+ * the absolute path, which is how `catalog.ts`'s relative `./messages/en.json`
+ * import is matched; the `@/` spelling covers any future direct import (only tests
+ * import it that way today).
+ */
+const unbundledCatalogStub = path.join(__dirname, 'src/i18n/unbundledCatalog.ts');
+const defaultCatalogEdgeAlias = {
+  [`${path.join(__dirname, 'src/i18n/messages/en.json')}$`]: unbundledCatalogStub,
+  '@/i18n/messages/en.json$': unbundledCatalogStub,
+};
+
+/**
  * Every compilation (client, server AND edge): ONE module per physical package directory.
  *
  * `resolve.symlinks = false` (see the webpack hook below) keys every module by the path
@@ -262,7 +341,7 @@ const nextConfig = {
       sharp: './src/lib/turbopackEmptyModule.ts',
     },
   },
-  webpack(config, { isServer, webpack }) {
+  webpack(config, { isServer, nextRuntime, webpack }) {
     // pnpm + linked workspace packages: when webpack follows the symlinked
     // package into its real .pnpm/<hash>/ location, peer-dep resolution
     // from that deep path fails to find sibling packages. symlinks:false
@@ -310,6 +389,7 @@ const nextConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       'onnxruntime-node$': false,
+      ...memoryPackageAliases,
       // Linked packages have their own development installs. With
       // `symlinks:false`, resolving `onnxruntime-web` from one of those packages
       // can pair that nested runtime with a different hoisted
@@ -338,6 +418,12 @@ const nextConfig = {
       // joined path; the extensionless form is what `./workerFactory` produces) plus
       // the bare subpath export.
       ...(isServer ? knowledgeWorkerFactoryServerAlias : {}),
+      // EDGE only: the default-locale catalog (~1.6 MB of JSON, ~0.5 MiB compressed —
+      // the largest single module the Worker carried) is not bundled; the edge server
+      // reads the published `en.json` once per isolate instead (`primeDefaultCatalog`,
+      // awaited by the root layout). The browser keeps the bundled copy for its first
+      // paint, and the Node build keeps it to prerender the static routes.
+      ...(nextRuntime === 'edge' ? defaultCatalogEdgeAlias : {}),
       // Server AND edge only: the in-browser inference runtimes become empty modules.
       // Each names its binary with `new URL('<x>.wasm', import.meta.url)` — onnxruntime-web
       // (~46 MB across its jsep + asyncify builds, reached through transformers.js, the
@@ -371,7 +457,9 @@ const nextConfig = {
           ].map((specifier) => [specifier, false]))
         : {}),
     };
-    // Server AND edge only: ONE copy of the default-locale catalog per function.
+    // Server only: ONE copy of the default-locale catalog per function. Since the edge
+    // build stopped bundling the catalog (the alias above) this matters to the Node
+    // build that prerenders the static routes; on the edge nothing matches it.
     //
     // `@/i18n/catalog` statically imports `messages/en.json` (~1.9 MB) and is reached
     // from BOTH App Router layers — the server-component layer (`i18n/request.ts`,

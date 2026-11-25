@@ -37,6 +37,8 @@ export interface ChildReport {
   changedFiles?: string[];
   /** What its report left for the owner to resolve (`parseSubagentReport`). */
   openIssues?: string[];
+  /** Negative claims its report states that nobody verified (`parseSubagentReport`). */
+  unverifiedClaims?: string[];
   /** What it READ — files with windows, data calls with offsets (`childCoverage.ts`). */
   coverage?: string[];
   /** Where the data its calls returned was saved, for the owner to read_file. */

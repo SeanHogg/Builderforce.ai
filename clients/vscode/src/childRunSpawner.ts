@@ -342,7 +342,7 @@ async function reportOf(host: ChildRunHost, key: number, lineage: RunLineage, re
       : state === "failed" && !answer
         ? snapshot.error || "it stopped without a report"
         : answer;
-  const { openIssues } = parseSubagentReport(answer);
+  const { openIssues, unverifiedClaims } = parseSubagentReport(answer);
   // Report + coverage + data note share ONE report budget (the owner's wait_agents result holds several).
   const packet = coverageChars(coverage) + (dataFile ? childDataNote(dataFile).length + 2 : 0);
   return {
@@ -354,6 +354,7 @@ async function reportOf(host: ChildRunHost, key: number, lineage: RunLineage, re
     ...(req.ticket ? { ticket: req.ticket } : {}),
     ...(files.size ? { changedFiles: [...files] } : {}),
     ...(openIssues.length ? { openIssues } : {}),
+    ...(unverifiedClaims?.length ? { unverifiedClaims } : {}),
     ...(coverage.length ? { coverage } : {}),
     ...(dataFile ? { dataFile } : {}),
   };

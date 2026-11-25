@@ -16,6 +16,7 @@
  */
 import type { PreviewRuntime, SnapshotStore } from '@seanhogg/builderforce-webcontainers';
 import { hashString } from '@/lib/hashString';
+import { loadWebcontainers } from './webcontainersPackage';
 import type { WorkspaceId } from '@/lib/workspace/workspaceId';
 
 /** What a snapshot reads from and writes to — the whole runtime is not needed. */
@@ -29,7 +30,7 @@ let defaultStore: Promise<SnapshotStore | null> | null = null;
 /** Create the page's store; null when the package cannot provide one (a miss, not an error). */
 async function openInstallSnapshotStore(): Promise<SnapshotStore | null> {
   try {
-    const { createSnapshotStore } = await import('@seanhogg/builderforce-webcontainers');
+    const { createSnapshotStore } = await loadWebcontainers();
     return createSnapshotStore({ name: 'builderforce-install-snapshots', maxEntries: 4 });
   } catch {
     return null;

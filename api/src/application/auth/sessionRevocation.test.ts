@@ -11,6 +11,7 @@ import {
 import { authTokens, authUserSessions } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { runInRequestScope } from '../shared/requestScope';
 
 /**
  * The ONE revoke use case: every route that signs a session out — the user's
@@ -307,6 +308,43 @@ describe('regression: a revoked token is never accepted through a database outag
     await Promise.all(writes);
     // The getOrSet LOAD wrote one envelope; the write-back added nothing to KV.
     expect(kv.put).toHaveBeenCalledTimes(1);
+  });
+
+  it('a not-live verdict also deletes its last-known-good copy (a load that raced the revoke wrote it)', async () => {
+    const { env, store } = storingEnv();
+    const { db: liveDb } = fakeAuthDb([[LIVE_ROW]]);
+    await findActiveTokenCached(env, liveDb, 'u1', 'j1');
+    expect([...store.keys()]).toContain('cache:lkg:auth:active:j1');
+
+    __clearL1CacheForTests();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 10 * 60_000); // past the fresh window, so the loader runs
+    try {
+      const { db: deadDb } = fakeAuthDb([[]]);
+      expect(await findActiveTokenCached(env, deadDb, 'u1', 'j1')).toBeNull();
+      await vi.waitFor(() => expect([...store.keys()].filter((k) => k.includes('auth:active:j1'))).toEqual([]));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('revoke repeats its strict deletes ~2s later on the invocation waitUntil (cross-isolate late-write race)', async () => {
+    const { env, kv } = storingEnv();
+    const pending: Promise<unknown>[] = [];
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    try {
+      await runInRequestScope({ env: {}, method: 'POST', path: '/x', waitUntil: (task) => pending.push(task) }, () =>
+        revokeSessionTokens(fakeDb(['j1']).db, env, { userId: 'u1', jti: 'j1' }));
+      const immediate = kv.delete.mock.calls.length;
+      expect(immediate).toBe(4); // 2 keys x plain + lkg
+      expect(pending.length).toBeGreaterThan(0);
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      await Promise.all(pending);
+      expect(kv.delete.mock.calls.length).toBe(immediate * 2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('a failed KV delete during revoke surfaces (strict), instead of leaving a 7-day stale copy', async () => {

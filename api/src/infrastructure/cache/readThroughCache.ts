@@ -314,5 +314,36 @@ export async function invalidateCached(env: CacheEnv, key: string, opts?: Invali
  * caller keeps the reported-and-swallowed default.
  */
 export async function invalidateCachedStrict(env: CacheEnv, key: string): Promise<void> {
-  return invalidateCached(env, key, { strict: true });
+  // Strict writers are, by definition, the ones outage-stale (lkg) entries hang on: always clear it.
+  // The failure is NOT reported here — it is rethrown, and whoever receives it reports it once.
+  return invalidateCached(env, key, { strict: true, lkg: true });
 }
+
+/**
+ * How long after a revoke the strict delete is repeated. An isolate that began its (pre-revoke)
+ * load before the delete can still write its result back to KV just after it; a second delete a
+ * couple of seconds later removes that late write, which would otherwise be served as
+ * last-known-good for days.
+ */
+export const LATE_WRITE_RECHECK_MS = 2_000;
+
+/**
+ * Strict-delete `key` OFF the request's critical path (the invocation's `waitUntil`, via
+ * {@link deferPastResponse}), optionally after `delayMs`. A failure is reported, never swallowed:
+ * nothing awaits this, so the report is the only place it can surface.
+ */
+export function invalidateCachedStrictInBackground(env: CacheEnv, key: string, delayMs = 0): void {
+  const task = (async () => {
+    if (delayMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    await invalidateCachedStrict(env, key);
+  })().catch((error) => {
+    reportCaughtError(error, { source: SOURCE, operation: 'invalidateCachedStrictInBackground', context: { delayMs } });
+  });
+  deferPastResponse(task);
+}
+
+/**
+ * {@link invalidateCached} options for a key whose reads opt into `staleOnUnavailableSeconds`:
+ * also deletes the last-known-good copy. Plain (reported, non-throwing) invalidation.
+ */
+export const INVALIDATE_WITH_LKG: InvalidateOptions = { lkg: true };

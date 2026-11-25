@@ -366,7 +366,7 @@ import { createForecastRoutes } from './presentation/routes/forecastRoutes';
 import { addCorsToResponse, corsMiddleware, EXPOSED_HEADERS, ALLOWED_REQUEST_HEADERS, ALLOWED_METHODS, resolveAllowedOrigin, reportRefusedOrigin } from './presentation/middleware/cors';
 import { errorHandler }   from './presentation/middleware/errorHandler';
 import { errorResponseBody } from './presentation/middleware/errorResponse';
-import { isDatabaseUnavailable } from './infrastructure/database/neonAvailability';
+import { isDatabaseUnavailable } from './application/shared/databaseAvailability';
 import { cachedApp } from './presentation/appCache';
 import { rateLimitMiddleware } from './presentation/middleware/rateLimitMiddleware';
 import { emulationMiddleware } from './presentation/middleware/emulationMiddleware';
@@ -1541,25 +1541,22 @@ export default {
       // added to prevent. waitUntil keeps the report durable without letting it
       // stand between the browser and a readable error.
       // A database outage is answered (503 database_unavailable, through the SAME
-      // `errorResponseBody` the app's errorHandler uses) but NOT reported: the sink is a
-      // write to the database that is refusing.
+      // `errorResponseBody` the app's errorHandler uses); the reporter itself skips it.
       const outage = isDatabaseUnavailable(err);
-      if (!outage) {
-        const report = reportUnhandledError(err, {
-          source: 'index.ts',
-          operation: 'top-level fetch',
-        }, {
-          env,
-          method: request.method,
-          path: new URL(request.url).pathname,
-        });
-        try {
-          ctx.waitUntil(report);
-        } catch {
-          // No executionCtx (some test harnesses). The report is already
-          // best-effort internally; never let scheduling it fail the response.
-          void report;
-        }
+      const report = reportUnhandledError(err, {
+        source: 'index.ts',
+        operation: 'top-level fetch',
+      }, {
+        env,
+        method: request.method,
+        path: new URL(request.url).pathname,
+      });
+      try {
+        ctx.waitUntil(report);
+      } catch {
+        // No executionCtx (some test harnesses). The report is already
+        // best-effort internally; never let scheduling it fail the response.
+        void report;
       }
       const origin = request.headers.get('Origin');
       const allow = resolveAllowedOrigin(origin, env.CORS_ORIGINS, new URL(request.url).pathname);

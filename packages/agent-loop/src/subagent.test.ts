@@ -113,6 +113,32 @@ describe("parseSubagentReport", () => {
     expect(r.openIssues[8]).toContain("4 more");
   });
 
+  it("flags confident negatives as unverified claims", () => {
+    const r = parseSubagentReport("Outcome: done\nThe helper does not exist in this package.\n- Migration is impossible without a schema change.\nOpen issues: none");
+    expect(r.unverifiedClaims).toEqual(["The helper does not exist in this package.", "Migration is impossible without a schema change."]);
+  });
+
+  it("omits unverifiedClaims for ordinary phrasing", () => {
+    const r = parseSubagentReport("Outcome: done\nChanged: a.ts\nVerified: tsc passes with no errors. No changes needed in b.ts. Nothing left to do.\nOpen issues: none");
+    expect(r).not.toHaveProperty("unverifiedClaims");
+  });
+
+  it("ignores negatives inside code fences and does not repeat open issues", () => {
+    const r = parseSubagentReport("Outcome: partial\n```\nerror: module does not exist\n```\nOpen issues:\n- Could not run the e2e suite");
+    expect(r).not.toHaveProperty("unverifiedClaims");
+    expect(r.openIssues).toEqual(["Could not run the e2e suite"]);
+  });
+
+  it("bounds the claims it hands the owner", () => {
+    const many = Array.from({ length: 12 }, (_, i) => `Thing ${i} does not exist.`).join("\n");
+    expect(parseSubagentReport(many).unverifiedClaims).toHaveLength(5);
+  });
+
+  it("regression: a report that says the target has no run-policy and the verify phase could not be added", () => {
+    const r = parseSubagentReport("Outcome: partial\nChanged: none\nThe pipeline has no run-policy so I could not add a verify phase.\nOpen issues: none");
+    expect(r.unverifiedClaims).toEqual(["The pipeline has no run-policy so I could not add a verify phase."]);
+  });
+
   it("still flags a failed slice that named nothing left, and stays silent on a report without the lines", () => {
     expect(parseSubagentReport("Outcome: failed").openIssues).toHaveLength(1);
     expect(parseSubagentReport("I changed a.ts and it works.")).toEqual({ openIssues: [] });

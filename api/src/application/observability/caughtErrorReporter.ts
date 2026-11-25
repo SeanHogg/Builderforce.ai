@@ -1,3 +1,4 @@
+import { isDatabaseUnavailable } from '../shared/databaseAvailability';
 import { currentRequestScope, deferPastResponse, type RequestScope } from '../shared/requestScope';
 import { redactDeep, redactSecrets } from '../../infrastructure/security/redactSecrets';
 
@@ -120,6 +121,10 @@ export function reportCaughtError(
   details: CaughtErrorDetails,
   runtimeOverride?: RequestScope,
 ): void {
+  // The database being unavailable is a platform outage the 503 mapping and the platform-health
+  // surface already announce; reporting each failed query would flood the sinks (which need that
+  // same database) with one report per request. The ONE place this rule lives.
+  if (isDatabaseUnavailable(error)) return;
   const record = recordFor(error, details, true);
   console.error('[caught-error]', {
     source: record.source,
@@ -152,6 +157,7 @@ export async function reportUnhandledError(
   details: CaughtErrorDetails,
   runtime: RequestScope,
 ): Promise<void> {
+  if (isDatabaseUnavailable(error)) return; // see reportCaughtError
   const record = recordFor(error, details, false);
   console.error('[unhandled-error]', {
     source: record.source,

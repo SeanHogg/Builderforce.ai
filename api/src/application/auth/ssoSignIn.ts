@@ -118,7 +118,7 @@ export async function signInWithSso(
       userId,
       role: asTenantRole(connection.defaultRole),
     });
-    await membershipChanged(env, connection.tenantId, [userId]);
+    await membershipChanged(env, connection.tenantId, [userId], 'grant');
   }
 
   const [user] = await db

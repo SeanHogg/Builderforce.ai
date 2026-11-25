@@ -119,7 +119,7 @@ function childAnswerOf(row: ChildRow): string {
 function reportOf(row: ChildRow, spec: CloudChildSpec): ChildReportLike {
   const state = childStateOf(row);
   const answer = childAnswerOf(row);
-  const { openIssues } = parseSubagentReport(answer);
+  const { openIssues, unverifiedClaims } = parseSubagentReport(answer);
   return {
     handle: spec.handle,
     name: spec.asAgent?.name ?? spec.persona?.name ?? spec.label,
@@ -128,6 +128,7 @@ function reportOf(row: ChildRow, spec: CloudChildSpec): ChildReportLike {
     output: clipChildOutput(answer),
     ...(spec.ticket ? { ticket: spec.ticket } : {}),
     ...(openIssues.length ? { openIssues } : {}),
+    ...(unverifiedClaims?.length ? { unverifiedClaims } : {}),
   };
 }
 

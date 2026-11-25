@@ -28,7 +28,6 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requirePermission } from '../middleware/requirePermission';
 import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
 import { resolveCanvasCapabilities } from '../middleware/featureGate';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
@@ -920,10 +919,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
 
     const tenant = await tenantService.addMember(id, actorUserId, body.newUserId, body.role);
     await invalidateTaskAssignees(c.env as Env, id);
-    // New membership must resolve at the gateway immediately, not after the 60s TTL.
-    await invalidateJwtMembershipCache(c.env as Env, id, body.newUserId).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
-    });
+    // The JWT membership cache is dropped by TenantService.addMember → membershipChanged.
     return c.json(tenant.toPlain());
   });
 
@@ -959,9 +955,6 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     if (found) {
       const tenant = await tenantService.addMember(id, actorUserId, found.id, role);
       await invalidateTaskAssignees(c.env as Env, id);
-      await invalidateJwtMembershipCache(c.env as Env, id, found.id).catch((error) => {
-        reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
-      });
       emitMemberActivity(c, db, 'member.added', {
         targetId: found.id, targetLabel: found.email,
         summary: `Added ${found.email} as ${role}`, metadata: { role, userId: found.id },
@@ -1062,10 +1055,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const actorUserId  = c.get('userId') as string;
     const tenant = await tenantService.removeMember(id, actorUserId, targetUserId);
     await invalidateTaskAssignees(c.env as Env, id);
-    // Revoke the removed member's gateway access at once (not after the 60s TTL).
-    await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
-    });
+    // The removed member's gateway access is revoked by TenantService.removeMember → membershipChanged.
     return c.json(tenant.toPlain());
   });
 

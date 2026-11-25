@@ -7,7 +7,7 @@
 import type { Context } from 'hono';
 import type { HonoEnv } from '../../../env';
 import { TenantAccessError } from '../../../application/llm/gatewayAccess';
-import { isDatabaseUnavailable } from '../../../infrastructure/database/neonAvailability';
+import { isDatabaseUnavailable } from '../../../application/shared/databaseAvailability';
 
 export {
   requireTenantAccess,

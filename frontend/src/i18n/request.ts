@@ -21,9 +21,11 @@ export default getRequestConfig(async () => {
 
   return {
     locale,
-    // The default locale is served from the bundled catalog, so the common path
-    // costs no request at all and `requestOrigin()` is never asked for.
-    messages: locale === DEFAULT_LOCALE ? await loadCatalog(locale) : await loadCatalog(locale, await requestOrigin()),
+    // Every locale gets the origin: on the edge server even the default catalog is a
+    // published-asset read (see `./catalog`), and the origin is its network fallback
+    // where there is no ASSETS binding. Elsewhere the default is bundled and the
+    // origin goes unused.
+    messages: await loadCatalog(locale, await requestOrigin()),
     // We intentionally format in the viewer's local clock + time zone (see
     // ./onError). Swallow only the benign ENVIRONMENT_FALLBACK code so it does
     // not spam logs; every real i18n error still surfaces.

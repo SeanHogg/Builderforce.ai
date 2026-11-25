@@ -30,7 +30,6 @@ import { TenantPlan } from '../../domain/shared/types';
 import { effectivePlanOf, loadTenantPlanRow } from '../tenant/tenantPlanSnapshot';
 import { resolveTokenLimits } from '../../domain/tenant/PlanLimits';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { isDatabaseUnavailable } from '../../infrastructure/database/neonAvailability';
 import { getTenantDayMonthTokens, sumTenantTextTokensDayAndMonth, utcDayStart, utcMonthStart } from './tokenUsage';
 import { aiCreditBalance } from '../points/aiCredits';
 
@@ -286,10 +285,8 @@ export async function tenantHasSuperadminMember(db: Db, tenantId: number, env?: 
       ? await getOrSetCached(env, `tenant:superadmin-member:${tenantId}`, compute, { kvTtlSeconds: 300 })
       : await compute();
   } catch (error) {
-    // A database outage is HANDLED (false) but not reported: the durable sink is a write to that same database.
-    if (!isDatabaseUnavailable(error)) {
-      reportCaughtError(error, { source: 'application/llm/tenantTokenAvailability.ts', operation: 'tenantHasSuperadminMember', context: { tenantId } });
-    }
+    // Handled (false); the reporter skips a database outage.
+    reportCaughtError(error, { source: 'application/llm/tenantTokenAvailability.ts', operation: 'tenantHasSuperadminMember', context: { tenantId } });
     return false;
   }
 }

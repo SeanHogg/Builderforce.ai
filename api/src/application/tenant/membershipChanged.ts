@@ -28,29 +28,37 @@
 import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
 import { invalidateTeamCaches } from '../kernel/TeamRoster';
 import type { Env } from '../../env';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { bumpInboxes } from '../messaging/dmThreadsCache';
 import { invalidateMyWorkspaces, invalidateTenantSnapshot } from './tenantReadCache';
 
 /**
+ * What the change did to access. `revoke` = remove / deactivate / demote / role change /
+ * workspace delete (access may have SHRUNK, so a stale cached entry is a security hole and its
+ * invalidation is strict). `grant` = add / create / reactivate / upgrade (access only grew).
+ */
+export type MembershipChange = 'grant' | 'revoke';
+
+/**
  * Announce that a tenant's membership changed.
  *
- * @param userIds the members affected, when they are known. A role change or a
- *   removal knows exactly who; a replace-all does not, and passing none simply
- *   leaves that member's short-TTL auth entry to expire on its own — which is the
- *   behaviour every caller had before this existed, so an unknown subject is a
- *   partial win rather than a regression.
+ * @param userIds the members affected. A role change or a removal knows exactly
+ *   who; a replace-all does not, and passing none simply leaves that member's
+ *   short-TTL auth entry to expire on its own.
+ * @param change see {@link MembershipChange}.
  */
 export async function membershipChanged(
   env: Env,
   tenantId: number,
-  userIds: readonly string[] = [],
+  userIds: readonly string[],
+  change: MembershipChange,
 ): Promise<void> {
   // The JWT membership entry decides whether this person still has access, and is served as
-  // last-known-good through a database outage: its delete is STRICT, so a failure is raised
-  // (after the best-effort clears below have still run) instead of leaving a removed member
-  // with access for days.
+  // last-known-good through a database outage. For a `revoke` its delete is STRICT: a failure is
+  // raised (after the best-effort clears below have still run) instead of leaving a removed
+  // member with access for days. A `grant` only ever under-grants while stale, so it reports.
   const [accessFailure] = await Promise.all([
-    Promise.all(userIds.map((userId) => invalidateJwtMembershipCache(env, tenantId, userId)))
+    Promise.all(userIds.map((userId) => invalidateJwtMembershipCache(env, tenantId, userId, change)))
       .then(() => undefined, (error: unknown) => ({ error })),
     Promise.all([
       // The footer roster (PRD 21 §4.1) and the assignable-workforce union the
@@ -61,7 +69,9 @@ export async function membershipChanged(
       invalidateMyWorkspaces(env, userIds),
       // A DM inbox shows only people the viewer may reach, which membership decides.
       bumpInboxes(env, userIds),
-    ]).catch(() => undefined),
+    ]).catch((error: unknown) => {
+      reportCaughtError(error, { source: 'application/tenant/membershipChanged.ts', operation: 'membershipChanged', context: { tenantId } });
+    }),
   ]);
   if (accessFailure) throw accessFailure.error;
 }

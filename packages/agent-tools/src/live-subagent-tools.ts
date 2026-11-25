@@ -66,6 +66,9 @@ export const LIVE_FANOUT_NEXT =
 /** Said under a child's report when it left work: the owner owns it, and finishes it. */
 const OPEN_ISSUES_HEAD = `Open issues — yours before you finish (${RESOLVE_OPEN_ISSUES}; then verify again):`;
 
+/** Said under a child's report that states negatives nobody checked ("X does not exist"). */
+export const UNVERIFIED_CLAIMS_HEAD = "Unverified claims — check each with one search before relaying or acting on it:";
+
 /** The owner's verbs, by name — ONE list every surface's catalog and pin guard read. */
 export const SUBAGENT_CONTROL_TOOL_NAMES = { wait: "wait_agents", message: "message_agent", stop: "stop_agent" } as const;
 
@@ -121,7 +124,8 @@ export function childReportText(report: ChildReportLike): string {
     : report.state === "failed"
       ? `${OPEN_ISSUES_HEAD}\n- the whole slice: it failed — finish it yourself or delegate it again`
       : "";
-  return [head, report.output, files, coverage, data, issues].filter(Boolean).join("\n\n");
+  const claims = report.unverifiedClaims?.length ? `${UNVERIFIED_CLAIMS_HEAD} ${report.unverifiedClaims.join(" | ")}` : "";
+  return [head, report.output, files, coverage, data, issues, claims].filter(Boolean).join("\n\n");
 }
 
 /** Heads the child's coverage in its report — what it already read, so the owner does not. */

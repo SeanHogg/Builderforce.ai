@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import localFont from 'next/font/local';
 import { LocaleProvider } from './LocaleProvider';
+import { primeDefaultCatalog } from '@/i18n/catalog';
 import './globals.css';
 // The knowledge graph view's `--kg-*` palette: the design mockup's fixed literals (not aliases of `--bf-*`); `html[data-theme='light']` selects the light set.
 import '@builderforce/knowledge-graph-view/tokens.css';
@@ -171,11 +172,22 @@ export const viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Static-rendered shell in the default locale; the client LocaleProvider swaps
   // to the user's cookie locale after hydration (see LocaleProvider). This keeps
   // marketing/public pages statically prerendered (SEO) instead of forcing every
   // route dynamic via a server-side cookie read.
+  //
+  // The edge server build does not bundle the default catalog (see `@/i18n/catalog`):
+  // it is read from its published asset here, before anything below renders with it.
+  // `NEXT_RUNTIME` is a compile-time constant, so the Node build that prerenders the
+  // static routes drops this branch entirely and stays static. The origin is only the
+  // network fallback for a server with no ASSETS binding (`next start`); it is loaded
+  // inside the branch so the request-header reader never joins the shell's closure.
+  if (process.env.NEXT_RUNTIME === 'edge') {
+    const { requestOrigin } = await import('@/i18n/requestOrigin');
+    await primeDefaultCatalog(await requestOrigin());
+  }
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning className={jetbrainsMono.variable}>
       <head>

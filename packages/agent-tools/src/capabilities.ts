@@ -416,6 +416,8 @@ export interface ChildReportLike {
   changedFiles?: string[];
   /** What the child's report left for its owner (`parseSubagentReport` in agent-loop). */
   openIssues?: string[];
+  /** Negative claims its report states that nobody verified (`parseSubagentReport`'s `unverifiedClaims`). */
+  unverifiedClaims?: string[];
   /** What the child READ — files with their windows, data calls with their offsets — so the owner never re-reads it. */
   coverage?: string[];
   /** Where the host kept the data the child's calls returned (a workspace-relative path the owner can read_file). */

@@ -78,6 +78,8 @@ export interface ParsedSubagentReport {
   outcome?: string;
   /** Each `Open issues:` item; empty when the report says none (or has no such line). */
   openIssues: string[];
+  /** Confident negatives the report states ("does not exist", "could not …") the owner must check before relaying; omitted when none. */
+  unverifiedClaims?: string[];
 }
 
 /** A report line — never a bullet, so an issue that starts "Changed: …" stays an issue. */
@@ -153,7 +155,47 @@ export function parseSubagentReport(output: string): ParsedSubagentReport {
   if (openIssues.length === 0 && outcome && FAILED_OUTCOMES.has(outcome)) {
     openIssues.push(`the sub-agent reported its slice ${outcome} without naming what is left`);
   }
-  return { ...(outcome ? { outcome } : {}), openIssues };
+  const unverifiedClaims = findUnverifiedClaims(output, issues);
+  return { ...(outcome ? { outcome } : {}), openIssues, ...(unverifiedClaims.length ? { unverifiedClaims } : {}) };
+}
+
+/**
+ * Phrasings of a confident NEGATIVE ("X does not exist", "I could not add Y", "impossible").
+ * Data, not logic: add a pattern here, nothing else changes. Deliberately narrow — "no errors",
+ * "no changes needed", "nothing left" are ordinary report prose, not claims.
+ */
+const NEGATIVE_CLAIMS: readonly RegExp[] = [
+  /\b(?:could\s*not|couldn't|cannot|can\s*not|can't|unable\s+to|failed\s+to\s+find)\s+\w+/i,
+  /\b(?:does\s*not|doesn't|do\s*not|don't|did\s*not|didn't|is\s*not|isn't|are\s*not|aren't)\s+(?:exist|support|supported|possible|available|implemented|defined|provided)\b/i,
+  /\b(?:nonexistent|non-existent|impossible|unfixable|infeasible|unsupportable)\b|\bnot\s+(?:possible|feasible|fixable)\b/i,
+  /\b(?:has|have|had|with|there\s+is|there\s+are)\s+no\s+(?!(?:errors?|issues?|changes?|problems?|failures?|warnings?|blockers?|further|more|other|remaining|open|outstanding|need|longer|output|diff|differences?)\b)[\w-]+/i,
+  /\bno\s+such\s+\w+/i,
+];
+
+/** Claims an owner is handed from one report, and how long each may run. */
+const MAX_UNVERIFIED_CLAIMS = 5;
+
+/**
+ * The sentences of a report that assert a negative the owner could relay as fact — outside
+ * code fences, and not already carried as an open issue (those reach the owner as work).
+ */
+function findUnverifiedClaims(output: string, capturedIssues: readonly string[]): string[] {
+  const claims: string[] = [];
+  let inFence = false;
+  for (const raw of output.split(/\r?\n/)) {
+    if (FENCE.test(raw)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const line = raw.replace(HEADING, "$2").replace(BULLET, "").trim();
+    for (const sentence of line.split(/(?<=[.!?])\s+/)) {
+      const text = sentence.replace(/^[*_\s]+|[*_\s]+$/g, "");
+      if (!text || capturedIssues.some((i) => i.includes(text))) continue;
+      if (NEGATIVE_CLAIMS.some((p) => p.test(text)) && !claims.includes(clipIssue(text))) claims.push(clipIssue(text));
+    }
+  }
+  return claims.slice(0, MAX_UNVERIFIED_CLAIMS);
 }
 
 /**

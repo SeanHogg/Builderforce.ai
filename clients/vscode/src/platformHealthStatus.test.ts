@@ -17,7 +17,7 @@ vi.mock("vscode", () => ({
   l10n: { t: (message: string) => message },
 }));
 
-import { createPlatformHealth } from "./bfApi/platformHealth";
+import { BAD_SUSTAINED_MS, RECOVERY_MS, createPlatformHealth } from "./bfApi/platformHealth";
 import { registerPlatformHealthStatus } from "./platformHealthStatus";
 
 describe("platform health status item", () => {
@@ -31,7 +31,7 @@ describe("platform health status item", () => {
   const setup = () => {
     const health = createPlatformHealth();
     const subscriptions: Array<{ dispose(): void }> = [];
-    registerPlatformHealthStatus({ subscriptions } as never, health, 5000);
+    registerPlatformHealthStatus({ subscriptions } as never, health);
     return { health, subscriptions };
   };
 
@@ -41,33 +41,46 @@ describe("platform health status item", () => {
     expect(item.command).toBe("builderforce.diagnose");
   });
 
-  it("shows degraded only after the state persists", () => {
+  it("shows degraded once two non-online answers land within 30s", () => {
     const { health } = setup();
     health.reportResponse(503);
-    vi.advanceTimersByTime(4999);
     expect(item.visible).toBe(false);
-    vi.advanceTimersByTime(1);
+    health.reportResponse(503);
     expect(item.visible).toBe(true);
     expect(item.text).toContain("degraded");
     expect(item.tooltip).toContain("local models");
   });
 
-  it("does not flap on a blip that recovers inside the delay", () => {
+  it("shows a single sustained failure after 5s", () => {
+    const { health } = setup();
+    health.reportUnreachable();
+    vi.advanceTimersByTime(BAD_SUSTAINED_MS - 1);
+    expect(item.visible).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(item.visible).toBe(true);
+    expect(item.text).toContain("offline");
+  });
+
+  it("does not flap on a blip that recovers", () => {
     const { health } = setup();
     health.reportUnreachable();
     vi.advanceTimersByTime(2000);
     health.reportResponse(200);
-    vi.advanceTimersByTime(10_000);
+    vi.advanceTimersByTime(60_000);
     expect(item.visible).toBe(false);
   });
 
-  it("switches to offline immediately once shown, and hides immediately on recovery", () => {
+  it("stays visible through a lone good answer and hides only after 30s of continuous online answers", () => {
     const { health } = setup();
     health.reportResponse(503);
-    vi.advanceTimersByTime(5000);
+    health.reportResponse(503);
     health.reportUnreachable();
     expect(item.text).toContain("offline");
     health.reportResponse(200);
+    expect(item.visible).toBe(true);
+    vi.advanceTimersByTime(RECOVERY_MS - 1);
+    expect(item.visible).toBe(true);
+    vi.advanceTimersByTime(1);
     expect(item.visible).toBe(false);
   });
 });

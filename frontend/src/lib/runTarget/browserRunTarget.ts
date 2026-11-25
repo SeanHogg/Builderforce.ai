@@ -25,6 +25,7 @@ import {
 import { prepareApplicationPolicy } from '@/lib/browserRuntime/previewRuntimeOptions';
 import { PREVIEW_PHP_OPTIONS } from '@/lib/browserRuntime/previewPhpOptions';
 import { PREVIEW_PYTHON_PROVIDES } from '@/lib/browserRuntime/previewPythonOptions';
+import { loadWebcontainers } from '@/lib/browserRuntime/webcontainersPackage';
 import { recordedFailure } from '@/lib/reportError';
 import { PREVIEW_CAPTURE_SCRIPT } from '@/lib/previewCapture/captureScript';
 import { acceptBlueprintInBrowser } from './browserAcceptance';
@@ -67,7 +68,7 @@ async function startSerialised(blueprint: AppBlueprint | null, context: RunConte
 
   const [app, wc] = await Promise.all([
     import('@seanhogg/builderforce-webcontainers/app'),
-    import('@seanhogg/builderforce-webcontainers'),
+    loadWebcontainers(),
   ]);
   if (token !== generation) return superseded();
   // What only the files tell (a native-only Python package, a PHP extension php-wasm

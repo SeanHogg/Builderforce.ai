@@ -24,6 +24,7 @@ import { PREVIEW_PHP_OPTIONS } from './previewPhpOptions';
 import { previewDotnetOptions } from './previewDotnetOptions';
 import { previewRuntimeIdOf, previewShieldOptions } from './previewRuntimeOptions';
 import { attachPreviewSignals } from './previewSignals';
+import { loadWebcontainers } from './webcontainersPackage';
 import { measureFiles, setPreviewRunningProbe, timeWrite } from './writeTiming';
 
 const RELAY_URL = process.env.NEXT_PUBLIC_PREVIEW_RELAY_URL || 'https://preview.builderforce.ai/__bfwc/relay.html';
@@ -134,7 +135,7 @@ export function sharedPreviewRuntimeId(): string | null {
 }
 
 function bootRuntime(projectId?: string): Promise<PreviewRuntime> {
-  booting ??= import('@seanhogg/builderforce-webcontainers')
+  booting ??= loadWebcontainers()
     .then((wc) => {
       const id = previewRuntimeIdOf(projectId);
       runtimeId = id;

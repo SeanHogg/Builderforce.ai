@@ -1,6 +1,7 @@
 import { fetchPublishedAsset } from '@/infrastructure/http/publishedAsset';
 import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
 import { DEFAULT_LOCALE, type Locale } from './config';
+// `undefined` in the edge server build, which aliases this file to `./unbundledCatalog`.
 import enMessages from './messages/en.json';
 
 /**
@@ -20,9 +21,28 @@ import enMessages from './messages/en.json';
  *
  * Catalogs are DATA, so they are published as static assets by
  * `scripts/publish-message-catalogs.mjs` (prebuild) and fetched on demand. The
- * default locale stays a static import: it is what SSR and the first client
- * render use, and putting a network hop in front of the first paint to save a
- * file that every render needs anyway would be a bad trade.
+ * default locale stays a static import in the BROWSER (and the Node build that
+ * prerenders static routes): it is what the first client render uses, and putting
+ * a network hop in front of the first paint to save a file that every render needs
+ * anyway would be a bad trade.
+ *
+ * ── THE EDGE SERVER READS THE DEFAULT CATALOG TOO ───────────────────────────
+ * On Cloudflare the import was ~0.5 MiB of the Worker's 10 MiB compressed ceiling
+ * (the largest single module in it), so the edge server build aliases
+ * `./messages/en.json` to an empty stand-in (`./unbundledCatalog`, wired in
+ * `next.config.js`) and reads the
+ * published `en.json` through the ASSETS binding instead — once per route per
+ * isolate (next-on-pages gives every route its own `globalThis`), by
+ * {@link primeDefaultCatalog}. The root layout awaits it, so everything rendered
+ * inside the layout (client components' SSR, `LocaleProvider` first of all) can
+ * read it synchronously through {@link defaultCatalog}, which answers from the
+ * bundle where there is one and from the primed copy on the edge. A SERVER
+ * component in a nested segment must not rely on that ordering — segments render
+ * in parallel with the root layout, and alone on a client-side navigation — so it
+ * awaits the prime itself (`serverDefaultCopy`, `getTranslations` via
+ * `request.ts`). The copy is held on `globalThis` because the server-component
+ * layer and the SSR layer each get their own instance of this module; both see the
+ * same per-route global.
  *
  * ── CHUNKED LOADING (client) ────────────────────────────────────────────────
  * A non-default locale is NOT one ~1.2 MB (gzipped) file on the browser anymore.
@@ -49,7 +69,8 @@ import enMessages from './messages/en.json';
  *   - `loadNamespace` can still fetch a single namespace on demand for a client
  *     surface that swaps locale without a reload; its result is likewise merged
  *     into the live catalog, never a replacement of the whole thing.
- *   - The default locale (`en`) never fetches: it is the bundled static import.
+ *   - The default locale (`en`) never fetches in the browser: it is the bundled
+ *     static import there (the edge server reads it once per isolate, above).
  *
  * Both the flat catalog and the chunks are versioned with
  * `NEXT_PUBLIC_APP_VERSION` and marked immutable in `public/_headers`, so the
@@ -59,11 +80,59 @@ import enMessages from './messages/en.json';
 export type Messages = Record<string, unknown>;
 
 /**
- * The one catalog that stays in the bundle, and the only one the first render
- * can use. Exported so `LocaleProvider` seeds its state from the same import
- * rather than reaching for the JSON a second time.
+ * The one catalog that stays in the bundle — `undefined` in the edge server build,
+ * which never bundles it. Read it through {@link defaultCatalog}, which also covers
+ * the edge.
  */
-export const defaultMessages = enMessages as Messages;
+export const defaultMessages = enMessages as Messages | undefined;
+
+/** Where the edge server keeps the default catalog it read (see the header comment). */
+const PRIMED_DEFAULT = Symbol.for('builderforce.i18n.defaultCatalog');
+
+interface PrimedDefault {
+  messages?: Messages;
+  loading?: Promise<Messages>;
+}
+
+function primedSlot(): PrimedDefault {
+  const scope = globalThis as unknown as Record<symbol, PrimedDefault | undefined>;
+  return (scope[PRIMED_DEFAULT] ??= {});
+}
+
+/**
+ * The default-locale catalog, synchronously: the bundled one, or — on the edge
+ * server — the copy {@link primeDefaultCatalog} read. Throws when the edge copy has
+ * not been read yet, which means a render started without the root layout's prime.
+ */
+export function defaultCatalog(): Messages {
+  if (defaultMessages) return defaultMessages;
+  const primed = primedSlot().messages;
+  if (!primed) throw new Error('[i18n] the default catalog was read before primeDefaultCatalog() resolved.');
+  return primed;
+}
+
+/**
+ * Make {@link defaultCatalog} answerable. Free wherever the catalog is bundled; on
+ * the edge server it reads the published `en.json` (the ASSETS binding on the
+ * deployed Worker; `origin` is the network fallback elsewhere) once per isolate and
+ * shares one in-flight read. A failed read is not cached, so the next render retries.
+ */
+export function primeDefaultCatalog(origin = ''): Promise<Messages> {
+  if (defaultMessages) return Promise.resolve(defaultMessages);
+  const slot = primedSlot();
+  if (slot.messages) return Promise.resolve(slot.messages);
+  slot.loading ??= fetchPublishedAsset(catalogUrl(DEFAULT_LOCALE), origin)
+    .then(async (response) => {
+      if (!response.ok) throw new Error(`[i18n] default catalog: HTTP ${response.status}`);
+      const messages = (await response.json()) as Messages;
+      slot.messages = messages;
+      return messages;
+    })
+    .finally(() => {
+      slot.loading = undefined;
+    });
+  return slot.loading;
+}
 
 /**
  * Root-relative URL of a published catalog, versioned by the build.
@@ -138,7 +207,7 @@ async function loadFlatCatalog(locale: Locale, origin: string): Promise<Messages
     });
   } catch (error) {
     console.warn(`[i18n] catalog "${locale}" unavailable — rendering in ${DEFAULT_LOCALE}.`, error);
-    return defaultMessages;
+    return primeDefaultCatalog(origin);
   }
 }
 
@@ -160,7 +229,7 @@ async function loadFlatCatalog(locale: Locale, origin: string): Promise<Messages
  *   root-relative URL resolves against the current document.
  */
 export async function loadCatalog(locale: Locale, origin = ''): Promise<Messages> {
-  if (locale === DEFAULT_LOCALE) return defaultMessages;
+  if (locale === DEFAULT_LOCALE) return primeDefaultCatalog(origin);
   const flat = await loadFlatCatalog(locale, origin);
   if (typeof window === 'undefined') return flat; // server: full catalog, unchanged
 
@@ -191,7 +260,7 @@ export async function loadCatalog(locale: Locale, origin = ''): Promise<Messages
  */
 export async function loadNamespace(locale: Locale, namespace: string, origin = ''): Promise<Messages | null> {
   if (locale === DEFAULT_LOCALE) {
-    const node = (defaultMessages as Messages)[namespace];
+    const node = (await primeDefaultCatalog(origin))[namespace];
     return node === undefined ? null : { [namespace]: node };
   }
   try {

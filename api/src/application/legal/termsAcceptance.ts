@@ -28,7 +28,7 @@ import type { Env } from '../../env';
 import { legalDocumentAcceptances, legalDocuments, userLegalAcceptances, userTermsAgreements } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToNullableTenant, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { recordActivity, type ActorIdentity } from '../activity/activityLog';
-import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { INVALIDATE_WITH_LKG, OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 
 /** Cache key for the platform-wide active terms version. */
 // Bump the key with each migration-published legal release. SQL migrations cannot
@@ -137,7 +137,7 @@ export async function checkTermsAcceptance(
 /** Call after publishing or amending a legal document. Best-effort. */
 export async function invalidateActiveTermsVersion(env: Env | undefined): Promise<void> {
   if (!env) return;
-  await invalidateCached(env, ACTIVE_TERMS_KEY).catch((error) => {
+  await invalidateCached(env, ACTIVE_TERMS_KEY, INVALIDATE_WITH_LKG).catch((error) => {
     reportCaughtError(error, { source: "application/legal/termsAcceptance.ts", operation: "invalidateActiveTermsVersion" });
   });
 }
@@ -145,7 +145,7 @@ export async function invalidateActiveTermsVersion(env: Env | undefined): Promis
 /** Call after a user accepts terms. Best-effort. */
 export async function invalidateAcceptedTermsVersion(env: Env | undefined, userId: string): Promise<void> {
   if (!env) return;
-  await invalidateCached(env, acceptedTermsKey(userId)).catch((error) => {
+  await invalidateCached(env, acceptedTermsKey(userId), INVALIDATE_WITH_LKG).catch((error) => {
     reportCaughtError(error, { source: "application/legal/termsAcceptance.ts", operation: "invalidateAcceptedTermsVersion" });
   });
 }

@@ -107,7 +107,7 @@ export async function seatAsCollaborator(
   if (existing) {
     await db.update(tenantMembers).set({ isActive: true })
       .where(scopedToTenant(tenantMembers, input.tenantId, eq(tenantMembers.id, existing.id)));
-    if (env) await membershipChanged(env, input.tenantId, [input.userId]);
+    if (env) await membershipChanged(env, input.tenantId, [input.userId], 'grant');
     return;
   }
   await db.insert(tenantMembers).values({
@@ -118,7 +118,7 @@ export async function seatAsCollaborator(
     joinedAt: new Date(),
     seatKind: SEAT_KIND.COLLABORATOR,
   }).onConflictDoNothing();
-  if (env) await membershipChanged(env, input.tenantId, [input.userId]);
+  if (env) await membershipChanged(env, input.tenantId, [input.userId], 'grant');
 }
 
 /**

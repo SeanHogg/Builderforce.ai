@@ -185,7 +185,7 @@ async function ensureMembership(env: Env, db: Db, tenantId: number, userId: stri
   // The one membership write outside the tenant aggregate — it announces itself
   // through the same hook, so a reseeded demo workspace's footer roster is right
   // on the first read rather than after the TTL.
-  await membershipChanged(env, tenantId, [userId]);
+  await membershipChanged(env, tenantId, [userId], 'grant');
 }
 
 /** Upsert the blueprint's demo agents and return id lookups for assignment. */

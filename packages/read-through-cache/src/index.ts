@@ -77,6 +77,9 @@ export interface InvalidateOptions {
    *  whose correctness depends on the entry being gone — a revoked key must not be served
    *  from a copy that outlives the revoke by days. */
   strict?: boolean;
+  /** Also delete the last-known-good (`cache:lkg:`) spelling. Set it for keys whose reads opt into
+   *  `staleOnError`; without it only the plain spelling is deleted (one KV delete, as before). */
+  lkg?: boolean;
 }
 
 export interface ReadThroughCacheOptions {
@@ -124,7 +127,7 @@ export interface ReadThroughCache {
    * recompute. Best-effort on the KV write.
    */
   set<T>(kv: KvNamespaceLike | undefined, key: string, value: T, opts?: CacheTtlOptions): Promise<void>;
-  /** Invalidate both cache layers for `key` (and both KV spellings of it). Call from every
+  /** Invalidate both cache layers for `key` (plus the lkg KV spelling when `opts.lkg`). Call from every
    *  mutation that changes the cached data so the next read re-loads. A failed KV delete is
    *  reported and swallowed unless `opts.strict`, which rethrows once `retryDelete` is spent. */
   invalidate(kv: KvNamespaceLike | undefined, key: string, opts?: InvalidateOptions): Promise<void>;
@@ -365,14 +368,18 @@ export function createReadThroughCache(options: ReadThroughCacheOptions = {}): R
       l1.delete(key);
       inFlight.delete(key);
       if (!kv) return;
-      // BOTH spellings: a key may hold a plain value, a last-known-good envelope, or both.
-      const storageKeys = [await kvStorageKey(key), await kvStorageKey(key, 'lkg')];
+      // The last-known-good spelling only when the caller's reads opted into `staleOnError`
+      // (`opts.lkg`): every other key keeps its single delete.
+      const storageKeys = [await kvStorageKey(key)];
+      if (opts?.lkg) storageKeys.push(await kvStorageKey(key, 'lkg'));
       const outcomes = await Promise.all(storageKeys.map(async (storageKey) => {
         try {
           await retryDelete(() => kv.delete(storageKey));
           return undefined;
         } catch (error) {
-          report(error, 'invalidate', 'delete', storageKey, key);
+          // Strict: the failure is rethrown below and the receiver reports it — reporting here too
+          // would be two reports of one error.
+          if (!opts?.strict) report(error, 'invalidate', 'delete', storageKey, key);
           return { error };
         }
       }));

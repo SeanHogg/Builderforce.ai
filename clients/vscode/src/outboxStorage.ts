@@ -79,23 +79,25 @@ export function durableOutboxStore<T, K>(name: string): OutboxStore<T, K> {
 }
 
 /**
- * Can the platform API serve writes right now? Set by the API client's own requests via
- * {@link platformHealth}: true only when `online` — a `degraded` answer (502/503/504, e.g.
- * 503 `database_unavailable`) pauses the outbox exactly as `unreachable` does, since retrying
- * writes into a failing platform is wasted traffic. The next healthy answer flips it back
- * and the outbox replays at once.
+ * Can the platform API serve writes right now? Follows the hysteresis-STABLE
+ * {@link platformHealth} state, never a single response: true only when `online`. Once the
+ * platform has been non-online for long enough to count (see `bfApi/platformHealth.ts`) the
+ * outbox pauses — a `degraded` platform (502/503/504, e.g. 503 `database_unavailable`) the
+ * same as `unreachable`, since retrying writes into a failing platform is wasted traffic —
+ * and it replays once the platform has answered healthily without a break long enough to
+ * return to `online`. A lone failed answer neither pauses nor un-pauses it.
  */
-export const apiConnectivity = createOnlineSignal(true);
+export const apiConnectivity = createOnlineSignal(platformHealth.state() === "online");
+platformHealth.subscribe((state) => apiConnectivity.set(state === "online"));
 
 /** Await a request, classifying the platform's health from its answer (status only — the body is never read). */
 export async function trackReachability(request: Promise<Response>): Promise<Response> {
   try {
     const res = await request;
-    apiConnectivity.set(platformHealth.reportResponse(res.status) === "online");
+    platformHealth.reportResponse(res.status);
     return res;
   } catch (error) {
     platformHealth.reportUnreachable();
-    apiConnectivity.set(false);
     throw error;
   }
 }

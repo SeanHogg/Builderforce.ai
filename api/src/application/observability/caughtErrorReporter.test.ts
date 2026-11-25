@@ -6,6 +6,8 @@ import {
   resetCaughtErrorReporterForTests,
 } from './caughtErrorReporter';
 import { runInRequestScope, updateRequestScope } from '../shared/requestScope';
+import { ServiceUnavailableError } from '../../domain/shared/errors';
+import { DATABASE_UNAVAILABLE_CODE } from '../../infrastructure/database/neonAvailability';
 
 afterEach(() => {
   resetCaughtErrorReporterForTests();
@@ -147,5 +149,20 @@ describe('caughtErrorReporter', () => {
     expect(Array.isArray(record.error.errors)).toBe(true);
     expect(record.error.errors).toHaveLength(2);
     expect(JSON.stringify(record.error.errors)).not.toContain(ghp);
+  });
+
+  it('skips a database outage (bare or drizzle-wrapped) in BOTH entry points: the sink writes to that database', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const sink = vi.fn(async () => undefined);
+    configureCaughtErrorReporter(sink);
+    const outage = new ServiceUnavailableError('The database is temporarily unavailable', { code: DATABASE_UNAVAILABLE_CODE });
+    const wrapped = new Error('Failed query', { cause: outage });
+
+    reportCaughtError(outage, { source: 'test', operation: 'outage' }, { env: {} });
+    reportCaughtError(wrapped, { source: 'test', operation: 'outage' }, { env: {} });
+    await reportUnhandledError(wrapped, { source: 'test', operation: 'outage' }, { env: {} });
+
+    expect(sink).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
   });
 });
