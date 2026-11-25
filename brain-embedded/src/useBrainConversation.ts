@@ -54,6 +54,7 @@ import { submitLocalTurnVerdict } from './localSuccess/verifiedLocalLabel';
 import type { ChatErrorAction } from './chatError';
 import type { DraftBinding, DraftToken } from './draftBinding';
 import { useLaunchCancel, type DraftSend } from './launchCancel';
+import { getRunWorkflow } from './runStore/runControl';
 import type { ChatMode, ChatRosterAgent } from './chatMode';
 import {
   startRun,
@@ -716,7 +717,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     (agentLabel?: string, surface?: string) =>
       buildBrainTriageReport({
         capturedAt: new Date().toISOString(),
-        events: getRunTrace(chatId),
+        events: [...getRunTrace(chatId), ...getRunWorkflow(chatId)],
         messages,
         chatId,
         agentLabel,

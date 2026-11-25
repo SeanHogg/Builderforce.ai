@@ -307,6 +307,9 @@ export async function synthesizeFinal(
   });
 
   const raw = completion.content ?? "";
+  // A closing turn that said nothing is NO answer: the surface's `settle` shaping must not turn silence into a filler reply
+  // (the Brain's `accept` answers an empty text "No response."), or the run would finish instead of failing on the breaker.
+  if (!raw.trim()) return null;
   const output = hooks.stall.settle ? hooks.stall.settle(pctx, raw) : raw.trim();
   if (!output) return null;
   appendRows(input, transcript, ask, { role: "assistant", content: output });

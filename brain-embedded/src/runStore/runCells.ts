@@ -149,6 +149,16 @@ export function pushTrace(c: RunCell, ev: BrainTraceEvent): void {
   emit(c);
 }
 
+/**
+ * A workflow stage span (`workflowDiagnostics.ts`): MEASUREMENT for the triage report, not a step of the conversation. It is kept
+ * beside the trace, never in it: the trace is the run's steps, every one of which is persisted as a step row (`persistStep`), so a
+ * span in it became a chat row per span (86 rows where the run has 13 real steps) that no surface shows.
+ */
+export function pushWorkflowSpan(c: RunCell, ev: BrainTraceEvent): void {
+  c.workflow = [...c.workflow.slice(1 - MAX_TRACE_EVENTS), ev];
+  emit(c);
+}
+
 /** The trace events THIS run produced — see {@link RunCell.runTraceFrom}. */
 export function runTrace(c: RunCell): BrainTraceEvent[] {
   return c.trace.slice(c.runTraceFrom);

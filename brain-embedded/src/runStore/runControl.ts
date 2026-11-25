@@ -135,6 +135,12 @@ export function getRunTrace(chatId: RunKey | null): BrainTraceEvent[] {
   return cells.get(chatId)?.trace ?? [];
 }
 
+/** The workflow stage spans measured for a chat's runs (read with the trace by the triage report). */
+export function getRunWorkflow(chatId: RunKey | null): BrainTraceEvent[] {
+  if (chatId == null) return [];
+  return cells.get(chatId)?.workflow ?? [];
+}
+
 /**
  * Stop a chat's in-flight run. Aborts the streaming LLM request (which rejects
  * the in-flight `stream()` — the loop treats an aborted signal as a clean exit,

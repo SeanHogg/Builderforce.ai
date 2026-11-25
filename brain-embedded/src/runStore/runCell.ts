@@ -57,6 +57,8 @@ export interface RunCell {
    */
   priorResearch: string | null;
   trace: BrainTraceEvent[];
+  /** Workflow stage spans of the chat's runs (`pushWorkflowSpan`): measurement beside the trace, never persisted as steps. */
+  workflow: BrainTraceEvent[];
   running: boolean;
   streamingText: string;
   error: string;
@@ -295,6 +297,7 @@ export function makeCell(): RunCell {
     transcript: [],
     priorResearch: null,
     trace: [],
+    workflow: [],
     running: false,
     streamingText: '',
     error: '',

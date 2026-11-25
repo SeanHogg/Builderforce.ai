@@ -22,9 +22,10 @@ describe('workflow diagnostics', () => {
       sink.workflow!({ ...base, status: 'running' });
       sink.workflow!({ ...base, status: 'completed', endedAt: 100, durationMs: 0 });
     }
-    expect(new Set(c.trace.map((e) => stepSig(e.category, e.label, e.ts))).size).toBe(4);
-    const messages: BrainMessage[] = c.trace.map((e, i) => ({ id: i + 1, seq: i + 1, role: 'tool', content: '', createdAt: e.ts, metadata: JSON.stringify({ ...e, kind: 'step' }) }));
-    for (const live of [[], c.trace]) {
+    expect(c.trace).toEqual([]); // spans are measurement beside the trace, never a persisted step
+    expect(new Set(c.workflow.map((e) => stepSig(e.category, e.label, e.ts))).size).toBe(4);
+    const messages: BrainMessage[] = c.workflow.map((e, i) => ({ id: i + 1, seq: i + 1, role: 'tool', content: '', createdAt: e.ts, metadata: JSON.stringify({ ...e, kind: 'step' }) }));
+    for (const live of [[], c.workflow]) {
       const summary = workflowDiagnostics(traceWithPersistedSteps(messages, live));
       expect(summary.stages.find((s) => s.stage === 'opening')).toMatchObject({ attempts: 2, completed: 2, running: 0, totalMs: 0 });
     }

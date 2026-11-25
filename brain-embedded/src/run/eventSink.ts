@@ -13,7 +13,7 @@
 import type { EventSink, RunEvent, RunOutcomeRow } from '@builderforce/agent-run';
 import type { BrainTraceEvent } from '../brainTriage';
 import type { RunCell } from '../runStore/runCell';
-import { emit, nowIso, pushTrace } from '../runStore/runCells';
+import { emit, nowIso, pushTrace, pushWorkflowSpan } from '../runStore/runCells';
 import { noteBudgetContained } from '../runStore/runEndOutcome';
 import { turnContextTokens } from '../runStore/turnContext';
 import { stallTraceStep } from './stallTrace';
@@ -135,7 +135,7 @@ export function brainEventSink(c: RunCell, outcome?: OutcomeReport, on: SinkReac
   return {
     workflow(metric) {
       // Trace merging keys on category/label/timestamp. Distinguish spans and phases even at 0 ms.
-      pushTrace(c, { ts: new Date(metric.endedAt ?? metric.startedAt).toISOString(), category: 'message', label: `workflow.stage.${metric.id}.${metric.status}`, args: metric, ...(metric.durationMs !== undefined ? { durationMs: metric.durationMs } : {}) });
+      pushWorkflowSpan(c, { ts: new Date(metric.endedAt ?? metric.startedAt).toISOString(), category: 'message', label: `workflow.stage.${metric.id}.${metric.status}`, args: metric, ...(metric.durationMs !== undefined ? { durationMs: metric.durationMs } : {}) });
     },
     emit(event: RunEvent): Promise<void> | void {
       const kept = event.kind === 'model.coder_reask' ? undefined : on.turnKept?.();

@@ -47,8 +47,9 @@ export async function runPrepared(run: BrainRunContext): Promise<void> {
       coderReask: (e) => discardAnswered(run, last, e.step, e.model),
       turnKept: keepAnswered,
       budgetStop: (e) => { last.contained = e.text; },
-      // The turn recorder writes the model downgrade, and the steering port records each direction it drains.
-      recorded: new Set(['llm.model_downgrade', 'steer.applied'] as const),
+      // The turn recorder writes the model downgrade, and the steering port records each direction it drains. The preamble already
+      // wrote the route's step (`run.pipeline_route`, `runPreamble.ts`), so `openRun`'s own `run.routed` is not a second row for it.
+      recorded: new Set(['llm.model_downgrade', 'steer.applied', 'run.routed'] as const),
     }),
     ship: run.shipPolicy,
     // From here the model policy is the AGENT's: the Brain's guards read `run.policy` (the view's) and report to it through the view.
