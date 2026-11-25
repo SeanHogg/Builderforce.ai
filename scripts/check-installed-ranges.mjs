@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Fail packaging when an installed dependency does not satisfy the range its consumer declares.
  *

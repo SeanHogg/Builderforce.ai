@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Guard (PRD 41 A1, done-check "No view or command uses `builderforce.signedIn` except account-only
  * ones"): every `when` clause in `package.json` that reads `builderforce.signedIn` must belong to an
