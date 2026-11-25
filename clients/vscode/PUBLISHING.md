@@ -4,18 +4,13 @@ The extension ships to **two** registries so every editor flavor can install it:
 
 | Registry | Serves | CLI | Token |
 | --- | --- | --- | --- |
-| **VS Code Marketplace** | VS Code (Microsoft build) | `vsce` | `VSCE_PAT` |
+| **VS Code Marketplace** | VS Code (Microsoft build) | `vsce` | GitHub Actions trusted publishing |
 | **Open VSX** | Cursor, Windsurf, VSCodium, code-server | `ovsx` | `OVSX_PAT` |
 
 ## One-time setup
 
 ### VS Code Marketplace
-1. Create a publisher at <https://marketplace.visualstudio.com/manage>. The `publisher`
-   field in `package.json` (`builderforce`) must match it.
-2. Back it with an **Azure DevOps** organization and create a **Personal Access Token**
-   with scope **Marketplace → Manage** (full).
-3. Store the token as the `VSCE_PAT` repo secret (CI) and/or run `vsce login builderforce`
-   locally.
+In the [BuilderForce publisher's Trusted Publishing settings](https://marketplace.visualstudio.com/manage/publishers/builderforce/trustedpublishing), create a GitHub Actions policy for owner `SeanHogg`, repository `Builderforce.ai`, and workflow `release.yml`. Leave Environment blank. The publish job runs on `main` and exchanges its GitHub OIDC identity for a short-lived Marketplace credential.
 
 ### Open VSX
 1. Sign in at <https://open-vsx.org> with GitHub and create an access token.
@@ -30,7 +25,6 @@ npm run compile
 npm run package                 # → builderforce-ai-<version>.vsix
 code --install-extension builderforce-ai-*.vsix   # smoke-test the .vsix
 
-npm run publish:marketplace     # vsce publish --no-dependencies
 npm run publish:openvsx -- builderforce-ai-*.vsix
 ```
 
@@ -40,13 +34,9 @@ Every push to `main` runs `.github/workflows/release.yml`, whose `publish-extens
 packages the extension once, launches it in a real VS Code, and publishes the same `.vsix`
 to both registries. There is no tag step; bump `version` in `package.json` and push.
 
-**Each registry is skipped, with only a warning, while its secret is unset.** A green
-release therefore does NOT mean the extension shipped. Check the job's log for
-`VSCE_PAT is not set` / `OVSX_PAT is not set`, or check the listing itself.
+Marketplace publishing fails if trusted authentication or upload fails. An existing universal package at the same version is a no-op. Open VSX still uses `OVSX_PAT`; check its listing to confirm publication.
 
-To publish a version whose release already ran, set the secrets and re-run just that
-job: `gh run rerun <run-id> --job <publish-extension job id>`. A version that already
-exists is rejected and reported as a warning, so a re-run is always safe.
+After fixing Marketplace policy or Open VSX credentials, retry the publish job with `gh run rerun <run-id> --job <publish-extension job id>` while its packaged artifact is still available.
 
 ## Versioning
 

@@ -23,7 +23,7 @@ and need no manual step once their secret exists.
 
 | Channel | What ships | Secret | Behaviour without it |
 | --- | --- | --- | --- |
-| Visual Studio Marketplace | `clients/vscode` VSIX | `VSCE_PAT` | Warns and skips |
+| Visual Studio Marketplace | `clients/vscode` VSIX | GitHub Actions trusted publishing | Fails the publish job |
 | Open VSX (Cursor, Windsurf, VSCodium, Gitpod) | the same VSIX | `OVSX_PAT` | Warns and skips |
 | MCP Registry | [`../server.json`](../server.json) — the remote `/mcp` server | none (GitHub OIDC) | Runs; refuses to publish if the endpoint isn't answering |
 | GitHub Marketplace | [`../actions/dispatch-agent`](../actions/dispatch-agent) | `ACTION_MIRROR_TOKEN`, `ACTION_MIRROR_REPO` | Warns and skips; the in-repo action still works |
