@@ -3,7 +3,7 @@ import {
   createComposerCommandRegistry,
   describeComposerProblem,
   parseComposerInput
-} from "./chunk-3H4JVERX.mjs";
+} from "./chunk-PPWDNYV2.mjs";
 export {
   HELP_COMMAND_ID,
   createComposerCommandRegistry,

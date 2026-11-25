@@ -45,6 +45,7 @@ vi.mock('./postingDistributionSweepStore', () => ({
   saveImportState: (...args: unknown[]) => saveImportState(...args),
   saveBoardFilterId: (...args: unknown[]) => saveBoardFilterId(...args),
   touchPostedDistribution: (...args: unknown[]) => touchPostedDistribution(...args),
+  touchNonImportableBoard: vi.fn(async () => undefined),
 }));
 vi.mock('./resolveBoardUrls', () => ({
   resolveDistributionUrl: vi.fn(),

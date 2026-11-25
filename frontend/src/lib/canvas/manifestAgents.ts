@@ -1,3 +1,4 @@
+import { AGENT_BUDGET_KEYS } from '@seanhogg/builderforce-webcontainers-core';
 import { MANIFEST_READ_PATHS } from '@builderforce/app-detect/manifest';
 import { canvasAppFiles } from '../canvasApp';
 
@@ -42,27 +43,9 @@ export function manifestAgentDeclarationRows(agent: ManifestAgent, noRole: strin
   });
 }
 
-/*
- * ── THE RUNTIME'S AGENT VOCABULARY, MIRRORED ─────────────────────────────────────
- * The core the frontend installs from npm (`@seanhogg/builderforce-webcontainers-core`
- * 2026.11.12) does not yet export its agent vocabulary, so the three names the declaration
- * form needs are stated here, each a copy of `packages/core/src/capabilities/agents.ts` or
- * `packages/core/src/agents/contract.ts`. They are named by the validator's own issue
- * paths (`agents.<id>.budget.<key>`, `agents.<id>.tools`), so a drift surfaces as a typed
- * refusal from `app_manifest.add_agent`, never as a silently accepted declaration. Once a
- * published core exports them, these become re-exports.
- */
-
-/** Core `AGENT_BUDGET_KEYS`: the limits an agent's `budget` may set. */
-export const AGENT_BUDGET_KEYS = ['tokens', 'usd', 'steps'] as const;
+export { AGENT_BUDGET_KEYS, ENV_TOOL_KEYS, TOOL_KEY_PATTERN } from '@seanhogg/builderforce-webcontainers-core';
 
 export type AgentBudgetKey = (typeof AGENT_BUDGET_KEYS)[number];
-
-/** Core `TOOL_KEY_PATTERN`: a tool key is dotted lowercase segments, never a wildcard. */
-export const TOOL_KEY_PATTERN = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/;
-
-/** Core `ENV_TOOL_KEYS`: the environment tools the runtime itself provides. */
-export const ENV_TOOL_KEYS = ['env.fs.read', 'env.fs.write', 'env.fs.list', 'env.run', 'env.preview.fetch', 'env.services.status'] as const;
 
 type BoardNodes = ReadonlyArray<{ id: string; data: Readonly<Record<string, unknown>> }>;
 

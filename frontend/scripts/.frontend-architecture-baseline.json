@@ -7,7 +7,7 @@
     "components/AgentStateViewer.tsx"
   ],
   "oversizedProductionFileLines": {
-    "app/incidents/IncidentsPageClient.tsx": 1174,
+    "app/incidents/IncidentsPageClient.tsx": 1172,
     "app/knowledge/[id]/KnowledgeDocClient.tsx": 1099,
     "app/marketplace/MarketplacePageClient.tsx": 1162,
     "components/AITrainingPanel.tsx": 992,
@@ -15,10 +15,10 @@
     "components/ProviderKeysSettings.tsx": 1333,
     "components/TaskMgmtContent.tsx": 2657,
     "components/agent/AgentExecutionPanel.tsx": 953,
-    "components/creation-canvas/CreationCanvas.tsx": 928,
+    "components/creation-canvas/CreationCanvas.tsx": 923,
     "components/manager/ManagerContent.tsx": 977,
     "components/reliability/MonitoringSections.tsx": 954,
-    "components/workforce/WorkforceAgents.tsx": 810,
+    "components/workforce/WorkforceAgents.tsx": 809,
     "lib/adminApi.ts": 1779,
     "lib/builderforceApi.ts": 9712,
     "lib/founderObjects.ts": 1596,

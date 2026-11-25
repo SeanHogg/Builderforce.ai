@@ -111,6 +111,18 @@ describe("the editor's workspace port: writes stay inside the folder", () => {
     expect(await readFile(from, "utf8")).toBe("{}");
   });
 
+  it("stats a file, a directory (a link to one included) and nothing", async () => {
+    const file = path.join(root, "page.html");
+    await writeFile(file, "<p>hi</p>");
+    await symlink(outside, path.join(root, "linked"), "junction");
+    const port = vscodeWorkspacePort();
+    expect(await port.stat(file)).toBe("file");
+    expect(await port.stat(root)).toBe("directory");
+    expect(await port.stat(path.join(root, "linked"))).toBe("directory");
+    expect(await port.stat(path.join(root, "gone.html"))).toBeUndefined();
+    expect(await port.stat(path.join(file, "below"))).toBeUndefined();
+  });
+
   it("passes the extension host's remote name through", () => {
     expect(vscodeWorkspacePort().remoteName()).toBeUndefined();
     editor.remoteName = "ssh-remote";

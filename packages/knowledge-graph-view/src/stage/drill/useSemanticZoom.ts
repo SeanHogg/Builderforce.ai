@@ -62,10 +62,16 @@ const cameraOf = (p: Placement): string => p.cacheKey.split('|')[1] ?? '';
 
 interface Candidate { id: string; key: string }
 
+/** What the frame-time evaluator reads (kept in a ref so it is never stale); the code key and trail are written back from it. */
+interface ZoomState {
+    drill: DrillModel; map: StageMap; entries: ReadonlyMap<string, NestEntry>;
+    codeKey: string | null; trail: readonly string[]; seqBand: number; band: number; candidates: Candidate[];
+}
+
 export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap, reducedMotion: boolean): SemanticZoom {
     const [entries, setEntries] = useState<ReadonlyMap<string, NestEntry>>(() => new Map());
     const [trail, setTrail] = useState<readonly string[]>([]);
-    const codeKey = trail.at(-1) ?? null;
+    const codeKey: string | null = trail.at(-1) ?? null;
     const [seqBand, setSeqBand] = useState(0);
     // An enter / out asked for and not yet in the stack: no second step until it lands.
     const pending = useRef(false);
@@ -87,7 +93,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         });
     }, [band, map.stations, map.keyOfStation, drill.view, drill.canEnter, drill.symbols]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const state = useRef({ drill, map, entries, codeKey, trail, seqBand, band, candidates });
+    const state = useRef<ZoomState>({ drill, map, entries, codeKey, trail, seqBand, band, candidates });
     state.current = { drill, map, entries, codeKey, trail, seqBand, band, candidates };
 
     const evaluate = useCallback(() => {

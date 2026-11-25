@@ -39,6 +39,11 @@ export function fakeWorkspacePort(folders: WorkspaceFolderRef[], files: Record<s
       return [...names];
     },
     exists: async (file) => port.files.has(file),
+    stat: async (file) => {
+      if (port.files.has(file)) return "file";
+      const prefix = file.endsWith(path.sep) ? file : file + path.sep;
+      return folders.some((folder) => folder.path === file) || [...port.files.keys()].some((key) => key.startsWith(prefix)) ? "directory" : undefined;
+    },
     readText: async (file) => port.files.get(file),
     writeText: async (file, text) => {
       const refused = await checkWrites([file]);

@@ -36,9 +36,9 @@ export const APPROVED_PERMANENT = [
   },
   {
     file: 'api/src/application/runtime/cloudAdapter.sharedTask.test.ts',
-    blob: 'af4f9ea349fcacd0efb94f8433ccb1e1c6c6ca13',
-    changed: "The host fixture's `verifyPin: undefined` becomes `reviewPin: undefined`; every expectation is unchanged.",
-    reason: "Intended change (6e6911185, BYO role routing, chat #153027): code review is its own `review` role, so the cloud host's review pin is named for it. A rename only.",
+    blob: '51b7a36b24f5ffe8a6c6566adcccbcf4891dea74',
+    changed: "The host fixture's `verifyPin: undefined` becomes `reviewPin: undefined`; every expectation is unchanged. Re-approved 2026-11-25 for an append-only case (2a9de14d9): 'attributes the child to its owner even when the durable cursor describes the child itself'; every existing line unchanged.",
+    reason: "Intended change (6e6911185, BYO role routing, chat #153027): code review is its own `review` role, so the cloud host's review pin is named for it. A rename only. The appended case pins sub-agent dispatch attribution (parentRunId is the owner's run, not the child's).",
     approvedBy: APPROVED_BY,
   },
   {
@@ -64,16 +64,16 @@ export const APPROVED_PERMANENT = [
   },
   {
     file: 'packages/agent-run/test/learnedFacts.test.ts',
-    blob: 'b76814c49245835147a6bef295b59ad3407f7410',
-    changed: "The readChangedExcerpt case is not carried.",
+    blob: '215eb5dbb5f0142f648d18c512c27bb848054e21',
+    changed: "The readChangedExcerpt case is not carried. Re-approved 2026-11-25 (74adb8001): the import adds `finishedRun` and a 'read-only investigations' describe is appended; every existing expectation is unchanged.",
     reason: "It reads the workspace with node fs and git; the package may not import node:*. The case runs unchanged in clients/vscode/src/changedExcerpt.test.ts (the editor, readChangedExcerpt).",
     approvedBy: APPROVED_BY,
     cases: 1,
   },
   {
     file: 'packages/agent-run/test/verify/runEndMemory.test.ts',
-    blob: 'ffad21b7d8a0b963ec876ab3acc76927f091a5ce',
-    changed: "The three run-end tail cases run over timeline and store.commitMemory port fakes instead of a stub Drizzle db; the seven pure cases are import-only.",
+    blob: '38879dc8945accaa29601a415ea744acf5a03bb1',
+    changed: "The three run-end tail cases run over timeline and store.commitMemory port fakes instead of a stub Drizzle db; the seven pure cases are import-only. Re-approved 2026-11-25 (e7c70fdfd): two cases appended (confirmed branch CI counts as a check; a failing on-prem check is preserved); every existing line unchanged.",
     reason: "The cloud keeps the three original tail cases unchanged in api/.../runEndMemory.test.ts; these are additional port-level variants.",
     approvedBy: APPROVED_BY,
   },
@@ -93,9 +93,16 @@ export const APPROVED_PERMANENT = [
   },
   {
     file: 'packages/agent-run/test/finish/finish.test.ts',
-    blob: '3ce1c6b9dff39b18e2e7e7dd7d1a4ab9378c013a',
-    changed: "Two expectation lines: enterVerify toHaveBeenCalled became a counter > 0; the record-mock calls became a reasons list. The six evaluateFinishGates cases run over FinishGatePorts; the cloud file carries five cloudFinishPorts cases.",
-    reason: "evaluateFinishGates over module mocks no longer exists in the cloud; the gates take ports.",
+    blob: '521ae95a07e59c4de6cd6379effb7bdc9c1e9bb3',
+    changed: "Two expectation lines: enterVerify toHaveBeenCalled became a counter > 0; the record-mock calls became a reasons list. The six evaluateFinishGates cases run over FinishGatePorts; the cloud file carries five cloudFinishPorts cases. Re-approved 2026-11-25 (2a9de14d9): initialFinishGateState loses its `isChild` argument, so every call drops `, false`; the case \"a sub-agent's no-deliverable gate starts spent\" becomes \"starts the no-deliverable gate unspent\", and the snapshot case passes noDeliverableBlocked: true in the resume instead of isChild.",
+    reason: "evaluateFinishGates over module mocks no longer exists in the cloud; the gates take ports. The sub-agent pre-spent deliverable gate was removed from the source (gates.ts, shipGates.ts) in the same commit, so the assertion on it pinned superseded behaviour; the snapshot case still asserts the same counters.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'packages/agent-run/test/subagents/subagent.test.ts',
+    blob: '9708d57cf292be890f6165c4f572d5f3e916d428',
+    changed: "'tells the child it is a clone — every tool its owner holds…' becomes 'tells the child to carry its slice out end to end', and the two `toMatch(/every tool your owner holds/)` expectations (plain and persona prompts) become `toMatch(/carry out your slice end to end/)`. Every other expectation is unchanged.",
+    reason: "Intended prompt rewording (fbaa577bc 'subagent', 2a9de14d9): the sub-agent system prompt no longer claims the child holds every tool its owner holds; it tells the child to carry its slice out end to end. The persona case still asserts the procedure survives (must stand alone).",
     approvedBy: APPROVED_BY,
   },
   {

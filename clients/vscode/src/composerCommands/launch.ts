@@ -1,6 +1,7 @@
 /**
- * `/launch [environment | external | stop | trust]` (PRD 31 §W11, "Local launch from the VSIX"):
- * run the workspace folder's app through the runtime's local launcher (`createLocalLauncher`)
+ * `/launch [environment | <file or folder path> | external | stop | trust]` (PRD 31 §W11, "Local launch from the VSIX"):
+ * run the workspace folder's app — or an HTML page / folder named by path (`launchTarget.ts`) —
+ * through the runtime's local launcher (`createLocalLauncher`)
  * and open it in VS Code's NATIVE integrated browser (a Chromium view, `openExternal.ts`) when
  * this VS Code has one; `/launch external` opens the system browser instead. Never the Simple
  * Browser or a webview: an iframe gets no service worker, cannot click through a certificate
@@ -22,17 +23,24 @@
  *   the host, which is not the person's computer there.
  * - ONE launcher per folder (`FolderLaunchers`): a second `/launch` (or `/launch external`)
  *   reopens it; another environment restarts it; `/launch stop` closes it.
+ * - A path target is held under its OWN key (`launcherKey`: the page's file, or the folder), never the
+ *   workspace folder's; a second `/launch <same path>` reopens it. A page runs the static-site manifest
+ *   (`emitStaticSiteManifest`) with its `page` shown at `/`; a folder runs its manifest, else a detected one
+ *   (nothing detected ⇒ nothing to launch, said). `external` / `stop` / `trust` always mean the workspace folder's.
  * - The URL carries the per-launch token in its fragment: it is shown in the chat, and
  *   never written to the output channel.
  * - The launcher serves HTTPS from a local CA: before the browser opens, the person is asked
  *   once per CA whether to trust it (`launcherTrust.ts`); `/launch trust` asks again.
  */
+import * as path from "node:path";
+import { emitStaticSiteManifest } from "@builderforce/app-detect";
 import type { ComposerCommandExecutor } from "./dispatch";
 import type { ComposerCommandText } from "./labels";
 import { LAUNCH_COMMAND_ID, LAUNCH_EXTERNAL, LAUNCH_STOP, LAUNCH_TRUST } from "./entries";
 import { NO_TRUST_STEP, type LauncherCa, type TrustOutcome } from "./launcherTrust";
 import type { FolderLaunchers, RunningLauncher } from "./folderLaunchers";
-import type { DetectManifest, ReadFolderFiles } from "./manifestInit";
+import { launcherKey, pageFile, resolveLaunchTarget, type LaunchTarget } from "./launchTarget";
+import type { DetectedManifest, DetectManifest, ReadFolderFiles } from "./manifestInit";
 import { findFolderManifest, MANIFEST_PATH } from "./manifestLocation";
 import { legacyManifestAction, staleSchemaAction } from "./manifestMove";
 import { APP_MANIFEST_SCHEMA_URL, hasStaleSchema } from "./manifestSchema";
@@ -45,7 +53,31 @@ export interface LaunchRequest {
   projectDir: string;
   environment?: string;
   manifestText?: string;
+  /** A project-relative HTML file (`/mockup.html`) shown at `/` (`LocalLauncherOptions.page`). */
+  page?: string;
 }
+
+/** The commands a reply's actions run to reopen a launcher; `external` and `trust` are the workspace folder's only. */
+interface OpenCommands {
+  editor: string;
+  external?: string;
+  trust?: string;
+}
+
+const WORKSPACE_COMMANDS: OpenCommands = {
+  editor: `/${LAUNCH_COMMAND_ID}`,
+  external: `/${LAUNCH_COMMAND_ID} ${LAUNCH_EXTERNAL}`,
+  trust: `/${LAUNCH_COMMAND_ID} ${LAUNCH_TRUST}`,
+};
+
+/** A path target's launcher: its identity in `FolderLaunchers`, what its replies call it, and the commands that reopen it. */
+interface Project {
+  key: string;
+  name: string;
+  commands: OpenCommands;
+}
+
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 export interface LaunchDeps {
   port: ComposerWorkspacePort;
@@ -93,6 +125,7 @@ export function launchExecutor(deps: LaunchDeps): ComposerCommandExecutor {
     force: boolean,
     askedExternal: boolean,
     moreActions: ComposerReplyAction[] = [],
+    commands: OpenCommands = WORKSPACE_COMMANDS,
   ): Promise<ComposerReply> => {
     const trust: TrustOutcome = deps.trust ? await deps.trust(launcher.ca, force) : NO_TRUST_STEP;
     const available = await deps.editorBrowser.available();
@@ -104,11 +137,11 @@ export function launchExecutor(deps: LaunchDeps): ComposerCommandExecutor {
     const inEditor: ComposerReplyAction[] = !available
       ? []
       : trust.trusted
-        ? [{ label: text.launchOpenInEditor, command: `/${LAUNCH_COMMAND_ID}` }]
-        : [{ label: text.launchTrustAndOpenInEditor, command: `/${LAUNCH_COMMAND_ID} ${LAUNCH_TRUST}` }];
+        ? [{ label: text.launchOpenInEditor, command: commands.editor }]
+        : commands.trust ? [{ label: text.launchTrustAndOpenInEditor, command: commands.trust }] : [];
     const actions: ComposerReplyAction[] = [
       ...inEditor,
-      { label: text.launchOpenExternal, command: `/${LAUNCH_COMMAND_ID} ${LAUNCH_EXTERNAL}` },
+      ...(commands.external ? [{ label: text.launchOpenExternal, command: commands.external }] : []),
       ...moreActions,
     ];
     return {
@@ -120,8 +153,50 @@ export function launchExecutor(deps: LaunchDeps): ComposerCommandExecutor {
     };
   };
 
+  /**
+   * `/launch <path>`: a page or a folder, held under its own key. A running one is reopened (with the
+   * certificate question and the editor/external choice of any launch); a page runs the static-site
+   * manifest with its `page`; a folder runs its manifest, else a detected one — or says there is nothing to run.
+   */
+  const launchPath = async (target: Extract<LaunchTarget, { kind: "page" | "folder" }>): Promise<ComposerReply> => {
+    const file = target.kind === "page" ? pageFile(target) : target.projectDir;
+    const project: Project = { key: launcherKey(target), name: path.basename(file) || file, commands: { editor: `/${LAUNCH_COMMAND_ID} "${file}"` } };
+    const running = launchers.running(project.key);
+    if (running) {
+      return trustThenOpen(await running.launcher, (opened) => text.launchReopened(project.name, opened), [], false, false, [], project.commands);
+    }
+    let request: LaunchRequest;
+    let detected: DetectedManifest | undefined;
+    if (target.kind === "page") {
+      request = { projectDir: target.projectDir, manifestText: emitStaticSiteManifest(path.basename(file, path.extname(file))).text, page: target.page };
+    } else {
+      detected = target.hasManifest ? undefined : deps.detect(await deps.readFiles(target.projectDir));
+      if (detected?.recognised === false) return { kind: "text", tone: "info", lines: [text.launchNothingToRun(target.projectDir)] };
+      request = { projectDir: target.projectDir, ...(detected ? { manifestText: detected.text } : {}) };
+    }
+    let launcher: RunningLauncher;
+    try {
+      launcher = await launchers.start(project.key, undefined, () => deps.start(request));
+    } catch (error) {
+      return { kind: "text", tone: "error", lines: [text.launchFailed(messageOf(error))] };
+    }
+    const notes = detected ? text.noteLines(detected.notes) : [];
+    return trustThenOpen(launcher, (opened) => text.launchStarted(project.name, opened), notes, false, false, [], project.commands);
+  };
+
   return async (args) => {
     const asked = typeof args.environment === "string" ? args.environment : undefined;
+    const target = await resolveLaunchTarget(port, asked);
+    if (target.kind === "page" || target.kind === "folder") return launchPath(target);
+    if (target.kind === "notPage") {
+      return {
+        kind: "text",
+        tone: "info",
+        lines: [text.launchNotHtml(target.file)],
+        actions: [{ label: text.launchFolderAction, command: `/${LAUNCH_COMMAND_ID} "${path.dirname(target.file)}"` }],
+      };
+    }
+    if (target.kind === "missing") return { kind: "text", tone: "info", lines: [text.launchNoSuchPath(target.argument)] };
     // `/launch trust`: launch (or reopen) as `/launch` does, asking about the certificate again.
     const forceTrust = asked === LAUNCH_TRUST;
     // `/launch external`: launch (or reopen — never restart) as `/launch` does, in the system browser.

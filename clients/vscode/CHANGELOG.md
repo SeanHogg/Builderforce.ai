@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.10.216] — Stable identities for named applications
+
+- Updated BuilderForce WebContainers to 2026.11.25. Named applications get stable IDs from their project and manifest name, even when they have identical services. Unnamed apps keep their existing IDs.
+- Previously launched named applications get a new preview origin. Browser data scoped to the previous origin stays there.
+
 ## [2026.10.215] — Reviews finish, and Simulate sits in the canvas toolbar
 
 - A graph build that runs out of memory or holds the graph worker for more than 3 minutes is ended, so the next build runs. A review whose map build fails still goes on to Judge and Update the map, and then finishes.

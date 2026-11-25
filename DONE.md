@@ -1,3 +1,19 @@
+## ✅ RESOLVED 2026-11-25 — W10 manifest application identity
+
+- WebContainers `2026.11.25` carries the manifest name into `ApplicationSpec` and derives `applicationId` from the project and name. A regression test covers two manifests with identical services in one project. Unnamed callers keep their IDs, and existing lease and recovery records keep their storage keys. The API, frontend, Studio, and VS Code extension now resolve this release.
+
+## ✅ RESOLVED 2026-11-25: A sub-agent's unchecked "could not / does not exist" claims now reach the owner flagged
+
+- **The gap.** A child reported that `agent-runtime/` "has no run-policy, so the verify phase could not be added". That was half wrong: `agent-loop.ts` holds a live `RunPolicyState`, so only the memory write was out of reach. The owner relayed the claim as fact.
+- **Fix.** `parseSubagentReport` (`packages/agent-loop/src/subagent.ts`) returns `unverifiedClaims`. These are named-negative or impossibility sentences, found by the data-driven `NEGATIVE_CLAIMS` patterns.
+  - **What it skips:** code fences, Verified/Changed/Checked result lines, fixed-bug descriptions, compiler or runtime error text, and sentences already listed as open issues.
+  - **Limits:** the scan is linear and bounded at 8,000 chars, with lines over 1,000 chars skipped. It keeps 5 claims, then adds "…and N more".
+  - **Rendering:** the shared `ownerSections()` in `packages/agent-tools/src/live-subagent-tools.ts` renders open issues and claims. It adds the line "Unverified claims — check each with one search before relaying or acting on it".
+  - **Surfaces:** VS Code (`childRunSpawner.ts`), cloud (`cloudChildRuns.ts`) and on-prem (`agent-runtime/src/agents/subagent-announce.ts` `ownerSectionsOf`).
+  - **Budget:** each surface counts the sections inside one report budget (`ownerSectionsChars`).
+- **The other half of that report** was already fixed: `changedFiles` is derived from the write tool calls in the trace, not from what the child says it changed.
+- Covered by `regression:` tests in `packages/agent-loop/src/subagent.test.ts` and `packages/agent-run/test/subagents/subagent.test.ts`, plus `childReportPacket.test.ts` and `subagent-announce.owner-sections.test.ts`.
+
 ## ✅ RESOLVED 2026-11-25: Neon outage — API answers 503 not 401, last-known-good auth reads, VSIX stays governed and shows a degraded state
 
 - All seven Neon-outage findings fixed (policy gates fail closed with the 24h snapshot kept; gateway membership/plan/BYO/credits/terms/segments serve a last-known-good copy only on a DB outage, under a separate `cache:lkg:<key>` key; `access.ts` and `callerTenant.ts` answer 503 not 401; the outage matcher walks drizzle `.cause` and matches the quota bodies; `pollAssignedTasks` keeps its seen-set on failure; `tenantHasSuperadminMember` never caches an error).

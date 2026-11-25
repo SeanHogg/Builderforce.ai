@@ -19,5 +19,6 @@ export function detectWorkspaceManifest(files: Map<string, string>): DetectedMan
     resources: Object.keys(manifest.resources ?? {}),
     // Detection's own warnings are notes too: never dropped silently. Coded, so the reply words them in the editor's language.
     notes: [...detection.metadata.warnings, ...notes],
+    recognised: detection.metadata.confidence > 0,
   };
 }

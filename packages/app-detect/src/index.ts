@@ -45,6 +45,7 @@ export {
   type EmitManifestResult,
 } from './manifest/emitManifest';
 export { manifestToBlueprintOverrides, type ManifestOverridesResult } from './manifest/manifestToBlueprintOverrides';
+export { emitStaticSiteManifest, STATIC_SITE_COMMAND } from './manifest/staticSiteManifest';
 export {
   BACKEND_INGRESS_PATH,
   LEGACY_MANIFEST_PATHS,

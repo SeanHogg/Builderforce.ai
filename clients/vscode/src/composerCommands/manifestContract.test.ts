@@ -10,6 +10,7 @@ import { composeKit, NAMED_KITS } from "@builderforce/ide-templates/kits";
 import {
   LEGACY_MANIFEST_PATHS, MANIFEST_DIR, MANIFEST_FILE_NAME, MANIFEST_PATH as KIT_MANIFEST_PATH, MANIFEST_READ_PATHS,
 } from "@builderforce/app-detect/manifest";
+import { emitStaticSiteManifest } from "@builderforce/app-detect";
 import { detectWorkspaceManifest } from "./detectManifest";
 import { LEGACY_MANIFEST_FILES, MANIFEST_FILE, MANIFEST_PATH, MANIFEST_READ_ORDER, WORKSPACE_DIR } from "./manifestLocation";
 
@@ -110,6 +111,12 @@ describe("manifests the extension writes parse cleanly in the runtime", () => {
   it.each(Object.keys(DETECTION_FIXTURES))("detected app %s: detect → emitManifest → parse + validate with zero issues", (name) => {
     const detected = detectWorkspaceManifest(new Map(Object.entries(DETECTION_FIXTURES[name]!)));
     const { manifest, issues } = runtimeIssues(detected.text);
+    expect(manifest).not.toBeNull();
+    expect(issues).toEqual([]);
+  });
+
+  it("the static-site manifest a page launch runs: parse + validate with zero issues", () => {
+    const { manifest, issues } = runtimeIssues(emitStaticSiteManifest("mockup").text);
     expect(manifest).not.toBeNull();
     expect(issues).toEqual([]);
   });

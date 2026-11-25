@@ -21,6 +21,8 @@ export interface DetectedManifest {
   resources: string[];
   /** Detection's warnings, then `emitManifest`'s notes — coded, worded by `text.noteLines`. */
   notes: DetectionNote[];
+  /** False when detection recognised nothing (the manifest is only its defaults: nothing runnable). Absent ⇒ recognised. */
+  recognised?: boolean;
 }
 
 /** Detect an app from its files (project-relative POSIX path → text). Pure. */

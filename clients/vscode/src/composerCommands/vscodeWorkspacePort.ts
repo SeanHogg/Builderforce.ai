@@ -3,7 +3,7 @@
  * `vscode.workspace.fs` and a modal warning, and the manifest preview/diff shown before
  * `/manifest init` writes. The ONE place these executors meet `vscode`.
  */
-import { lstat } from "node:fs/promises";
+import { lstat, stat } from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import type { ShowManifest } from "./manifestInit";
@@ -41,6 +41,16 @@ export function vscodeWorkspacePort(): ComposerWorkspacePort {
         return true;
       } catch (error) {
         if (isMissingPath(error)) return false;
+        throw error;
+      }
+    },
+    // `stat`, not `lstat`: a link to a page or a folder is that page or folder.
+    stat: async (file) => {
+      try {
+        const entry = await stat(file);
+        return entry.isDirectory() ? "directory" : entry.isFile() ? "file" : undefined;
+      } catch (error) {
+        if (isMissingPath(error)) return undefined;
         throw error;
       }
     },

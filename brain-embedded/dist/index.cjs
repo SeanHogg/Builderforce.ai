@@ -3425,9 +3425,9 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-haiku-latest": [1e-7, 5e-7],
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
-  "~deepseek/deepseek-flash-latest": [3e-8, 2e-7],
+  "~deepseek/deepseek-flash-latest": [36e-9, 5e-7],
   "~deepseek/deepseek-pro-latest": [999e-10, 5e-6],
-  "~deepseek/deepseek-v4-flash-latest": [44e-9, 132e-9],
+  "~deepseek/deepseek-v4-flash-latest": [47e-9, 3e-7],
   "~google/gemini-flash-latest": [15e-7, 75e-7],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
   "~moonshotai/kimi-latest": [1824e-10, 110055e-10],
@@ -3504,16 +3504,15 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2": [26e-8, 38e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [9e-8, 18e-8],
-  "deepseek/deepseek-v4-flash-0731": [443e-10, 3e-7],
+  "deepseek/deepseek-v4-flash-0731": [47e-9, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
-  "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
+  "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
   "deepseek/deepseek-v4-pro": [128e-8, 256e-8],
   "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
-  "deepseek/deepseek-v4.1-flash": [498e-10, 1992e-10],
-  "deepseek/deepseek-v4.1-flash-1017": [3e-8, 2e-7],
+  "deepseek/deepseek-v4.1-flash": [14e-8, 42e-8],
+  "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
   "deepseek/deepseek-v4.1-flash-1017:batch": [35e-9, 149e-9],
   "deepseek/deepseek-v4.1-flash:batch": [5e-8, 15e-8],
-  "dots-studio/dots-3-note-preview:free": [0, 0],
   "elorian/glimpse": [6e-7, 3e-6],
   "fireworks/ember-1": [3e-6, 15e-6],
   "google/gemini-2.5-flash": [3e-7, 25e-7],
@@ -3567,7 +3566,7 @@ var PRICE_SNAPSHOT = {
   "google/lyria-3-pro-preview": [0, 0],
   "gryphe/mythomax-l2-13b": [3e-7, 5e-7],
   "ibm-granite/granite-4.2-8b": [6e-8, 15e-8],
-  "inclusionai/ling-3.0-flash": [6e-8, 18e-8],
+  "inclusionai/ling-3.0-flash": [21e-9, 63e-9],
   "inclusionai/ling-3.0-flash-vl": [6e-8, 18e-8],
   "inclusionai/ling-3.0-tiny": [15e-9, 45e-9],
   "inclusionai/ling-3.1-flash": [75e-9, 225e-9],
@@ -3597,7 +3596,7 @@ var PRICE_SNAPSHOT = {
   "meta/muse-spark-open": [125e-8, 425e-8],
   "meta/muse-wonder": [4e-6, 2e-5],
   "microsoft/phi-4": [7e-8, 14e-8],
-  "minimax/minimax-m2.5": [27e-8, 95e-8],
+  "minimax/minimax-m2.5": [3e-7, 12e-7],
   "minimax/minimax-m2.7": [6e-7, 18e-7],
   "minimax/minimax-m3": [3e-7, 12e-7],
   "minimax/minimax-m3:batch": [224e-9, 88e-8],
@@ -3611,10 +3610,8 @@ var PRICE_SNAPSHOT = {
   "mistralai/mistral-large-2407": [2e-6, 6e-6],
   "mistralai/mistral-large-2512": [5e-7, 15e-7],
   "mistralai/mistral-large-4-0": [7e-7, 21e-7],
-  "mistralai/mistral-medium-3": [44e-8, 22e-7],
   "mistralai/mistral-medium-3-5": [15e-7, 75e-7],
   "mistralai/mistral-medium-3-5:batch": [75e-8, 375e-8],
-  "mistralai/mistral-medium-3.1": [44e-8, 22e-7],
   "mistralai/mistral-nemo": [29e-9, 3e-8],
   "mistralai/mistral-saba": [2e-7, 6e-7],
   "mistralai/mistral-small-24b-instruct-2501": [5e-8, 8e-8],
@@ -3626,7 +3623,6 @@ var PRICE_SNAPSHOT = {
   "mistralai/voxtral-small-24b-2507": [1e-7, 3e-7],
   "moondream/moondream3-preview": [3e-7, 25e-7],
   "moondream/moondream3.1-9b-a2b": [3e-7, 25e-7],
-  "moonshotai/kimi-k2-0905": [6e-7, 25e-7],
   "moonshotai/kimi-k2.5": [5e-7, 25e-7],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
   "moonshotai/kimi-k2.7-code": [6e-7, 3e-6],
@@ -3805,7 +3801,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
   "qwen/qwen3.6-27b": [32e-8, 32e-7],
-  "qwen/qwen3.6-35b-a3b": [5e-8, 7e-7],
+  "qwen/qwen3.6-35b-a3b": [1e-7, 89e-8],
   "qwen/qwen3.6-flash": [1875e-10, 1125e-9],
   "qwen/qwen3.6-plus": [325e-9, 195e-8],
   "qwen/qwen3.7-flash": [3e-8, 13e-8],
@@ -3859,7 +3855,9 @@ var PRICE_SNAPSHOT = {
   "unbiased/pareto-26.10-preview": [8e-7, 32e-7],
   "unbiased/pareto-26.9": [25e-7, 75e-7],
   "undi95/remm-slerp-l2-13b": [3e-7, 5e-7],
+  "upstage/solar-mini-4-5": [1e-8, 4e-8],
   "upstage/solar-mini4": [5e-8, 2e-7],
+  "upstage/solar-pro-4-contributor": [9e-8, 36e-8],
   "upstage/solar-pro4": [15e-8, 6e-7],
   "writer/palmyra-x5": [6e-7, 6e-6],
   "x-ai/grok-4.20": [125e-8, 25e-7],
@@ -3871,8 +3869,8 @@ var PRICE_SNAPSHOT = {
   "x-ai/grok-4.6:batch": [16e-7, 48e-7],
   "x-ai/grok-4.7": [2e-6, 6e-6],
   "x-ai/grok-4.7:batch": [16e-7, 48e-7],
-  "xiaomi/mimo-v2.5": [4e-7, 2e-6],
   "xiaomi/mimo-v2.6-flash": [14e-8, 28e-8],
+  "xiaomi/mimo-v2.6-flash-mopd": [15e-8, 42e-8],
   "xiaomi/mimo-v2.6-pro": [435e-9, 87e-8],
   "xiaomi/mimo-v2.6-pro-ultraspeed": [435e-8, 87e-7],
   "z-ai/glm-4.5": [6e-7, 22e-7],
@@ -22625,11 +22623,12 @@ function matchChoice(value, choices) {
   const wanted = value.toLowerCase();
   return choices.find((choice) => choice.value.toLowerCase() === wanted)?.value;
 }
-function checkChoices(name, values, choices, problems) {
+function checkChoices(name, values, choices, problems, open2 = false) {
   if (!choices) return values;
   return values.map((value) => {
     const canonical = matchChoice(value, choices);
     if (canonical === void 0) {
+      if (open2) return value;
       problems.push({ code: "bad-choice", name, value, choices: choices.map((choice) => choice.value) });
       return value;
     }
@@ -22675,7 +22674,7 @@ function parseArguments(command, tokens) {
     if (arg.multiple) {
       const values = positionals.slice(cursor).flatMap(splitList);
       cursor = positionals.length;
-      if (values.length > 0) args[arg.name] = checkChoices(arg.name, values, arg.choices, problems);
+      if (values.length > 0) args[arg.name] = checkChoices(arg.name, values, arg.choices, problems, arg.open);
       else if (arg.required) problems.push({ code: "missing-arg", name: arg.name });
       continue;
     }
@@ -22685,7 +22684,7 @@ function parseArguments(command, tokens) {
       continue;
     }
     cursor += 1;
-    args[arg.name] = checkChoices(arg.name, [value], arg.choices, problems)[0];
+    args[arg.name] = checkChoices(arg.name, [value], arg.choices, problems, arg.open)[0];
   }
   for (const extra of positionals.slice(cursor)) problems.push({ code: "extra-arg", value: extra });
   for (const flag of flags) {

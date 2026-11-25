@@ -243,6 +243,7 @@ function findUnverifiedClaims(output: string, capturedIssues: readonly string[])
     }
     const heading = HEADING.exec(raw);
     if (heading) inResults = RESULT_SECTIONS.has(heading[1]!.toLowerCase());
+    else if (inResults && !BULLET.test(raw) && !/^\s/.test(raw)) inResults = false;
     if (inResults) continue;
     const line = (heading ? heading[2]! : raw).replace(BULLET, "").trim();
     for (const sentence of splitSentences(line)) {

@@ -117,6 +117,13 @@ export interface ComposerCommandText extends ComposerCommandLabels {
   launchStopChoice: string;
   launchTrustChoice: string;
   launchFailed(error: string): string;
+  /** `/launch <path>` named a file that is not an HTML page. */
+  launchNotHtml(file: string): string;
+  /** The action that launches that file's folder instead. */
+  launchFolderAction: string;
+  launchNoSuchPath(path: string): string;
+  /** `/launch <folder>`: no manifest, no index page, and detection found nothing runnable. */
+  launchNothingToRun(folder: string): string;
 
   // The launcher's local certificate (`launcherTrust.ts`)
   trustQuestion: string;
@@ -232,6 +239,10 @@ export function composerCommandText(): ComposerCommandText {
     launchStopChoice: t("Stop the running launcher"),
     launchTrustChoice: t("Trust the launcher's local certificate"),
     launchFailed: (error) => t("The launcher could not start: {0}", error),
+    launchNotHtml: (file) => t("{0} is not an HTML page. Only HTML pages can be launched; launch its folder instead.", file),
+    launchFolderAction: t("Launch its folder"),
+    launchNoSuchPath: (target) => t("There is no file or folder at {0}.", target),
+    launchNothingToRun: (folder) => t("{0} has no index.html or index.htm and no builderforce.json, so there is nothing to launch.", folder),
 
     trustQuestion: t("The launcher shows your app over HTTPS. To let your browser trust it, BuilderForce adds a local certificate to YOUR user certificate store. That certificate can only vouch for localhost addresses. Your system may ask you to confirm."),
     trustApprove: t("Trust and launch"),

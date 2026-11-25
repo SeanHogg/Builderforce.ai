@@ -47,6 +47,15 @@ describe("composer command entries", () => {
     expect(without.args[0]!.choices).toBeUndefined();
   });
 
+  it("parses a file or folder path (quoted with spaces, backslashes intact) beside the declared environments", () => {
+    const registry = createComposerCommandRegistry(buildComposerCommands({ ...context, environments: [{ value: "local" }] }), composerCommandText());
+    const parse = (line: string) => parseComposerInput(line, registry);
+    expect(parse("/launch LOCAL")).toMatchObject({ kind: "command", args: { environment: "local" } });
+    expect(parse("/launch C:\\code\\agentic\\design\\mock.html")).toMatchObject({ kind: "command", args: { environment: "C:\\code\\agentic\\design\\mock.html" } });
+    expect(parse("/launch \"C:\\My Docs\\mock up.html\"")).toMatchObject({ kind: "command", args: { environment: "C:\\My Docs\\mock up.html" } });
+    expect(parse("/launch ../design")).toMatchObject({ kind: "command", args: { environment: "../design" } });
+  });
+
   it("never lists an environment named like a /launch subcommand: the subcommand is listed once", () => {
     const environments = [{ value: "external" }, { value: "local" }, { value: "stop" }, { value: "trust" }];
     const launch = buildComposerCommands({ ...context, environments }).find((command) => command.id === "launch")!;

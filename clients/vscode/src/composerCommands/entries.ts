@@ -112,10 +112,12 @@ export function buildComposerCommands(context: ComposerCommandContext): Composer
     },
     {
       id: LAUNCH_COMMAND_ID,
-      syntax: "/launch [environment | external | stop | trust]",
+      syntax: "/launch [environment | <file or folder path> | external | stop | trust]",
       args: [{
         name: "environment",
         required: false,
+        // The choices are suggestions: a path (quoted when it has spaces) is also accepted (`launchTarget.ts`).
+        open: true,
         // With no readable manifest any environment name is passed through to the launcher, which names a bad one.
         ...(environments.length > 0
           ? {

@@ -222,6 +222,79 @@ describe("/launch", () => {
     expect(linesOf(await launch("stop"))).toEqual(["No launcher is running for app."]);
   });
 
+  it("/launch <html file> runs the static-site manifest with that page, names it, and reopens it on a second launch", async () => {
+    const file = path.join(app.path, "design", "mock up.html");
+    const { start, detect, launch } = setup({ [file]: "<p>hi</p>" });
+    const reply = await launch(file);
+    const text = composerCommandText();
+    expect(start).toHaveBeenCalledOnce();
+    const request = start.mock.calls[0]![0];
+    expect(request).toMatchObject({ projectDir: path.dirname(file), page: "/mock up.html" });
+    expect(JSON.parse(request.manifestText!).services.web.command).toBe("vite");
+    expect(detect).not.toHaveBeenCalled();
+    expect(linesOf(reply)[0]).toBe(text.launchStarted("mock up.html", false));
+    expect(reply).toMatchObject({ actions: [{ label: text.launchOpenInEditor, command: `/launch "${file}"` }] });
+    const again = await launch(file);
+    expect(start).toHaveBeenCalledOnce();
+    expect(linesOf(again)[0]).toBe(text.launchReopened("mock up.html", false));
+  });
+
+  it("a page launch does not collide with the workspace folder's launcher", async () => {
+    const file = path.join(app.path, "a.html");
+    const { start, launch } = setup({ [file]: "" });
+    await launch(file);
+    await launch();
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(start.mock.calls[1]![0]).toEqual({ projectDir: app.path, manifestText: "{\"detected\":true}" });
+  });
+
+  it("/launch <folder> with an index page launches it as a page, the same launcher as typing the file", async () => {
+    const dir = path.join(app.path, ".design");
+    const { start, launch } = setup({ [path.join(dir, "Index.HTML")]: "", [path.join(dir, "x.css")]: "" });
+    await launch(dir);
+    expect(start).toHaveBeenCalledOnce();
+    expect(start.mock.calls[0]![0]).toMatchObject({ projectDir: dir, page: "/Index.HTML" });
+    const again = await launch(path.join(dir, "Index.HTML"));
+    expect(start).toHaveBeenCalledOnce();
+    expect(linesOf(again)[0]).toBe(composerCommandText().launchReopened("Index.HTML", false));
+  });
+
+  it("/launch <folder> with a manifest launches it as a project (its manifest, no page, no detection)", async () => {
+    const dir = path.join(app.path, "site");
+    const { start, detect, launch } = setup({ [path.join(dir, ".builderforce", "builderforce.json")]: "{}" });
+    const reply = await launch(dir);
+    expect(start).toHaveBeenCalledExactlyOnceWith({ projectDir: dir });
+    expect(detect).not.toHaveBeenCalled();
+    expect(linesOf(reply)[0]).toBe(composerCommandText().launchStarted("site", false));
+  });
+
+  it("/launch <folder> with neither manifest nor index page detects, shows the notes, or says there is nothing to run", async () => {
+    const dir = path.join(app.path, "docs");
+    const { start, detect, launch } = setup({ [path.join(dir, "readme.md")]: "x" });
+    const notes = [detectionNote("secrets-to-vault", { names: ["API_KEY"] })];
+    detect.mockReturnValueOnce({ text: "{}", services: [], resources: [], notes });
+    const reply = await launch(dir);
+    const text = composerCommandText();
+    expect(start).toHaveBeenCalledExactlyOnceWith({ projectDir: dir, manifestText: "{}" });
+    expect(linesOf(reply)).toEqual([text.launchStarted("docs", false), ...text.noteLines(notes)]);
+
+    const empty = setup({ [path.join(dir, "readme.md")]: "x" });
+    empty.detect.mockReturnValueOnce({ text: "{}", services: [], resources: [], notes: [], recognised: false });
+    expect(linesOf(await empty.launch(dir))).toEqual([text.launchNothingToRun(dir)]);
+    expect(empty.start).not.toHaveBeenCalled();
+  });
+
+  it("refuses a file that is not an HTML page (offering its folder), and says when a path does not exist", async () => {
+    const file = path.join(app.path, "notes.txt");
+    const { start, launch } = setup({ [file]: "x" });
+    const text = composerCommandText();
+    const refused = await launch(file);
+    expect(linesOf(refused)).toEqual([text.launchNotHtml(file)]);
+    expect(refused).toMatchObject({ actions: [{ label: text.launchFolderAction, command: `/launch "${app.path}"` }] });
+    expect(linesOf(await launch("gone/none.html"))).toEqual([text.launchNoSuchPath("gone/none.html")]);
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it("closes every launcher on deactivate", async () => {
     const other = folderRef("other");
     const { port, launchers, started, launch } = setup({}, [app, other]);

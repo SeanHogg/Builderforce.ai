@@ -17,6 +17,9 @@ export interface WorkspaceFolderRef {
   path: string;
 }
 
+/** What {@link ComposerWorkspacePort.stat} finds. */
+export type PathKind = "file" | "directory";
+
 export interface ComposerWorkspacePort {
   folders(): readonly WorkspaceFolderRef[];
   /**
@@ -31,6 +34,8 @@ export interface ComposerWorkspacePort {
   listDir(dir: string): Promise<string[]>;
   /** Is there an entry at this path — a symbolic link (dangling included) counts, it is never followed. */
   exists(file: string): Promise<boolean>;
+  /** What is at this path, a symbolic link followed: a file, a directory, or undefined when there is nothing (or nothing else) there. */
+  stat(file: string): Promise<PathKind | undefined>;
   /** The file's text, or undefined when it does not exist. */
   readText(file: string): Promise<string | undefined>;
   /** The files among these that may NOT be written (`writeContainment.ts`), so a command can refuse before writing any. */
