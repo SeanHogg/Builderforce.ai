@@ -7,6 +7,7 @@ import {
   llmProxyForPlan,
   type ProxyEnv,
 } from './LlmProxyService';
+import { CODING_MODEL_POOL } from './modelPool';
 import { _resetMemoryCooldowns } from '../../infrastructure/auth/cooldownStore';
 
 // ---------------------------------------------------------------------------
@@ -50,7 +51,10 @@ const freeCodersIn = (chain: readonly string[] | undefined): string[] =>
 describe('coding runs exhaust the free coder pool before escalating', () => {
   it('CODING_FREE_ATTEMPT_BUDGET covers the whole free coding pool (≫ the general cap of 2)', () => {
     expect(CODING_FREE_ATTEMPT_BUDGET).toBeGreaterThan(FREE_ATTEMPT_BUDGET);
-    expect(CODING_FREE_ATTEMPT_BUDGET).toBeGreaterThanOrEqual(6);
+    // The budget IS the free coding pool (derived), so it tracks catalog refreshes; it must
+    // still hold more than one extra free coder beyond the general cap.
+    expect(CODING_FREE_ATTEMPT_BUDGET).toBe(CODING_MODEL_POOL.filter((m) => FREE_MODEL_POOL.includes(m)).length);
+    expect(CODING_FREE_ATTEMPT_BUDGET).toBeGreaterThanOrEqual(FREE_ATTEMPT_BUDGET * 2);
   });
 
   it('a coding proxy walks MORE than 2 free coders in its candidate chain', async () => {

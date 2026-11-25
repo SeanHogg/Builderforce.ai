@@ -6,6 +6,7 @@ import { tierForModel, vendorForModel, type VendorId } from './vendors';
 import { _resetMemoryCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
 import type { LlmProxyOptions, ProxyEnv } from './proxyTypes';
 import { capableTwinsOf } from './vendors/modelTwins';
+import { nvidiaModule } from './vendors/nvidia';
 
 // The real twin catalog, observable: one test below needs a twin the catalog does not
 // declare (see 'under the BYO boundary …'); every other test runs the real lookup.
@@ -32,7 +33,8 @@ function runtime(opts: LlmProxyOptions) {
 const none = () => [new Set<string>(), new Set<VendorId>()] as const;
 const freeCount = (chain: readonly string[]) => chain.filter((m) => tierForModel(m) === 'FREE').length;
 
-const NIM_FREE = 'nvidia/nemotron-3-super-120b-a12b';
+// A live FREE NIM model, derived from the catalog so a snapshot refresh cannot strand it.
+const NIM_FREE = nvidiaModule.catalog.find((m) => m.tier === 'FREE')!.id;
 const OLLAMA_FREE = 'gpt-oss:120b';
 const TWIN_FREE = 'deepseek-v4-flash:cloud';
 const TWIN_PAID = 'deepseek/deepseek-v4-flash';

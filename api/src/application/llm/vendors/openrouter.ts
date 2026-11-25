@@ -35,7 +35,7 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   // an honest 404 rather than a silent swap to another vendor's model.
   { id: 'nvidia/nemotron-3-ultra-550b-a55b:free',    tier: 'FREE', weights: 'nemotron-3-ultra-550b-a55b', label: 'Nemotron 3 Ultra 550B (Free)',       brand: 'NVIDIA'    },
   { id: 'google/gemma-4-26b-a4b-it:free',            tier: 'FREE', weights: 'gemma-4-26b-a4b-it', label: 'Gemma 4 26B A4B (Free)',             brand: 'Google',    capabilities: ['vision'] },
-  { id: 'nvidia/nemotron-3.5-super-vl:free', tier: 'FREE', label: 'Nemotron 3.5 Super VL (Free)', brand: 'NVIDIA', capabilities: ['vision'], supersedes: ['nvidia/nemotron-3-super-120b-a12b:free'] },
+  { id: 'nvidia/nemotron-3.5-super-vl:free', tier: 'FREE', label: 'Nemotron 3.5 Super VL (Free)', brand: 'NVIDIA', capabilities: ['vision'] },
   { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', tier: 'FREE', label: 'Nemotron 3 Nano Omni 30B Reasoning (Free)', brand: 'NVIDIA' },
   { id: 'google/gemma-4-31b-it:free',                tier: 'FREE', weights: 'gemma-4-31b-it', label: 'Gemma 4 31B (Free)',                  brand: 'Google',    supersedes: ['google/gemma-3-27b-it:free'] },
   { id: 'nvidia/nemotron-3.5-lightning:free',        tier: 'FREE', label: 'Nemotron 3.5 Lightning (Free)',      brand: 'NVIDIA'     },

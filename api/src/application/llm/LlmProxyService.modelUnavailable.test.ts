@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { adminPoolProxy, type ProxyEnv } from './LlmProxyService';
+import { getModule } from './vendors';
 import { _resetMemoryCooldowns } from '../../infrastructure/auth/cooldownStore';
 
 const originalFetch = globalThis.fetch;
+// A live NIM catalog id — derived, so a catalog/snapshot refresh cannot strand the test.
+const RETIRED_MODEL = getModule('nvidia').catalog[0]!.id;
 
 afterEach(() => {
   (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
@@ -18,7 +21,7 @@ describe('removed model handling', () => {
 
     const proxy = adminPoolProxy(
       { NVIDIA_API_KEY: 'nvapi-test' } as ProxyEnv,
-      ['moonshotai/kimi-k3'],
+      [RETIRED_MODEL],
       'builderforceLLM',
     );
     const result = await proxy.complete({ messages: [{ role: 'user', content: 'hi' }] });
@@ -26,7 +29,7 @@ describe('removed model handling', () => {
     expect(result.response.status).toBe(503);
     expect(result.outcome).toBe('model_unavailable');
     expect(result.resolvedVendor).toBe('nvidia');
-    expect(result.resolvedModel).toBe('moonshotai/kimi-k3');
+    expect(result.resolvedModel).toBe(RETIRED_MODEL);
 
     const body = await result.response.json() as {
       error: {
@@ -41,7 +44,7 @@ describe('removed model handling', () => {
     expect(body.error.reason).toBe('all_models_unavailable');
     expect(body.error.details.failovers).toEqual([
       expect.objectContaining({
-        model: 'moonshotai/kimi-k3',
+        model: RETIRED_MODEL,
         vendor: 'nvidia',
         code: 410,
         kind: 'client_error',

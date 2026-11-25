@@ -250,7 +250,9 @@ describe('canonicalModelId (superseded → live successor)', () => {
     // `deepseek-flash`, `granite-4.1-8b` → `granite`, `kimi-k2.6` → `kimi` (Kimi spells its
     // version `k<n>`). So opus → sonnet still fails, while a version bump inside one family
     // passes whatever the vendor's naming shape.
-    const familyOf = (id: string) => id.split('/').pop()!.split('-').filter((t) => !/^[vk]?\d/.test(t)).join('-');
+    // Release-tier / sizing tokens (`pro`, `flash`, `instruct`, active-params `a52b`) are not a family:
+    // `kimi-k3.1-pro` stays in `kimi`, `mistral-large-4-1t-a52b` in `mistral-large`. A different family (VL vs text, opus vs sonnet) still differs and still fails.
+    const familyOf = (id: string) => id.split('/').pop()!.split('-').filter((t) => !/^[vk]?\d/.test(t) && !/^(pro|flash|instruct|a\d+[bm])$/.test(t)).join('-');
     for (const [from, to] of Object.entries(SUPERSEDED_MODEL_IDS)) {
       expect(namespaceOf(to), `${from} → ${to} must stay in one namespace`).toBe(namespaceOf(from));
       expect(familyOf(to), `${from} → ${to} must stay in one model family`).toBe(familyOf(from));

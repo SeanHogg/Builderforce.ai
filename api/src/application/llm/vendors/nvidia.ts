@@ -29,7 +29,7 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   // NIM segment burned an attempt on a 404 before the cascade could advance. Do not
   // add an id here from memory — refresh the snapshot and take it from there.
   { id: 'nvidia/nemotron-3-ultra-550b-a55b',            tier: 'FREE', weights: 'nemotron-3-ultra-550b-a55b', label: 'Nemotron 3 Ultra 550B (NIM)',    brand: 'NVIDIA'    },
-  { id: 'nvidia/nemotron-3.5-super-vl-120b-a12b', tier: 'FREE', label: 'Nemotron 3.5 Super VL (NIM)', brand: 'NVIDIA', capabilities: ['vision'], supersedes: ['nvidia/nemotron-3-super-120b-a12b'] },
+  { id: 'nvidia/nemotron-3.5-super-vl-120b-a12b', tier: 'FREE', label: 'Nemotron 3.5 Super VL (NIM)', brand: 'NVIDIA', capabilities: ['vision'] },
   { id: 'moonshotai/kimi-k3.1-pro', tier: 'FREE', label: 'Kimi K3.1 Pro (NIM)', brand: 'Moonshot', supersedes: ['moonshotai/kimi-k3', 'moonshotai/kimi-k2.6'] },
   { id: 'z-ai/glm-5.3-flash', tier: 'FREE', label: 'GLM 5.3 Flash (NIM)', brand: 'Z.AI' },
   { id: 'nvidia/nemotron-3.5-lightning-30b-a3b', tier: 'FREE', label: 'Nemotron 3.5 Lightning 30B (NIM)', brand: 'NVIDIA' },
