@@ -44,11 +44,13 @@ function checkChoices(
   values: string[],
   choices: ComposerCommandChoice[] | undefined,
   problems: ComposerCommandProblem[],
+  open = false,
 ): string[] {
   if (!choices) return values;
   return values.map((value) => {
     const canonical = matchChoice(value, choices);
     if (canonical === undefined) {
+      if (open) return value;
       problems.push({ code: 'bad-choice', name, value, choices: choices.map((choice) => choice.value) });
       return value;
     }
@@ -97,7 +99,7 @@ function parseArguments(command: ComposerCommand, tokens: string[]): { args: Rec
     if (arg.multiple) {
       const values = positionals.slice(cursor).flatMap(splitList);
       cursor = positionals.length;
-      if (values.length > 0) args[arg.name] = checkChoices(arg.name, values, arg.choices, problems);
+      if (values.length > 0) args[arg.name] = checkChoices(arg.name, values, arg.choices, problems, arg.open);
       else if (arg.required) problems.push({ code: 'missing-arg', name: arg.name });
       continue;
     }
@@ -107,7 +109,7 @@ function parseArguments(command: ComposerCommand, tokens: string[]): { args: Rec
       continue;
     }
     cursor += 1;
-    args[arg.name] = checkChoices(arg.name, [value], arg.choices, problems)[0]!;
+    args[arg.name] = checkChoices(arg.name, [value], arg.choices, problems, arg.open)[0]!;
   }
   for (const extra of positionals.slice(cursor)) problems.push({ code: 'extra-arg', value: extra });
 

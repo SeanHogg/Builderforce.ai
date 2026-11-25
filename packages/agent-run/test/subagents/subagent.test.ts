@@ -114,6 +114,11 @@ describe("parseSubagentReport", () => {
     expect(r.openIssues[8]).toContain("4 more");
   });
 
+  it("flags a confident negative but not a passing check or a fixed bug", () => {
+    const r = parseSubagentReport("Outcome: done\nVerified: tsc passes with no new errors.\nFixed the bug where the drawer could not close.\nThe helper does not exist.\nOpen issues: none");
+    expect(r.unverifiedClaims).toEqual(["The helper does not exist."]);
+  });
+
   it("still flags a failed slice that named nothing left, and stays silent on a report without the lines", () => {
     expect(parseSubagentReport("Outcome: failed").openIssues).toHaveLength(1);
     expect(parseSubagentReport("I changed a.ts and it works.")).toEqual({ openIssues: [] });

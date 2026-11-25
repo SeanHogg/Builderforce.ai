@@ -23,6 +23,11 @@ export interface ComposerCommandArg {
   required: boolean;
   /** When set, a value must be one of these (matched case-insensitively, returned canonical). */
   choices?: ComposerCommandChoice[];
+  /**
+   * With `choices`: they are suggestions, not a closed list. A value matching one is still
+   * returned canonical; any other value passes through as typed (a path beside environment names).
+   */
+  open?: boolean;
   /** Comma-separated and/or space-separated values collected into a list. */
   multiple?: boolean;
 }

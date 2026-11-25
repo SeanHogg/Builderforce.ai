@@ -83,6 +83,19 @@ describe('parseComposerInput', () => {
     expect(parse('/help nope')).toMatchObject({ kind: 'invalid', problems: [{ code: 'bad-choice', name: 'command', value: 'nope' }] });
   });
 
+  it('lets an open argument take any value beside its choices, keeping quoted Windows paths intact', () => {
+    const open = createComposerCommandRegistry([{
+      id: 'launch',
+      syntax: '/launch [environment | path]',
+      args: [{ name: 'environment', required: false, open: true, choices: [{ value: 'staging' }] }],
+      example: '/launch staging',
+    }], labels);
+    const run = (text: string) => parseComposerInput(text, open);
+    expect(run('/launch STAGING')).toMatchObject({ kind: 'command', args: { environment: 'staging' } });
+    expect(run('/launch "C:\\my docs\\a b.html"')).toMatchObject({ kind: 'command', args: { environment: 'C:\\my docs\\a b.html' } });
+    expect(run('/launch C:\\code\\page.html')).toMatchObject({ kind: 'command', args: { environment: 'C:\\code\\page.html' } });
+  });
+
   it('answers an unknown command as unknown, never a message', () => {
     expect(parse('/deploy prod')).toEqual({ kind: 'unknown', name: 'deploy' });
   });

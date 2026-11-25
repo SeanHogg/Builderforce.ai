@@ -131,7 +131,60 @@ describe("parseSubagentReport", () => {
 
   it("bounds the claims it hands the owner", () => {
     const many = Array.from({ length: 12 }, (_, i) => `Thing ${i} does not exist.`).join("\n");
-    expect(parseSubagentReport(many).unverifiedClaims).toHaveLength(5);
+    const claims = parseSubagentReport(many).unverifiedClaims!;
+    expect(claims).toHaveLength(6);
+    expect(claims[5]).toBe("…and 7 more — see the full report");
+  });
+
+  it.each([
+    "Verified: tsc passes with no new errors.",
+    "Verified: Tests pass with no regressions.",
+    "Verified: tsc passes with no type errors.",
+    "Checked: build ran with no behaviour change.",
+    "Changed: a.ts, which has no callers outside this package.",
+    "The change has no effect on b.ts.",
+    "Tests pass with no regressions.",
+    "Fixed the bug where the drawer could not close.",
+    "Resolved: users couldn't save drafts.",
+    "ReferenceError: foo is not defined",
+    "error TS2307: Cannot find module 'x'.",
+  ])("does not flag %s", (line) => {
+    expect(parseSubagentReport(`Outcome: done\n${line}\nOpen issues: none`)).not.toHaveProperty("unverifiedClaims");
+  });
+
+  it("skips the lines under a Verified heading until the section ends", () => {
+    const r = parseSubagentReport("Verified:\n- the store does not exist in the test env\n\nThe cache does not exist.");
+    expect(r.unverifiedClaims).toEqual(["The cache does not exist."]);
+  });
+
+  it.each([
+    "Cannot reproduce the bug.",
+    "The package lacks a build script.",
+    "The export is missing from index.ts.",
+    "Found no callers of helper().",
+    "The hook isn't wired into the runner.",
+    "The module does not export parse.",
+    "The helper is never called.",
+    "Nobody calls the old route.",
+    "It won't work without the flag.",
+  ])("flags %s", (line) => {
+    expect(parseSubagentReport(`Outcome: done\n${line}`).unverifiedClaims).toEqual([line]);
+  });
+
+  it("does not split a sentence after an abbreviation", () => {
+    const line = "Use a flag, e.g. the verbose one, but the option does not exist.";
+    expect(parseSubagentReport(line).unverifiedClaims).toEqual([line]);
+    expect(parseSubagentReport("Lint, tests, etc. The helper is never called.").unverifiedClaims).toEqual([
+      "Lint, tests, etc. The helper is never called.",
+    ]);
+  });
+
+  it("scans a pathological line in linear time", () => {
+    const started = Date.now();
+    parseSubagentReport(`a${" ".repeat(40_000)}b`);
+    parseSubagentReport(`Open issues: x${" ".repeat(40_000)}b`);
+    parseSubagentReport(`${" ".repeat(40_000)}b`);
+    expect(Date.now() - started).toBeLessThan(200);
   });
 
   it("regression: a report that says the target has no run-policy and the verify phase could not be added", () => {

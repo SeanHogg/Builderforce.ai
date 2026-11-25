@@ -147,6 +147,23 @@ describe("a child's report packet (VS Code chat #273)", () => {
     expect(report.coverage!.at(-1)).toMatch(/more \(every call is in the collected-data file\)/);
   });
 
+  it("keeps the answer, open issues and unverified claims inside ONE report budget", async () => {
+    const { host, finish } = fakeHost();
+    const controls = childControls(host, OWNER);
+    controls.spawn({ label: "x", task: "read things", role: "explore" });
+    const key = host.registry.liveOf(OWNER.key)[0]!.key;
+    const claims = Array.from({ length: 6 }, (_, i) => `Thing ${i} does not exist.`).join("\n");
+    const issues = Array.from({ length: 4 }, (_, i) => `- issue ${i} is still open`).join("\n");
+    answers.set(key, `${claims}\n\n${"finding ".repeat(2_000)}\n\nOutcome: partial\nOpen issues:\n${issues}`);
+    const waiting = controls.wait(["a1"], 1_000);
+    await finish(key);
+    const report = (await waiting).reports[0]!;
+    expect(report.unverifiedClaims?.length).toBeGreaterThan(0);
+    const text = childReportText(report);
+    const head = text.indexOf("\n\n") + 2;
+    expect(text.length - head).toBeLessThanOrEqual(SUBAGENT_REPORT_CHARS + 200);
+  });
+
   it("reports a failed save on the child's trace instead of dropping it, and still settles", async () => {
     const { host, finish } = fakeHost({ saveChildData: async () => { throw new Error("EACCES"); } });
     const controls = childControls(host, OWNER);
