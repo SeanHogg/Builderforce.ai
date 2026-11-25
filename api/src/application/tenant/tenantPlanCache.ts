@@ -9,7 +9,7 @@
  */
 
 import type { Env } from '../../env';
-import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { invalidateCachedStrict } from '../../infrastructure/cache/readThroughCache';
 import { invalidateTenantMembersWorkspaces, invalidateTenantSnapshot } from './tenantReadCache';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
@@ -29,7 +29,9 @@ export async function invalidateTenantPlan(
 ): Promise<void> {
   if (!env) return;
   await Promise.all([
-    invalidateCached(env, tenantPlanCacheKey(tenantId)),
+    // strict: the snapshot is served as last-known-good through a database outage, so a plan
+    // change whose cache delete failed must fail loudly rather than keep serving the old plan.
+    invalidateCachedStrict(env, tenantPlanCacheKey(tenantId)),
     // The workspace snapshot carries the same plan/billing columns.
     invalidateTenantSnapshot(env, tenantId),
     invalidateTenantMembersWorkspaces(env, tenantId, opts).catch((error: unknown) => {

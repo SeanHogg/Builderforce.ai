@@ -78,6 +78,7 @@ import { bindOutboxStorage, durableStepHost } from "./outboxStorage";
 import { bindLocalSuccessStorage } from "./localSuccessStorage";
 import { registerDeadLetterExport } from "./deadLetterExport";
 import { registerSyncSummary } from "./sync/registerSyncSummary";
+import { registerPlatformHealthStatus } from "./platformHealthStatus";
 import { registerLocalWork } from "./localWork/registerLocalWork";
 import { bindOutboxSendPermissionAtActivation } from "./sendPermissionActivation";
 import { installAuditClose } from "./installAuditClose";
@@ -499,6 +500,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerDeadLetterExport(context, localFirst.store);
   registerSyncSummary(context, localFirst.durableStore);
+  registerPlatformHealthStatus(context);
   registerLocalWork(context);
 
   context.subscriptions.push(

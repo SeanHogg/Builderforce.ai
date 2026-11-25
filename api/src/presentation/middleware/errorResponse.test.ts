@@ -26,6 +26,14 @@ class PublisherLikeError extends Error {
   }
 }
 
+describe('errorResponseBody · wrapped database outage (shared with the top-level fetch guard in index.ts)', () => {
+  it('answers a drizzle-wrapped outage as 503 database_unavailable, never leaking the wrapper', () => {
+    const outage = new ServiceUnavailableError('The database is temporarily unavailable', { code: 'database_unavailable' });
+    const wrapped = new Error('Failed query: select 1', { cause: outage });
+    expect(errorResponseBody(wrapped)).toEqual({ status: 503, body: { error: GENERIC_SERVER_ERROR, code: 'database_unavailable' } });
+  });
+});
+
 describe('statusOf', () => {
   it('maps every DomainError subclass, most specific first', () => {
     expect(statusOf(new ValidationError('v'))).toBe(400);

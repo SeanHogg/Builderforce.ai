@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db, Tx } from '../database/connection';
 import type { Env } from '../../env';
-import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached } from '../cache/readThroughCache';
+import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCachedStrict } from '../cache/readThroughCache';
 import { segments } from '../database/schema';
 
 /**
@@ -16,7 +16,8 @@ import { segments } from '../database/schema';
  * Resolved ids are stable, so they are cached per (tenant, account, company)
  * through the canonical read-through cache (`getOrSetCached`: L1 in-isolate, L2 KV
  * when the caller passes `env`) rather than a private Map. The cache is:
- *  - INVALIDATED on segment mutate/delete (see invalidateSegment) in both layers,
+ *  - INVALIDATED on segment mutate/delete (see invalidateSegment — keys are derived from the
+ *    segment row, so it works from any isolate) in both layers,
  *    so a suspended/archived/erased segment stops resolving at once;
  *  - TTL-BACKSTOPPED (CACHE_TTL_SECONDS) for any isolate the invalidation could not
  *    reach. The per-entry TTL bounds that staleness to a few minutes while keeping
@@ -27,23 +28,44 @@ import { segments } from '../database/schema';
 /** How long a resolved mapping may be served before it is re-read — the cross-isolate backstop. */
 const CACHE_TTL_SECONDS = 300;
 
-/** Which cache keys resolved to each segment, so a segment mutation can drop exactly them. */
-const keysBySegment = new Map<string, Set<string>>();
-
 function keyFor(tenantId: number, accountId?: string, companyId?: string): string {
   return `segment:${tenantId}|${accountId ?? ''}|${companyId ?? ''}`;
 }
 
+/** The columns of a `segments` row that determine which cache keys resolve to it. */
+export interface SegmentKeyCoordinates {
+  tenantId: number;
+  externalAccountId: string | null;
+  externalCompanyId: string | null;
+  isDefault: boolean;
+}
+
 /**
- * Drop every cached mapping that resolves to `segmentId` — both layers when `env` is
- * given. Call after any change that alters or removes a segment (status flip, plan
- * change, deletion) so the next request re-resolves instead of serving a stale id.
+ * The cache keys that resolve to ONE segment, derived from its row — the same
+ * `(tenant, account, company)` triple {@link resolveSegment} keys on, plus the tenant's
+ * claimless key when it is the default. A pure function of the row, so ANY isolate (and
+ * any writer) derives the identical keys: invalidation is cross-isolate, not limited to
+ * the isolate that happened to resolve the segment.
  */
-export async function invalidateSegment(segmentId: string, env?: Env): Promise<void> {
-  const keys = keysBySegment.get(segmentId);
-  if (!keys) return;
-  keysBySegment.delete(segmentId);
-  await Promise.all([...keys].map((key) => invalidateCached(env, key)));
+export function segmentCacheKeys(segment: SegmentKeyCoordinates): string[] {
+  const keys: string[] = [];
+  if (segment.externalAccountId && segment.externalCompanyId) {
+    keys.push(keyFor(segment.tenantId, segment.externalAccountId, segment.externalCompanyId));
+  }
+  if (segment.isDefault) keys.push(keyFor(segment.tenantId));
+  return keys;
+}
+
+/**
+ * Drop every cached mapping that resolves to `segment` — both layers when `env` is
+ * given. Call after any change that alters or removes a segment (status flip, plan
+ * change, deletion) so the next request re-resolves instead of serving a stale id. It
+ * is `strict`: the mapping may be served as last-known-good for days through an outage,
+ * so a delete that failed must fail the write rather than leave a suspended or erased
+ * segment resolving.
+ */
+export async function invalidateSegment(segment: SegmentKeyCoordinates, env?: Env): Promise<void> {
+  await Promise.all(segmentCacheKeys(segment).map((key) => invalidateCachedStrict(env, key)));
 }
 
 export interface SegmentClaims {
@@ -66,9 +88,6 @@ export async function resolveSegment(
     l1TtlMs: CACHE_TTL_SECONDS * 1000,
     staleOnUnavailableSeconds: OUTAGE_STALE_TTL_SECONDS,
   });
-  const keys = keysBySegment.get(id) ?? new Set<string>();
-  keys.add(cacheKey);
-  keysBySegment.set(id, keys);
   return id;
 }
 

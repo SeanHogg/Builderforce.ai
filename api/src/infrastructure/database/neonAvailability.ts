@@ -36,24 +36,62 @@ const NEON_UNAVAILABLE = new RegExp(
   '^(?:Server error \\(HTTP status 402\\)'
   // The driver prefixes every non-400 refusal with its status; the data-transfer quota's
   // status has not been observed, so any 3-digit status is accepted when the BODY is Neon's
-  // quota text (which may be wrapped in JSON).
-  + '|Server error \\(HTTP status \\d{3}\\): [\\s\\S]*?exceeded the (?:compute time|data transfer) quota'
+  // quota text, which must LEAD the body (optionally as the JSON `message` value) — a 5xx whose body
+  // merely echoes the phrase further in is an unrelated failure, not an outage.
+  + '|Server error \\(HTTP status \\d{3}\\): (?:\\{\\s*"message"\\s*:\\s*")?Your (?:account or )?project has exceeded the (?:compute time|data transfer) quota'
   + '|Your (?:account or )?project has exceeded the (?:compute time|data transfer) quota)',
 );
 
-/** True for the outage error {@link asDatabaseUnavailable} produces. The ONE predicate
- *  for "the core database refused to run queries" — cache fallbacks and callers use it. */
-export function isDatabaseUnavailable(error: unknown): boolean {
+/** How deep a `cause` chain is followed. drizzle wraps once (`DrizzleQueryError`); a
+ *  service may wrap again — five is generous and keeps a cyclic chain finite. */
+const MAX_CAUSE_DEPTH = 5;
+
+/** The error and its `cause` chain, outermost first, bounded by {@link MAX_CAUSE_DEPTH}. */
+function* causeChain(error: unknown): Generator<unknown> {
+  let current = error;
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH && current != null; depth++) {
+    yield current;
+    current = typeof current === 'object' ? (current as { cause?: unknown }).cause : undefined;
+  }
+}
+
+function isOutageError(error: unknown): error is ServiceUnavailableError {
   return error instanceof ServiceUnavailableError && error.code === DATABASE_UNAVAILABLE_CODE;
 }
 
-/** The outage error for a Neon quota refusal; any other error is returned untouched. */
+/**
+ * The outage error inside `error`, or undefined. drizzle's `PgPreparedQuery` rethrows a
+ * driver failure as `DrizzleQueryError(query, params, cause)`, so the
+ * {@link ServiceUnavailableError} {@link withDatabaseAvailability} raised reaches the
+ * app as a `.cause` — never as the thrown error itself. This is the ONE unwrap: the 503
+ * mapping, the cache fallback and every reporter skip go through it.
+ */
+export function databaseUnavailableCause(error: unknown): ServiceUnavailableError | undefined {
+  for (const link of causeChain(error)) if (isOutageError(link)) return link;
+  return undefined;
+}
+
+/** True when `error` IS, or is a wrapper (drizzle's `DrizzleQueryError`) around, the outage
+ *  error {@link asDatabaseUnavailable} produces. The ONE predicate for "the core database
+ *  refused to run queries" — cache fallbacks and callers use it. */
+export function isDatabaseUnavailable(error: unknown): boolean {
+  return databaseUnavailableCause(error) !== undefined;
+}
+
+/** The outage error for a Neon quota refusal (the error itself or anything in its `cause`
+ *  chain); any other error is returned untouched. */
 export function asDatabaseUnavailable(error: unknown): unknown {
-  if (!(error instanceof Error) || !NEON_UNAVAILABLE.test(error.message)) return error;
-  return new ServiceUnavailableError('The database is temporarily unavailable', {
-    code: DATABASE_UNAVAILABLE_CODE,
-    cause: error,
-  });
+  const existing = databaseUnavailableCause(error);
+  if (existing) return existing;
+  for (const link of causeChain(error)) {
+    if (link instanceof Error && NEON_UNAVAILABLE.test(link.message)) {
+      return new ServiceUnavailableError('The database is temporarily unavailable', {
+        code: DATABASE_UNAVAILABLE_CODE,
+        cause: link,
+      });
+    }
+  }
+  return error;
 }
 
 type Settle = (value: unknown) => unknown;

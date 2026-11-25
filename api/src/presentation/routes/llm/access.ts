@@ -7,6 +7,7 @@
 import type { Context } from 'hono';
 import type { HonoEnv } from '../../../env';
 import { TenantAccessError } from '../../../application/llm/gatewayAccess';
+import { isDatabaseUnavailable } from '../../../infrastructure/database/neonAvailability';
 
 export {
   requireTenantAccess,
@@ -23,6 +24,9 @@ export function respondToAccessError(c: Context<HonoEnv>, err: unknown) {
   // requireTenantAccess signals a bad/missing credential with a plain `Error` (verifyJwt,
   // "Missing or malformed...", revoked key) -> 401. Anything typed (ServiceUnavailableError, ...) is
   // NOT a credential failure: rethrow so the global errorHandler renders it (503 on a DB outage).
+  // A drizzle-wrapped outage (`DrizzleQueryError` with the 503 as its cause, possibly re-wrapped in a
+  // plain Error) is the same outage: rethrow so errorHandler unwraps it to a 503.
+  if (isDatabaseUnavailable(err)) throw err;
   if (err instanceof Error && err.constructor !== Error) throw err;
   return c.json({ error: (err as Error).message || 'Unauthorized' }, 401);
 }

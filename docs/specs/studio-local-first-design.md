@@ -164,6 +164,10 @@ Review class: slice 1 and slice 3 touch more than one package or a shared contra
 2. **Web engine and store.** Files: `frontend/src/lib/localFirst/webSyncDriver.ts` (+ work management adopts it), the whole `domains/canvas/infrastructure/localFirst/` folder (records, replica, commit, open, conflicts, blob store, upload queue, legacy import), `domains/canvas/domain/boardSnapshot.ts`. Output: fully tested library with no UI wiring and no deletion; items 1-8 of section 9 pass at the library level. Depends on slice 1 only for the integration test (uses its fixtures).
 3. **Studio wiring and retirement.** Files: `CreationSessionClient.tsx`, `lib/pendingWork.ts`, `lib/canvas/startCreationSession.ts`, `useCanvasSession.ts`, `useCanvasSessionSync.ts`, `lib/canvasMediaStore.ts`, `useStudioApps.ts`, `LastBoardBridge.tsx`, `PendingDraftsNotice.tsx`, `SessionList.tsx`, `StudioSyncStatus` + i18n keys, then delete `localCanvasStore.ts` and run the parity list unchanged. Output: Studio on the replica, acceptance run.
 
+## Decisions (2026-11-24, session model; operator may override)
+
+Design reviewed and approved for implementation. The four product questions below take their recommended answers: (1) offline = boards opened on this device + the 20 most recent pre-seeded on sign-in; (2) caps 25 MB file / 200 MB video / 500 MB per device partition, 7-day blob grace; (3) same-object conflict = keep local rendered + keep-mine/keep-theirs SlideOutPanel; (4) no retention limit for unbound guest boards (unchanged behaviour). The pull projector (section 2) is a Gap Register entry, not part of slices 1–3.
+
 ## Open questions for the operator (business/product only)
 
 1. **Offline scope for server boards never opened on this device.** Recommended: only boards opened at least once (plus the N most recent, default 20, pre-seeded on sign-in) are available offline. The alternative is replicating every board in the tenant, which costs storage and bandwidth on large workspaces.

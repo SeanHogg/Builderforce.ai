@@ -18,7 +18,7 @@ import { asc, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { tenantLlmProviderKeys } from '../../infrastructure/database/schema';
-import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCachedStrict } from '../../infrastructure/cache/readThroughCache';
 
 export interface TenantProviderRow {
   id: string;
@@ -37,7 +37,9 @@ export const tenantProviderRowsCacheKey = (tenantId: number): string => `byo-row
  * (`GET /llm/byo-order`) among them — misses on its own.
  */
 export async function invalidateTenantProviderRows(env: Env, tenantId: number): Promise<void> {
-  await invalidateCached(env, tenantProviderRowsCacheKey(tenantId));
+  // strict: a deleted BYO key is served as last-known-good through a database outage, so a
+  // delete that failed here must fail the writer rather than leave the key routable.
+  await invalidateCachedStrict(env, tenantProviderRowsCacheKey(tenantId));
 }
 
 /** All of the tenant's provider rows, ordered by BYO precedence (`priority` ASC, unset last,

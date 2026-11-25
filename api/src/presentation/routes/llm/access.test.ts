@@ -29,6 +29,14 @@ describe('respondToAccessError', () => {
     expect(await res.json()).toMatchObject({ code: DATABASE_UNAVAILABLE_CODE });
   });
 
+  it('regression: a plain Error wrapping the outage (drizzle-style cause) is still a 503', async () => {
+    const res = await appThrowing(() => {
+      throw new Error('Failed query: select 1', { cause: new ServiceUnavailableError('down', { code: DATABASE_UNAVAILABLE_CODE }) });
+    }).request('/', undefined, TEST_ENV);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ code: DATABASE_UNAVAILABLE_CODE });
+  });
+
   it('a plain Error (bad/missing/expired credential) still answers 401', async () => {
     const res = await appThrowing(() => { throw new Error('Token expired'); }).request('/');
     expect(res.status).toBe(401);

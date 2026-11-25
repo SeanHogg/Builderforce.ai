@@ -27,6 +27,18 @@ describe("listAssignedTasks", () => {
     expect(reportExtensionError).toHaveBeenCalledWith(boom, { operation: "tasks:listAssigned" });
   });
 
+  it.each([502, 503, 504])("a platform outage (HTTP %i) answers undefined WITHOUT filing an error report", async (status) => {
+    authed.mockRejectedValueOnce(Object.assign(new Error(`/api/vscode/tasks → HTTP ${status}`), { status }));
+    await expect(listAssignedTasks(secrets)).resolves.toBeUndefined();
+    expect(reportExtensionError).not.toHaveBeenCalled();
+  });
+
+  it("a non-outage HTTP error (500) is still reported", async () => {
+    authed.mockRejectedValueOnce(Object.assign(new Error("boom"), { status: 500 }));
+    await expect(listAssignedTasks(secrets)).resolves.toBeUndefined();
+    expect(reportExtensionError).toHaveBeenCalledTimes(1);
+  });
+
   it("a genuinely empty assignment list is []", async () => {
     authed.mockResolvedValueOnce({ tasks: [] });
     await expect(listAssignedTasks(secrets)).resolves.toEqual([]);

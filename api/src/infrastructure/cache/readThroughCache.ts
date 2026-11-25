@@ -30,7 +30,7 @@ import { deferPastResponse } from '../../application/shared/requestScope';
  */
 
 import type { Env } from '../../env';
-import { createReadThroughCache, type CacheTtlOptions } from '@builderforce/read-through-cache';
+import { createReadThroughCache, type CacheTtlOptions, type InvalidateOptions } from '@builderforce/read-through-cache';
 import { isKvRateLimit, retryTransient } from '../shared/retryTransient';
 import { isDatabaseUnavailable } from '../database/neonAvailability';
 
@@ -129,8 +129,14 @@ export const OUTAGE_STALE_TTL_SECONDS = 7 * 24 * 3600;
  * read-modify-write that reconciles from the source only on a cold miss, instead
  * of double-counting against a loader that already includes the new write).
  */
-export async function peekCached<T>(env: CacheEnv, key: string): Promise<T | null> {
-  return cache.peek<T>(cacheL2Kv(env), key);
+export async function peekCached<T>(
+  env: CacheEnv,
+  key: string,
+  /** Pass the SAME `staleOnUnavailableSeconds` the key was written with: opted-in entries live
+   *  under their own KV spelling, which a plain peek never reads. */
+  opts?: Pick<CacheOpts, 'staleOnUnavailableSeconds'>,
+): Promise<T | null> {
+  return cache.peek<T>(cacheL2Kv(env), key, withStaleOnUnavailable(opts));
 }
 
 /**
@@ -296,6 +302,17 @@ export async function bumpPublicCanvasVersion(env: Env, tenantId: number): Promi
 
 /** Invalidate both cache layers for `key`. Call from every mutation that
  *  changes the cached data so the next read re-loads. */
-export async function invalidateCached(env: CacheEnv, key: string): Promise<void> {
-  return cache.invalidate(cacheL2Kv(env), key);
+export async function invalidateCached(env: CacheEnv, key: string, opts?: InvalidateOptions): Promise<void> {
+  return cache.invalidate(cacheL2Kv(env), key, opts);
+}
+
+/**
+ * {@link invalidateCached} that THROWS when the KV delete fails after its retries. For the
+ * writers an outage-stale entry's correctness hangs on — a membership removal, a revoked
+ * key or session, a plan change: a delete that quietly failed would leave a copy that is
+ * served (as last-known-good) for up to {@link OUTAGE_STALE_TTL_SECONDS}. Every other
+ * caller keeps the reported-and-swallowed default.
+ */
+export async function invalidateCachedStrict(env: CacheEnv, key: string): Promise<void> {
+  return invalidateCached(env, key, { strict: true });
 }

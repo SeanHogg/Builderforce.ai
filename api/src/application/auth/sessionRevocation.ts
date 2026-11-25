@@ -30,7 +30,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authTokens, authUserSessions, users } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
-import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached, setCached } from '../../infrastructure/cache/readThroughCache';
+import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCachedStrict, setCached } from '../../infrastructure/cache/readThroughCache';
 import { UnauthorizedError } from '../../domain/shared/errors';
 
 /**
@@ -248,7 +248,10 @@ export async function resolveActiveToken(
   const writes = lastSeenWrites(db, active, now);
   if (writes.length > 0) {
     const touched = { ...active, tokenLastSeenAt: new Date(now), sessionLastSeenAt: active.sessionRowId ? new Date(now) : null };
-    writes.push(setCached(env, activeTokenCacheKey(jti), toCached(userId, touched), ACTIVE_TOKEN_CACHE));
+    // L1 ONLY (`undefined` env = no KV): this deferred write-back runs after the response and
+    // can race a revoke that deleted the key. Written to KV it would resurrect a revoked
+    // verdict — as a last-known-good envelope, for days. Only a getOrSet LOAD writes KV.
+    writes.push(setCached(undefined, activeTokenCacheKey(jti), toCached(userId, touched), { l1TtlMs: ACTIVE_TOKEN_CACHE.l1TtlMs }));
   }
   return { active, writes };
 }
@@ -274,7 +277,8 @@ export async function sessionVersionOf(env: Env | undefined, db: Db, userId: str
 }
 
 export async function invalidateSessionVersion(env: Env | undefined, userId: string): Promise<void> {
-  await invalidateCached(env, sessionVersionCacheKey(userId));
+  // strict: a force-logout whose cache delete failed would leave the old version served as last-known-good.
+  await invalidateCachedStrict(env, sessionVersionCacheKey(userId));
 }
 
 /**
@@ -373,8 +377,8 @@ export async function revokeSessionTokens(
   // Both cached verdicts for each revoked jti: the worker's introspection answer and
   // this API's own live-token row ({@link findActiveTokenCached}).
   await Promise.all(revokedJtis.flatMap((jti) => [
-    invalidateCached(env, sessionIntrospectCacheKey(jti)),
-    invalidateCached(env, activeTokenCacheKey(jti)),
+    invalidateCachedStrict(env, sessionIntrospectCacheKey(jti)),
+    invalidateCachedStrict(env, activeTokenCacheKey(jti)),
   ]));
   return { revokedJtis };
 }

@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { getTenantTokenAvailability, checkTenantTokenGate, resolveTenantTokenLimits } from './tenantTokenAvailability';
+import { describe, it, expect, vi } from 'vitest';
+import { DrizzleQueryError } from 'drizzle-orm';
+import { ServiceUnavailableError } from '../../domain/shared/errors';
+import { DATABASE_UNAVAILABLE_CODE } from '../../infrastructure/database/neonAvailability';
+import { getTenantTokenAvailability, checkTenantTokenGate, resolveTenantTokenLimits, tenantHasSuperadminMember } from './tenantTokenAvailability';
 import type { Db } from '../../infrastructure/database/connection';
 
 /**
@@ -202,5 +205,35 @@ describe('resolveTenantTokenLimits (the limit the dashboard + cost forecast DISP
     const db = fakeDb([[{ ...activePro, tokenDailyLimitOverride: 1000 }], [], [{ day: 999999, month: 999999 }]]);
     const l = await resolveTenantTokenLimits(db, 1);
     expect(l.dailyLimit).toBe(1000);
+  });
+});
+
+describe('tenantHasSuperadminMember', () => {
+  const failingDb = (error: unknown): Db => {
+    const chain: Record<string, unknown> = {};
+    for (const m of ['from', 'where', 'limit', 'innerJoin']) chain[m] = () => chain;
+    chain.then = (_resolve: unknown, reject: (e: unknown) => unknown) => reject(error);
+    return { select: () => chain } as unknown as Db;
+  };
+
+  it('a database outage answers false and files NO error report (the sink is that database)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const outage = new DrizzleQueryError('select', [], new ServiceUnavailableError('down', { code: DATABASE_UNAVAILABLE_CODE }));
+      await expect(tenantHasSuperadminMember(failingDb(outage), 1)).resolves.toBe(false);
+      expect(spy.mock.calls.some(([tag]) => tag === '[caught-error]')).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('any other failure is still reported', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await expect(tenantHasSuperadminMember(failingDb(new Error('relation "x" does not exist')), 1)).resolves.toBe(false);
+      expect(spy.mock.calls.some(([tag]) => tag === '[caught-error]')).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

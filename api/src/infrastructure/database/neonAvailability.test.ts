@@ -58,6 +58,11 @@ describe('asDatabaseUnavailable (HTTP driver status variants)', () => {
     const bare = new Error('You exceeded your current quota');
     expect(asDatabaseUnavailable(bare)).toBe(bare);
   });
+
+  it('does not map a 5xx whose body merely echoes the quota phrase later on', () => {
+    const echo = new Error('Server error (HTTP status 502): {"error":"upstream failed","detail":"Your project has exceeded the data transfer quota"}');
+    expect(asDatabaseUnavailable(echo)).toBe(echo);
+  });
 });
 
 describe('isDatabaseUnavailable', () => {

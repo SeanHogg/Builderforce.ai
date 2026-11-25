@@ -56,7 +56,9 @@ describe('JWT membership resolution via resolveKeyCached', () => {
     expect(first).toEqual({ ok: true, payload: { isSuperadmin: true } });
     expect(second).toEqual(first);
     expect(loader).toHaveBeenCalledTimes(1); // second call is a cache hit
-    expect(kv.store.has(`cache:${keyCacheKey('jwt', '42:user-1')}`)).toBe(true);
+    // The envelope lives under the `lkg` spelling — never the plain key an older reader would misread.
+    expect(kv.store.has(`cache:lkg:${keyCacheKey('jwt', '42:user-1')}`)).toBe(true);
+    expect(kv.store.has(`cache:${keyCacheKey('jwt', '42:user-1')}`)).toBe(false);
   });
 
   it('writes the JWT entry with the short TTL, not the 365-day key TTL', async () => {
@@ -99,6 +101,7 @@ describe('JWT membership resolution via resolveKeyCached', () => {
 
     await invalidateJwtMembershipCache(env, 42, 'user-1');
     expect(kv.delete).toHaveBeenCalledWith(`cache:${keyCacheKey('jwt', '42:user-1')}`);
+    expect(kv.delete).toHaveBeenCalledWith(`cache:lkg:${keyCacheKey('jwt', '42:user-1')}`);
     const afterInvalidate = await resolveKeyCached(env, 'jwt', jwtMembershipHash(42, 'user-1'), loader);
 
     expect(loader).toHaveBeenCalledTimes(2); // the drop forced a re-load

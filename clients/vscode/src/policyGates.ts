@@ -17,8 +17,8 @@
  * last-known policy to hold it to.
  */
 
-import type * as vscode from "vscode";
-import { fetchPolicyGates, fetchProjectShipPolicy } from "./bfApi";
+import * as vscode from "vscode";
+import { fetchPolicyGates, fetchProjectShipPolicy, probeEditorKey } from "./bfApi";
 import { getApiKey } from "./gateway";
 import type { PolicyGate } from "@builderforce/agent-tools";
 import { DEFAULT_SHIP_POLICY, narrowShipPolicy, type ShipPolicy } from "@builderforce/run-guards";
@@ -85,7 +85,14 @@ export function resetPolicyGatesCache(): void {
  * default) governs, and nothing is cached or persisted over the recorded policy.
  */
 async function throwIfSignedIn(secrets: vscode.SecretStorage, what: string): Promise<void> {
-  if (await getApiKey(secrets)) throw new Error(`${what} unreadable: the platform returned no session`);
+  if (!(await getApiKey(secrets))) return;
+  // A REFUSED key (revoked/deleted) is not an outage: the user must sign in again, and saying
+  // "platform returned no session" sends them to check their network. `probeEditorKey` is the
+  // ONE classification of the key exchange (rejected vs unreachable) — reused, not re-derived.
+  if ((await probeEditorKey(secrets)) === "rejected") {
+    throw new Error(vscode.l10n.t("BuilderForce refused your editor key, so your workspace policy could not be read. Sign in again."));
+  }
+  throw new Error(`${what} unreadable: the platform returned no session`);
 }
 
 /** Effective gates for a run in this editor, or `[]` when signed out. */

@@ -40,7 +40,7 @@
  */
 
 import type { Env } from '../../env';
-import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached, peekCached, setCached } from '../cache/readThroughCache';
+import { OUTAGE_STALE_TTL_SECONDS, getOrSetCached, invalidateCached, invalidateCachedStrict, peekCached, setCached } from '../cache/readThroughCache';
 
 /** 365 days. Long-lived because mutations invalidate explicitly. */
 const TTL_SECONDS = 365 * 24 * 60 * 60;
@@ -176,5 +176,7 @@ export function jwtMembershipHash(tenantId: number, userId: string): string {
  * take effect immediately instead of after `JWT_TTL_SECONDS`. Safe to no-op.
  */
 export async function invalidateJwtMembershipCache(env: Env, tenantId: number, userId: string): Promise<void> {
-  await invalidateKeyCache(env, 'jwt', jwtMembershipHash(tenantId, userId));
+  // strict: this entry is served as last-known-good through a database outage, so a removed
+  // or demoted member whose delete failed must surface, not keep access for days.
+  await invalidateCachedStrict(env, keyCacheKey('jwt', jwtMembershipHash(tenantId, userId)));
 }

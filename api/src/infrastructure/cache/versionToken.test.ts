@@ -18,7 +18,7 @@ describe('bumpVersion', () => {
     await runInDurableObjectScope('TestDO', env, { waitUntil: (t) => { waited.push(t); } }, () => bumpVersion('k-do', 'test'));
     expect(waited).toHaveLength(1);
     await Promise.all(waited);
-    expect(kv.delete).toHaveBeenCalledTimes(1);
+    expect(kv.delete).toHaveBeenCalledTimes(2); // plain + last-known-good spelling
   });
 
   it('dedupes repeat bumps of one key within a scope and awaits when nothing can defer', async () => {
@@ -28,6 +28,6 @@ describe('bumpVersion', () => {
       await bumpVersion('k-dup', 'test');
       await bumpVersion('k-other', 'test');
     });
-    expect(kv.delete).toHaveBeenCalledTimes(2);
+    expect(kv.delete).toHaveBeenCalledTimes(4); // two distinct keys x two spellings
   });
 });

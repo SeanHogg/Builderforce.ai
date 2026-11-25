@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryLocalFirstStore } from "@builderforce/local-first";
 import { DEFAULT_SHIP_POLICY, shipPolicyOf } from "@builderforce/run-guards";
 
+vi.mock("vscode", () => ({ l10n: { t: (m: string) => m } }));
 const fetchPolicyGates = vi.fn();
 const fetchProjectShipPolicy = vi.fn();
 vi.mock("./bfApi", () => ({
   fetchPolicyGates: (...a: unknown[]) => fetchPolicyGates(...a),
   fetchProjectShipPolicy: (...a: unknown[]) => fetchProjectShipPolicy(...a),
+  probeEditorKey: async () => "unreachable",
 }));
 
 // policyGates reads the stored editor key (signed in vs out) through gateway.ts, which needs the vscode host.

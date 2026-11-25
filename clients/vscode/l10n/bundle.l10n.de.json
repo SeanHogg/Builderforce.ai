@@ -1,6 +1,14 @@
 {
   " on {target}": " an {target}",
   " — {bytes} so far": " — bisher {bytes}",
+  "$(cloud-offline) BuilderForce offline": "$(cloud-offline) BuilderForce offline",
+  "$(warning) BuilderForce degraded": "$(warning) BuilderForce eingeschränkt",
+  "BuilderForce cannot be reached.": "BuilderForce ist nicht erreichbar.",
+  "BuilderForce is reachable but having trouble serving requests.": "BuilderForce ist erreichbar, kann Anfragen aber derzeit nicht zuverlässig bearbeiten.",
+  "BuilderForce platform status": "BuilderForce-Plattformstatus",
+  "Click to run Diagnose Connection.": "Klicken, um die Verbindungsdiagnose auszuführen.",
+  "Still works: local tools, local chats and local models.": "Funktioniert weiterhin: lokale Tools, lokale Chats und lokale Modelle.",
+  "Unavailable until it recovers: cloud models and sync (your changes are queued and sent later).": "Nicht verfügbar, bis die Plattform wieder läuft: Cloud-Modelle und Synchronisierung (Ihre Änderungen werden eingereiht und später gesendet).",
   "$(add) Register external MCP server…": "$(add) Externen MCP-Server registrieren…",
   "$(credit-card) Add a card to unlock premium models": "$(credit-card) Karte hinzufügen, um Premium-Modelle freizuschalten",
   "$(rocket) Upgrade to unlock premium models": "$(rocket) Upgrade, um Premium-Modelle freizuschalten",
@@ -1530,5 +1538,6 @@
   "{0}: {1}": "{0}: {1}",
   "Ran commands ({count})": "Befehle ausgeführt ({count})",
   "Used {tools} ({count})": "{tools} verwendet ({count})",
-  "{count} failed": "{count} fehlgeschlagen"
+  "{count} failed": "{count} fehlgeschlagen",
+  "BuilderForce refused your editor key, so your workspace policy could not be read. Sign in again.": "BuilderForce hat deinen Editor-Schlüssel abgelehnt, daher konnte die Richtlinie deines Arbeitsbereichs nicht gelesen werden. Melde dich erneut an."
 }

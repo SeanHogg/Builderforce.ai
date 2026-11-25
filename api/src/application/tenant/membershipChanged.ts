@@ -45,16 +45,23 @@ export async function membershipChanged(
   tenantId: number,
   userIds: readonly string[] = [],
 ): Promise<void> {
-  await Promise.all([
-    // The footer roster (PRD 21 §4.1) and the assignable-workforce union the
-    // pickers read — two projections of one fact, cleared together.
-    invalidateTeamCaches(env, tenantId),
-    // The JWT membership entry that decides whether this person still has access.
-    ...userIds.map((userId) => invalidateJwtMembershipCache(env, tenantId, userId)),
-    // The snapshot lists every member; the affected people's workspace lists carry their role.
-    invalidateTenantSnapshot(env, tenantId),
-    invalidateMyWorkspaces(env, userIds),
-    // A DM inbox shows only people the viewer may reach, which membership decides.
-    bumpInboxes(env, userIds),
-  ]).catch(() => undefined);
+  // The JWT membership entry decides whether this person still has access, and is served as
+  // last-known-good through a database outage: its delete is STRICT, so a failure is raised
+  // (after the best-effort clears below have still run) instead of leaving a removed member
+  // with access for days.
+  const [accessFailure] = await Promise.all([
+    Promise.all(userIds.map((userId) => invalidateJwtMembershipCache(env, tenantId, userId)))
+      .then(() => undefined, (error: unknown) => ({ error })),
+    Promise.all([
+      // The footer roster (PRD 21 §4.1) and the assignable-workforce union the
+      // pickers read — two projections of one fact, cleared together.
+      invalidateTeamCaches(env, tenantId),
+      // The snapshot lists every member; the affected people's workspace lists carry their role.
+      invalidateTenantSnapshot(env, tenantId),
+      invalidateMyWorkspaces(env, userIds),
+      // A DM inbox shows only people the viewer may reach, which membership decides.
+      bumpInboxes(env, userIds),
+    ]).catch(() => undefined),
+  ]);
+  if (accessFailure) throw accessFailure.error;
 }

@@ -12,6 +12,7 @@ import {
   type OutboxSendPermission,
   type OutboxStore,
 } from "@builderforce/write-outbox";
+import { platformHealth } from "./bfApi/platformHealth";
 
 /**
  * The extension's adapter for the shared write outbox's DURABLE mode — the one place a
@@ -77,16 +78,23 @@ export function durableOutboxStore<T, K>(name: string): OutboxStore<T, K> {
   });
 }
 
-/** Is the platform API answering? Set by the API client's own requests. */
+/**
+ * Can the platform API serve writes right now? Set by the API client's own requests via
+ * {@link platformHealth}: true only when `online` — a `degraded` answer (502/503/504, e.g.
+ * 503 `database_unavailable`) pauses the outbox exactly as `unreachable` does, since retrying
+ * writes into a failing platform is wasted traffic. The next healthy answer flips it back
+ * and the outbox replays at once.
+ */
 export const apiConnectivity = createOnlineSignal(true);
 
-/** Await a request, recording whether the API answered at all. */
+/** Await a request, classifying the platform's health from its answer (status only — the body is never read). */
 export async function trackReachability(request: Promise<Response>): Promise<Response> {
   try {
     const res = await request;
-    apiConnectivity.set(true);
+    apiConnectivity.set(platformHealth.reportResponse(res.status) === "online");
     return res;
   } catch (error) {
+    platformHealth.reportUnreachable();
     apiConnectivity.set(false);
     throw error;
   }

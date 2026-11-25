@@ -13,6 +13,7 @@ import type { Context, Env as HonoBaseEnv } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { InternalError, RequestValidationError, ServiceUnavailableError, StatusError, isClientError, statusOf } from '../../domain/shared/errors';
 import { reportCaughtError, type CaughtErrorDetails } from '../../application/observability/caughtErrorReporter';
+import { databaseUnavailableCause, isDatabaseUnavailable } from '../../infrastructure/database/neonAvailability';
 import type { HonoEnv } from '../../env';
 
 /** What a 500 says. The real message went to the reporter, not to the caller. */
@@ -61,7 +62,10 @@ export interface ErrorResponseBody {
  * both callers decide (with the same rule: 5xx ⇒ report) before rendering. A 5xx
  * given the `errorId` it was reported under carries it as a reference.
  */
-export function errorResponseBody(error: unknown, errorId?: string): { status: number; body: ErrorResponseBody } {
+export function errorResponseBody(thrown: unknown, errorId?: string): { status: number; body: ErrorResponseBody } {
+  // drizzle wraps the driver's failure (`DrizzleQueryError`), so a database outage arrives
+  // as a `.cause`. Unwrapped HERE, once, so every renderer answers it as the 503 it is.
+  const error = databaseUnavailableCause(thrown) ?? thrown;
   const status = statusOf(error);
   // An InternalError's / StatusError's message was written for the caller; any other 5xx text is a diagnostic.
   if (status >= 500) {
@@ -94,7 +98,8 @@ export function failResponse(
   details: CaughtErrorDetails,
   extra?: Record<string, unknown>,
 ): Response {
-  const errorId = isClientError(statusOf(error)) ? undefined : reportServerError(c, error, details);
+  // A database outage is not reported: the durable sink is a write to that same database.
+  const errorId = isClientError(statusOf(error)) || isDatabaseUnavailable(error) ? undefined : reportServerError(c, error, details);
   const { status, body } = errorResponseBody(error, errorId);
   return c.json(extra ? { ...body, ...extra } : body, status as ContentfulStatusCode);
 }

@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { isClientError, statusOf } from '../../domain/shared/errors';
 import { reportUnhandledError } from '../../application/observability/caughtErrorReporter';
+import { isDatabaseUnavailable } from '../../infrastructure/database/neonAvailability';
 import type { HonoEnv } from '../../env';
 import { addCorsToResponse } from './cors';
 import { errorResponseBody, mintErrorId } from './errorResponse';
@@ -22,7 +23,9 @@ import { errorResponseBody, mintErrorId } from './errorResponse';
  * user sees can be looked up rather than guessed at by path and time.
  */
 export async function errorHandler(err: Error, c: Context): Promise<Response> {
-  const errorId = isClientError(statusOf(err)) ? undefined : mintErrorId();
+  // A database outage is not reported — the durable sink is a write to that same database —
+  // and a wrapped one (drizzle's DrizzleQueryError) is the same outage.
+  const errorId = isClientError(statusOf(err)) || isDatabaseUnavailable(err) ? undefined : mintErrorId();
   const { status, body } = errorResponseBody(err, errorId);
   const honoContext = c as Context<HonoEnv>;
   if (errorId) {

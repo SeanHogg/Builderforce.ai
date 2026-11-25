@@ -4,8 +4,14 @@ import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryLocalFirstStore } from "@builderforce/local-first";
 
+vi.mock("vscode", () => ({ l10n: { t: (m: string) => m } }));
 const fetchPolicyGates = vi.fn();
-vi.mock("./bfApi", () => ({ fetchPolicyGates: (...a: unknown[]) => fetchPolicyGates(...a) }));
+// What `probeEditorKey` says of the stored key when a signed-in read comes back empty.
+const probeEditorKey = vi.fn(async (): Promise<string> => "unreachable");
+vi.mock("./bfApi", () => ({
+  fetchPolicyGates: (...a: unknown[]) => fetchPolicyGates(...a),
+  probeEditorKey: () => probeEditorKey(),
+}));
 // "Signed in" = an editor key is stored. Default: signed out (no key).
 const getApiKey = vi.fn(async (): Promise<string | undefined> => undefined);
 vi.mock("./gateway", () => ({ getApiKey: () => getApiKey() }));
@@ -17,6 +23,8 @@ const secrets = {} as never;
 
 beforeEach(() => {
   fetchPolicyGates.mockReset();
+  probeEditorKey.mockReset();
+  probeEditorKey.mockResolvedValue("unreachable");
   getApiKey.mockReset();
   getApiKey.mockResolvedValue(undefined);
   resetPolicyGatesCache();
@@ -154,6 +162,22 @@ describe("resolveRunPolicyGates outage vs signed out", () => {
     getApiKey.mockResolvedValue("bfk_stored");
     fetchPolicyGates.mockResolvedValueOnce(undefined);
     await expect(resolveRunPolicyGates(secrets, 7, readAt)).rejects.toBeInstanceOf(PolicyGatesUnavailableError);
+  });
+
+  it("regression: a REFUSED editor key says so (sign in again); an unreachable platform keeps the generic reason", async () => {
+    persistedStore();
+    getApiKey.mockResolvedValue("bfk_stored");
+    fetchPolicyGates.mockResolvedValue(undefined);
+
+    probeEditorKey.mockResolvedValue("rejected");
+    const refused = await resolveRunPolicyGates(secrets, 7, readAt).catch((e: unknown) => e);
+    expect(refused).toBeInstanceOf(PolicyGatesUnavailableError);
+    expect((refused as Error).message).toContain("refused your editor key");
+    expect((refused as Error).message).toContain("Sign in again");
+
+    probeEditorKey.mockResolvedValue("unreachable");
+    const down = await resolveRunPolicyGates(secrets, 8, readAt).catch((e: unknown) => e);
+    expect((down as Error).message).toContain("the platform returned no session");
   });
 
   it("regression: signed out ⇒ [] and nothing cached or persisted", async () => {

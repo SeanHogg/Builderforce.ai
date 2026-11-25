@@ -1,6 +1,14 @@
 {
   " on {target}": "，目标 {target}",
   " — {bytes} so far": " — 已收到 {bytes}",
+  "$(cloud-offline) BuilderForce offline": "$(cloud-offline) BuilderForce 离线",
+  "$(warning) BuilderForce degraded": "$(warning) BuilderForce 服务降级",
+  "BuilderForce cannot be reached.": "无法连接到 BuilderForce。",
+  "BuilderForce is reachable but having trouble serving requests.": "BuilderForce 可以连接，但处理请求时出现问题。",
+  "BuilderForce platform status": "BuilderForce 平台状态",
+  "Click to run Diagnose Connection.": "点击运行连接诊断。",
+  "Still works: local tools, local chats and local models.": "仍可使用：本地工具、本地聊天和本地模型。",
+  "Unavailable until it recovers: cloud models and sync (your changes are queued and sent later).": "恢复前不可用：云端模型和同步（您的更改将排队，稍后发送）。",
   "$(add) Register external MCP server…": "$(add) 注册外部 MCP 服务器…",
   "$(credit-card) Add a card to unlock premium models": "$(credit-card) 添加银行卡以解锁高级模型",
   "$(rocket) Upgrade to unlock premium models": "$(rocket) 升级以解锁高级模型",
@@ -1530,5 +1538,6 @@
   "{0}: {1}": "{0}：{1}",
   "Ran commands ({count})": "运行了命令（{count}）",
   "Used {tools} ({count})": "使用了 {tools}（{count}）",
-  "{count} failed": "{count} 次失败"
+  "{count} failed": "{count} 次失败",
+  "BuilderForce refused your editor key, so your workspace policy could not be read. Sign in again.": "BuilderForce 拒绝了你的编辑器密钥，因此无法读取你的工作区策略。请重新登录。"
 }

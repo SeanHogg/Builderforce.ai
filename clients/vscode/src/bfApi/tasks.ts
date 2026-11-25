@@ -3,6 +3,7 @@ import { isClosedTask } from "@builderforce/agent-loop";
 import { ttlCache } from "../ttlCache";
 import { reportExtensionError } from "../errorReporter";
 import { authed } from "./transport";
+import { classifyPlatformStatus } from "./platformHealth";
 
 export interface BfTask {
   id: number;
@@ -149,7 +150,12 @@ export async function listAssignedTasks(secrets: vscode.SecretStorage): Promise<
     const r = await authed<{ tasks: BfAssignedTask[] }>(secrets, "/api/vscode/tasks");
     return r === undefined ? undefined : r.tasks ?? [];
   } catch (error) {
-    void reportExtensionError(error, { operation: "tasks:listAssigned" });
+    // A platform/database outage (502/503/504) is handled — the list is just unavailable — and the
+    // status bar already says so; reporting it files one error per poll for one outage.
+    const status = (error as { status?: unknown } | null)?.status;
+    if (typeof status !== "number" || classifyPlatformStatus(status) !== "degraded") {
+      void reportExtensionError(error, { operation: "tasks:listAssigned" });
+    }
     return undefined;
   }
 }

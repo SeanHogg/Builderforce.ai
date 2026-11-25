@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
-import type { SQL } from 'drizzle-orm';
+import { DrizzleQueryError, type SQL } from 'drizzle-orm';
+import { ServiceUnavailableError } from '../../domain/shared/errors';
+import { DATABASE_UNAVAILABLE_CODE, isDatabaseUnavailable } from '../../infrastructure/database/neonAvailability';
+import { __clearL1CacheForTests } from '../../infrastructure/cache/readThroughCache';
 import {
   revokeSessionTokens, findActiveTokenCached, resolveActiveToken, sessionVersionOf, invalidateSessionVersion,
   type RevokeSelector, type ActiveTokenRow,
@@ -123,9 +126,12 @@ describe('revokeSessionTokens', () => {
     // Both cached verdicts for EVERY revoked jti are dropped from the shared KV: the
     // worker's introspection answer and the API's own live-token row.
     expect(result).toEqual({ revokedJtis: ['j-a', 'j-b'] });
+    // Each key is dropped under BOTH KV spellings (plain + last-known-good envelope).
     expect(del.mock.calls.map((c) => c[0]).sort()).toEqual([
       'cache:auth:active:j-a', 'cache:auth:active:j-b',
       'cache:auth:introspect:j-a', 'cache:auth:introspect:j-b',
+      'cache:lkg:auth:active:j-a', 'cache:lkg:auth:active:j-b',
+      'cache:lkg:auth:introspect:j-a', 'cache:lkg:auth:introspect:j-b',
     ]);
   });
 
@@ -234,6 +240,79 @@ describe('resolveActiveToken', () => {
     const cached = await findActiveTokenCached(env, db, 'u1', 'j3');
     expect(cached?.tokenLastSeenAt?.getTime()).toBeGreaterThan(staleRow.tokenLastSeenAt!.getTime());
     expect(callCount()).toBe(1);
+  });
+});
+
+describe('regression: a revoked token is never accepted through a database outage', () => {
+  /** A KV that really stores, so the last-known-good envelope exists to be (not) resurrected. */
+  function storingEnv() {
+    const store = new Map<string, string>();
+    const kv = {
+      get: vi.fn(async (key: string) => (store.has(key) ? JSON.parse(store.get(key)!) : null)),
+      put: vi.fn(async (key: string, value: string) => { store.set(key, value); }),
+      delete: vi.fn(async (key: string) => { store.delete(key); }),
+    };
+    return { env: { AUTH_CACHE_KV: kv } as unknown as Env, store, kv };
+  }
+
+  /** What production throws: drizzle's wrapper with the 503 outage as its cause. */
+  const refusingDb = () => {
+    const outage = new DrizzleQueryError('select ...', [], new ServiceUnavailableError('down', { code: DATABASE_UNAVAILABLE_CODE }));
+    const chain: Record<string, unknown> = {};
+    for (const name of ['from', 'leftJoin', 'where']) chain[name] = () => chain;
+    chain.limit = async () => { throw outage; };
+    return { select: () => chain, update: () => ({ set: () => ({ where: async () => undefined }) }) } as unknown as Db;
+  };
+
+  it('serves the last-known-good verdict while the token is live and the database is down', async () => {
+    const { env } = storingEnv();
+    const { db } = fakeAuthDb([[LIVE_ROW]]);
+    await findActiveTokenCached(env, db, 'u1', 'j1');
+    __clearL1CacheForTests();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 10 * 60_000); // past the 5-minute fresh window
+    try {
+      expect(await findActiveTokenCached(env, refusingDb(), 'u1', 'j1')).toEqual(LIVE_ROW);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('after revokeSessionTokens the revoked token is NOT accepted, even with a drizzle-wrapped outage', async () => {
+    const { env, store } = storingEnv();
+    const { db: liveDb } = fakeAuthDb([[LIVE_ROW]]);
+    await resolveActiveToken(env, liveDb, 'u1', 'j1');
+    expect([...store.keys()]).toContain('cache:lkg:auth:active:j1');
+
+    await revokeSessionTokens(fakeDb(['j1']).db, env, { userId: 'u1', jti: 'j1' });
+    expect([...store.keys()].filter((k) => k.includes('auth:active:j1'))).toEqual([]);
+
+    __clearL1CacheForTests();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 10 * 60_000);
+    try {
+      const outcome = await resolveActiveToken(env, refusingDb(), 'u1', 'j1').then(() => 'accepted', (error: unknown) => error);
+      expect(outcome).not.toBe('accepted');
+      expect(isDatabaseUnavailable(outcome)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('the deferred last-seen write-back never writes KV, so it cannot resurrect a racing revoke', async () => {
+    const { env, kv } = storingEnv();
+    const staleRow: ActiveTokenRow = { ...LIVE_ROW, jti: 'j9', tokenLastSeenAt: new Date(Date.now() - 20 * 60_000) };
+    const { db } = fakeAuthDb([[staleRow]]);
+    const { writes } = await resolveActiveToken(env, db, 'u1', 'j9');
+    await Promise.all(writes);
+    // The getOrSet LOAD wrote one envelope; the write-back added nothing to KV.
+    expect(kv.put).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed KV delete during revoke surfaces (strict), instead of leaving a 7-day stale copy', async () => {
+    const del = vi.fn(async () => { throw new Error('KV DELETE failed: 500'); });
+    const env = { AUTH_CACHE_KV: { get: vi.fn(async () => null), put: vi.fn(), delete: del } } as unknown as Env;
+    await expect(revokeSessionTokens(fakeDb(['j1']).db, env, { userId: 'u1', jti: 'j1' })).rejects.toThrow('KV DELETE failed');
   });
 });
 

@@ -198,7 +198,7 @@ describe('createReadThroughCache · injected error reporting and delete retry', 
     };
     await cache.set(kv, 'w', 1);
     await cache.invalidate(kv, 'w');
-    expect(onError.mock.calls.map((call) => (call[1] as { cacheOperation: string }).cacheOperation)).toEqual(['put', 'delete']);
+    expect(onError.mock.calls.map((call) => (call[1] as { cacheOperation: string }).cacheOperation)).toEqual(['put', 'delete', 'delete']);
   });
 
   it('routes the KV delete through retryDelete', async () => {
@@ -216,8 +216,9 @@ describe('createReadThroughCache · injected error reporting and delete retry', 
     });
     const cache = createReadThroughCache({ retryDelete });
     await cache.invalidate({ get: vi.fn(), put: vi.fn(), delete: del } as unknown as KvNamespaceLike, 'ver:tenant:1');
-    expect(retryDelete).toHaveBeenCalledTimes(1);
-    expect(del).toHaveBeenCalledTimes(2);
+    // One retried delete per spelling (plain + last-known-good); only the first op's first attempt fails.
+    expect(retryDelete).toHaveBeenCalledTimes(2);
+    expect(del).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -277,7 +278,7 @@ describe('createReadThroughCache · staleOnError (last-known-good)', () => {
 
   /** Age the stored envelope's fresh window past, leaving it in KV (as expiry would not yet have). */
   async function expireFresh(kv: ReturnType<typeof memoryKv>, key: string): Promise<void> {
-    const storageKey = await kvStorageKey(key);
+    const storageKey = await kvStorageKey(key, 'lkg');
     const envelope = JSON.parse(kv.store.get(storageKey)!);
     kv.store.set(storageKey, JSON.stringify({ ...envelope, freshUntil: Date.now() - 1 }));
   }
@@ -287,7 +288,8 @@ describe('createReadThroughCache · staleOnError (last-known-good)', () => {
     const loader = vi.fn(async () => ({ v: 1 }));
     await createReadThroughCache().getOrSet(kv, 'k', loader, opts);
     expect(kv.put).toHaveBeenCalledTimes(1);
-    const [, body, options] = (kv.put as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    const [putKey, body, options] = (kv.put as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(putKey).toBe('cache:lkg:k');
     expect(options).toEqual({ expirationTtl: stale.ttlSeconds });
     expect(JSON.parse(body as string)).toMatchObject({ __rtcStale: 1, value: { v: 1 } });
 
@@ -335,12 +337,80 @@ describe('createReadThroughCache · staleOnError (last-known-good)', () => {
     await expect(cache.getOrSet(kv, 'k', async () => { throw outage; }, opts)).rejects.toBe(outage);
   });
 
-  it('a legacy raw KV value is still a normal hit', async () => {
+  it('an opted-in read never consults the plain key: a raw value there is not a hit', async () => {
     const kv = memoryKv();
     kv.store.set(await kvStorageKey('k'), JSON.stringify({ v: 9 }));
     const loader = vi.fn(async () => ({ v: 1 }));
-    expect(await createReadThroughCache().getOrSet(kv, 'k', loader, opts)).toEqual({ v: 9 });
-    expect(loader).not.toHaveBeenCalled();
+    expect(await createReadThroughCache().getOrSet(kv, 'k', loader, opts)).toEqual({ v: 1 });
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it('regression: the envelope lives under the `lkg` key, so a reader without staleOnError never sees it', async () => {
+    const kv = memoryKv();
+    await createReadThroughCache().getOrSet(kv, 'k', async () => ({ v: 1 }), opts);
+    expect([...kv.store.keys()]).toEqual(['cache:lkg:k']);
+    expect(await kvStorageKey('k', 'lkg')).toBe('cache:lkg:k');
+
+    // The pre-change reader: plain getOrSet / peek on the same key. It misses (and loads) —
+    // it can never be handed `{ __rtcStale, value, freshUntil }` as if it were the value.
+    const oldLoader = vi.fn(async () => ({ v: 2 }));
+    expect(await createReadThroughCache().peek(kv, 'k')).toBeNull();
+    expect(await createReadThroughCache().getOrSet(kv, 'k', oldLoader)).toEqual({ v: 2 });
+    expect(oldLoader).toHaveBeenCalledTimes(1);
+  });
+
+  it('peek with staleOnError reads the envelope (fresh only); without it, the plain key', async () => {
+    const kv = memoryKv();
+    await createReadThroughCache().set(kv, 'k', { v: 1 }, opts);
+    expect(await createReadThroughCache().peek(kv, 'k', { staleOnError: stale })).toEqual({ v: 1 });
+    expect(await createReadThroughCache().peek(kv, 'k')).toBeNull();
+    await expireFresh(kv, 'k');
+    expect(await createReadThroughCache().peek(kv, 'k', { staleOnError: stale })).toBeNull();
+  });
+
+  it('invalidate deletes BOTH spellings', async () => {
+    const kv = memoryKv();
+    kv.store.set(await kvStorageKey('k'), JSON.stringify({ v: 9 }));
+    await createReadThroughCache().set(kv, 'k', { v: 1 }, opts);
+    expect(kv.store.size).toBe(2);
+    await createReadThroughCache().invalidate(kv, 'k');
+    expect(kv.store.size).toBe(0);
+  });
+
+  it('oversized keys keep the two spellings distinct and bounded', async () => {
+    const key = `search:${'é'.repeat(400)}`;
+    const plain = await kvStorageKey(key);
+    const lkg = await kvStorageKey(key, 'lkg');
+    expect(plain).toMatch(/^cache:sha256:[0-9a-f]{64}$/);
+    expect(lkg).toMatch(/^cache:lkg:sha256:[0-9a-f]{64}$/);
+    expect(plain).not.toBe(lkg);
+  });
+
+  it('a loader value of undefined writes no envelope (it reads as a miss)', async () => {
+    const kv = memoryKv();
+    expect(await createReadThroughCache().getOrSet(kv, 'k', async () => undefined, opts)).toBeUndefined();
+    expect(kv.put).not.toHaveBeenCalled();
+    await createReadThroughCache().set(kv, 'k2', undefined, opts);
+    expect(kv.put).not.toHaveBeenCalled();
+  });
+
+  describe('invalidate { strict }', () => {
+    const failingKv = (): KvNamespaceLike => ({
+      get: vi.fn(async () => null),
+      put: vi.fn(async () => undefined),
+      delete: vi.fn(async () => { throw new Error('KV DELETE failed'); }),
+    });
+
+    it('rethrows once retryDelete is exhausted, after still reporting', async () => {
+      const onError = vi.fn();
+      const cache = createReadThroughCache({ onError });
+      await expect(cache.invalidate(failingKv(), 'k', { strict: true })).rejects.toThrow('KV DELETE failed');
+      expect(onError).toHaveBeenCalled();
+    });
+
+    it('default (non-strict) swallows the failure as before', async () => {
+      await expect(createReadThroughCache().invalidate(failingKv(), 'k')).resolves.toBeUndefined();
+    });
   });
 
   it('callers without staleOnError still write the raw value with the plain TTL', async () => {

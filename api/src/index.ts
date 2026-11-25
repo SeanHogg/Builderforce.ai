@@ -365,6 +365,8 @@ import { createForecastRoutes } from './presentation/routes/forecastRoutes';
 // Middleware
 import { addCorsToResponse, corsMiddleware, EXPOSED_HEADERS, ALLOWED_REQUEST_HEADERS, ALLOWED_METHODS, resolveAllowedOrigin, reportRefusedOrigin } from './presentation/middleware/cors';
 import { errorHandler }   from './presentation/middleware/errorHandler';
+import { errorResponseBody } from './presentation/middleware/errorResponse';
+import { isDatabaseUnavailable } from './infrastructure/database/neonAvailability';
 import { cachedApp } from './presentation/appCache';
 import { rateLimitMiddleware } from './presentation/middleware/rateLimitMiddleware';
 import { emulationMiddleware } from './presentation/middleware/emulationMiddleware';
@@ -1538,26 +1540,33 @@ export default {
       // 1102, which is the exact "CORS error on every endpoint" this guard was
       // added to prevent. waitUntil keeps the report durable without letting it
       // stand between the browser and a readable error.
-      const report = reportUnhandledError(err, {
-        source: 'index.ts',
-        operation: 'top-level fetch',
-      }, {
-        env,
-        method: request.method,
-        path: new URL(request.url).pathname,
-      });
-      try {
-        ctx.waitUntil(report);
-      } catch {
-        // No executionCtx (some test harnesses). The report is already
-        // best-effort internally; never let scheduling it fail the response.
-        void report;
+      // A database outage is answered (503 database_unavailable, through the SAME
+      // `errorResponseBody` the app's errorHandler uses) but NOT reported: the sink is a
+      // write to the database that is refusing.
+      const outage = isDatabaseUnavailable(err);
+      if (!outage) {
+        const report = reportUnhandledError(err, {
+          source: 'index.ts',
+          operation: 'top-level fetch',
+        }, {
+          env,
+          method: request.method,
+          path: new URL(request.url).pathname,
+        });
+        try {
+          ctx.waitUntil(report);
+        } catch {
+          // No executionCtx (some test harnesses). The report is already
+          // best-effort internally; never let scheduling it fail the response.
+          void report;
+        }
       }
       const origin = request.headers.get('Origin');
       const allow = resolveAllowedOrigin(origin, env.CORS_ORIGINS, new URL(request.url).pathname);
       const message = err instanceof Error ? err.message : String(err);
-      return new Response(JSON.stringify({ error: message }), {
-        status: 500,
+      const answer = outage ? errorResponseBody(err) : { status: 500, body: { error: message } };
+      return new Response(JSON.stringify(answer.body), {
+        status: answer.status,
         headers: {
           'Content-Type': 'application/json',
           // Only for an origin the app itself would answer. A refused origin gets

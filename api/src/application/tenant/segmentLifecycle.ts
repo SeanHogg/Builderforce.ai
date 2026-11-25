@@ -92,7 +92,7 @@ export async function updateSegment(
     .returning();
   if (!updated) return null;
   // Drop the warm-isolate mapping so a status/plan change takes effect now.
-  await invalidateSegment(updated.id, env);
+  await invalidateSegment(updated, env);
   return updated;
 }
 
@@ -107,10 +107,16 @@ export async function eraseSegment(db: Db, env: Env, tenantId: number, id: strin
   const [deleted] = await db
     .delete(segments)
     .where(and(eq(segments.id, id), eq(segments.tenantId, tenantId), eq(segments.isDefault, false)))
-    .returning({ id: segments.id });
+    .returning({
+      id: segments.id,
+      tenantId: segments.tenantId,
+      externalAccountId: segments.externalAccountId,
+      externalCompanyId: segments.externalCompanyId,
+      isDefault: segments.isDefault,
+    });
   if (!deleted) return null;
   await cascadeSegmentDelete(db, telemetryKeys);
-  // Stop the warm isolate from resolving the now-deleted segment.
-  await invalidateSegment(deleted.id, env);
+  // Stop every isolate from resolving the now-deleted segment.
+  await invalidateSegment(deleted, env);
   return deleted.id;
 }
