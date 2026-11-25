@@ -1361,7 +1361,7 @@
     "@seanhogg/builderforce-brain-ui": "link:../../packages/brain-ui",
     "@seanhogg/builderforce-memory": "^2026.10.85",
     "@seanhogg/builderforce-memory-engine": "^2026.10.65",
-    "@seanhogg/builderforce-memory-mcp": "^2026.10.67",
+    "@seanhogg/builderforce-memory-mcp": "^2026.10.85",
     "@seanhogg/builderforce-studio": "link:../../studio",
     "@seanhogg/builderforce-voice": "link:../../voice",
     "@seanhogg/builderforce-webcontainers": "^2026.11.12",

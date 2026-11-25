@@ -165,7 +165,7 @@ describe('buildTranscript whole-report ceiling', () => {
     expect(text.trimEnd().endsWith('```')).toBe(true);
     const parsed = JSON.parse(jsonBlock(text)!) as Record<string, unknown>;
     expect(parsed._elided).toEqual(['except run.workflow']);
-    if (!bigReport.run) throw new Error('bigReport.run must be present');
+    if (!bigReport.run) throw new Error('Expected a run in the diagnostics fixture');
     expect(parsed.run).toEqual({ workflow: bigReport.run.workflow });
     // Order: error, then the budget note, then the JSON.
     const errAt = text.indexOf('### Conversation error');

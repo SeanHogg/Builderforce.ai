@@ -396,7 +396,10 @@ jobs:
     name: Publish VS Code extension
     runs-on: ubuntu-latest
     needs: [plan, verify-extension, package-extension]
-    if: ${{ needs.plan.outputs.extension == 'true' && github.event_name != 'pull_request' }}
+    if: ${{ needs.plan.outputs.extension == 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v7
 
@@ -415,18 +418,16 @@ jobs:
       # trigger with the deploys below.
       - name: Publish to the Visual Studio Marketplace
         working-directory: clients/vscode
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
-          if [ -z "$VSCE_PAT" ]; then
-            echo "::warning::VSCE_PAT is not set — skipping Visual Studio Marketplace publish."
+          version=$(unzip -p builderforce.vsix extension/package.json | jq -er .version)
+          listing=$(npx --yes @vscode/vsce@4.1.1 show builderforce.builderforce-ai --json)
+          if jq -e --arg version "$version" \
+            'any(.versions[]; .version == $version and ((.targetPlatform // "universal") == "universal"))' \
+            <<< "$listing" > /dev/null; then
+            echo "Marketplace already has the universal VSIX for $version."
             exit 0
           fi
-          # Both registries reject a version that already exists. That is the
-          # expected outcome of re-running this workflow on an unbumped version,
-          # so it must not fail the release.
-          npx --yes @vscode/vsce publish --no-dependencies --packagePath builderforce.vsix \
-            || echo "::warning::Visual Studio Marketplace publish did not apply (most likely this version is already published)."
+          npx --yes @vscode/vsce@4.1.1 publish --oidc --no-dependencies --packagePath builderforce.vsix
 
       - name: Publish to Open VSX
         working-directory: clients/vscode
