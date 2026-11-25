@@ -1,0 +1,3 @@
+minimumReleaseAgeExclude:
+  - '@seanhogg/builderforce-webcontainers-core@2026.11.28'
+  - '@seanhogg/builderforce-webcontainers@2026.11.28'

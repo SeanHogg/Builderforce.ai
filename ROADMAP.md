@@ -79,6 +79,8 @@ Progression depends on exit gates, not calendar dates. Weeks are indicative. Sec
 
 Phase 0 status: `REL-04` is done; `REL-03` has its QA secrets in GitHub (added by the operator) and awaits its first green `qa-e2e` run on `main`; `REL-05` is in progress (server/edge side-effect-free fix landed 2026-11-25, size not yet re-measured; last measured 10.82 MiB); `AE-01` and `REL-10` are blocked on operator actions. Operator confirmations 2026-11-25: hosting is Cloudflare, Stripe is already provisioned, and benchmark capture is deprioritized.
 
+Phase 1 started 2026-11-25: WC-02 in progress (capabilities.state landed; security section pending SEC-03).
+
 ## Key targets
 
 Proposed engineering targets, not forecasts. The historical baselines are **not re-measured**; see [BASELINES.md](./docs/roadmap/BASELINES.md).

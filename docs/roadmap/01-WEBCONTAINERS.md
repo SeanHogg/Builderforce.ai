@@ -9,7 +9,7 @@ Part of the [strategic roadmap](../../ROADMAP.md). Entry fields are defined in [
 
 WC-02 expands PRD 31 W11 into the canonical infrastructure-as-code contract (`builderforce.json`). An environment declares: applications and services, runtime and language requirements, databases, queues and storage, agents and agent factories, AI models and inference providers, MCP servers and tool permissions, ingress and external API access, scheduled and event-driven jobs, security policies, resource budgets, state persistence policies and deployment targets.
 
-The agent-facing `ai` resource, `app_manifest.schema` and `.validate` already shipped (see [DONE.md](../../DONE.md), 2026-11-25). The `agents`, `security` and `state` sections of the strategy sketch are **proposed extensions, not the supported schema**.
+The agent-facing `ai` resource, `app_manifest.schema` and `.validate` already shipped (see [DONE.md](../../DONE.md), 2026-11-25). The `agents` and `state` sections are supported as the built-in capabilities `capabilities.agents` and `capabilities.state` (kinds `source`, `transcripts`, `checkpoints` and `tempFiles`; secrets are refused because they are always secure references and never snapshotted). The `security` section of the strategy sketch is still a **proposed extension, not the supported schema**, tracked by SEC-03.
 
 ## State management
 
@@ -79,7 +79,7 @@ blocker: null
 id: WC-02
 program: webcontainers
 priority: P0
-status: planned
+status: in-progress
 arc: make
 source: PRD-31
 dependencies:
