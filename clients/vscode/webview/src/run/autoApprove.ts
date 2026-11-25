@@ -1,5 +1,5 @@
 import { localStorageConfirmationPersistence } from '@seanhogg/builderforce-brain-embedded';
-import { readStored, writeStored } from './storage';
+import { readStored, writeStored } from '../chat/storage';
 
 /**
  * The editor's human-in-the-loop gate, reconciled with the setting that seeds it.

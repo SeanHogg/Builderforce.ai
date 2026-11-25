@@ -4,7 +4,7 @@
  */
 import { useSyncExternalStore } from 'react';
 import { decodeTokenClaims } from '@/lib/tokenClaims';
-import { getToken, onTokenChange } from '../vscodeBridge';
+import { getToken, onTokenChange } from '../bridge/vscodeBridge';
 
 const viewerId = (): string | null => decodeTokenClaims(getToken()).sub ?? null;
 

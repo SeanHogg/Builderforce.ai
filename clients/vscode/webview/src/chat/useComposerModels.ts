@@ -16,8 +16,8 @@ import {
   type ChatModelSelection,
   type PromptOptionsLabels,
 } from '@seanhogg/builderforce-brain-ui';
-import type { AuthedFetch } from '../authedFetch';
-import { post, type InitData } from '../vscodeBridge';
+import type { AuthedFetch } from '../bridge/authedFetch';
+import { post, type InitData } from '../bridge/vscodeBridge';
 
 export function useComposerModels(
   init: InitData,

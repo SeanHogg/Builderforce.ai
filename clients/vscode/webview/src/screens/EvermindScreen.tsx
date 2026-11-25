@@ -27,8 +27,8 @@ import {
   type EvermindConsoleAdapter,
   type PickedMemory,
 } from '@seanhogg/builderforce-brain-ui';
-import { authedFetch } from './authedFetch';
-import { getToken, onRefresh, refreshToken, request, type InitData } from './vscodeBridge';
+import { authedFetch } from '../bridge/authedFetch';
+import { getToken, onRefresh, refreshToken, request, type InitData } from '../bridge/vscodeBridge';
 
 export function EvermindScreen({ init }: { init: InitData }) {
   const labels = useMemo(() => ({ ...DEFAULT_EVERMIND_LABELS, ...evermindLabelsFromBundle(init.labels) }), [init.labels]);

@@ -19,10 +19,10 @@
 import { useMemo } from 'react';
 import { parseByoUnresolved, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { ChatErrorBanner, ModelFallbackNotice, useDismissibleNotice, useModelFallback } from '@seanhogg/builderforce-brain-ui';
-import { hostModelFallback } from '../hostRunDriver';
-import { openUpgrade } from '../accountPlan';
-import { invalidatePlanSnapshot } from '../planSnapshot';
-import { post, refreshToken, type InitData, type LabelBundle } from '../vscodeBridge';
+import { hostModelFallback } from '../run/hostRunDriver';
+import { openUpgrade } from '../auth/accountPlan';
+import { invalidatePlanSnapshot } from '../auth/planSnapshot';
+import { post, refreshToken, type InitData, type LabelBundle } from '../bridge/vscodeBridge';
 import { chatErrorLabels, makeT } from './chatLabels';
 import { modelRemedies } from './inferenceModeOption';
 import { SignedOutBanner } from './SignedOutBanner';

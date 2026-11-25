@@ -14,7 +14,7 @@
 import { memo, useCallback, useMemo } from 'react';
 import type { BrainChat, BrainPersistenceAdapter } from '@seanhogg/builderforce-brain-embedded';
 import { ChatTicketsPanel, OriginalRequest, SpendPill, type ChatTicketsExtension } from '@seanhogg/builderforce-brain-ui';
-import { post, type InitData } from '../vscodeBridge';
+import { post, type InitData } from '../bridge/vscodeBridge';
 import type { useChatAudience } from './useChatAudience';
 import type { useTicketRail } from './useTicketRail';
 

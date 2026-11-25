@@ -13,7 +13,7 @@
  */
 import type { ChatQuestionVM, ChatTicketsAdapter, TicketLinkVM } from '@seanhogg/builderforce-brain-ui';
 import { chatQuestionsReader, createChatTicketsRestAdapter } from '@seanhogg/builderforce-brain-ui';
-import { authedFetch } from './authedFetch';
+import { authedFetch } from '../bridge/authedFetch';
 
 /** The platform adapter, plus the questions filter over a link list the caller already holds. */
 export interface ChatTicketsPlatform {

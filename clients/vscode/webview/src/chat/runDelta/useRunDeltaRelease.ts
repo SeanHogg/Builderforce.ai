@@ -9,7 +9,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useConfirm } from '@/components/confirmContext';
 import { releaseConfirmText, type RunDeltaLabels } from '@builderforce/knowledge-graph-view/delta';
-import { request } from '../../vscodeBridge';
+import { request } from '../../bridge/vscodeBridge';
 import { RUN_DELTA_RELEASE, releaseRefusalOf, type RunDeltaReleaseRefusal } from './runDeltaCards';
 
 export interface RunDeltaRelease {

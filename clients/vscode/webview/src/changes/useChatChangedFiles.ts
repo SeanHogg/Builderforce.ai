@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { AuthedFetch } from './authedFetch';
-import type { ChatRef } from '../../src/chatRail/railProtocol';
+import type { AuthedFetch } from '../bridge/authedFetch';
+import type { ChatRef } from '../../../src/chatRail/railProtocol';
 
 /**
  * The files the active chat changed, for scoping the "Changes" pill — LOCAL-FIRST.

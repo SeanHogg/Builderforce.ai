@@ -1,5 +1,5 @@
 import type { UpgradeTarget } from '@seanhogg/builderforce-brain-ui';
-import { post } from './vscodeBridge';
+import { post } from '../bridge/vscodeBridge';
 
 /**
  * The ONE place the VSIX decides where an "upgrade" click lands — the `/` menu's

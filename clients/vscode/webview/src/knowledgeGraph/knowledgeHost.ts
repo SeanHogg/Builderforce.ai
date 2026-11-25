@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { EditorView, KnowledgeGraphSource, SourceLocation } from '@builderforce/knowledge-graph-view';
-import { onHostMessage, request } from '../vscodeBridge';
+import { onHostMessage, request } from '../bridge/vscodeBridge';
 import {
   KNOWLEDGE_CALL, KNOWLEDGE_EDITOR, KNOWLEDGE_EVENT, KNOWLEDGE_FOCUS, type KnowledgeEditorFrame, type KnowledgeEventFrame, type KnowledgeFocusFrame,
 } from '../../../src/knowledge/knowledgeProtocol';

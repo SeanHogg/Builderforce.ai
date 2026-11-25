@@ -7,7 +7,7 @@
 import { useMemo, type ComponentProps } from 'react';
 import type { useBrainConversation } from '@seanhogg/builderforce-brain-embedded';
 import { BrainTimeline, ownMessageOf } from '@seanhogg/builderforce-brain-ui';
-import type { InitData } from '../vscodeBridge';
+import type { InitData } from '../bridge/vscodeBridge';
 import { useViewerId } from './useViewerId';
 import { useHostAttachmentDownload } from './attachmentDownload';
 import { VsCodeTranslationProvider } from './VsCodeTranslationProvider';

@@ -7,8 +7,8 @@
  */
 import { createProviderConnectionsClient, type ProviderTestResult } from '@builderforce/provider-connect';
 import type { ComposerConnections } from '@seanhogg/builderforce-brain-ui';
-import { authedGateway } from './authedFetch';
-import { getToken, post, refreshToken, request } from './vscodeBridge';
+import { authedGateway } from '../bridge/authedFetch';
+import { getToken, post, refreshToken, request } from '../bridge/vscodeBridge';
 
 export function editorConnections(baseUrl: string): ComposerConnections {
   return {

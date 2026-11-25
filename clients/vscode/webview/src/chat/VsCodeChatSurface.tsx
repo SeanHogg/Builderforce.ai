@@ -60,10 +60,10 @@ import {
 import { AiSurface, PendingQuestionBanner, SurfaceFooter, ToolConfirmBar } from '@seanhogg/builderforce-brain-ui';
 import { usePendingQuestion } from './usePendingQuestion';
 import { usePrefetchChips } from './usePrefetchChips';
-import { authedFetch } from '../authedFetch';
-import { getToken, post, refreshToken, type InitData } from '../vscodeBridge';
-import { setHostRunContext } from '../hostRunDriver';
-import { autoApprovePersistence } from '../autoApprove';
+import { authedFetch } from '../bridge/authedFetch';
+import { getToken, post, refreshToken, type InitData } from '../bridge/vscodeBridge';
+import { setHostRunContext } from '../run/hostRunDriver';
+import { autoApprovePersistence } from '../run/autoApprove';
 import { makeT, promptMenuLabels, timelineLabels, toolConfirmLabels } from './chatLabels';
 import { EditorEmptyState } from './editorStarters';
 import { SubagentStrip } from './SubagentStrip';

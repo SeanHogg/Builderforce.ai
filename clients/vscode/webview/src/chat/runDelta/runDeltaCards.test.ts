@@ -5,7 +5,7 @@ import { releaseRun } from './useRunDeltaRelease';
 
 // Hoisted: the release hook's module imports the confirm provider and the bridge, neither of which a unit test needs.
 vi.mock('@/components/confirmContext', () => ({ useConfirm: () => async () => true }));
-vi.mock('../../vscodeBridge', () => ({ request: vi.fn(), onHostMessage: vi.fn() }));
+vi.mock('../../bridge/vscodeBridge', () => ({ request: vi.fn(), onHostMessage: vi.fn() }));
 
 const card = (runId: string, repo = '/repo', headline: 'worse' | 'same' = 'same', at?: number): RunDeltaCardPayload =>
   ({ chatId: 7, runId, repo, root: repo, ...(at !== undefined ? { at } : {}), delta: { runId, headline, dimensions: [] } }) as unknown as RunDeltaCardPayload;

@@ -18,7 +18,7 @@ import {
   type ModelChoiceLabels,
   type SpendLabels,
 } from '@seanhogg/builderforce-brain-ui';
-import type { LabelBundle } from '../vscodeBridge';
+import type { LabelBundle } from '../bridge/vscodeBridge';
 import { optionBundleKey } from './chatLabels';
 
 /** Composer keys whose bundle key is not `app.<key>`. */

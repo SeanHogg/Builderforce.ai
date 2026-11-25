@@ -7,7 +7,7 @@
 
 import { useMemo } from 'react';
 import { HeaderIcon, SurfaceHeader } from '@seanhogg/builderforce-brain-ui';
-import { post, type LabelBundle } from '../vscodeBridge';
+import { post, type LabelBundle } from '../bridge/vscodeBridge';
 import { makeT, surfaceHeaderLabels } from './chatLabels';
 import type { CopyState } from './useCopyDiagnostics';
 

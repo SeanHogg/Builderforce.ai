@@ -3,7 +3,7 @@ import type { BrainChat } from '@seanhogg/builderforce-brain-embedded';
 import { filterChatHistory } from './useChatHistoryView';
 
 // The bridge reaches for `acquireVsCodeApi` at load; these tests never post.
-vi.mock('../vscodeBridge', () => ({ post: vi.fn() }));
+vi.mock('../bridge/vscodeBridge', () => ({ post: vi.fn() }));
 
 const chat = (id: number, title: string): BrainChat => ({ id, title }) as BrainChat;
 

@@ -26,12 +26,12 @@
  *   hostFetch.ts       — the host-proxied streaming fetch (`llm.*` frames)
  */
 
-import { installApiFailureRelay } from './apiFailureRelay';
+import { installApiFailureRelay } from '../diagnostics/apiFailureRelay';
 import { post } from './bridgeTransport';
 
 export type { LabelBundle, BrainIntent, InitData } from './bridgeTypes';
 export type { EditorContext } from '@seanhogg/builderforce-brain-embedded';
-export type { PendingChangeSet } from '../../src/git/gitChangeModel';
+export type { PendingChangeSet } from '../../../src/git/gitChangeModel';
 export { post, request, onHostMessage } from './bridgeTransport';
 export { hostFetch } from './hostFetch';
 export {

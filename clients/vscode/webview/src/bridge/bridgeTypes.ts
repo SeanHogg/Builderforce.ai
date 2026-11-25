@@ -6,7 +6,7 @@
 import type { InferenceMode, PlatformPolicySnapshot } from '@builderforce/local-first';
 import type { ModelChoiceLabels } from '@seanhogg/builderforce-brain-embedded';
 import type { EditorContext } from '@seanhogg/builderforce-brain-embedded';
-import type { PendingChangeSet } from '../../src/git/gitChangeModel';
+import type { PendingChangeSet } from '../../../src/git/gitChangeModel';
 
 /**
  * A localized string bundle the host builds from its `vscode.l10n` catalog and
@@ -136,7 +136,7 @@ export interface InitData {
   /** Localized UI strings (see {@link LabelBundle}). */
   labels: LabelBundle;
   /** The composer commands' `/help` model (PRD 31 §W11), drawn as the `/` menu's Actions tab. Absent from an older host. */
-  composerCommands?: import('../../src/composerCommands/reply').ComposerCommandsInit;
+  composerCommands?: import('../../../src/composerCommands/reply').ComposerCommandsInit;
   // Recomputed later by the host and pushed as a {@link ComposerCommandsFrame}, which replaces this.
   /** The editor's display language (`vscode.env.language`, e.g. `de`, `zh-cn`) — how
    *  numbers, money and relative times are formatted in the shared components. */
@@ -177,4 +177,4 @@ export interface InitData {
 }
 
 /** Host → webview: the `/` menu's help model, recomputed after `init` (`src/bridgeProtocol.ts`). */
-export type ComposerCommandsFrame = import('../../src/panels/bridgeProtocol').ComposerCommandsFrame;
+export type ComposerCommandsFrame = import('../../../src/panels/bridgeProtocol').ComposerCommandsFrame;

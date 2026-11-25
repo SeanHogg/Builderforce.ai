@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { request } from '../bridgeTransport';
-import { onPendingChanges } from '../bridgeState';
+import { request } from '../bridge/bridgeTransport';
+import { onPendingChanges } from '../bridge/bridgeState';
 
 /**
  * The working tree's unified diff, from the host (`changes.diff` → `detectPendingDiff`).

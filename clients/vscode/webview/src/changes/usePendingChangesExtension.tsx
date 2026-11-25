@@ -9,7 +9,7 @@ import {
   type PendingChangeVM,
   type PendingChangesLabels,
 } from '@seanhogg/builderforce-brain-ui';
-import { getPendingChanges, onPendingChanges, post, type LabelBundle, type PendingChangeSet } from './vscodeBridge';
+import { getPendingChanges, onPendingChanges, post, type LabelBundle, type PendingChangeSet } from '../bridge/vscodeBridge';
 import { scopeChangesToChat } from './chatChangeScope';
 
 /**

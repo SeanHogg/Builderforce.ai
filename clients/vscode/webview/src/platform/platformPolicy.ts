@@ -10,9 +10,9 @@ import {
   type PlatformPolicySnapshot,
   type PlatformRequestRecord,
 } from '@builderforce/local-first';
-import type { CapabilityInputs } from '../../src/tools/capabilityStates';
-import { handleFrame } from './bridgeTransport';
-import { onInit } from './bridgeState';
+import type { CapabilityInputs } from '../../../src/tools/capabilityStates';
+import { handleFrame } from '../bridge/bridgeTransport';
+import { onInit } from '../bridge/bridgeState';
 
 /**
  * The webview realm's copy of the host policy. It is not a second policy: the host

@@ -24,11 +24,11 @@ import './knowledgeGraph/hostTokens.css';
 // viewport. It has the final word on `body` and `#root`.
 import './canvas/theme.css';
 import { WorkspaceApp } from './WorkspaceApp';
-import { installPageEngineHost } from './pageEngines';
-import { installWebviewPlatformPolicy } from './platformPolicy';
+import { installPageEngineHost } from './engines/pageEngines';
+import { installWebviewPlatformPolicy } from './platform/platformPolicy';
 import { RootBoundary } from './RootBoundary';
-import { installUncaughtErrorRelay } from './uncaughtErrorRelay';
-import { post } from './vscodeBridge';
+import { installUncaughtErrorRelay } from './diagnostics/uncaughtErrorRelay';
+import { post } from './bridge/vscodeBridge';
 
 // Before the installers below, so anything they throw later (a handler, a timer) is on the record too.
 installUncaughtErrorRelay((report) => post('webview.error', { ...report }));

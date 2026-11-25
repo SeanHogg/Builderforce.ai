@@ -8,7 +8,7 @@
  */
 
 import type { EditorContext } from '@seanhogg/builderforce-brain-embedded';
-import type { PendingChangeSet } from '../../src/git/gitChangeModel';
+import type { PendingChangeSet } from '../../../src/git/gitChangeModel';
 import type { BrainIntent, InitData } from './bridgeTypes';
 import { handleFrame, request, subscribe } from './bridgeTransport';
 

@@ -16,7 +16,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { setEmbedAuth } from '@/lib/auth';
-import { getToken, onTokenChange, refreshToken, type InitData } from '../vscodeBridge';
+import { getToken, onTokenChange, refreshToken, type InitData } from '../bridge/vscodeBridge';
 
 /** `none`: no session, so no board. Otherwise why a server board is not drawn yet. */
 export type BoardAuthState = 'ready' | 'none' | 'connecting' | 'failed' | 'signedOut';

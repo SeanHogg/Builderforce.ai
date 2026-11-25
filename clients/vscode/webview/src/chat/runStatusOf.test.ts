@@ -7,8 +7,8 @@ import { runStatusOf, hasPendingAskUser } from './useVsCodeChats';
 // the host persistence (`createHostPersistence` → `bridgeTransport`), which grabs
 // `acquireVsCodeApi()` at module load. Stub the transport so it never runs, exactly like
 // attachmentUpload.test.ts does; these tests never post.
-vi.mock('../bridgeTransport', () => ({ request: vi.fn(() => Promise.resolve(undefined)), post: vi.fn() }));
-vi.mock('../vscodeBridge', () => ({ post: vi.fn() }));
+vi.mock('../bridge/bridgeTransport', () => ({ request: vi.fn(() => Promise.resolve(undefined)), post: vi.fn() }));
+vi.mock('../bridge/vscodeBridge', () => ({ post: vi.fn() }));
 
 // The precedence a history row's marker relies on: a chat paused on a question/
 // answer ('awaiting' -> the amber '?' marker) wins over one that is merely running

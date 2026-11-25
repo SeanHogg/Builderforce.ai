@@ -20,11 +20,11 @@ import catalogs from 'virtual:bf-canvas-messages';
 import { BrainProvider, localTransport, type BrainConfig, type BrainTransport } from '@seanhogg/builderforce-brain-embedded';
 import { ToastProvider } from '@/components/ToastProvider';
 import { ConfirmProvider } from '@/components/ConfirmProvider';
-import { getToken, hostFetch, onHostMessage, post, refreshToken, type InitData } from '../vscodeBridge';
+import { getToken, hostFetch, onHostMessage, post, refreshToken, type InitData } from '../bridge/vscodeBridge';
 import { installCanvasHost } from './hostActions';
-import { createHostPersistence } from '../hostPersistence';
-import { installHostRunDriver } from '../hostRunDriver';
-import { webviewLocalFetch } from '../pageEngines';
+import { createHostPersistence } from '../bridge/hostPersistence';
+import { installHostRunDriver } from '../run/hostRunDriver';
+import { webviewLocalFetch } from '../engines/pageEngines';
 
 const LOCALES = ['en', 'zh', 'es', 'fr', 'de'] as const;
 type CanvasLocale = (typeof LOCALES)[number];

@@ -12,7 +12,7 @@ import { DEFAULT_RUN_DELTA_LABELS, RunDeltaPanel } from '@builderforce/knowledge
 import { footerPanel } from '@builderforce/knowledge-graph-view/delta/history';
 import { RunDeltaHistorySection } from './RunDeltaHistorySection';
 
-vi.mock('../../vscodeBridge', () => ({ request: vi.fn(() => new Promise(() => {})), onHostMessage: vi.fn(() => () => {}) }));
+vi.mock('../../bridge/vscodeBridge', () => ({ request: vi.fn(() => new Promise(() => {})), onHostMessage: vi.fn(() => () => {}) }));
 
 const delta = {
   version: 1, runId: 'r1', headline: 'same', digest: 'd', blocking: [], excluded: [],

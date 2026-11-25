@@ -14,7 +14,7 @@ import {
   invalidateConsumptionSnapshot,
   type ConsumptionSnapshot,
 } from '@seanhogg/builderforce-brain-ui';
-import type { AuthedFetch } from './authedFetch';
+import type { AuthedFetch } from '../bridge/authedFetch';
 
 export function fetchPlanSnapshot(apiReq: AuthedFetch, forceRefresh = false): Promise<ConsumptionSnapshot | null> {
   return fetchConsumptionSnapshot(apiReq, forceRefresh);

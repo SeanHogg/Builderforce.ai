@@ -12,7 +12,7 @@ import { useFormatter, useTranslations } from 'use-intl';
 import type { RunDeltaSummary } from '@builderforce/run-delta';
 import type { RunDeltaLabels } from '@builderforce/knowledge-graph-view/delta';
 import { RunDeltaHistory, runDeltaHistoryLabels } from '@builderforce/knowledge-graph-view/delta/history';
-import { request } from '../../vscodeBridge';
+import { request } from '../../bridge/vscodeBridge';
 import { HISTORY_LIMIT, RUN_DELTA_HISTORY, historyFromAnswer } from './runDeltaHistory';
 
 export interface RunDeltaHistorySectionProps {

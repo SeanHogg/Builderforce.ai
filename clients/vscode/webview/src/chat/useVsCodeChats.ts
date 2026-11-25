@@ -16,8 +16,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_CHAT_TITLE, useArmedNewChat, useBrainChats, useChatCreation, type BrainChat, type ChatMode, type DraftBinding, type DraftToken } from '@seanhogg/builderforce-brain-embedded';
 import { selectPendingAskUser } from '@seanhogg/builderforce-brain-ui';
-import { onHostMessage, onRefresh, post, request, type InitData } from '../vscodeBridge';
-import { createHostPersistence } from '../hostPersistence';
+import { onHostMessage, onRefresh, post, request, type InitData } from '../bridge/vscodeBridge';
+import { createHostPersistence } from '../bridge/hostPersistence';
 import { daysIdleOf } from './chatIdle';
 import { useGlobalRunState } from './useGlobalRunState';
 

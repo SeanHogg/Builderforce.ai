@@ -44,8 +44,8 @@ function indexerFrames(): Array<{ type: string; event: KnowledgeEvent }> {
 
 describe('the chat composer under background indexing (PRD 41 §11)', () => {
   it('re-renders zero times: no indexer frame reaches any chat-state subscription', async () => {
-    const state = await import('../bridgeState');
-    const transport = await import('../bridgeTransport');
+    const state = await import('../bridge/bridgeState');
+    const transport = await import('../bridge/bridgeTransport');
     let renders = 0;
     const bump = (): void => { renders += 1; };
     const unsubs = [

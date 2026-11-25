@@ -46,11 +46,11 @@ import { useCallback, useEffect, useMemo, useReducer, useState, type ReactNode }
 
 import './visualization.css';
 
-import { onHostMessage } from '../bridgeTransport';
-import { getPendingChanges, onPendingChanges } from '../bridgeState';
+import { onHostMessage } from '../bridge/bridgeTransport';
+import { getPendingChanges, onPendingChanges } from '../bridge/bridgeState';
 import { makeT } from '../chat/chatLabels';
-import { scopeChangesToChat } from '../chatChangeScope';
-import type { LabelBundle } from '../vscodeBridge';
+import { scopeChangesToChat } from '../changes/chatChangeScope';
+import type { LabelBundle } from '../bridge/vscodeBridge';
 import type { PendingChange, PendingChangeSet } from '../../../src/git/gitChangeModel';
 import { parseUnifiedDiff, type FileDiff } from './diffModel';
 import { buildChangeGraph, type ChangeGraph } from './changeGraph';

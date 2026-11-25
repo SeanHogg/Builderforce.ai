@@ -11,7 +11,7 @@
 import { useMemo } from 'react';
 import { ActionsPane, type PromptOptionsCommands } from '@seanhogg/builderforce-brain-ui';
 import type { ComposerReply } from '../../../src/composerCommands/reply';
-import type { InitData } from '../vscodeBridge';
+import type { InitData } from '../bridge/vscodeBridge';
 import { makeT, promptMenuLabels } from './chatLabels';
 
 export function ComposerCommandReply({ reply, init, commands, onRun, onDismiss }: {

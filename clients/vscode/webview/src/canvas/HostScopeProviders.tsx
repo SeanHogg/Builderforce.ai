@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from 'react';
 import { ProjectScopeProvider, type ProjectScopeHost } from '@/lib/ProjectScopeContext';
 import { LiveSessionProvider } from '@/lib/live/LiveSessionContext';
 import { PinsProvider } from '@/lib/widgets/PinsProvider';
-import { post } from '../vscodeBridge';
+import { post } from '../bridge/vscodeBridge';
 
 /**
  * The shell state the web canvas reads, mounted for the editor.

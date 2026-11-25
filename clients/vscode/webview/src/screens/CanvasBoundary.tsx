@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { post } from './vscodeBridge';
+import { post } from '../bridge/vscodeBridge';
 
 /**
  * THE CHAT IS THE FLOOR.

@@ -10,7 +10,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { isEffort, type Effort } from '@seanhogg/builderforce-brain-embedded';
-import { readStored, writeStored } from '../storage';
+import { readStored, writeStored } from './storage';
 import { EFFORT_KEY, THINKING_KEY } from './chatPreferences';
 
 export function useRunShaping() {

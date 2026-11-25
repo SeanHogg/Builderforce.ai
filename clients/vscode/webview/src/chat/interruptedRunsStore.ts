@@ -9,7 +9,7 @@
 
 import { useSyncExternalStore } from 'react';
 import type { InterruptedRunView } from '../../../src/run/interruptedRunTypes';
-import { onHostMessage, post } from '../vscodeBridge';
+import { onHostMessage, post } from '../bridge/vscodeBridge';
 
 export type { InterruptedRunView };
 

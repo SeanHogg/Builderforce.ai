@@ -24,12 +24,12 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import { chatDiagnosticsReads } from '@seanhogg/builderforce-brain-ui';
 import { decodeTokenClaims } from '@/lib/tokenClaims';
-import type { AuthedFetch } from '../authedFetch';
+import type { AuthedFetch } from '../bridge/authedFetch';
 import type { ChatTicketsAdapter } from '@seanhogg/builderforce-brain-ui';
-import { fetchPlanSnapshot } from '../planSnapshot';
-import { buildTranscript, hasTranscriptContent } from '../transcript';
-import { getToken, post, type InitData } from '../vscodeBridge';
-import { WEBVIEW_BUILD_ID, WEBVIEW_BUILT_AT } from '../webviewBuildInfo';
+import { fetchPlanSnapshot } from '../auth/planSnapshot';
+import { buildTranscript, hasTranscriptContent } from '../diagnostics/transcript';
+import { getToken, post, type InitData } from '../bridge/vscodeBridge';
+import { WEBVIEW_BUILD_ID, WEBVIEW_BUILT_AT } from '../diagnostics/webviewBuildInfo';
 import { subagentDiagnosticsOf } from './chatChildren';
 import type { useComposerModels } from './useComposerModels';
 

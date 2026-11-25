@@ -17,8 +17,8 @@ import type { ComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
 import type { PromptOptionsCommands } from '@seanhogg/builderforce-brain-ui';
 import { COMPOSER_COMMANDS_FRAME } from '../../../src/panels/bridgeProtocol';
 import type { ComposerCommandsInit, ComposerInputResult, ComposerReply } from '../../../src/composerCommands/reply';
-import type { ComposerCommandsFrame } from '../bridgeTypes';
-import { onHostMessage, request, type InitData } from '../vscodeBridge';
+import type { ComposerCommandsFrame } from '../bridge/bridgeTypes';
+import { onHostMessage, request, type InitData } from '../bridge/vscodeBridge';
 
 /** Only these lines can be commands; anything else goes straight through the turn door. */
 const MAY_BE_COMMAND = /^\s*\/(?:\/|[a-z])/;

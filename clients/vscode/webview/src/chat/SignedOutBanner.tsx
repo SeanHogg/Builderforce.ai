@@ -3,8 +3,8 @@
  * composer, and keep the chat usable (a BYO key or an unpinned local-first model may
  * still serve the turn). Replaces the old full-surface "Sign in to start" wall.
  */
-import { needsRouteBanner } from '../signedOutGate';
-import { post, type InitData } from '../vscodeBridge';
+import { needsRouteBanner } from '../auth/signedOutGate';
+import { post, type InitData } from '../bridge/vscodeBridge';
 import { makeT } from './chatLabels';
 
 export function SignedOutBanner({ init }: { init: InitData }) {

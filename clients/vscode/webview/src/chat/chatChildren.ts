@@ -10,7 +10,7 @@ import { useMemo, useSyncExternalStore } from 'react';
 import { getRunSnapshot, getRunTrace, isModelReply, type ChatInputAttachment, type DirectedRecipient, type SteerTurn, type SubagentDiagnosticsInput } from '@seanhogg/builderforce-brain-embedded';
 import type { ChatSubagentVM } from '@seanhogg/builderforce-brain-ui';
 import type { ChildView } from '../../../src/child/childRuns';
-import { post } from '../vscodeBridge';
+import { post } from '../bridge/vscodeBridge';
 
 export type { ChildView };
 

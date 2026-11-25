@@ -38,7 +38,7 @@ import {
   type RunDeltaLabels,
 } from '@builderforce/knowledge-graph-view/delta';
 import { repoDisplayName } from '@builderforce/knowledge-graph-view/delta/history';
-import { onHostMessage, request } from '../../vscodeBridge';
+import { onHostMessage, request } from '../../bridge/vscodeBridge';
 import { RunDeltaOpenPanel } from './RunDeltaOpenPanel';
 import { PredictedLine } from './PredictedLine';
 import {

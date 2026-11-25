@@ -12,7 +12,7 @@
 import { useCallback, useMemo } from 'react';
 import type { BrainChat } from '@seanhogg/builderforce-brain-embedded';
 import { ChatHistoryList, ChatHistoryRow, InterruptedRunRow, type ChatRowActions, type InterruptedChatState } from '@seanhogg/builderforce-brain-ui';
-import type { LabelBundle } from '../vscodeBridge';
+import type { LabelBundle } from '../bridge/vscodeBridge';
 import { chatHistoryLabels, makeT } from './chatLabels';
 import { useChatChildrenCount } from './chatChildren';
 import { acknowledgeInterruptedRun, useInterruptedRuns } from './interruptedRunsStore';

@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { chatDoorLiveness, isInjectedTurnMetadata, joinRestorableTurns, restoreTurn, useChatTurns, useComposerDraft, useRunRefreshTick, type BrainMessage, type ChatTurns, type ChatInputAttachment, type ComposerDraftStore, type DirectedRecipient, type DraftBinding, type SendContext, type UseBrainConversation } from '@seanhogg/builderforce-brain-embedded';
-import { request } from '../vscodeBridge';
+import { request } from '../bridge/vscodeBridge';
 import { stageSend, stopReaches, type SendStage } from './stageSend';
 import { childTarget, steerRun, type useChatChildren } from './chatChildren';
 import type { QueuedTurn } from './VsCodeComposer';

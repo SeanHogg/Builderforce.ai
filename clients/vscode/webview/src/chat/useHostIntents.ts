@@ -7,7 +7,7 @@
 
 import { useEffect } from 'react';
 import type { BrainPersistenceAdapter } from '@seanhogg/builderforce-brain-embedded';
-import { onIntent, type BrainIntent } from '../vscodeBridge';
+import { onIntent, type BrainIntent } from '../bridge/vscodeBridge';
 
 export function useHostIntents({ persistence, projectId, setChatId, setInput, reloadChats, linkTicket, t }: {
   persistence: BrainPersistenceAdapter;

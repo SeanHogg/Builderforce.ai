@@ -35,11 +35,11 @@ import {
   type QueuedItem,
   type RecipientPickerProps,
 } from '@seanhogg/builderforce-brain-ui';
-import type { AuthedFetch } from '../authedFetch';
-import { openUpgrade } from '../accountPlan';
-import { editorConnections } from '../providerConnections';
-import { webviewLocalModelStore } from '../pageEngines';
-import { post, request, type InitData } from '../vscodeBridge';
+import type { AuthedFetch } from '../bridge/authedFetch';
+import { openUpgrade } from '../auth/accountPlan';
+import { editorConnections } from '../auth/providerConnections';
+import { webviewLocalModelStore } from '../engines/pageEngines';
+import { post, request, type InitData } from '../bridge/vscodeBridge';
 import { makeT, personaModalityOptions, personaPickerLabels, queuedTurnLabels, recipientPickerLabels } from './chatLabels';
 import { brainComposerLabels } from './composerLabels';
 import { editorStarters } from './editorStarters';

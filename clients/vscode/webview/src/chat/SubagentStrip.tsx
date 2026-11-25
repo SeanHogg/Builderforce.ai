@@ -11,7 +11,7 @@
 import { useState } from 'react';
 import { resolveRunConfirm, stopRun, useRunSnapshot } from '@seanhogg/builderforce-brain-embedded';
 import { LiveActivity, ToolConfirmBar, type LiveActivityLabels, type ToolConfirmBarLabels } from '@seanhogg/builderforce-brain-ui';
-import type { LabelBundle } from '../vscodeBridge';
+import type { LabelBundle } from '../bridge/vscodeBridge';
 import { makeT, toolConfirmLabels } from './chatLabels';
 import { steerRun, useChatChildren, type ChildView } from './chatChildren';
 

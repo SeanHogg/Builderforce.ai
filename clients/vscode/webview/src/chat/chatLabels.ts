@@ -43,7 +43,7 @@ import {
   type PromptOptionsLabels,
   type RecipientPickerLabels,
 } from '@seanhogg/builderforce-brain-ui';
-import type { LabelBundle } from '../vscodeBridge';
+import type { LabelBundle } from '../bridge/vscodeBridge';
 
 /** Read a localized string from the host's bundle, falling back to English. */
 export function makeT(labels: LabelBundle) {

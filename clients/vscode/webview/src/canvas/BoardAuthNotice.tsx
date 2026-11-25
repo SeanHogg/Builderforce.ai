@@ -4,7 +4,7 @@
  * nothing when the board is ready or there is no board at all.
  */
 import { makeT } from '../chat/chatLabels';
-import { post } from '../vscodeBridge';
+import { post } from '../bridge/vscodeBridge';
 import type { BoardAuth } from './useBoardAuth';
 
 export function BoardAuthNotice({ auth, labels }: { auth: BoardAuth; labels: Record<string, string> }) {

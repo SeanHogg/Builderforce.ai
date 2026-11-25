@@ -7,7 +7,7 @@
  * web and Rovr ask by.
  */
 import { inferenceModeOption, modelRemedies as sharedModelRemedies, type ModelRemedies, type PromptOptionsInferenceMode } from '@seanhogg/builderforce-brain-ui';
-import { post, type InitData } from '../vscodeBridge';
+import { post, type InitData } from '../bridge/vscodeBridge';
 
 export function webviewInferenceMode(init: InitData): PromptOptionsInferenceMode | undefined {
   if (!init.inferenceMode) return undefined;

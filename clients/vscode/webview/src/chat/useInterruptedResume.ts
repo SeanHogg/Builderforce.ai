@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import { onHostMessage } from '../vscodeBridge';
+import { onHostMessage } from '../bridge/vscodeBridge';
 import { createResumeTracker, resumeEventOf, type ResumeSnapshot } from './interruptedResume';
 import { acknowledgeInterruptedRun } from './interruptedRunsStore';
 

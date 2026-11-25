@@ -1,7 +1,7 @@
 import type { BrainPersistenceAdapter, InlinedAttachments } from '@seanhogg/builderforce-brain-embedded';
-import type { LocalPersistenceMethod } from '../../src/panels/bridgeProtocol';
+import type { LocalPersistenceMethod } from '../../../src/panels/bridgeProtocol';
 import { request } from './bridgeTransport';
-import { keepLocalThroughHost, newAttachmentUploadState, signThroughHost, uploadThroughHost, type AttachmentUploadPorts, type SavedAttachment } from './attachmentUpload';
+import { keepLocalThroughHost, newAttachmentUploadState, signThroughHost, uploadThroughHost, type AttachmentUploadPorts, type SavedAttachment } from '../chat/attachmentUpload';
 
 /** `method` is the shared list the host dispatches on, so a name the host cannot
  *  serve does not compile here. */

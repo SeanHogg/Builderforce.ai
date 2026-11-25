@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // The real transport acquires the VS Code API at load; every request here goes through the injected `send`.
-vi.mock('../bridgeTransport', () => ({ request: vi.fn() }));
+vi.mock('../bridge/bridgeTransport', () => ({ request: vi.fn() }));
 
 import { ATTACHMENT_DOWNLOAD_MAX_BYTES } from '../../../src/attachments/attachmentLimits';
 import { createHostAttachmentDownload } from './attachmentDownload';

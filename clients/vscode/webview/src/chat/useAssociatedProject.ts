@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { BrainChat } from '@seanhogg/builderforce-brain-embedded';
-import type { InitData } from '../vscodeBridge';
+import type { InitData } from '../bridge/vscodeBridge';
 
 /**
  * The chat's project, resolved chat-FIRST: a chat that belongs to a project is about

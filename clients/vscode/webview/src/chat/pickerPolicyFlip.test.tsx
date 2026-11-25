@@ -46,7 +46,7 @@ const localTickets = vi.fn(async () => [{ id: 9, title: 'Local ticket', status: 
  * (and keeping the module's real `handleFrame`/`onHostMessage` registry + `message` listener)
  * lets a host `platform.policy` frame reach the real `useCapability` subscription.
  */
-vi.mock('../bridgeTransport', () => {
+vi.mock('../bridge/bridgeTransport', () => {
   const frameHandlers = new Map<string, (m: Record<string, unknown>) => boolean | void>();
   const hostMessageWaiters = new Map<string, Set<(frame: unknown) => void>>();
   const RAIL_SNAPSHOT = {
@@ -97,18 +97,18 @@ vi.mock('../bridgeTransport', () => {
   };
 });
 
-vi.mock('../chatTicketsAdapter', () => ({
+vi.mock('./chatTicketsAdapter', () => ({
   // The `#` typeahead reads the rail through the `local.chatRail` bridge (mocked above), not this
   // platform adapter — only the adapter's CONSTRUCTION runs here. A benign listTickets suffices.
   createChatTicketsPlatform: () => ({ adapter: { listTickets: async () => [] }, questionsFor: async () => [] }),
 }));
 
-vi.mock('../useChatChangedFiles', () => ({ useChatChangedFiles: () => null }));
-vi.mock('../usePendingChangesExtension', () => ({ usePendingChangesExtension: () => null }));
+vi.mock('../changes/useChatChangedFiles', () => ({ useChatChangedFiles: () => null }));
+vi.mock('../changes/usePendingChangesExtension', () => ({ usePendingChangesExtension: () => null }));
 
-import * as bridge from '../bridgeTransport';
-import { installWebviewPlatformPolicy } from '../platformPolicy';
-import { useCapability } from '../useCapability';
+import * as bridge from '../bridge/bridgeTransport';
+import { installWebviewPlatformPolicy } from '../platform/platformPolicy';
+import { useCapability } from '../platform/useCapability';
 import { useTicketRail } from './useTicketRail';
 
 // Install the platform policy ONCE at import time, before any component subscribes. The module

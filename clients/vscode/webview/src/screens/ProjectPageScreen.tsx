@@ -7,8 +7,8 @@ import {
   type ProjectListLabels,
   type ProjectListTone,
 } from '@seanhogg/builderforce-brain-ui';
-import { getToken, onIntent, post, refreshToken, type InitData, type LabelBundle } from './vscodeBridge';
-import { authedFetch } from './authedFetch';
+import { getToken, onIntent, post, refreshToken, type InitData, type LabelBundle } from '../bridge/vscodeBridge';
+import { authedFetch } from '../bridge/authedFetch';
 
 /**
  * The list-shaped project pages (Backlog, PRDs) — the thin transport wrapper around

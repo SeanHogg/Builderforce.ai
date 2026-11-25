@@ -8,7 +8,7 @@ import { useEffect, useMemo } from 'react';
 import { chatRosterFromParticipants, type BrainMessage, type ChatRosterAgent, type ComposerDraftStore } from '@seanhogg/builderforce-brain-embedded';
 import { useChatActivitySignal, useChatParticipants, useRecipientChoice } from '@seanhogg/builderforce-brain-ui';
 import type { ChatTicketsAdapter } from '@seanhogg/builderforce-brain-ui';
-import { useCapability } from '../useCapability';
+import { useCapability } from '../platform/useCapability';
 import { childParticipants, useChatChildren, useChatSubagentRoster } from './chatChildren';
 
 export function useChatAudience({ ticketAdapter, chatId, serverChatId, messages, ticketRefresh, draftStore, personaAgents, onRoster }: {

@@ -22,7 +22,7 @@ vi.mock('@seanhogg/builderforce-brain-embedded', () => ({
 }));
 vi.mock('@seanhogg/bfi-web/bfi_web_bg.wasm?url', () => ({ default: 'https://webview.test/media/webview/asset-bfi_web_bg.wasm' }));
 vi.mock('./bfiWorker.ts?worker&url', () => ({ default: 'https://webview.test/media/webview/bfiWorker.js' }));
-vi.mock('./vscodeBridge', () => ({ onHostMessage: vi.fn(() => () => undefined), post: vi.fn(), request }));
+vi.mock('../bridge/vscodeBridge', () => ({ onHostMessage: vi.fn(() => () => undefined), post: vi.fn(), request }));
 
 type BfiWorkerOptions = {
   create: () => unknown;

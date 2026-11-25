@@ -10,9 +10,9 @@
  */
 import { useMemo, type ReactNode } from 'react';
 import { TranslationProvider, createCloudTranslate, translationLabelsFrom, bundleLookup } from '@seanhogg/builderforce-brain-ui';
-import { authedFetch } from '../authedFetch';
-import { webviewOnDeviceTasks } from '../webviewOnDeviceTasks';
-import { getToken, post, refreshToken, type InitData } from '../vscodeBridge';
+import { authedFetch } from '../bridge/authedFetch';
+import { webviewOnDeviceTasks } from '../engines/webviewOnDeviceTasks';
+import { getToken, post, refreshToken, type InitData } from '../bridge/vscodeBridge';
 import { useViewerId } from './useViewerId';
 import { translationIdentityOf } from './translationIdentity';
 

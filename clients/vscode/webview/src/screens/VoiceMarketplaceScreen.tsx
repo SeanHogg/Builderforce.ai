@@ -10,9 +10,9 @@ import { useEffect, useState } from 'react';
 import { IntlProvider } from 'use-intl';
 import { VoiceMarketplace } from '@/components/voice/VoiceMarketplace';
 import { setEmbedAuth } from '@/lib/auth';
-import { canvasMessages } from './canvas/CanvasScreenProviders';
-import { installCanvasHost } from './canvas/hostActions';
-import { getToken, onRefresh, onTokenChange, type InitData } from './vscodeBridge';
+import { canvasMessages } from '../canvas/CanvasScreenProviders';
+import { installCanvasHost } from '../canvas/hostActions';
+import { getToken, onRefresh, onTokenChange, type InitData } from '../bridge/vscodeBridge';
 
 export function VoiceMarketplaceScreen({ init }: { init: InitData }) {
   const { locale, messages } = canvasMessages(init);

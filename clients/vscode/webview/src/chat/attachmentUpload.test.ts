@@ -4,7 +4,7 @@ const host = vi.hoisted(() => ({
   calls: [] as Array<{ type: string; payload: Record<string, unknown> }>,
   answer: (_type: string, _payload: Record<string, unknown>): unknown => undefined,
 }));
-vi.mock('./bridgeTransport', () => ({
+vi.mock('../bridge/bridgeTransport', () => ({
   request: vi.fn(async (type: string, payload: Record<string, unknown>) => {
     host.calls.push({ type, payload });
     return host.answer(type, payload);
@@ -13,7 +13,7 @@ vi.mock('./bridgeTransport', () => ({
 
 import { AttachmentRefusedError, MAX_INLINE_TEXT_BYTES } from '@seanhogg/builderforce-brain-embedded';
 import { base64Of, readAttachmentText } from './attachmentUpload';
-import { createHostPersistence } from './hostPersistence';
+import { createHostPersistence } from '../bridge/hostPersistence';
 
 const ingressOps = () => host.calls.filter((c) => c.type === 'attachment.ingress').map((c) => c.payload.op);
 

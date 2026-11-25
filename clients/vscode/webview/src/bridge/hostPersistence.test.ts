@@ -13,7 +13,7 @@ describe("the panel is wired to it", () => {
   // when chat became a SURFACE of the one canvas, and the runtime moved with it into
   // `ChatRuntimeProvider` there — and then into `canvas/CanvasScreenProviders.tsx`, the
   // one provider stack every board screen mounts. Same wiring, same assertions.
-  const app = readFileSync(join(__dirname, "canvas", "CanvasScreenProviders.tsx"), "utf8");
+  const app = readFileSync(join(__dirname, "..", "canvas", "CanvasScreenProviders.tsx"), "utf8");
 
   it("writes chat history to the extension host's local store, signed in or out", () => {
     expect(app).toContain("createHostPersistence");

@@ -9,9 +9,9 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { serverChatIdOf, type BrainChat, type BrainPersistenceAdapter } from '@seanhogg/builderforce-brain-embedded';
 import { useChatMemorySwitch } from '@seanhogg/builderforce-brain-ui';
-import { authedFetch } from '../authedFetch';
-import { adoptChatProject } from '../adoptChatProject';
-import { getToken, refreshToken, type InitData } from '../vscodeBridge';
+import { authedFetch } from '../bridge/authedFetch';
+import { adoptChatProject } from '../project/adoptChatProject';
+import { getToken, refreshToken, type InitData } from '../bridge/vscodeBridge';
 import { vsixWebviewMemoryHooks } from './vsixWebviewMemoryHooks';
 
 export function useChatMemory({ init, chatId, activeChat, projectId, persistence, reloadChats, persistMemory, armMemory }: {

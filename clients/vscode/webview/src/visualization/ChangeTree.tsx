@@ -5,7 +5,7 @@
  */
 import { useMemo, useState } from 'react';
 import { makeT } from '../chat/chatLabels';
-import type { LabelBundle } from '../vscodeBridge';
+import type { LabelBundle } from '../bridge/vscodeBridge';
 import type { ChangeGraph } from './changeGraph';
 
 /** Git's status word, as the Source Control view beside it words it. */

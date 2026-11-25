@@ -17,7 +17,7 @@ import type { RunDelta } from '@builderforce/run-delta';
 import { DEFAULT_RUN_DELTA_LABELS } from '@builderforce/knowledge-graph-view/delta';
 import { RunDeltaOpenPanel } from './RunDeltaOpenPanel';
 
-vi.mock('../../vscodeBridge', () => ({ request: vi.fn(() => new Promise(() => {})), onHostMessage: vi.fn(() => () => {}) }));
+vi.mock('../../bridge/vscodeBridge', () => ({ request: vi.fn(() => new Promise(() => {})), onHostMessage: vi.fn(() => () => {}) }));
 
 const delta = {
   version: 1, runId: 'r1', headline: 'same', digest: 'd', blocking: [], excluded: [],

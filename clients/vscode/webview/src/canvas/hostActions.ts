@@ -19,7 +19,7 @@ import {
   type CanvasHostCapture,
   type CanvasHostRange,
 } from '@/lib/canvasHost';
-import { post, request, type LabelBundle } from '../vscodeBridge';
+import { post, request, type LabelBundle } from '../bridge/vscodeBridge';
 
 /**
  * The capture actions offered in the session bar, in display order. `id` is the

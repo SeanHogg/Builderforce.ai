@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // The bridge reaches for `acquireVsCodeApi` at load; these tests never post.
-vi.mock('../vscodeBridge', () => ({ post: vi.fn() }));
+vi.mock('../bridge/vscodeBridge', () => ({ post: vi.fn() }));
 
 import { childParticipants, childTarget, type ChildView } from './chatChildren';
 

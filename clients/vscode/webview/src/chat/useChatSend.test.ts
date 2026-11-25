@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const steerRun = vi.hoisted(() => vi.fn());
 const door = vi.hoisted(() => ({ options: undefined as Record<string, unknown> | undefined, queueAfter: undefined as ReturnType<typeof vi.fn> | undefined }));
 
-vi.mock('../vscodeBridge', () => ({ request: vi.fn(async () => ({ block: '' })) }));
+vi.mock('../bridge/vscodeBridge', () => ({ request: vi.fn(async () => ({ block: '' })) }));
 vi.mock('./chatChildren', () => ({ childTarget: () => null, steerRun }));
 vi.mock('@seanhogg/builderforce-brain-embedded', async (importOriginal) => {
   const real = await importOriginal<typeof import('@seanhogg/builderforce-brain-embedded')>();

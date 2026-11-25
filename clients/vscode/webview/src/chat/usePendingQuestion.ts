@@ -6,7 +6,7 @@
  */
 import { useCallback, useMemo, useState } from 'react';
 import { selectPendingAskUser } from '@seanhogg/builderforce-brain-ui';
-import type { InitData } from '../vscodeBridge';
+import type { InitData } from '../bridge/vscodeBridge';
 import { askUserLabels } from './chatLabels';
 
 export function usePendingQuestion(messages: Parameters<typeof selectPendingAskUser>[0], labels: InitData['labels']) {

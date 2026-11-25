@@ -16,8 +16,8 @@ import {
   type BrainRunOpening,
   type Effort,
 } from '@seanhogg/builderforce-brain-embedded';
-import type { AuthedFetch } from '../authedFetch';
-import { getEditorContext, onEditorContext, type EditorContext, type InitData } from '../vscodeBridge';
+import type { AuthedFetch } from '../bridge/authedFetch';
+import { getEditorContext, onEditorContext, type EditorContext, type InitData } from '../bridge/vscodeBridge';
 
 export function useChatOpening({ init, apiReq, associatedProject, effort, webBrowsing }: {
   init: InitData;

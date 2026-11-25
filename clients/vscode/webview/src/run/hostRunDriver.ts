@@ -28,10 +28,10 @@ import {
   type BrainRunRequest,
   type ModelFallbackSurface,
 } from '@seanhogg/builderforce-brain-embedded';
-import { applyListDelta } from '../../src/sync/listDelta';
-import type { RunSyncMessage } from '../../src/brain/brainRunHostProtocol';
-import { onHostMessage, post } from './vscodeBridge';
-import { setChatChildren, steerRunTurns, type ChildView } from './chat/chatChildren';
+import { applyListDelta } from '../../../src/sync/listDelta';
+import type { RunSyncMessage } from '../../../src/brain/brainRunHostProtocol';
+import { onHostMessage, post } from '../bridge/vscodeBridge';
+import { setChatChildren, steerRunTurns, type ChildView } from '../chat/chatChildren';
 
 /** What the panel knows that the host does not: its own switches and picker state. */
 export interface HostRunContext {

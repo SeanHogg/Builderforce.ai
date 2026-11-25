@@ -9,7 +9,7 @@
 import { useEffect, type ReactNode } from 'react';
 import type { Prediction } from '@builderforce/run-delta/predict';
 import { PredictedBlock, type RunDeltaLabels } from '@builderforce/knowledge-graph-view/delta';
-import { request } from '../../vscodeBridge';
+import { request } from '../../bridge/vscodeBridge';
 
 export const RUN_DELTA_PREDICTION_SHOWN = 'run-delta/prediction-shown';
 const NATURALNESS = 'naturalness.unusual-lines';

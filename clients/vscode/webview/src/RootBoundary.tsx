@@ -1,7 +1,7 @@
 import { Component, type CSSProperties, type ErrorInfo, type ReactNode } from 'react';
 import { BOOT_STRINGS_ELEMENT_ID, type RootFallbackStrings } from '../../src/panels/webviewBundleShell';
-import { errorReport, type WebviewErrorReport } from './uncaughtErrorRelay';
-import { post } from './vscodeBridge';
+import { errorReport, type WebviewErrorReport } from './diagnostics/uncaughtErrorRelay';
+import { post } from './bridge/vscodeBridge';
 
 /**
  * THE PANEL NEVER GOES BLANK.
