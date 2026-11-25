@@ -346,6 +346,12 @@ export const APPROVED_THIS_PUSH = [
     approvedBy: APPROVED_BY,
   },
   {
+    file: 'brain-embedded/src/run/parity/runOracle.mjs',
+    changed: "The vitest invocation adds `--reporter=default --reporter=hanging-process` before the oracle files (and the line is re-quoted with single quotes); cwd, stdio, shell and the exit status are unchanged.",
+    reason: "Runner-only change: the hanging-process reporter names the handle that keeps a parity run from exiting, so an oracle hang in CI is diagnosable. It runs the same oracle files through the same package config; no test file, case or assertion changes.",
+    approvedBy: APPROVED_BY,
+  },
+  {
     file: 'clients/vscode/src/nativeBrainRun.setup.test.ts',
     changed: "Deleted; its cases live in `oneRunDoor.test.ts` and `participantRun.test.ts` (both in the oracle list).",
     reason: "Intended change (5eb3411d6): nativeBrainRun was split; the successor suites are larger (92 + 503 lines vs 169).",
