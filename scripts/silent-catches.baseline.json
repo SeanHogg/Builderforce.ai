@@ -7,9 +7,9 @@
     "durable-object-direct-report": 0
   },
   "frontend/src": {
-    "empty-catch": 172,
+    "empty-catch": 167,
     "empty-promise-catch": 74,
-    "literal-promise-catch": 262,
+    "literal-promise-catch": 261,
     "console-only": 16,
     "durable-object-direct-report": 0
   },

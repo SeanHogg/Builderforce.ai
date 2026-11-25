@@ -29,9 +29,9 @@ import {
   type TimelinePayload,
 } from './boardRecords';
 
-export const ACCOUNT: EntityDestination = {
+export const ACCOUNT = {
   kind: 'bound', platformInstance: 'https://builderforce.example', accountId: 'account-1', tenantId: 'tenant-1',
-};
+} as const satisfies EntityDestination;
 
 export const AT = '2026-11-24T12:00:00.000Z';
 
