@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const logLine = vi.hoisted(() => vi.fn());
-vi.mock("./host/hostLog", () => ({ hostLog: logLine }));
+vi.mock("../host/hostLog", () => ({ hostLog: logLine }));
 
 import { createInitBudget, createLateRepushLimit } from "./initBudget";
 

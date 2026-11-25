@@ -17,9 +17,9 @@ import {
   type LocalFirstStore,
   type SyncPushBatch,
 } from "@builderforce/local-first";
-import { readRailFromFacts } from "./chatRail/buildRail";
+import { readRailFromFacts } from "../chatRail/buildRail";
 import { createLocalWorkRepository } from "./localWorkRepository";
-import { creationDestination, isSignedInTenantLure, LocalWorkRepositoryError } from "./localWork/localWorkShared";
+import { creationDestination, isSignedInTenantLure, LocalWorkRepositoryError } from "./localWorkShared";
 
 /** A VS Code authentication session, the shape `auth.ts` actually builds. */
 const SIGNED_IN_SESSION = {

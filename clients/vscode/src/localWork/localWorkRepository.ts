@@ -33,9 +33,9 @@
 
 import type { DestinationBinding, EntityDestination, LocalFirstStore } from "@builderforce/local-first";
 import { createProjectRepository } from "./localProjectRepository";
-import { createTicketRepository } from "./tickets/localTicketRepository";
-import { createOwnershipRepository } from "./localWork/localWorkOwnership";
-import { creationDestination, type WorkRepoContext } from "./localWork/localWorkShared";
+import { createTicketRepository } from "../tickets/localTicketRepository";
+import { createOwnershipRepository } from "./localWorkOwnership";
+import { creationDestination, type WorkRepoContext } from "./localWorkShared";
 
 export interface LocalWorkRepositoryOptions {
   /** The durable transactional store — VSIX snapshot store in the host, memory in tests. */

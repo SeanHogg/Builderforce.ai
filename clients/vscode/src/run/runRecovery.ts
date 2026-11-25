@@ -33,7 +33,7 @@ import {
   type TerminalExecutionStatus,
 } from "@builderforce/local-first";
 import { RUN_DELTA_HOLD_PREFIX, RUN_DELTA_RELEASE_REFUSED, RUN_DELTA_UNMEASURED } from "@builderforce/run-delta/contract";
-import { childrenOfRecord } from "./child/childRunJournal";
+import { childrenOfRecord } from "../child/childRunJournal";
 
 export const RUN_LIFECYCLE_SCHEMA_VERSION = 1;
 

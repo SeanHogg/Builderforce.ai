@@ -1,9 +1,9 @@
 import * as vscode from "vscode";
 
 import { classifyQueue, isDurableUserWorkQueue, isTelemetryQueue } from "@builderforce/write-outbox";
-import { authedRaw, isWorkspaceParked } from "./bfApi";
-import { createDurableOutbox, outboxSecrets, scopeTenantId } from "./sync/outboxStorage";
-import { getSelectedProject } from "./project/projectState";
+import { authedRaw, isWorkspaceParked } from "../bfApi";
+import { createDurableOutbox, outboxSecrets, scopeTenantId } from "../sync/outboxStorage";
+import { getSelectedProject } from "../project/projectState";
 import { messageOf } from "./messageOf";
 
 /**

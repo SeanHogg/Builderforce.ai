@@ -16,15 +16,15 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { EXPORT_DEAD_LETTERS_COMMAND } from "./deadLetterCommand";
 
-const HOST_FILE = "./sync/deadLetterExport.ts";
-const ACTIVATION_FILE = "./extension.ts";
-const MANIFEST_FILE = "../package.json";
+const HOST_FILE = "./deadLetterExport.ts";
+const ACTIVATION_FILE = "../extension.ts";
+const MANIFEST_FILE = "../../package.json";
 const NLS_FILES = [
-  "../package.nls.json",
-  "../package.nls.de.json",
-  "../package.nls.es.json",
-  "../package.nls.fr.json",
-  "../package.nls.zh-cn.json",
+  "../../package.nls.json",
+  "../../package.nls.de.json",
+  "../../package.nls.es.json",
+  "../../package.nls.fr.json",
+  "../../package.nls.zh-cn.json",
 ] as const;
 
 /** The `%command.*%` key the manifest declares the command title under. */

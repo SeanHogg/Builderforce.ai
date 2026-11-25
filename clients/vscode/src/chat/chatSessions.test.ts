@@ -17,7 +17,7 @@ const SOURCE = fs.readFileSync(path.join(__dirname, "chatSessions.ts"), "utf8");
 
 describe("chatSessions stays a thin registration adapter", () => {
   it("serves every turn through the SHARED participant handler", () => {
-    expect(SOURCE).toContain('import { createBuilderForceHandler } from "./chat/chatParticipant"');
+    expect(SOURCE).toContain('import { createBuilderForceHandler } from "./chatParticipant"');
     expect(SOURCE).toContain("createBuilderForceHandler(ctx, runHost)");
   });
 
@@ -107,7 +107,7 @@ describe("chatSessions stays a thin registration adapter", () => {
   it("declares the session contribution AND the proposal in package.json", () => {
     // A tab needs both halves: the declarative `contributes.chatSessions` point and the
     // runtime binding above.
-    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf8"));
     expect(pkg.enabledApiProposals).toContain("chatSessionsProvider");
     const sessions = pkg.contributes.chatSessions;
     expect(Array.isArray(sessions) && sessions.length).toBeTruthy();

@@ -18,11 +18,11 @@
  */
 
 import * as vscode from "vscode";
-import { fetchPolicyGates, fetchProjectShipPolicy, probeEditorKey } from "./bfApi";
-import { getApiKey } from "./gateway/gateway";
+import { fetchPolicyGates, fetchProjectShipPolicy, probeEditorKey } from "../bfApi";
+import { getApiKey } from "../gateway/gateway";
 import type { PolicyGate } from "@builderforce/agent-tools";
 import { DEFAULT_SHIP_POLICY, narrowShipPolicy, type ShipPolicy } from "@builderforce/run-guards";
-import { snapshotPermitsOfflineRun, type PolicySnapshotValue } from "./platform/policySnapshots";
+import { snapshotPermitsOfflineRun, type PolicySnapshotValue } from "./policySnapshots";
 import { messageOf } from "./messageOf";
 
 /** Raised when a tenant's gates could not be resolved — the run must not start. */

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createMemoryLocalFirstStore, UNBOUND_DESTINATION } from "@builderforce/local-first";
 import { LOCAL_DOMAIN_TOOL_NAMES, LocalDomainToolError, classifyLocalDomainTool } from "./localDomainTools";
-import { LOCAL_DOMAIN_TOOL_SPECS, routeToLocalDomainTools } from "./tools/localDomainToolRouting";
+import { LOCAL_DOMAIN_TOOL_SPECS, routeToLocalDomainTools } from "./localDomainToolRouting";
 import {
   HOST_DOMAIN_TOOL_LINE,
   installLocalDomainTools,
@@ -121,7 +121,7 @@ describe("installLocalDomainTools", () => {
  * wiring fails the suite.
  */
 describe("the run host installs the local domain tools", () => {
-  const HOST_FILE = "./brain/brainRunHostPorts.ts";
+  const HOST_FILE = "../brain/brainRunHostPorts.ts";
 
   it("calls installLocalDomainTools on the tool-dispatch path", () => {
     const source = readFileSync(new URL(HOST_FILE, import.meta.url), "utf8");

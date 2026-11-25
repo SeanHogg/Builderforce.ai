@@ -1,5 +1,5 @@
-import { withinMs } from "./contextPack/withinMs";
-import { hostLog } from "./host/hostLog";
+import { withinMs } from "../contextPack/withinMs";
+import { hostLog } from "../host/hostLog";
 import { messageOf } from "./messageOf";
 
 /**

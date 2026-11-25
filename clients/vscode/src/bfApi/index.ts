@@ -17,11 +17,11 @@ export {
   setSelectedWorkspace,
   signedInTenantId,
   workspaceTenantId,
-} from "./bfApi/session";
+} from "./session";
 
 // Transport: the authenticated fetch every domain rides.
-export { authed, authedRaw, fetchAuthed, isWorkspaceParked, WorkspaceParkedError } from "./bfApi/transport";
-export type { AuthedInit } from "./bfApi/transport";
+export { authed, authedRaw, fetchAuthed, isWorkspaceParked, WorkspaceParkedError } from "./transport";
+export type { AuthedInit } from "./transport";
 
 // Identity and workspaces.
 export {
@@ -33,14 +33,14 @@ export {
   getCurrentUserName,
   getCurrentWorkspace,
   listWorkspaces,
-} from "./bfApi/workspace";
-export type { BfWorkspace } from "./bfApi/workspace";
+} from "./workspace";
+export type { BfWorkspace } from "./workspace";
 
-export { connect, diagnose } from "./bfApi/connection";
+export { connect, diagnose } from "./connection";
 
 // Projects, their Evermind head and shared facts.
-export { createProject, listProjects } from "./bfApi/projects";
-export type { BfProject } from "./bfApi/projects";
+export { createProject, listProjects } from "./projects";
+export type { BfProject } from "./projects";
 export {
   bfApiRequest,
   forgetProjectFact,
@@ -49,10 +49,10 @@ export {
   projectEvermindHooks,
   recallProjectFacts,
   rememberProjectFact,
-} from "./bfApi/projectMemory";
+} from "./projectMemory";
 
-export { createCreationSession, listCreationSessions } from "./bfApi/creationSessions";
-export type { BfCreationSessionSummary } from "./bfApi/creationSessions";
+export { createCreationSession, listCreationSessions } from "./creationSessions";
+export type { BfCreationSessionSummary } from "./creationSessions";
 
 // The board: tickets and objectives.
 export {
@@ -68,8 +68,8 @@ export {
   listTasksForReview,
   setTaskArchived,
   updateTaskStatus,
-} from "./bfApi/tasks";
-export type { BfObjective, BfTask } from "./bfApi/tasks";
+} from "./tasks";
+export type { BfObjective, BfTask } from "./tasks";
 
 // Brain chats and the turns written to them.
 export {
@@ -79,10 +79,10 @@ export {
   listBrainChats,
   renameBrainChat,
   updateBrainChatProject,
-} from "./bfApi/brainChats";
-export type { BfBrainChat } from "./bfApi/brainChats";
+} from "./brainChats";
+export type { BfBrainChat } from "./brainChats";
 // Side effect only: registers the "brain-turns" durable outbox with the dead-letter queue.
-import "./bfApi/brainMessages";
+import "./brainMessages";
 
 // Platform runs, approvals and the live attention map.
 export {
@@ -91,32 +91,32 @@ export {
   listHumanRequests,
   resolveHumanRequest,
   submitExecution,
-} from "./bfApi/runtime";
+} from "./runtime";
 export type {
   BfApproval,
   BfAttention,
   BfAttentionManager,
   BfAttentionState,
-} from "./bfApi/runtime";
+} from "./runtime";
 
-export { postActivitySignals } from "./bfApi/activitySignals";
-export type { VsixActivitySignal } from "./bfApi/activitySignals";
+export { postActivitySignals } from "./activitySignals";
+export type { VsixActivitySignal } from "./activitySignals";
 
-export { getProjectDiagnostics, listSystemAudits, runAudit } from "./bfApi/diagnostics";
-export type { BfProjectDiagnostic } from "./bfApi/diagnostics";
+export { getProjectDiagnostics, listSystemAudits, runAudit } from "./diagnostics";
+export type { BfProjectDiagnostic } from "./diagnostics";
 
-export { joinMeeting, listMeetings } from "./bfApi/meetings";
-export type { BfMeetingDetail, BfMeetingJoin } from "./bfApi/meetings";
+export { joinMeeting, listMeetings } from "./meetings";
+export type { BfMeetingDetail, BfMeetingJoin } from "./meetings";
 
-export { beginMcpOAuthConnect, createMcpExtension, listMcpExtensions } from "./bfApi/mcpExtensions";
-export type { BfMcpExtension } from "./bfApi/mcpExtensions";
+export { beginMcpOAuthConnect, createMcpExtension, listMcpExtensions } from "./mcpExtensions";
+export type { BfMcpExtension } from "./mcpExtensions";
 
-export { fetchPolicyGates, fetchProjectShipPolicy, fetchRunContextSection } from "./bfApi/runContext";
+export { fetchPolicyGates, fetchProjectShipPolicy, fetchRunContextSection } from "./runContext";
 
 export {
   listByoProviders,
   removeByoProvider,
   setByoProviderKey,
   testByoProvider,
-} from "./bfApi/byoProviders";
-export type { ByoProvider } from "./bfApi/byoProviders";
+} from "./byoProviders";
+export type { ByoProvider } from "./byoProviders";

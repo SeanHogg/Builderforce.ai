@@ -16,7 +16,7 @@
 
 import * as fs from "node:fs";
 import { discoveryFilePath, forgetDesktopProbe, registerWorkspace } from "./desktopContext";
-import { invalidateStableGrounding } from "./memory/grounding";
+import { invalidateStableGrounding } from "../memory/grounding";
 
 /** How often the discovery file is stat'ed. A start is noticed within this long. */
 export const DESKTOP_WATCH_MS = 5_000;

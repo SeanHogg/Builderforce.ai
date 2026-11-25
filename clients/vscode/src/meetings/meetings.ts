@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import * as bfApi from "./bfApi";
-import { getBaseUrl, getWebBaseUrl, SECRET_KEY } from "./gateway/gateway";
+import * as bfApi from "../bfApi";
+import { getBaseUrl, getWebBaseUrl, SECRET_KEY } from "../gateway/gateway";
 
 /**
  * Meetings surface for the editor: a tree of upcoming/live meetings fed by the

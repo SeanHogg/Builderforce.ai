@@ -8,7 +8,7 @@ import {
   bindOutboxStorage,
   createDurableOutbox,
   setOutboxScope,
-} from "./sync/outboxStorage";
+} from "../sync/outboxStorage";
 
 /**
  * G13 for error-reports. The classifier says drop-on-failure. createDurableOutbox

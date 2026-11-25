@@ -58,7 +58,7 @@ describe("errorReporter filing boundary", () => {
     }
 
     // Its only persistence door is the outbox factory, not a store it builds.
-    expect(reporter).toContain('from "./sync/outboxStorage"');
+    expect(reporter).toContain('from "../sync/outboxStorage"');
     expect(reporter).not.toContain("createOutbox(");
   });
 

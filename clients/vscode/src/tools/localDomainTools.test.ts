@@ -8,7 +8,7 @@ import {
   UNBOUND_DESTINATION,
   type LocalFirstStore,
 } from "@builderforce/local-first";
-import { readRailFromFacts } from "./chatRail/buildRail";
+import { readRailFromFacts } from "../chatRail/buildRail";
 import { createLocalWorkRepository, type LocalWorkRepository } from "./localWorkRepository";
 import {
   LocalDomainToolError,
@@ -49,7 +49,7 @@ describe("localDomainTools", () => {
   });
 
   it("is not wired into extension activation", () => {
-    const activation = readFileSync(new URL("./extension.ts", import.meta.url), "utf8");
+    const activation = readFileSync(new URL("../extension.ts", import.meta.url), "utf8");
     expect(activation).not.toContain("localDomainTools");
   });
 

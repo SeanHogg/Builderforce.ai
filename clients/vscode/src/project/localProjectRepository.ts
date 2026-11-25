@@ -18,7 +18,7 @@ import {
   requireText,
   type LocalProject,
   type WorkRepoContext,
-} from "./localWork/localWorkShared";
+} from "../localWork/localWorkShared";
 
 export interface CreateLocalProjectInput {
   name: string;

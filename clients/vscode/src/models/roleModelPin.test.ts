@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ROLE_MODEL_DEFAULT_ENV, ROLE_MODELS_ENV } from "@builderforce/learned-routing";
 import { modelForChildRun, NATIVE_RUN_ROLE, reviewModelPin, roleModelPin } from "./roleModelPin";
 
-const SRC = __dirname;
+const SRC = path.resolve(__dirname, "..");
 
 const env = (over: Record<string, string | undefined> = {}): NodeJS.ProcessEnv => ({
   [ROLE_MODELS_ENV]: '{"code":"claude-opus-4-8","verify":"gpt-4.1-mini"}',

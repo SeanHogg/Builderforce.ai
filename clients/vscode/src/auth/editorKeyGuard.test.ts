@@ -12,11 +12,11 @@ vi.mock("vscode", () => ({
   window: { showWarningMessage: h.warn },
   commands: { executeCommand: vi.fn() },
 }));
-vi.mock("./bfApi", () => ({
+vi.mock("../bfApi", () => ({
   onEditorKeyRejected: () => ({ dispose: () => undefined }),
   dropWorkspaceSelection: h.drop,
 }));
-vi.mock("./gateway/gateway", () => ({ SECRET_KEY: "k" }));
+vi.mock("../gateway/gateway", () => ({ SECRET_KEY: "k" }));
 
 import { watchRejectedEditorKey } from "./editorKeyGuard";
 import { observeGatewayResponse } from "./gatewayAuth";

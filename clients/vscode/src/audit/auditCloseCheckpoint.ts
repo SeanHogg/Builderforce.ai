@@ -14,7 +14,7 @@ import {
   getLocalAuditRun,
   recoverInterruptedAuditRuns,
   type LocalAuditRun,
-} from "./audit/localAuditStore";
+} from "./localAuditStore";
 
 export interface AuditCloseIdentity {
   auditId: string;

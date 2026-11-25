@@ -9,7 +9,7 @@ import {
   onWorkspaceRefused,
   workspaceHeaderFor,
 } from "./gatewayAuth";
-import { setCurrentWorkspace } from "./workspace/workspaceSelection";
+import { setCurrentWorkspace } from "../workspace/workspaceSelection";
 
 describe("gateway workspace header", () => {
   beforeEach(() => setCurrentWorkspace(undefined));
@@ -72,7 +72,7 @@ describe("workspace refusal classifier", () => {
 
 describe("run-outcomes sender", () => {
   it("names the workspace the outcome was QUEUED in, not the current selection", () => {
-    const gateway = readFileSync(join(__dirname, "gateway/gateway.ts"), "utf8");
+    const gateway = readFileSync(join(__dirname, "..", "gateway/gateway.ts"), "utf8");
     expect(gateway).toMatch(/gatewayAuthHeaders\(key,[^)]*\{[^)]*\},\s*scopeTenantId\(ctx\.scope\)\)/);
   });
 });

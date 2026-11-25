@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import { dropWorkspaceSelection, onEditorKeyRejected } from "./bfApi";
-import { SECRET_KEY } from "./gateway/gateway";
+import { dropWorkspaceSelection, onEditorKeyRejected } from "../bfApi";
+import { SECRET_KEY } from "../gateway/gateway";
 import { onWorkspaceRefused } from "./gatewayAuth";
 
 /**

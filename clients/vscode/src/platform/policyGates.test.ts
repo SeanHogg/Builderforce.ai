@@ -8,16 +8,16 @@ vi.mock("vscode", () => ({ l10n: { t: (m: string) => m } }));
 const fetchPolicyGates = vi.fn();
 // What `probeEditorKey` says of the stored key when a signed-in read comes back empty.
 const probeEditorKey = vi.fn(async (): Promise<string> => "unreachable");
-vi.mock("./bfApi", () => ({
+vi.mock("../bfApi", () => ({
   fetchPolicyGates: (...a: unknown[]) => fetchPolicyGates(...a),
   probeEditorKey: () => probeEditorKey(),
 }));
 // "Signed in" = an editor key is stored. Default: signed out (no key).
 const getApiKey = vi.fn(async (): Promise<string | undefined> => undefined);
-vi.mock("./gateway/gateway", () => ({ getApiKey: () => getApiKey() }));
+vi.mock("../gateway/gateway", () => ({ getApiKey: () => getApiKey() }));
 
 import { POLICY_GATES_FRESH_MS, POLICY_GATES_STALE_MS, PolicyGatesUnavailableError, configurePolicyGatesPersistence, resetPolicyGatesCache, resolveRunPolicyGates } from "./policyGates";
-import { createPolicyGatesPersistence, loadPolicySnapshot, snapshotPermitsOfflineRun } from "./platform/policySnapshots";
+import { createPolicyGatesPersistence, loadPolicySnapshot, snapshotPermitsOfflineRun } from "./policySnapshots";
 
 const secrets = {} as never;
 
@@ -193,7 +193,7 @@ describe("resolveRunPolicyGates outage vs signed out", () => {
 describe("activation wires policy snapshot persistence", () => {
   it("calls configurePolicyGatesPersistence from activate", () => {
     const here = dirname(fileURLToPath(import.meta.url));
-    const source = readFileSync(join(here, "extension.ts"), "utf8");
+    const source = readFileSync(join(here, "..", "extension.ts"), "utf8");
     const activate = source.slice(source.indexOf("export function activate"));
     expect(activate).toMatch(/configurePolicyGatesPersistence\(\s*createPolicyGatesPersistence\(/);
   });

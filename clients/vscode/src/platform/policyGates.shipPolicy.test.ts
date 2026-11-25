@@ -5,7 +5,7 @@ import { DEFAULT_SHIP_POLICY, shipPolicyOf } from "@builderforce/run-guards";
 vi.mock("vscode", () => ({ l10n: { t: (m: string) => m } }));
 const fetchPolicyGates = vi.fn();
 const fetchProjectShipPolicy = vi.fn();
-vi.mock("./bfApi", () => ({
+vi.mock("../bfApi", () => ({
   fetchPolicyGates: (...a: unknown[]) => fetchPolicyGates(...a),
   fetchProjectShipPolicy: (...a: unknown[]) => fetchProjectShipPolicy(...a),
   probeEditorKey: async () => "unreachable",
@@ -13,10 +13,10 @@ vi.mock("./bfApi", () => ({
 
 // policyGates reads the stored editor key (signed in vs out) through gateway.ts, which needs the vscode host.
 const getApiKey = vi.fn(async (): Promise<string | undefined> => undefined);
-vi.mock("./gateway/gateway", () => ({ getApiKey: () => getApiKey() }));
+vi.mock("../gateway/gateway", () => ({ getApiKey: () => getApiKey() }));
 
 import { POLICY_GATES_FRESH_MS, POLICY_GATES_STALE_MS, configurePolicyGatesPersistence, resetPolicyGatesCache, resolveRunPolicyGates, resolveRunShipPolicy } from "./policyGates";
-import { createPolicyGatesPersistence, loadPolicySnapshot } from "./platform/policySnapshots";
+import { createPolicyGatesPersistence, loadPolicySnapshot } from "./policySnapshots";
 
 const secrets = {} as never;
 const PR = shipPolicyOf("pull_request", "project_settings");

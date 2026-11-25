@@ -5,7 +5,7 @@ import nodePath from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { encodeJournalFrame, newLocalRecord, scanJournal, type LocalFirstSnapshot } from "@builderforce/local-first";
 import { createDurableLocalFirstStore } from "./durableLocalFirstStore";
-import { JOURNAL_FILE, LEGACY_JOURNAL_FILE } from "./localFirst/localFirstJournalIo";
+import { JOURNAL_FILE, LEGACY_JOURNAL_FILE } from "./localFirstJournalIo";
 
 const directories: string[] = [];
 

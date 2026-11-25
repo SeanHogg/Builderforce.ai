@@ -1,11 +1,11 @@
 import * as vscode from "vscode";
-import { WebviewPanelBase } from "./panels/webviewShared";
-import { workspaceCanvasSession, type WorkspaceCanvasSession } from "./workspace/workspaceSession";
+import { WebviewPanelBase } from "./webviewShared";
+import { workspaceCanvasSession, type WorkspaceCanvasSession } from "../workspace/workspaceSession";
 import { WorkspaceSurface, type BrainInbound } from "./workspaceSurface";
 import { asVisualizationFrame } from "./visualizationInitFrame";
-import { KnowledgeBridge, setPendingKnowledgeFocus } from "./knowledge/knowledgeBridge";
-import { KNOWLEDGE_CALL, KNOWLEDGE_EDITOR, KNOWLEDGE_FOCUS, type KnowledgeCall, type KnowledgeEditorFrame, type KnowledgeFocusFrame } from "./knowledge/knowledgeProtocol";
-import { editorFrameOf, sameFrame } from "./knowledge/knowledgeEditorFrame";
+import { KnowledgeBridge, setPendingKnowledgeFocus } from "../knowledge/knowledgeBridge";
+import { KNOWLEDGE_CALL, KNOWLEDGE_EDITOR, KNOWLEDGE_FOCUS, type KnowledgeCall, type KnowledgeEditorFrame, type KnowledgeFocusFrame } from "../knowledge/knowledgeProtocol";
+import { editorFrameOf, sameFrame } from "../knowledge/knowledgeEditorFrame";
 import { messageOf } from "./messageOf";
 
 /** At most one `knowledge.editor` post per this window (ms): the LAST editor state in it, posted when it ends. */

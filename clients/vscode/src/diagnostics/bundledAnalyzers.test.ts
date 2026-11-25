@@ -65,8 +65,8 @@ describe("bundled analyzer resolution", () => {
 describe("pins", () => {
   it("analyzers/package.json pins exactly what the REAL runner reports", async () => {
     // The package is mocked above; the pins come from their own tiny module (the real values, no heavy imports).
-    const real = await import("../../../packages/agent-tools/src/analyzerPins");
-    const manifest = JSON.parse(readFileSync(path.join(__dirname, "..", "analyzers", "package.json"), "utf8")) as { dependencies: Record<string, string> };
+    const real = await import("../../../../packages/agent-tools/src/analyzerPins");
+    const manifest = JSON.parse(readFileSync(path.join(__dirname, "..", "..", "analyzers", "package.json"), "utf8")) as { dependencies: Record<string, string> };
     const pinned = real.ANALYZER_VERSIONS;
     const [tsName, tsVersion] = real.TYPESCRIPT_PIN.split("@");
     expect(manifest.dependencies).toEqual({ ...pinned, [tsName as string]: tsVersion });

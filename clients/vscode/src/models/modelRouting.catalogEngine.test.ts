@@ -1,6 +1,6 @@
 import { LOCAL_MODEL_CATALOG, ONNX_BONSAI_CATALOG } from "@builderforce/local-inference";
 import { describe, expect, it } from "vitest";
-import { formatLocalModelRef, routeCatalogEngine } from "./models/catalogEngine";
+import { formatLocalModelRef, routeCatalogEngine } from "./catalogEngine";
 
 describe("routeCatalogEngine", () => {
   it("sends a GGUF Bonsai to bfi and an ONNX q4 Bonsai to onnx", () => {

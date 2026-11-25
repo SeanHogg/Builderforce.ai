@@ -20,7 +20,7 @@ import * as path from "node:path";
  *   - the gateway client stays ignorant of on-device models entirely.
  */
 
-const SRC = __dirname;
+const SRC = path.resolve(__dirname, "..");
 
 /**
  * Strip comments before matching. These modules explain themselves by NAMING their
@@ -43,7 +43,7 @@ function sourceFiles(): Array<{ name: string; text: string }> {
 describe("model routing is centralized", () => {
   it("has the seam it claims to have", () => {
     // Guards the guard: a rename that emptied this file would make every case vacuous.
-    const routing = fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8");
+    const routing = fs.readFileSync(path.join(SRC, "models/modelRouting.ts"), "utf8");
     for (const symbol of ["resolveModelRoute", "routeRequiresSignIn", "routeStream", "routeComplete"]) {
       expect(routing).toContain(`export ${symbol.startsWith("route") && symbol !== "routeComplete" ? "function" : ""}`.trim());
       expect(routing).toContain(symbol);
@@ -55,16 +55,16 @@ describe("model routing is centralized", () => {
     // are the two sides of the branch. A second module reaching for either one is a
     // second router, which is how the surfaces diverged before.
     const owners: Record<string, readonly string[]> = {
-      createNativeStream: ["modelRouting.ts", "native/nativeGatewayStream.ts"],
+      createNativeStream: ["models/modelRouting.ts", "native/nativeGatewayStream.ts"],
       // The local transports are brain-embedded's (shared with the Chrome extension);
       // in the editor only the seam reaches for them. `completeLocal` also matches
       // `completeLocalFirst` — local-first is a transport choice too. The streaming side
       // is ONE call, `createHostModelStream` (the routing step every host shares).
-      createHostModelStream: ["modelRouting.ts"],
+      createHostModelStream: ["models/modelRouting.ts"],
       createLocalStream: [],
-      completeLocal: ["modelRouting.ts"],
+      completeLocal: ["models/modelRouting.ts"],
       createLocalFirstStream: [],
-      probeLocalFirstRuntimes: ["modelRouting.ts", "models/localModels.ts"],
+      probeLocalFirstRuntimes: ["models/modelRouting.ts", "models/localModels.ts"],
     };
     const sources = sourceFiles();
     for (const [symbol, allowed] of Object.entries(owners)) {
@@ -87,7 +87,7 @@ describe("model routing is centralized", () => {
   });
 
   it("decides local-first in the seam, letting any model choice win over it", () => {
-    const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
+    const routing = stripComments(fs.readFileSync(path.join(SRC, "models/modelRouting.ts"), "utf8"));
     // An explicit pick / Evermind pin / default model / BYO pool names what the user
     // wants; only gateway-auto may be served on this machine first.
     expect(routing).toContain("if (!localFirstApplies(choice)) return choice;");
@@ -122,10 +122,10 @@ describe("model routing is centralized", () => {
   it("routes every completion surface through the seam", () => {
     // The scanner is the surface that silently stayed on the gateway. It must take a
     // route, not a model id, so it cannot resolve one of its own.
-    const scan = fs.readFileSync(path.join(SRC, "codebaseScan.ts"), "utf8");
+    const scan = fs.readFileSync(path.join(SRC, "diagnostics/codebaseScan.ts"), "utf8");
     expect(scan).toContain("routeComplete");
     expect(scan).toContain("route: ModelRoute");
-    expect(scan).not.toContain('from "./gateway/gateway"');
+    expect(scan).not.toContain('from "../gateway/gateway"');
   });
 });
 
@@ -191,12 +191,12 @@ describe("the platform stays on the gateway when the model does not", () => {
     const init = stripComments(fs.readFileSync(path.join(SRC, "workspace/workspaceInit.ts"), "utf8"));
     const extension = stripComments(fs.readFileSync(path.join(SRC, "extension.ts"), "utf8"));
     for (const source of [init, extension]) expect(source).not.toContain("turn: true");
-    const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
+    const routing = stripComments(fs.readFileSync(path.join(SRC, "models/modelRouting.ts"), "utf8"));
     expect(routing).toContain("if (request.turn && config.enabled && config.localFirst) hostModelProvisioner.ensure();");
   });
 
   it("never lets a Hybrid fallback be silent — both chat surfaces hear onFallback", () => {
-    const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
+    const routing = stripComments(fs.readFileSync(path.join(SRC, "models/modelRouting.ts"), "utf8"));
     const participant = stripComments(fs.readFileSync(path.join(SRC, "chat/chatParticipant.ts"), "utf8"));
     const host = stripComments(fs.readFileSync(path.join(SRC, "brain/brainRunHost.ts"), "utf8"));
     const participantRun = stripComments(fs.readFileSync(path.join(SRC, "chat/participantRun.ts"), "utf8"));
@@ -218,7 +218,7 @@ describe("the platform stays on the gateway when the model does not", () => {
  * signed-in person whose cloud is unavailable is never shown the sign-in prompt.
  */
 describe("the inference mode is decided by the seam", () => {
-  const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
+  const routing = stripComments(fs.readFileSync(path.join(SRC, "models/modelRouting.ts"), "utf8"));
 
   it("stamps the mode on every route from the one setting module", () => {
     expect(routing).toContain("const configuredMode = currentInferenceMode();");
@@ -291,7 +291,7 @@ describe("the inference mode is decided by the seam", () => {
 });
 
 describe("knowing a local window is not a vote to route", () => {
-  const routing = stripComments(fs.readFileSync(path.join(SRC, "modelRouting.ts"), "utf8"));
+  const routing = stripComments(fs.readFileSync(path.join(SRC, "models/modelRouting.ts"), "utf8"));
 
   it("reads windows from every enabled runtime, local-first or not", () => {
     expect(routing).toMatch(/function localWindowProbes\(\)[^{]*\{\s*return probeOnDeviceRuntimes\(/);

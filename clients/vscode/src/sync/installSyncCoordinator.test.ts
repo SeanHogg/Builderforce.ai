@@ -211,7 +211,7 @@ describe("installSyncCoordinator", () => {
   });
 
   it("is not imported by extension activation and does not open the editor, IndexedDB, or the network", () => {
-    const extension = readFileSync(fileURLToPath(new URL("./extension.ts", import.meta.url)), "utf8");
+    const extension = readFileSync(fileURLToPath(new URL("../extension.ts", import.meta.url)), "utf8");
     expect(extension).not.toContain("installSyncCoordinator");
     expect(extension).not.toContain("drainQueuedCreates");
     const source = readFileSync(fileURLToPath(new URL("./installSyncCoordinator.ts", import.meta.url)), "utf8");

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { commitGateRefusal, pushGateRefusal, repoRelative, sweptScratchScripts, type GateDeps, type GitRunner } from "./publishGate";
 
 /** The real commit VS Code chat #275 pushed (`git show c9c043248 -- frontend/scripts/.react-hooks-baseline.txt`). */
-const C9C043248 = readFileSync(path.resolve(__dirname, "../../../packages/run-guards/src/__fixtures__/c9c043248-react-hooks-baseline.diff"), "utf8");
+const C9C043248 = readFileSync(path.resolve(__dirname, "../../../../packages/run-guards/src/__fixtures__/c9c043248-react-hooks-baseline.diff"), "utf8");
 const DIFF_ONLY = C9C043248.slice(C9C043248.indexOf("diff --git"));
 const BASELINE = "frontend/scripts/.react-hooks-baseline.txt";
 const ROOT = path.resolve("/repo");

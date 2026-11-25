@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
-import { createBuilderForceHandler } from "./chat/chatParticipant";
-import { localBrainApplication } from "./localFirst/localFirstStore";
-import type { BrainRunHost } from "./brain/brainRunHost";
+import { createBuilderForceHandler } from "./chatParticipant";
+import { localBrainApplication } from "../localFirst/localFirstStore";
+import type { BrainRunHost } from "../brain/brainRunHost";
 
 const SESSION_TYPE = "builderforce";
 /** The id `registerChatParticipant` creates the participant under. The session tab binds

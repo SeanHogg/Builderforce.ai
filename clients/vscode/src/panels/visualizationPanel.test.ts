@@ -79,10 +79,10 @@ vi.mock("vscode", () => ({
   Uri: { joinPath: (...parts: unknown[]) => parts.join("/") },
   l10n: { t: (message: string) => message },
 }));
-vi.mock("./gateway/gateway", () => ({ getBaseUrl: () => "https://api.example" }));
+vi.mock("../gateway/gateway", () => ({ getBaseUrl: () => "https://api.example" }));
 vi.mock("./errorReporter", () => ({ logLine: vi.fn(), reportExtensionError: vi.fn(async () => undefined) }));
-vi.mock("./panels/webviewBundleShell", () => ({ makeNonce: () => "n", renderBundleShell: () => "<html></html>" }));
-vi.mock("./panels/webviewHostBridge", () => ({
+vi.mock("./webviewBundleShell", () => ({ makeNonce: () => "n", renderBundleShell: () => "<html></html>" }));
+vi.mock("./webviewHostBridge", () => ({
   handleSharedHostMessage: async () => false,
   postToWebview: (webview: { postMessage(m: unknown): Promise<boolean> } | undefined, msg: unknown) => {
     void webview?.postMessage(msg);
@@ -91,7 +91,7 @@ vi.mock("./panels/webviewHostBridge", () => ({
     if (id) void webview?.postMessage({ type: "response", id, ok, result, ...(error ? { error } : {}) });
   },
 }));
-vi.mock("./workspace/workspaceSession", () => ({ workspaceCanvasSession: async () => ({}) }));
+vi.mock("../workspace/workspaceSession", () => ({ workspaceCanvasSession: async () => ({}) }));
 vi.mock("./workspaceSurface", () => ({
   WorkspaceSurface: class {
     handle = async () => undefined;
@@ -104,7 +104,7 @@ const knowledge = vi.hoisted(() => ({
   handle: vi.fn<(call: unknown) => Promise<unknown>>(async () => "ok"),
   root: undefined as undefined | { rootId: string; title: string; rootPath: string; folderPath: string; rel: string },
 }));
-vi.mock("./knowledge/knowledgeBridge", () => ({
+vi.mock("../knowledge/knowledgeBridge", () => ({
   setPendingKnowledgeFocus: () => undefined,
   KnowledgeBridge: class {
     constructor(opts: { post: (msg: unknown) => void }) {
@@ -118,7 +118,7 @@ vi.mock("./knowledge/knowledgeBridge", () => ({
 
 import * as path from "node:path";
 import { EDITOR_FEED_MS, VisualizationPanel } from "./visualizationPanel";
-import { KNOWLEDGE_CALL, KNOWLEDGE_EDITOR } from "./knowledge/knowledgeProtocol";
+import { KNOWLEDGE_CALL, KNOWLEDGE_EDITOR } from "../knowledge/knowledgeProtocol";
 
 const ctx = { extensionUri: "ext" } as never;
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));

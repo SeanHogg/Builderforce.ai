@@ -16,7 +16,7 @@ vi.mock("vscode", () => ({
   l10n: { t: (s: string) => s },
 }));
 
-import { platformPolicy } from "./platform/platformPolicy";
+import { platformPolicy } from "./platformPolicy";
 import { assertPlatformSocketAllowed, platformPolicyFrame, platformSocketUrl } from "./platformCallGate";
 
 beforeEach(() => {
@@ -57,7 +57,7 @@ describe("platformCallGate", () => {
   });
 
   it("the shared host bridge publishes the snapshot and refuses a denied platform socket", () => {
-    const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "panels/webviewHostBridge.ts"), "utf8");
+    const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "..", "panels/webviewHostBridge.ts"), "utf8");
     const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
     expect(code).toContain("watchPlatformPolicy(");
     expect(code).toContain("assertPlatformSocketAllowed(");

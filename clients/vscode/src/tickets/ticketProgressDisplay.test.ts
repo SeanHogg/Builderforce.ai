@@ -85,7 +85,7 @@ describe("conversationAccessibilityName", () => {
 });
 
 describe("sessionsTree row contract", () => {
-  const source = fs.readFileSync(path.join(__dirname, "sessions/sessionsTree.ts"), "utf8");
+  const source = fs.readFileSync(path.join(__dirname, "..", "sessions/sessionsTree.ts"), "utf8");
 
   it("does not prefix TreeItem.label with {n}% · {title}", () => {
     // The previous defect: conversationTreeLabel returned `${pct}% · ${title}`.

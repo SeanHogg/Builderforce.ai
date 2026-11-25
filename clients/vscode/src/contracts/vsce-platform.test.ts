@@ -6,7 +6,7 @@ import {
   planPackageStep,
   planPublishArgs,
   rewriteVersionLine,
-} from "../vsce-platform.lib.mjs";
+} from "../../vsce-platform.lib.mjs";
 
 describe("bumpPatchVersion", () => {
   it("bumps the trailing numeric run", () => {

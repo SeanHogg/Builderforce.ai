@@ -5,8 +5,8 @@ import nodePath from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { newLocalRecord } from "@builderforce/local-first";
 import { createDurableLocalFirstStore, type DurableLocalFirstStore } from "./durableLocalFirstStore";
-import { JOURNAL_FILE } from "./localFirst/localFirstJournalIo";
-import { createCompactionBackoff } from "./localFirst/localFirstCompactionBackoff";
+import { JOURNAL_FILE } from "./localFirstJournalIo";
+import { createCompactionBackoff } from "./localFirstCompactionBackoff";
 
 const directories: string[] = [];
 

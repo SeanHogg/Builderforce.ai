@@ -9,7 +9,7 @@
  */
 
 import * as vscode from "vscode";
-import { detectGitContext, peekGitContext, watchGitContext } from "./git/gitContext";
+import { detectGitContext, peekGitContext, watchGitContext } from "../git/gitContext";
 import type { EditorContext } from "@seanhogg/builderforce-brain-embedded";
 
 /** Bound the selection text handed to the model (a whole-file select shouldn't blow the prompt). */

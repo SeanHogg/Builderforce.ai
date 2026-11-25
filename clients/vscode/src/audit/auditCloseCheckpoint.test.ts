@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createMemoryLocalFirstStore } from "@builderforce/local-first";
-import { ensureLocalAuditDefinitions, getLocalAuditRun, startLocalAuditRun } from "./audit/localAuditStore";
+import { ensureLocalAuditDefinitions, getLocalAuditRun, startLocalAuditRun } from "./localAuditStore";
 import { closeAuditLocally, planAuditClose, readClosedAudit, refuseCloudLaunch, type AuditCloseInput } from "./auditCloseCheckpoint";
 
 const IDS = { auditId: "quality-audit", projectId: 7, requestId: "close-1" };

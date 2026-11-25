@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createMemoryLocalFirstStore } from "@builderforce/local-first";
-import { ensureLocalAuditDefinitions, startLocalAuditRun } from "./audit/localAuditStore";
+import { ensureLocalAuditDefinitions, startLocalAuditRun } from "./localAuditStore";
 import { EXTENSION_ACTIVATION_LINE, installAuditClose } from "./installAuditClose";
 import { closeAuditLocally } from "./auditCloseCheckpoint";
 
@@ -124,7 +124,7 @@ describe("installAuditClose", () => {
     // installs is not a closed ticket — so this assertion is inverted from the state
     // the slice started in. What must NOT change is inertness: installing wires
     // nothing, calls nothing, and launches nothing.
-    const extension = readFileSync(resolve(here, "extension.ts"), "utf8");
+    const extension = readFileSync(resolve(here, "..", "extension.ts"), "utf8");
     expect(activateInstallsAuditClose(extension)).toBe(true);
     expect(activateInstallsAuditClose(`// ${EXTENSION_ACTIVATION_LINE}\nexport function activate() {}\n`)).toBe(false);
     expect(activateInstallsAuditClose(`/* ${EXTENSION_ACTIVATION_LINE} */\nexport function activate() {}\n`)).toBe(false);

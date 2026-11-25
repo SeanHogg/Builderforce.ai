@@ -29,8 +29,8 @@ import {
   isScratchScriptPath,
   ownsBaselineRaise,
 } from "@builderforce/run-guards";
-import { isManifestPath, manifestRefusal } from "./composerCommands/manifestGate";
-import { runGitRaw } from "./git/gitCli";
+import { isManifestPath, manifestRefusal } from "../composerCommands/manifestGate";
+import { runGitRaw } from "./gitCli";
 import { messageOf } from "./messageOf";
 
 /** Runs `git <args>` in the call's directory and returns stdout, or undefined when git refused. */

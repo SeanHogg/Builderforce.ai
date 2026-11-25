@@ -10,7 +10,7 @@ import {
 import {
   installRunRecovery,
   type RunRecoveryHostContext,
-} from "./run/installRunRecovery";
+} from "./installRunRecovery";
 import {
   listInterruptedRuns,
   recordRunAcknowledged,
@@ -151,7 +151,7 @@ describe("installRunRecovery", () => {
   });
 
   it("fails if recoverInterruptedRuns is never called from installRunRecovery", () => {
-    const source = readFileSync(new URL("./run/installRunRecovery.ts", import.meta.url), "utf8")
+    const source = readFileSync(new URL("./installRunRecovery.ts", import.meta.url), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/^\s*\/\/.*$/gm, "");
     const start = source.indexOf("export function installRunRecovery");
