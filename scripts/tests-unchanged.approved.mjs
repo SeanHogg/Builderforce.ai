@@ -271,6 +271,102 @@ export const APPROVED_THIS_PUSH = [
     reason: "Mock repair, no behaviour change: modules on the cloud adapter's import path now read the registry at load (llm/vendors/modelTwins.ts calls getCatalog, llm/modelPoolComposition.ts calls autoRoutableModelsByTier), so the catalogEntry-only factory failed the suite before any case ran ('No \"getCatalog\" export is defined on the mock'). The fake the cases depend on (no catalog entry for the fake model) is kept.",
     approvedBy: APPROVED_BY,
   },
+  ...[
+    'brain-embedded/src/run/brainFold.deadline.test.ts',
+    'brain-embedded/src/run/foldParity.test.ts',
+    'brain-embedded/src/runStore/continueChat.test.ts',
+    'brain-embedded/src/runStore/continueClaim.test.ts',
+    'brain-embedded/src/runStore/continueStop.test.ts',
+    'brain-embedded/src/runStore/serverChat.test.ts',
+    'brain-embedded/src/runStore/startRun.settle.test.ts',
+    'brain-embedded/src/test/engineKit.ts',
+    'brain-embedded/src/useBrainConversation.test.tsx',
+    'brain-embedded/src/useChatTurns.draftStop.test.tsx',
+  ].map((file) => ({
+    file,
+    changed: "Every `startRun(...)` / `useBrainConversation(...)` call (and the engineKit scenario type) gains `entryPoint: 'vscode'`; no expectation changes.",
+    reason: "Intended change (a0c2321c6): `entryPoint` is now a required field of BrainRunRequest and of useBrainConversation's options, so each fixture names the door it runs through. A fixture field, no weakened assertion.",
+    approvedBy: APPROVED_BY,
+  })),
+  ...[
+    'packages/agent-run/test/channels/killedCommand.test.ts',
+    'packages/agent-run/test/cloud/cloudPolicy.test.ts',
+    'packages/agent-run/test/cloud/modelHandoff.test.ts',
+    'packages/agent-run/test/compaction/applyCompaction.test.ts',
+    'packages/agent-run/test/steering/notStartedRegistry.test.ts',
+    'packages/agent-run/test/support/policyContext.ts',
+    'packages/agent-run/test/telemetry/costTally.test.ts',
+    'packages/agent-run/test/telemetry/outcomeRow.test.ts',
+  ].map((file) => ({
+    file,
+    changed: "`freshState(policy, task)` becomes `freshState(policy)` at the fixture's call sites; no expectation changes.",
+    reason: "Intended change (2a9de14d9): freshState no longer takes the task (runState.ts), so the fixtures drop the argument. A signature follow-through, no weakened assertion.",
+    approvedBy: APPROVED_BY,
+  })),
+  ...[
+    'agent-runtime/src/conformance/crossAdapter.test.ts',
+    'brain-embedded/src/crossAdapterConformance.test.ts',
+    'brain-embedded/src/test/brainRunHarness.ts',
+  ].map((file) => ({
+    file,
+    changed: "The one entry call is `openRun` (was `runAgent`) and the expected trace is CONFORMANCE_ENTRY_TRACE (was CONFORMANCE_TRACE); the harness builds the model hook via createModelHook/recordedPreflight and passes `surface: { preflight }`. The expected trace is asserted exactly as before.",
+    reason: "Intended change (24d65d520, 5eb3411d6): the run entry point is openRun and its conformance trace is renamed for the entry-point door; the same adapters are compared against the same single trace.",
+    approvedBy: APPROVED_BY,
+  })),
+  ...[
+    'brain-embedded/src/run/conformance.test.ts',
+  ].map((file) => ({
+    file,
+    changed: "ENTRY_POINTS is `ALL_ENTRY_POINTS` from @builderforce/learned-routing (was the literal ['vscode', 'web', 'rovr']).",
+    reason: "Intended change (f2947bc38): the entry-point list has one owner so a new door is covered automatically; it covers at least the three doors it listed.",
+    approvedBy: APPROVED_BY,
+  })),
+  {
+    file: 'agent-runtime/src/run/channelOutcome.test.ts',
+    changed: "The scripted tool is `exec` running `npm test` (was `echo`) and the outcome row additionally expects `verify: \"passed\"`; every earlier field is asserted as before.",
+    reason: "Intended change (5eb3411d6): the channel outcome row now records a verify result derived from a completed test command, so the fixture's tool must be a command. An assertion is added, none loosened.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'agent-runtime/src/run/channelRebuild.test.ts',
+    changed: "The three Agents are built with `tools: [read]` (a stub `read` tool); no expectation changes.",
+    reason: "Mock repair (5eb3411d6): the rebuilt channel agent now requires a tool catalog, so the fixture supplies one.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'brain-embedded/src/run/parity/gates.test.ts',
+    changed: "The expected wire text is `builtin_reviews_record refused: no independently approved review exists for the current diff.` (was `no reviewGate-approved independent review exists for the current diff`).",
+    reason: "Intended change (2a9de14d9, shipGates.ts): the refusal names the tool and says 'independently approved'; the test still asserts the same refusal reaches the wire.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'brain-embedded/src/run/parity/oracle.files.txt',
+    changed: "`clients/vscode/src/nativeBrainRun.setup.test.ts` is replaced by `oneRunDoor.test.ts` and `participantRun.test.ts`.",
+    reason: "Intended change (5eb3411d6): nativeBrainRun was split and its setup tests moved into those two files, which are now in the oracle list.",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'clients/vscode/src/nativeBrainRun.setup.test.ts',
+    changed: "Deleted; its cases live in `oneRunDoor.test.ts` and `participantRun.test.ts` (both in the oracle list).",
+    reason: "Intended change (5eb3411d6): nativeBrainRun was split; the successor suites are larger (92 + 503 lines vs 169).",
+    approvedBy: APPROVED_BY,
+    cases: 5,
+  },
+  ...[
+    'clients/vscode/src/brainRunHost.entryPoint.test.ts',
+    'clients/vscode/src/brainRunHost.identityTimeout.test.ts',
+  ].map((file) => ({
+    file,
+    changed: "`transientRunPersistence` is imported from `./nativeRunStream` (was `./nativeBrainRun`) via a dynamic import.",
+    reason: "Import move (a0c2321c6) that the guard cannot normalise because it is a dynamic `await import`; no assertion changes.",
+    approvedBy: APPROVED_BY,
+  })),
+  {
+    file: 'packages/agent-loop/src/subagent.test.ts',
+    changed: "The sub-agent prompt expectation is /carry out your slice end to end/ (was /every tool your owner holds/) in two places; unverified-claim cases are added.",
+    reason: "Intended change (fbaa577bc, subagent.ts): the child prompt wording changed to 'Use the tools available in this run to carry out your slice end to end'; the test still pins that the prompt tells the child to do its slice.",
+    approvedBy: APPROVED_BY,
+  },
 ];
 
 export const APPROVED = [...APPROVED_PERMANENT, ...APPROVED_THIS_PUSH];
