@@ -29,6 +29,7 @@ import type { AttachmentIngressRequest } from "./attachmentIngress";
 import { composerCommandHost } from "./composerCommands/host";
 import type { ComposerCommandsInit } from "./composerCommands/reply";
 import { COMPOSER_COMMANDS_FRAME, type ComposerCommandsFrame } from "./bridgeProtocol";
+import { messageOf } from "./messageOf";
 
 /** Inbound messages unique to the workspace surface (the shared cases live in the bridge). */
 export interface BrainInbound extends WebviewInbound {
@@ -338,7 +339,7 @@ export class WorkspaceSurface implements vscode.Disposable {
             : undefined;
           this.respond(msg.id, true, rows ?? []);
         } catch (error) {
-          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+          this.respond(msg.id, false, undefined, messageOf(error));
         }
         break;
       // Scoped to the chat the surface is showing: several chats run at once out in the
@@ -355,7 +356,7 @@ export class WorkspaceSurface implements vscode.Disposable {
         } catch (error) {
           // Capture failures are user-facing ("open a file first"), so they belong in
           // the editor's own notification channel, not swallowed into the webview.
-          const detail = error instanceof Error ? error.message : String(error);
+          const detail = messageOf(error);
           void vscode.window.showWarningMessage(detail);
           this.respond(msg.id, false, undefined, detail);
         }
@@ -449,7 +450,7 @@ export class WorkspaceSurface implements vscode.Disposable {
           const provider = typeof msg.provider === "string" ? msg.provider : "";
           this.respond(msg.id, true, provider ? await testAccountFromEditor(this.ctx.secrets, provider) : null);
         } catch (error) {
-          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+          this.respond(msg.id, false, undefined, messageOf(error));
         }
         break;
       // The chat's pending-changes bar: open ONE changed file's diff, or take the
@@ -472,7 +473,7 @@ export class WorkspaceSurface implements vscode.Disposable {
         try {
           this.respond(msg.id, true, await detectPendingDiff());
         } catch (error) {
-          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+          this.respond(msg.id, false, undefined, messageOf(error));
         }
         break;
       // Run the existing connection-diagnostics command (opens the output channel).
@@ -508,7 +509,7 @@ export class WorkspaceSurface implements vscode.Disposable {
         try {
           this.respond(msg.id, true, await composerCommandHost(this.ctx).handle(typeof msg.text === "string" ? msg.text : ""));
         } catch (error) {
-          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+          this.respond(msg.id, false, undefined, messageOf(error));
         }
         break;
       // The panel's attachments, through the host so they reach the model: a text kept
@@ -518,7 +519,7 @@ export class WorkspaceSurface implements vscode.Disposable {
         try {
           this.respond(msg.id, true, await hostAttachmentIngress(this.ctx.secrets).handle(msg as AttachmentIngressRequest));
         } catch (error) {
-          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+          this.respond(msg.id, false, undefined, messageOf(error));
         }
         break;
       // An attachment's preview → Download: the host fetches the original (with the
@@ -527,7 +528,7 @@ export class WorkspaceSurface implements vscode.Disposable {
         try {
           this.respond(msg.id, true, await hostAttachmentDownload(this.ctx.secrets, msg as AttachmentDownloadRequest));
         } catch (error) {
-          this.respond(msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+          this.respond(msg.id, false, undefined, messageOf(error));
         }
         break;
       // Per-turn LIMBIC parity: the webview round-trips the turn's text here, where the
@@ -650,7 +651,7 @@ export class WorkspaceSurface implements vscode.Disposable {
         d.dispose();
       } catch (error) {
         // Reported, then the rest still dispose.
-        logLine(`[workspace] surface dispose: a disposable threw: ${error instanceof Error ? error.message : String(error)}`);
+        logLine(`[workspace] surface dispose: a disposable threw: ${messageOf(error)}`);
       }
     }
   }

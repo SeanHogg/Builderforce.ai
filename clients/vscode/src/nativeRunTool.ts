@@ -11,6 +11,7 @@ import { evaluatePolicyGate, toolCallPaths, type PolicyGate } from "@builderforc
 import { publishAllowed, publishVerbOf, type ShipPolicy } from "@builderforce/run-guards";
 import type { RunHooks } from "./hooks/runHooks";
 import type { NativeApprovalRequest, NativeRunEvents, NativeRunLabels } from "./nativeRunTypes";
+import { messageOf } from "./messageOf";
 
 /** Coerce a tool-call argument bag to a plain record. */
 export function argsRecord(value: unknown): Record<string, unknown> {
@@ -198,7 +199,7 @@ export function createNativeRunTool(opts: {
       const parsed = parseToolOutput(out);
       return opts.hooks ? opts.hooks.afterTool(resolved, record, parsed) : parsed;
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = messageOf(e);
       opts.events.onToolResult(`${label} — ${message}`, false);
       return { ok: false, error: message };
     }

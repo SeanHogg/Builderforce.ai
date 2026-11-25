@@ -9,6 +9,7 @@
 import * as vscode from "vscode";
 import type { KnowledgeIndexFiles } from "@builderforce/agent-tools/knowledge-index";
 import { logLine } from "../../errorReporter";
+import { messageOf } from "../../messageOf";
 import { getLocalModelsConfig } from "../../gateway";
 import { configureEditorEmbedder } from "./embedderPort";
 import { configureHostKnowledgeIndex, markKnowledgeFileChanged } from "./hostKnowledgeIndex";
@@ -40,7 +41,7 @@ export function activateKnowledgeIndex(): vscode.Disposable[] {
   configureHostKnowledgeIndex({
     workspaceRoots: () => (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath),
     files: workspaceIndexFiles(),
-    onError: (e) => logLine(`[knowledge-index] ${e instanceof Error ? e.message : String(e)}`),
+    onError: (e) => logLine(`[knowledge-index] ${messageOf(e)}`),
   });
   const changed = (fsPath: string): void => { if (knowledgeRunsAt(fsPath)) markKnowledgeFileChanged(fsPath); };
   return [

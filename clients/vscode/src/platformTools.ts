@@ -7,6 +7,7 @@ import { namesRunChat } from "./localTicketScope";
 import { toolMutating } from "./toolMutating";
 import { ttlCache } from "./ttlCache";
 import { describeNetworkError, retryOnConnectFailure } from "@seanhogg/builderforce-brain-embedded";
+import { messageOf } from "./messageOf";
 
 /**
  * Platform tools = the SHARED, server-side capability catalog (projects, tasks,
@@ -105,7 +106,7 @@ export async function runServerChatId(
   try {
     return (await identity.serverChatIdNow()) ?? identity.serverChatId;
   } catch (error) {
-    report(`[platform tools] reading the live server chat of local chat ${String(identity.localChatId)} failed; using the run's start binding (${String(identity.serverChatId)}): ${error instanceof Error ? error.message : String(error)}`);
+    report(`[platform tools] reading the live server chat of local chat ${String(identity.localChatId)} failed; using the run's start binding (${String(identity.serverChatId)}): ${messageOf(error)}`);
     return identity.serverChatId;
   }
 }

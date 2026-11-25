@@ -19,6 +19,7 @@ import { noteRunStep, type RunLineage } from "@seanhogg/builderforce-brain-embed
 import { collectedDataText, type CoverageStep } from "./childCoverage";
 import { CACHE_DIR, ensureIgnoredCacheDir } from "./ignoredCacheDir";
 import type { ChildRunHost } from "./childRunSpawner";
+import { messageOf } from "./messageOf";
 
 /** The sub-folder of the workspace cache the data files live in. */
 export const CHILD_DATA_SUBDIR = "subagents";
@@ -29,7 +30,7 @@ export const CHILD_DATA_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
 
 /** A failure caught here, recorded on the child's own trace — never swallowed. */
 export function noteChildFailure(key: number, label: string, error: unknown): void {
-  noteRunStep(key, { label, result: error instanceof Error ? error.message : String(error) });
+  noteRunStep(key, { label, result: messageOf(error) });
 }
 
 /** Save what the child's calls returned for its owner; the path, or undefined (reported on its trace when the save failed). */

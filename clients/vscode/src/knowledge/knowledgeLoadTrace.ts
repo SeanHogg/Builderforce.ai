@@ -12,6 +12,7 @@
 
 import type { KnowledgeHostLag, KnowledgeLoadInFlight, KnowledgeLoadPhase, KnowledgeLoadTrace, KnowledgeLoadTraceEntry } from "./knowledgeProtocol";
 import { startHostLag, type HostLagMonitor, type LagSampler } from "./review/reviewHostLag";
+import { messageOf } from "../messageOf";
 
 /** Finished calls kept. */
 export const TRACE_CAPACITY = 20;
@@ -132,7 +133,7 @@ export function createLoadTrace(opts: LoadTraceOptions = {}): LoadTraceRecorder 
         finish(result === null || result === undefined ? "null" : "ok");
         return result;
       } catch (error) {
-        finish("error", error instanceof Error ? error.message : String(error));
+        finish("error", messageOf(error));
         throw error;
       }
     },

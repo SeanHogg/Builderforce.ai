@@ -33,6 +33,7 @@ import type { EmbedderPort } from "@seanhogg/builderforce-memory/knowledge";
 import { knowledgeRootId } from "../knowledgeRoots";
 import { workspaceSymbolIndex } from "../../workspaceSymbols";
 import { editorEmbedder } from "./embedderPort";
+import { messageOf } from "../../messageOf";
 
 export type { HostKnowledgeIndex, HostKnowledgeIndexCore };
 export type { IndexHit, SimilarPair } from "@seanhogg/builderforce-memory/knowledge";
@@ -50,7 +51,7 @@ export interface EditorKnowledgeIndexConfig {
   onError?: (e: unknown) => void;
 }
 
-const warn = (e: unknown): void => console.warn(`[knowledge-index] ${e instanceof Error ? e.message : String(e)}`);
+const warn = (e: unknown): void => console.warn(`[knowledge-index] ${messageOf(e)}`);
 
 function build(config: EditorKnowledgeIndexConfig): KnowledgeIndexRegistry {
   const logError = config.onError ?? warn;

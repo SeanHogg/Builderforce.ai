@@ -38,6 +38,7 @@ import { desktopSemanticCapability } from "./desktopContext";
 import { createLocalShell } from "./localShell";
 import { SKIP_DIRS, searchWorkspace } from "./workspaceSearch";
 import { workspaceSymbolIndex } from "./workspaceSymbols";
+import { messageOf } from "./messageOf";
 
 // Bound the bytes pulled off disk per read. The shared `read_file` tool paginates the
 // returned content into line windows, and an oversized file returns a truncated PREFIX
@@ -245,7 +246,7 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
         try {
           start = resolveInRoot(rootResolved, scopeDir);
         } catch (e) {
-          return { ok: false, query, error: e instanceof Error ? e.message : String(e) };
+          return { ok: false, query, error: messageOf(e) };
         }
       }
       const ripgrep = options.ripgrep ? await options.ripgrep().catch(() => null) : null;

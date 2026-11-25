@@ -50,6 +50,7 @@ import { createChildRuns } from "./childRuns";
 import { createRunRelay } from "./runRelay";
 import { createLlmFailureLogger } from "./llmFailureLog";
 import { hostLog } from "./hostLog";
+import { messageOf } from "./messageOf";
 import { childControls, ownerFinishHold } from "./childRunSpawner";
 import { createChildRunHost, ownerOf, type RunSpec } from "./childRunHost";
 import { createChildApprovalRelay } from "./childApprovalRelay";
@@ -393,7 +394,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     } catch (e) {
       // The loop reports its own failures on the run cell; this is the rarer case of
       // the run never starting (the tool catalog or transport could not be built).
-      broadcast({ type: "run.failed", chatId: payload.chatId, error: e instanceof Error ? e.message : String(e) });
+      broadcast({ type: "run.failed", chatId: payload.chatId, error: messageOf(e) });
     }
   };
 
@@ -407,7 +408,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
     ...(ports.runSettings ? { subagentModel: async () => (await ports.runSettings!()).subagentModel } : {}),
     start: ports.startThrough ?? start,
     wakeFailed: (chatId, error) => {
-      broadcast({ type: "run.failed", chatId, error: error instanceof Error ? error.message : String(error) });
+      broadcast({ type: "run.failed", chatId, error: messageOf(error) });
     },
     isBusy,
     autoApproveOf,

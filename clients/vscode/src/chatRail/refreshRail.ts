@@ -19,6 +19,7 @@ import { readChatRunHistory, readChatTicketLinks, type BrainPersistenceAdapter, 
 import { linkRows, listedTickets, runRows, ticketRows, type WireRun, type WireTicket } from "./railRows";
 import type { ChatRailRefreshOutcome, ChatRef } from "./railProtocol";
 import { resolveChat } from "./resolveChat";
+import { messageOf } from "../messageOf";
 
 export interface RailRefreshPorts {
   /** Whether the platform may be read right now (the `connected-feature` capability). */
@@ -104,7 +105,7 @@ export async function refreshRail(
     tickets = await readChatTicketLinks<WireTicket>(expectList(ports.get, "tickets"), chat.serverId);
     runs = (await readChatRunHistory<{ runs: WireRun[] }>(expectList(ports.get, "runs"), chat.serverId))!.runs;
   } catch (error) {
-    return { status: "error", message: error instanceof Error ? error.message : String(error) };
+    return { status: "error", message: messageOf(error) };
   }
 
   const at = (ports.now ?? (() => new Date()))().toISOString();

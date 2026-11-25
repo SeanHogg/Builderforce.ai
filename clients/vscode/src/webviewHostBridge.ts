@@ -14,6 +14,7 @@ import { createLocalWorkRepository } from "./localWorkRepository";
 import { handleChatRailRequest } from "./chatRail/chatRailHost";
 import { signInToAccountProvider } from "./providerConnect";
 import { withFreshNonce } from "./webviewBundleShell";
+import { messageOf } from "./messageOf";
 
 /**
  * The host half of the webview bridge — the three things EVERY bundled-React
@@ -66,7 +67,7 @@ function publishPlatformPolicy(webview: vscode.Webview, frame: ReturnType<typeof
     void webview.postMessage(frame);
   } catch (error) {
     // A disposed webview throws on access. Forget it; the dispose hook may not have run yet.
-    logLine(`[webview] policy push dropped: ${error instanceof Error ? error.message : String(error)}`);
+    logLine(`[webview] policy push dropped: ${messageOf(error)}`);
     forgetWebview(webview);
   }
 }
@@ -99,7 +100,7 @@ function watchTicketProgress(ctx: vscode.ExtensionContext): void {
       try {
         void view.postMessage({ type: "refresh" });
       } catch (error) {
-        logLine(`[webview] ticket-progress refresh dropped: ${error instanceof Error ? error.message : String(error)}`);
+        logLine(`[webview] ticket-progress refresh dropped: ${messageOf(error)}`);
         forgetWebview(view);
       }
     }
@@ -241,7 +242,7 @@ export async function handleSharedHostMessage(
     try {
       assertPlatformSocketAllowed(socket);
     } catch (error) {
-      respondToWebview(webview, msg.id, false, undefined, error instanceof Error ? error.message : String(error));
+      respondToWebview(webview, msg.id, false, undefined, messageOf(error));
       return true;
     }
   }
@@ -280,7 +281,7 @@ export async function handleSharedHostMessage(
           tickets.map((t) => ({ id: t.id, title: t.payload.title, status: t.payload.status })),
         );
       } catch (error) {
-        logLine(`[webview] local.tickets failed: ${error instanceof Error ? error.message : String(error)}`);
+        logLine(`[webview] local.tickets failed: ${messageOf(error)}`);
         respondToWebview(webview, msg.id, true, []);
       }
       return true;
@@ -325,7 +326,7 @@ export async function handleSharedHostMessage(
       try {
         if (webview) webview.html = withFreshNonce(webview.html);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = messageOf(error);
         // `html` get/set throws on a disposed webview: the panel closed while the reload
         // was queued — expected, so logged only. Anything else is a real failure.
         if (/disposed/i.test(message)) logLine(`[webview] reload dropped: ${message}`);

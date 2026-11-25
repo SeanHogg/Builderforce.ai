@@ -1,5 +1,6 @@
 import { withinMs } from "./contextPack/withinMs";
 import { hostLog } from "./hostLog";
+import { messageOf } from "./messageOf";
 
 /**
  * How long ONE slow step of the panel's `init` (token, project names, personality, model
@@ -72,7 +73,7 @@ export function createInitBudget(onLate?: () => void, budgetMs: number = INIT_ST
       let settled = false;
       const landed = work.then(
         (value) => { settled = true; return answered(value); },
-        (error: unknown) => { settled = true; hostLog(`[init] ${name} failed: ${error instanceof Error ? error.message : String(error)}`); return false; },
+        (error: unknown) => { settled = true; hostLog(`[init] ${name} failed: ${messageOf(error)}`); return false; },
       );
       const value = await withinMs(work, budgetMs, fallback);
       if (!settled) {

@@ -14,6 +14,7 @@
 
 import { createHash } from "node:crypto";
 import { WORKSPACE_DIR } from "@seanhogg/builderforce-webcontainers/manifest";
+import { messageOf } from "../messageOf";
 
 /** Where in a run a hook fires. */
 export type HookEvent = "stop" | "preTool" | "postTool" | "runEnd";
@@ -73,7 +74,7 @@ export function parseHooksFile(raw: string): ParsedHooks {
   try {
     doc = JSON.parse(raw);
   } catch (e) {
-    return { hooks: [], problems: [`${HOOKS_FILE} is not valid JSON: ${e instanceof Error ? e.message : String(e)}`] };
+    return { hooks: [], problems: [`${HOOKS_FILE} is not valid JSON: ${messageOf(e)}`] };
   }
   const list = isRecord(doc) ? doc.hooks : undefined;
   if (!Array.isArray(list)) return { hooks: [], problems: [`${HOOKS_FILE} needs a top-level "hooks" array`] };

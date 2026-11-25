@@ -19,6 +19,7 @@
 import { availableParallelism, cpus } from "node:os";
 import { Worker } from "node:worker_threads";
 import { ExtractFailed, type ExtractJob, type ExtractJobResult, type ExtractPool } from "@seanhogg/builderforce-memory/knowledge";
+import { messageOf } from "../../messageOf";
 
 /** What the pool uses of a `worker_threads` Worker (a test hands in its own). */
 export interface PoolWorker {
@@ -163,7 +164,7 @@ export function createExtractPool(options: ExtractPoolOptions): ExtractPoolHandl
       finish(held, () => ("error" in reply ? held.reject(reply.final ? new ExtractFailed(reply.error) : new Error(reply.error)) : held.resolve(reply.result)));
       dispatch();
     });
-    worker.on("error", (error: unknown) => failSlot(slot, worker, `The extraction worker crashed: ${error instanceof Error ? error.message : String(error)}`));
+    worker.on("error", (error: unknown) => failSlot(slot, worker, `The extraction worker crashed: ${messageOf(error)}`));
     worker.on("exit", (code: number) => failSlot(slot, worker, `The extraction worker exited (code ${code}).`));
     return worker;
   };
@@ -193,7 +194,7 @@ export function createExtractPool(options: ExtractPoolOptions): ExtractPoolHandl
           }, jobTimeoutMs);
         }
       } catch (error) {
-        const reason = `The extraction worker could not start: ${error instanceof Error ? error.message : String(error)}`;
+        const reason = `The extraction worker could not start: ${messageOf(error)}`;
         const held = next;
         if (options.fallback) { slot.current = undefined; goDown(reason, held); return; }
         retire(slot);
@@ -234,7 +235,7 @@ export function createExtractPool(options: ExtractPoolOptions): ExtractPoolHandl
         try {
           start(slot);
         } catch (error) {
-          const reason = `The extraction worker could not start: ${error instanceof Error ? error.message : String(error)}`;
+          const reason = `The extraction worker could not start: ${messageOf(error)}`;
           if (options.fallback) { goDown(reason); return; }
         }
       }

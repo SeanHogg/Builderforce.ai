@@ -27,6 +27,7 @@ import { isUnsettledAnswer, parseSubagentOrigin, resumeStateOf, STOPPED_TURN_STE
 import type { RunHostMessage, RunSink } from "./brainRunHostProtocol";
 import type { InstalledRunRecovery } from "./installRunRecovery";
 import type { RunHold, RunTerminalStatus } from "./runRecovery";
+import { messageOf } from "./messageOf";
 
 /** The slice of a run snapshot the terminal-status decision reads. */
 export interface RunOutcomeSnapshot {
@@ -114,7 +115,7 @@ export function createHostRunLifecycle(deps: HostRunLifecycleDeps): HostRunLifec
   const live = new Map<number, { runId: string; startedAt: string; step: number; ask?: string }>();
   const now = deps.now ?? (() => new Date());
   const report = (what: string, runId: string) => (error: unknown): void => {
-    deps.log(`[run journal] ${what} ${runId} failed: ${error instanceof Error ? error.message : String(error)}`);
+    deps.log(`[run journal] ${what} ${runId} failed: ${messageOf(error)}`);
   };
   /** The terminal write, after the gate (if any) has decided. A gate that throws holds nothing. */
   const finish = async (runId: string, chatId: number, status: RunTerminalStatus): Promise<void> => {

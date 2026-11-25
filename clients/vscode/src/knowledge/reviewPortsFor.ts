@@ -36,6 +36,7 @@ import { sharedAnalysis } from "./l3SharedAnalysis";
 import { workspaceRunner } from "./l3Worker";
 import { editorJudgement, judgeConfigured } from "./knowledgeJudgement";
 import type { OpenRoot } from "./knowledgeService";
+import { messageOf } from "../messageOf";
 
 /** Longest the plan waits on a step it needs (the code layers, whether a judge is configured). */
 export const PLAN_STEP_MS = 10_000;
@@ -136,7 +137,7 @@ export function reviewPortsFor(deps: RootPortsDeps): RootPortsBuilder {
     once(() => boundedStep(work, runMs, {
       fallback,
       onTimeout: onTimeout(name),
-      ...(swallow ? { onFail: (error: unknown, elapsed: number) => log(name, `failed after ${elapsed}ms: ${error instanceof Error ? error.message : String(error)}`) } : {}),
+      ...(swallow ? { onFail: (error: unknown, elapsed: number) => log(name, `failed after ${elapsed}ms: ${messageOf(error)}`) } : {}),
     }));
 
   const caps = buildLocalCapabilityProvider(root.folderPath);
@@ -191,7 +192,7 @@ export function reviewPortsFor(deps: RootPortsDeps): RootPortsBuilder {
       boundedStep(work, planMs, {
         fallback,
         onTimeout: (elapsed) => log(name, `no answer after ${elapsed}ms; the plan goes on without it`),
-        onFail: (error, elapsed) => log(name, `failed after ${elapsed}ms: ${error instanceof Error ? error.message : String(error)}`),
+        onFail: (error, elapsed) => log(name, `failed after ${elapsed}ms: ${messageOf(error)}`),
       });
     const [parts, judge] = await Promise.all([
       boundedStep(partitions, planMs, { fallback: undefined, onTimeout: (elapsed) => log("partitions", `no answer after ${elapsed}ms; the plan goes on without them`) }),
@@ -215,7 +216,7 @@ export function reviewPortsFor(deps: RootPortsDeps): RootPortsBuilder {
       log("plan", `${root.rootPath}: ${files} files walked in ${walkMs}ms, ports ${portsMs}ms, manifest+diff ${Math.max(0, total - portsMs - walkMs)}ms, total ${total}ms`);
       return planned;
     } catch (error) {
-      log("plan failed", `${root.rootPath} after ${Date.now() - started}ms (${files} files walked): ${error instanceof Error ? error.message : String(error)}`);
+      log("plan failed", `${root.rootPath} after ${Date.now() - started}ms (${files} files walked): ${messageOf(error)}`);
       throw error;
     }
   }

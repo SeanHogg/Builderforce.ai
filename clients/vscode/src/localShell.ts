@@ -21,6 +21,7 @@ import { killJob, pollJob, startJob, type JobOwner } from "./localShellJobs";
 import { readOutput, retainOutput } from "./localShellOutputs";
 import { cachedResult, invalidateRunCache, rememberResult, shellCacheEffect, workspaceFingerprint } from "./localShellCache";
 import { withScratchEnv } from "./scratchDir";
+import { messageOf } from "./messageOf";
 
 // Bound a command's wall-clock + the output handed back to the model. Matches the cloud
 // Container's COMMAND_TIMEOUT_MS (api/container/server.mjs) — a build/type-check/test
@@ -126,7 +127,7 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
       // Every command sees the run's scratch directory (`$BF_SCRATCH_DIR`, `scratchDir.ts`): throwaway scripts go there, not the repo.
       child = spawnCommand(withPipefail(command, bash, process.platform), bash, { cwd: dir, env: { ...process.env, ...withScratchEnv(owner, options.env) } });
     } catch (e) {
-      return { ok: false, exitCode: 1, stdout: e instanceof Error ? e.message : String(e) };
+      return { ok: false, exitCode: 1, stdout: messageOf(e) };
     }
     let overflowed = false;
     const exited = collect(child, () => {

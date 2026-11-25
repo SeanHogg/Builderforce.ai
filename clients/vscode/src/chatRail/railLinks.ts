@@ -16,6 +16,7 @@ import { linkTierFields, ticketMappingOf } from "./railPayloads";
 import type { ChatRailMutationOutcome, ChatRef, RailLinkType, RailTicketRef } from "./railProtocol";
 import { ticketRows } from "./railRows";
 import { resolveChat, type ResolvedChat } from "./resolveChat";
+import { messageOf } from "../messageOf";
 
 export interface RailLinkPorts {
   deviceId: string;
@@ -26,7 +27,7 @@ export interface RailLinkPorts {
 
 function failure(error: unknown): ChatRailMutationOutcome {
   const code = (error as { code?: unknown })?.code;
-  return { ok: false, error: typeof code === "string" ? code : error instanceof Error ? error.message : String(error) };
+  return { ok: false, error: typeof code === "string" ? code : messageOf(error) };
 }
 
 /** The local ticket a `(kind, ref)` names, or undefined when the device has none. */

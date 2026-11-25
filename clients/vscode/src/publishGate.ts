@@ -30,6 +30,7 @@ import {
   ownsBaselineRaise,
 } from "@builderforce/run-guards";
 import { runGitRaw } from "./gitCli";
+import { messageOf } from "./messageOf";
 
 /** Runs `git <args>` in the call's directory and returns stdout, or undefined when git refused. */
 export type GitRunner = (args: string) => Promise<string | undefined>;
@@ -153,7 +154,7 @@ const EDITOR_DEPS: GateDeps = {
     } catch (err) {
       // A file that vanished between `ls-files` and the read has nothing to judge; anything else is said.
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        console.warn(`[builderforce] publish gate: could not read ${absPath}: ${err instanceof Error ? err.message : String(err)}`);
+        console.warn(`[builderforce] publish gate: could not read ${absPath}: ${messageOf(err)}`);
       }
       return undefined;
     }

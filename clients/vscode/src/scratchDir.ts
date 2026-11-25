@@ -10,6 +10,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { messageOf } from "./messageOf";
 
 /** The environment variable a command reads its scratch directory from. */
 export const SCRATCH_DIR_ENV = "BF_SCRATCH_DIR";
@@ -24,7 +25,7 @@ export function scratchDirFor(owner: number | string | undefined): string {
     fs.mkdirSync(dir, { recursive: true });
   } catch (err) {
     // The variable still names the folder; a command that writes there reports the failure itself.
-    console.warn(`[builderforce] could not create the scratch directory ${dir}: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(`[builderforce] could not create the scratch directory ${dir}: ${messageOf(err)}`);
   }
   return dir;
 }

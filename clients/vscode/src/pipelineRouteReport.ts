@@ -30,6 +30,7 @@ import { MIN_QUICK_RUNS_FOR_SUGGESTION, type RouteTotals } from "@builderforce/p
 import { MILLICENTS_PER_USD } from "@builderforce/spend-contract";
 import { localBrainApplication } from "./localFirstStore";
 import { ensureWorkspaceDirs, workspacePaths } from "./workspace/workspacePaths";
+import { messageOf } from "./messageOf";
 
 export const PIPELINE_ROUTE_REPORT_COMMAND = "builderforce.pipelineRouteReport";
 /** The window the report reads. */
@@ -192,7 +193,7 @@ export function registerPipelineRouteReport(ctx: vscode.ExtensionContext): void 
   ctx.subscriptions.push(
     vscode.commands.registerCommand(PIPELINE_ROUTE_REPORT_COMMAND, () =>
       showRouteReport(ctx).catch((e: unknown) => {
-        void vscode.window.showErrorMessage(vscode.l10n.t("The pipeline route report could not be built: {0}", e instanceof Error ? e.message : String(e)));
+        void vscode.window.showErrorMessage(vscode.l10n.t("The pipeline route report could not be built: {0}", messageOf(e)));
       }),
     ),
   );

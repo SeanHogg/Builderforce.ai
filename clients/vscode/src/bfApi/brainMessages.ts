@@ -3,6 +3,7 @@ import type { BrainMessage, EvermindLearnOutcome } from "@seanhogg/builderforce-
 import { registerDeadLetterQueue } from "../deadLetterCommand";
 import { createDurableOutbox, outboxSecrets, scopeTenantId } from "../outboxStorage";
 import { authed } from "./transport";
+import { messageOf } from "../messageOf";
 
 /** One turn row as the messages endpoint takes it. `eventKey` is its idempotency key. */
 interface BrainMessageInput {
@@ -106,7 +107,7 @@ async function postBrainMessages(
       if (!r) return { ok: false, signedOut: true, reason: "not signed in" };
       return { ok: true, messages: r.messages ?? [], ...(r.evermindLearn ? { evermindLearn: r.evermindLearn } : {}) };
     } catch (e) {
-      last = e instanceof Error ? e.message : String(e);
+      last = messageOf(e);
       const code = (e as { status?: unknown } | null)?.status;
       status = typeof code === "number" ? code : undefined;
       if (!isRetriableWrite(e)) break;

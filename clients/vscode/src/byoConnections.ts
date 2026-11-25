@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { LLM_PROVIDER_INFO } from "@builderforce/model-catalog";
 import * as bfApi from "./bfApi";
+import { messageOf } from "./messageOf";
 import { connectProviderInteractively, editorAccounts } from "./providerConnect";
 import { testAccountFromEditor } from "./localAccountTest";
 
@@ -86,7 +87,7 @@ async function addProviderWithKey(
       return true;
     }
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = messageOf(e);
     void vscode.window.showErrorMessage(
       vscode.l10n.t("BuilderForce: could not connect {0} ({1}).", info.label, message),
     );
@@ -141,7 +142,7 @@ async function testConnection(secrets: vscode.SecretStorage, provider: bfApi.Byo
       );
     }
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = messageOf(e);
     void vscode.window.showErrorMessage(
       vscode.l10n.t("BuilderForce: could not test {0} ({1}).", label, message),
     );
@@ -169,7 +170,7 @@ async function removeConnection(secrets: vscode.SecretStorage, provider: bfApi.B
       );
     }
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = messageOf(e);
     void vscode.window.showErrorMessage(
       vscode.l10n.t("BuilderForce: could not disconnect {0} ({1}).", label, message),
     );
@@ -205,7 +206,7 @@ export async function manageByoConnections(secrets: vscode.SecretStorage): Promi
   try {
     providers = await bfApi.listByoProviders(secrets);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = messageOf(e);
     void vscode.window.showErrorMessage(
       /HTTP 403/.test(message)
         ? vscode.l10n.t("BuilderForce: only a workspace owner can manage connections.")

@@ -10,6 +10,7 @@
 
 import { stopIntent } from "@builderforce/run-guards";
 import type { BrainRunHost } from "./brainRunHostContract";
+import { messageOf } from "./messageOf";
 
 type Gated = Pick<BrainRunHost, "start" | "stop" | "steer" | "steerTurns">;
 type StartPayload = Parameters<BrainRunHost["start"]>[0];
@@ -17,7 +18,7 @@ type StartPayload = Parameters<BrainRunHost["start"]>[0];
 /** The gate failed before calling the host, so its queued direction has not been admitted. */
 export class HostStartSetupError extends Error {
   constructor(cause: unknown, readonly stopped: boolean) {
-    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    super(messageOf(cause), { cause });
   }
 }
 

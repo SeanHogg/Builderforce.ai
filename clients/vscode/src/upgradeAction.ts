@@ -2,6 +2,7 @@ import { chatErrorAction, type ChatErrorAction } from "@seanhogg/builderforce-br
 import * as vscode from "vscode";
 import { getWebBaseUrl } from "./gateway";
 import { noLocalModelMessage } from "./noLocalModelPrompt";
+import { messageOf } from "./messageOf";
 
 /**
  * Turn an entitlement failure into somewhere the user can actually GO — the host
@@ -66,7 +67,7 @@ export function upgradeActionForVerdict(action: ChatErrorAction | null): Upgrade
  * exactly as it did before.
  */
 export function formatChatError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = messageOf(error);
   return formatChatErrorVerdict(message, chatErrorAction(error));
 }
 

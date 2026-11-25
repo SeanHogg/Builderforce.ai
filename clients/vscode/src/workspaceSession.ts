@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as bfApi from "./bfApi";
 import { currentCapabilityInputs } from "./capabilityContext";
 import { networkDenied } from "./capabilityStates";
+import { messageOf } from "./messageOf";
 
 /**
  * THE BOARD THIS EDITOR WORKS IN.
@@ -95,7 +96,7 @@ export async function workspaceCanvasSession(
     void vscode.window.showWarningMessage(
       vscode.l10n.t(
         "BuilderForce: could not load your Canvas sessions ({0}). Showing a local board — your conversation is unaffected.",
-        error instanceof Error ? error.message : String(error),
+        messageOf(error),
       ),
     );
     return localSession(ctx);

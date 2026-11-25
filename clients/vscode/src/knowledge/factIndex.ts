@@ -29,6 +29,7 @@ import {
   type FactChange, type FactGraph, type FactKind, type FactRule, type FileFacts, type Finding, type MountFact, type RuleTraceEntry,
 } from "@seanhogg/builderforce-memory/knowledge";
 import type { FactGraphStore } from "./factGraphStore";
+import { messageOf } from "../messageOf";
 
 /**
  * A restored file's raw facts with its raw candidate mounts back in place: each candidate's registration `order` names
@@ -218,7 +219,7 @@ export class FactIndex {
         this.opts.log?.(`facts ${path}`, error);
         // A producer bug the same bytes always repeat (`file_facts_invalid_order`): a FINAL failure of this file — it has
         // no facts at this hash. Anything else (`facts_grammar_unavailable`, a read) is transient: left un-applied, retried.
-        if (FINAL_FACTS_ERRORS.test(error instanceof Error ? error.message : String(error))) { rawChanged.set(path, null); applied.set(path, hash); }
+        if (FINAL_FACTS_ERRORS.test(messageOf(error))) { rawChanged.set(path, null); applied.set(path, hash); }
       }
     });
     const listingMoved = listingBefore.size !== this.listing.size || [...this.listing].some((p) => !listingBefore.has(p));

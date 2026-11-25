@@ -527,7 +527,6 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 
 ### Code health `[platform]`
 
-- **[vscode] About 60 inline copies of `error instanceof Error ? error.message : String(error)` remain in `clients/vscode/src`** (in `workspaceSurface`, `webviewHostBridge`, `brainRunHost`, `knowledge/*`, `childRunSpawner` and others). The `/launch <path>` pass (2026-11-25) made `clients/vscode/src/messageOf.ts` the one helper and moved the named twins to it. Sweep the inline expressions onto it as well, so error wording has one owner.
 
 - **The API has no await-in-loop check and no per-route latency or query instrumentation.** Add both; add cursors and `pg_trgm` only where those measurements show the need. [platform.md › PRD 22](./docs/specs/platform.md#12-backend-speed-and-execution-controls).
 - **No reuse census of frontend interaction patterns** (async state, dialogs, forms, filters, tables). Check one in, then extend `components/ui` one feature slice at a time. [platform.md › PRD 22](./docs/specs/platform.md#118-reusable-frontend-component-program).

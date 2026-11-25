@@ -24,6 +24,7 @@ import {
   type LocalDeviceSupport,
 } from "@builderforce/local-inference";
 import type { FileModelStore } from "./modelFiles";
+import { messageOf } from "../messageOf";
 
 /** Bonsai 4B (572 MB) is the largest row downloaded without being asked. */
 export const AUTO_PROVISION_MAX_BYTES = 600_000_000;
@@ -87,7 +88,7 @@ export function createModelProvisioner(deps: ProvisionDeps): ModelProvisioner {
       await deps.store.download(model.ref, (fraction) => deps.report({ kind: "progress", fraction }), abort.signal);
     } catch (e) {
       deps.report(
-        abort.signal.aborted ? { kind: "cancelled", model } : { kind: "failed", model, error: e instanceof Error ? e.message : String(e) },
+        abort.signal.aborted ? { kind: "cancelled", model } : { kind: "failed", model, error: messageOf(e) },
       );
       return;
     }

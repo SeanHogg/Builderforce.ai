@@ -19,6 +19,7 @@ import { isFailedToolResult, type RunStopHook, type RunStopInput } from "@seanho
 import type { ShellResult } from "@builderforce/agent-tools";
 import { DIRECTIVES_DIR, HOOKS_FILE, appliesToRun, matchesTool, type HookEvent, type WorkspaceHook } from "./hookConfig";
 import type { LocalShellOptions } from "../localShell";
+import { messageOf } from "../messageOf";
 
 /** The hooks of one run, as the run's seams call them. */
 export interface RunHooks {
@@ -83,7 +84,7 @@ export function createRunHooks(opts: RunHooksOptions): RunHooks {
     opts.shell(hook.command!, {
       timeoutMs: hook.timeoutMs,
       env: { BUILDERFORCE_HOOK_EVENT: hook.on, BUILDERFORCE_HOOK_ID: hook.id, ...env },
-    }).catch((e: unknown) => ({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+    }).catch((e: unknown) => ({ ok: false, error: messageOf(e) }));
 
   const toolEnv = (name: string, args: Record<string, unknown>): Record<string, string> => ({
     BUILDERFORCE_TOOL_NAME: name,

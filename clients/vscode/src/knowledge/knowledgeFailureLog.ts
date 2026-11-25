@@ -7,6 +7,7 @@
  */
 
 import type { KnowledgeEvent } from "./knowledgeProtocol";
+import { messageOf } from "../messageOf";
 
 export interface ReviewFailureContext {
   /** Which step failed: planning, or the confirmed run. */
@@ -32,7 +33,7 @@ const detailOf = (error: unknown): string => (error instanceof Error ? error.sta
 
 /** Logs the failure (timestamp, root, review, phase, message, stack) and returns what the view is sent. */
 export function logReviewFailure(sink: FailureSink, ctx: ReviewFailureContext, error: unknown): Pick<FailedEvent, "error" | "detail" | "host" | "rootPath"> {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = messageOf(error);
   const detail = detailOf(error);
   const at = (sink.now?.() ?? new Date()).toISOString();
   sink.log(

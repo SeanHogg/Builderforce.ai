@@ -37,6 +37,7 @@ import type { KnowledgeFixResult } from "./knowledgeProtocol";
 import { runShell } from "./knowledgeShell";
 import { fixText } from "./knowledgeFixText";
 import { snapshotFix, type FixSnapshot } from "./knowledgeFixUndo";
+import { messageOf } from "../messageOf";
 
 /** One codemod: what it does to the work tree for a finding whose files are `wanted`. Validation that needs no git runs in `prepare`, before the lock. */
 interface Codemod {
@@ -210,7 +211,7 @@ async function fix(ports: FixPorts, wanted: ReadonlySet<string>, apply: (ports: 
     }
   }
   if (restoreError !== undefined) {
-    const why = restoreError instanceof Error ? restoreError.message : String(restoreError);
+    const why = messageOf(restoreError);
     await leaveBranch().catch(() => undefined);
     throw new Error(fixText.notUndoneCleanly(why));
   }
@@ -243,7 +244,7 @@ async function fix(ports: FixPorts, wanted: ReadonlySet<string>, apply: (ports: 
     } catch (error) {
       // No undo record: never leave the fix applied on its branch. Revert it, then ALWAYS try to
       // go back and drop the branch; the message says what actually happened.
-      const why = error instanceof Error ? error.message : String(error);
+      const why = messageOf(error);
       let revertError: unknown;
       let back = false;
       try {
@@ -254,7 +255,7 @@ async function fix(ports: FixPorts, wanted: ReadonlySet<string>, apply: (ports: 
         back = await abandonBranch().catch(() => false);
       }
       const message = revertError !== undefined
-        ? fixText.notRecordedRevertFailed(why, revertError instanceof Error ? revertError.message : String(revertError))
+        ? fixText.notRecordedRevertFailed(why, messageOf(revertError))
         : !branch
           ? fixText.notRecordedReverted(why)
           : back

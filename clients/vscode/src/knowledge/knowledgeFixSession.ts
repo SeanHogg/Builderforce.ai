@@ -25,6 +25,7 @@ import { undoSnapshot, UndoPartial, type FixSnapshot } from "./knowledgeFixUndo"
 import { previewOf, runKnipReport, stillReported } from "./knowledgeKnipReport";
 import type { KnowledgeCheckReply, KnowledgeFixPreview, KnowledgeFixResult } from "./knowledgeProtocol";
 import { DETAIL_CAP, ShellFailure } from "./knowledgeShell";
+import { messageOf } from "../messageOf";
 
 export interface FixSessionHost {
   trusted(): boolean;
@@ -154,7 +155,7 @@ export class KnowledgeFixSession {
       return preview;
     } catch (error) {
       this.previews.delete(slot);
-      (this.host.log ?? console.warn)(`[knowledge fix] knip preview failed for ${rootPath}: ${error instanceof Error ? error.message : String(error)}`);
+      (this.host.log ?? console.warn)(`[knowledge fix] knip preview failed for ${rootPath}: ${messageOf(error)}`);
       return null;
     }
   }
@@ -190,7 +191,7 @@ export class KnowledgeFixSession {
         const left = stillReported(await runKnipReport(rootPath, signal), finding.kind, filesOf(rootId, finding), exportNameOf(finding));
         return left.length === 0 ? { status: "pass" } : { status: "fail", detail: fixText.rescanStill(left.join(", ")).slice(0, DETAIL_CAP) };
       } catch (error) {
-        const why = error instanceof ShellFailure ? `${error.message}${error.output ? `\n${error.output}` : ""}` : error instanceof Error ? error.message : String(error);
+        const why = error instanceof ShellFailure ? `${error.message}${error.output ? `\n${error.output}` : ""}` : messageOf(error);
         return { status: "fail", detail: why.slice(-DETAIL_CAP) };
       }
     });

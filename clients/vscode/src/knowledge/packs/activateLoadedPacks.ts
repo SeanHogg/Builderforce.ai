@@ -10,6 +10,7 @@
  */
 
 import { logLine } from "../../errorReporter";
+import { messageOf } from "../../messageOf";
 import { configureLoadedPacks, type PackMemento } from "./loadedPackRegistry";
 import { configurePackErrors, reindexLoadedPacks } from "./packIndexing";
 
@@ -17,7 +18,7 @@ export function activateLoadedPacks(state: PackMemento): void {
   configureLoadedPacks(state);
   // One reporter for the lazy re-index and for every later recall of a pack.
   configurePackErrors((what, error) =>
-    logLine(`[knowledge] ${what}: ${error instanceof Error ? error.message : String(error)}`),
+    logLine(`[knowledge] ${what}: ${messageOf(error)}`),
   );
   // Lazily: the first pack recall, or the first Visualizer session, re-indexes the remembered
   // packs — never activation itself. No `await`: a missing file is a log line, not a failure.

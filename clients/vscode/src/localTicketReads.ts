@@ -21,6 +21,7 @@ import { railProgressKind, railTicketProgress } from "./chatRail/railPayloads";
 import type { ToolDef } from "./fileTools";
 import { isLocalId } from "@builderforce/local-first";
 import type { ChatTicketScope, UnsyncedTicket } from "./localTicketScope";
+import { messageOf } from "./messageOf";
 
 type Args = Record<string, unknown>;
 type ReadAdapter = (args: Args, server: () => Promise<string>, scope: ChatTicketScope) => Promise<string>;
@@ -59,7 +60,7 @@ async function serverRead(server: () => Promise<string>): Promise<{ body: Args }
       return { error: text };
     }
   } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) };
+    return { error: messageOf(error) };
   }
 }
 

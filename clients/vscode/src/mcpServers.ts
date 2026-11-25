@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as bfApi from "./bfApi";
 import { clearPlatformToolsCache } from "./platformTools";
+import { messageOf } from "./messageOf";
 
 /**
  * Register a bring-your-own MCP server from the editor.
@@ -88,7 +89,7 @@ export async function manageMcpServers(secrets: vscode.SecretStorage): Promise<v
   try {
     servers = await bfApi.listMcpExtensions(secrets);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = messageOf(e);
     // 403 is the owner gate, and saying so is more useful than the raw status.
     void vscode.window.showErrorMessage(
       /HTTP 403/.test(message)
@@ -130,7 +131,7 @@ export async function manageMcpServers(secrets: vscode.SecretStorage): Promise<v
     const server = servers.find((s) => s.id === pick.id);
     if (server) await offerConnect(secrets, server);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = messageOf(e);
     void vscode.window.showErrorMessage(
       /HTTP 403/.test(message)
         ? vscode.l10n.t("BuilderForce: only a workspace owner can manage MCP servers.")

@@ -11,6 +11,7 @@ import { fetchAuthed } from "./bfApi";
 import { downloadAttachment, type AttachmentDownloadRequest } from "./attachmentDownload";
 import { ATTACHMENT_DOWNLOAD_MAX_BYTES } from "./attachmentLimits";
 import { logLine } from "./errorReporter";
+import { messageOf } from "./messageOf";
 import { getBaseUrl } from "./gateway";
 
 /**
@@ -39,7 +40,7 @@ async function fetchOwnAttachment(secrets: vscode.SecretStorage, path: string, n
           // An attachment path only (the caller checked it), and never followed elsewhere.
           res = await fetchAuthed(secrets, path, { method: "GET", redirect: "error", signal });
         } catch (e) {
-          logLine(`[download] ${name} failed: ${e instanceof Error ? e.message : String(e)}`);
+          logLine(`[download] ${name} failed: ${messageOf(e)}`);
           throw new Error(unreachable(name));
         }
         if (!res) throw new Error(vscode.l10n.t("Sign in to BuilderForce to download {0}.", name));
@@ -53,7 +54,7 @@ async function fetchOwnAttachment(secrets: vscode.SecretStorage, path: string, n
           // The body is read under the same signal: a stalled or cancelled read ends in the person's sentence.
           return new Uint8Array(await res.arrayBuffer());
         } catch (e) {
-          logLine(`[download] ${name} body read failed: ${e instanceof Error ? e.message : String(e)}`);
+          logLine(`[download] ${name} body read failed: ${messageOf(e)}`);
           throw new Error(cancel.signal.aborted ? couldNotDownload(name, vscode.l10n.t("the download was cancelled.")) : unreachable(name));
         }
       } finally {

@@ -33,6 +33,7 @@ import { gatewaySummaryCompletion } from "./chatSummarizer";
 import { pruneRailReadMarkOnDelete } from "./chatRail/refreshRail";
 import { mergeLocalTicketSummaries } from "./chatRail/localTicketSummary";
 import { hostLog } from "./hostLog";
+import { messageOf } from "./messageOf";
 
 /** The durable store over this extension's global storage. */
 export function createVsCodeLocalFirstStore(
@@ -42,7 +43,7 @@ export function createVsCodeLocalFirstStore(
   return createDurableLocalFirstStore(ctx.globalStorageUri.fsPath, {
     beforeWrite,
     onSlowCommit: (ms, frameBytes) => hostLog(`[local-first] slow commit: ${ms} ms, ${frameBytes} byte frame`),
-    onBackgroundError: (error) => hostLog(`[local-first] ${error instanceof Error ? error.message : String(error)}`),
+    onBackgroundError: (error) => hostLog(`[local-first] ${messageOf(error)}`),
   });
 }
 

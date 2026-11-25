@@ -8,6 +8,7 @@ import { parentPort } from "node:worker_threads";
 import { isOverBudget, postBounded } from "../workers/boundedTransfer";
 import { RUN_DELTA_ARRAYS, RUN_DELTA_OVER_BUDGET, type DeltaWorkerReply } from "./deltaWorkerProtocol";
 import { computePrepared, type PreparedDelta } from "./preparedPorts";
+import { messageOf } from "../messageOf";
 
 const send = (reply: DeltaWorkerReply): void => parentPort?.postMessage(reply);
 
@@ -17,10 +18,10 @@ parentPort?.once("message", (prepared: PreparedDelta) => {
       try {
         send({ type: "ok", delta: postBounded(send, delta, RUN_DELTA_ARRAYS) });
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = messageOf(error);
         send(isOverBudget(error) ? { type: "error", error: `${RUN_DELTA_OVER_BUDGET}: ${message}`, code: RUN_DELTA_OVER_BUDGET } : { type: "error", error: message });
       }
     },
-    (error: unknown) => send({ type: "error", error: error instanceof Error ? error.message : String(error) }),
+    (error: unknown) => send({ type: "error", error: messageOf(error) }),
   );
 });

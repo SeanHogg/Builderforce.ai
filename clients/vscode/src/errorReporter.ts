@@ -4,6 +4,7 @@ import { classifyQueue, isDurableUserWorkQueue, isTelemetryQueue } from "@builde
 import { authedRaw, isWorkspaceParked } from "./bfApi";
 import { createDurableOutbox, outboxSecrets, scopeTenantId } from "./outboxStorage";
 import { getSelectedProject } from "./projectState";
+import { messageOf } from "./messageOf";
 
 /**
  * The extension's ONE log surface, and its OPT-IN path to the platform's error store.
@@ -151,7 +152,7 @@ export async function reportExtensionError(
   error: unknown,
   details: ExtensionErrorDetails,
 ): Promise<void> {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = messageOf(error);
   logLine(`[${details.operation}] ${message}`);
 
   // Expected and self-healing (the selected workspace's re-scope is parked): logged, never filed.

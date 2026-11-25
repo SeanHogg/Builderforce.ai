@@ -23,11 +23,12 @@ import { getApiKey } from "./gateway";
 import type { PolicyGate } from "@builderforce/agent-tools";
 import { DEFAULT_SHIP_POLICY, narrowShipPolicy, type ShipPolicy } from "@builderforce/run-guards";
 import { snapshotPermitsOfflineRun, type PolicySnapshotValue } from "./policySnapshots";
+import { messageOf } from "./messageOf";
 
 /** Raised when a tenant's gates could not be resolved — the run must not start. */
 export class PolicyGatesUnavailableError extends Error {
   constructor(cause: unknown) {
-    super(`policy gates unavailable: ${cause instanceof Error ? cause.message : String(cause)}`);
+    super(`policy gates unavailable: ${messageOf(cause)}`);
     this.name = "PolicyGatesUnavailableError";
   }
 }

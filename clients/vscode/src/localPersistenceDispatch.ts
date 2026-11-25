@@ -12,6 +12,7 @@
  */
 import { submitLocalTurnVerdict } from "@seanhogg/builderforce-brain-embedded";
 import { isLocalPersistenceMethod } from "./bridgeProtocol";
+import { messageOf } from "./messageOf";
 
 /** Refusal sentence for a `local.persistence` method the host cannot run. */
 export const UNKNOWN_PERSISTENCE_METHOD = "Unsupported local persistence operation";
@@ -35,7 +36,7 @@ export async function callLocalPersistence(
     if (method === "setMessageFeedback") submitRatingVerdict(list[2]);
     return { ok: true, result };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    return { ok: false, error: messageOf(error) };
   }
 }
 

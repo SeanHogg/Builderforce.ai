@@ -14,12 +14,13 @@ import * as path from "node:path";
 import { parentPort } from "node:worker_threads";
 import { registerBundledAnalyzers } from "../bundledAnalyzers";
 import { postResult, runL3Job, type L3Job, type L3WorkerReply } from "./l3WorkerJob";
+import { messageOf } from "../messageOf";
 
 const port = parentPort;
 if (!port) throw new Error("knowledgeL3Worker must run in a worker thread");
 
 const send = (reply: L3WorkerReply): void => port.postMessage(reply);
-const fail = (error: unknown): void => send({ type: "error", error: error instanceof Error ? error.message : String(error) });
+const fail = (error: unknown): void => send({ type: "error", error: messageOf(error) });
 
 port.once("message", (job: L3Job) => {
   // The analyzers ship in `out/analyzers`, beside this bundle: a worker has its own module state, so it registers them itself.

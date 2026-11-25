@@ -23,6 +23,7 @@
 
 import { isOverBudget } from "../workers/boundedTransfer";
 import { hostMemento } from "./knowledgeSyncStatus";
+import { messageOf } from "../messageOf";
 
 /** The command that lifts a root's quarantine and asks for L3 again (`l3RetryCommand.ts`). */
 export const L3_RETRY_COMMAND = "builderforce.knowledge.retryAnalyzers";
@@ -153,7 +154,7 @@ export class L3CrashGuard {
   async end(sha: string | null, error?: unknown): Promise<void> {
     this.running = Math.max(0, this.running - 1);
     if (error !== undefined && isPermanentL3Failure(error)) {
-      await this.quarantine({ sha, at: this.seams.now(), reason: "permanent-failure", detail: error instanceof Error ? error.message : String(error) });
+      await this.quarantine({ sha, at: this.seams.now(), reason: "permanent-failure", detail: messageOf(error) });
     }
     if (this.running === 0) await this.write(l3InFlightKey(this.rootId), undefined);
   }

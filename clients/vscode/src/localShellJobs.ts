@@ -20,6 +20,7 @@ import { killProcessTree, spawnCommand } from "./processTree";
 import { forgetRunOutputs, retainOutput } from "./localShellOutputs";
 import { invalidateRunCache } from "./localShellCache";
 import { isSubAgentHandle } from "./childRuns";
+import { messageOf } from "./messageOf";
 
 /** The run a job belongs to; `undefined` = a caller with no run (a hook, a test). */
 export type JobOwner = number | undefined;
@@ -101,7 +102,7 @@ export function startJob(command: string, opts: StartJobOptions): ShellJobStart 
       ...(opts.env ? { env: { ...process.env, ...opts.env } } : {}),
     });
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    return { ok: false, error: messageOf(e) };
   }
   const owner = opts.owner;
   const n = (nextJobOf.get(owner) ?? 0) + 1;

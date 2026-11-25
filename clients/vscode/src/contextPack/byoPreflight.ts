@@ -14,6 +14,7 @@ import type * as vscode from "vscode";
 import { authed, getCurrentWorkspace } from "../bfApi";
 import { ttlCache } from "../ttlCache";
 import { logLine } from "../errorReporter";
+import { messageOf } from "../messageOf";
 import type { ModelPreflightResult } from "@seanhogg/builderforce-brain-embedded";
 import { preflightFallback, unresolvedByoEntries, type ProviderHealth } from "./byoPreflightVerdict";
 
@@ -60,7 +61,7 @@ export async function byoPreflight(secrets: vscode.SecretStorage, deadlineMs: nu
   });
   // A body that fails after the deadline has nobody to tell: its failure is "no notice".
   const body = preflightBody(secrets).catch((e: unknown) => {
-    logLine(`BYO preflight failed — no notice for this run: ${e instanceof Error ? e.message : String(e)}`);
+    logLine(`BYO preflight failed — no notice for this run: ${messageOf(e)}`);
     return undefined;
   });
   try {

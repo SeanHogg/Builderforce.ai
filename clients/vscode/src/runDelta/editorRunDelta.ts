@@ -31,6 +31,7 @@ import type { RunEndDeps } from "./atRunEnd";
 import { readRunPredictions, withPredicted, type PredictedCard } from "./runDeltaPredictions";
 import type { StoredRunDelta } from "./runDeltaRecords";
 import type { Prediction } from "@builderforce/run-delta/predict";
+import { messageOf } from "../messageOf";
 
 type DeltaHost = typeof import("./runDeltaHost");
 
@@ -78,7 +79,7 @@ export interface EditorRunDelta {
 }
 
 const log = (what: string, error: unknown): void =>
-  hostLog(`[run delta] ${what}: ${error instanceof Error ? error.message : String(error)}`);
+  hostLog(`[run delta] ${what}: ${messageOf(error)}`);
 
 /**
  * Whether EVERY committed change set of a finalized run is design-only (`.design/` / `*.dc.html`): reads each

@@ -1,3 +1,7 @@
+## ✅ RESOLVED 2026-11-25: VS Code error wording has one owner (`messageOf`)
+
+- All 95 inline `X instanceof Error ? X.message : String(X)` expressions in `clients/vscode/src` (61 files) now call `src/messageOf.ts`. Variants with different semantics (stack traces, rewrapped errors, `.message ?? String(e)`) stay as they are. Typecheck green; composerCommands + knowledge/packs tests 275/275.
+
 ## ✅ RESOLVED 2026-11-25 — W10 manifest application identity
 
 - WebContainers `2026.11.25` carries the manifest name into `ApplicationSpec` and derives `applicationId` from the project and name. A regression test covers two manifests with identical services in one project. Unnamed callers keep their IDs, and existing lease and recovery records keep their storage keys. The API, frontend, Studio, and VS Code extension now resolve this release.

@@ -13,6 +13,7 @@ import { createLocalWorkRepository } from "../localWorkRepository";
 import { openWorkspace } from "../openWorkspace";
 import { boundChatOf, type LocalWorkNode } from "./localWorkModel";
 import { LocalWorkTreeProvider, ticketStatusText } from "./localWorkTreeProvider";
+import { messageOf } from "../messageOf";
 
 export const LOCAL_WORK_VIEW = "builderforce.localWork";
 const CREATE_TICKET = "builderforce.localWork.createTicket";
@@ -31,7 +32,7 @@ export function registerLocalWork(context: vscode.ExtensionContext): void {
       try {
         await run(node);
       } catch (error) {
-        surfaceError(error, `command:${operation}`, `${failure}: ${error instanceof Error ? error.message : String(error)}`);
+        surfaceError(error, `command:${operation}`, `${failure}: ${messageOf(error)}`);
       }
     };
 

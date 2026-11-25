@@ -30,6 +30,7 @@ import { workspaceSymbolIndex } from "./workspaceSymbols";
 import { byoPreflight } from "./contextPack/byoPreflight";
 import { killRunJobs } from "./localShellJobs";
 import { logLine } from "./errorReporter";
+import { messageOf } from "./messageOf";
 
 export function editorRunSetupPorts(
   secrets: vscode.SecretStorage,
@@ -64,7 +65,7 @@ export function editorRunSetupPorts(
     }),
     modelPreflight: () => byoPreflight(secrets),
     settleRun: (runKey) => {
-      void killRunJobs(runKey).catch((e: unknown) => logLine(`[run ${runKey}] background jobs not all stopped: ${e instanceof Error ? e.message : String(e)}`));
+      void killRunJobs(runKey).catch((e: unknown) => logLine(`[run ${runKey}] background jobs not all stopped: ${messageOf(e)}`));
     },
   };
 }

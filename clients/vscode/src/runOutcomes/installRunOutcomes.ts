@@ -6,13 +6,14 @@
  */
 
 import type { LocalFirstStore } from "@builderforce/local-first";
+import { messageOf } from "../messageOf";
 
 export interface RunOutcomeJobs {
   dispose(): void;
 }
 
 export function installRunOutcomes(deps: { store: LocalFirstStore; deviceId(): string; log(line: string): void }): RunOutcomeJobs {
-  const onError = (error: unknown): void => deps.log(`[run outcomes] ${error instanceof Error ? error.message : String(error)}`);
+  const onError = (error: unknown): void => deps.log(`[run outcomes] ${messageOf(error)}`);
   let disposed = false;
   const stops: Array<() => void> = [];
   void Promise.all([import("./commitAttribution"), import("./localLabels"), import("../gitApi")]).then(([attribution, labels, git]) => {

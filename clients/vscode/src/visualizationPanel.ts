@@ -5,6 +5,7 @@ import { WorkspaceSurface, type BrainInbound } from "./workspaceSurface";
 import { asVisualizationFrame } from "./visualizationInitFrame";
 import { KnowledgeBridge, setPendingKnowledgeFocus } from "./knowledge/knowledgeBridge";
 import { KNOWLEDGE_CALL, KNOWLEDGE_FOCUS, type KnowledgeCall, type KnowledgeFocusFrame } from "./knowledge/knowledgeProtocol";
+import { messageOf } from "./messageOf";
 
 /**
  * The RIGHT-HAND half of the chat split: the same Creation Canvas beside the live run's
@@ -95,7 +96,7 @@ export class VisualizationPanel extends WebviewPanelBase<BrainInbound> {
     try {
       this.respond(id, true, await this.knowledge.handle(call as KnowledgeCall));
     } catch (error) {
-      this.respond(id, false, undefined, error instanceof Error ? error.message : String(error));
+      this.respond(id, false, undefined, messageOf(error));
     }
   }
 

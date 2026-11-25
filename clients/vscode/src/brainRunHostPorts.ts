@@ -13,6 +13,7 @@ import { activeEntityScope } from "./chatAccount";
 import { activeWorkspaceManager, fetchRunContextSection, getCurrentUserId, projectEvermindHooks } from "./bfApi";
 import { localBrainApplication } from "./localFirstStore";
 import { hostLog } from "./hostLog";
+import { messageOf } from "./messageOf";
 import { editorRunSettings } from "./editorRunSettings";
 import { deviceLedgerPorts } from "./runUsageLedgerPorts";
 import { auditToolCatalog } from "./auditToolCatalog";
@@ -338,7 +339,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
         runId,
         author,
         stillRunning: () => isRunning(payload.chatId),
-        onError: (error) => hostLog(`[change set] ${error instanceof Error ? error.message : String(error)}`),
+        onError: (error) => hostLog(`[change set] ${messageOf(error)}`),
         capture: await delta.capture(runId),
         onFinalized: delta.onFinalized({
           chatId: payload.chatId,

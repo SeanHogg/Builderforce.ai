@@ -14,6 +14,7 @@ import {
 } from "./insightsCadence";
 import { getSelectedProject, onProjectChange } from "./projectState";
 import { NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
+import { messageOf } from "./messageOf";
 
 /** One row in the Insights tree. */
 interface InsightRow {
@@ -164,7 +165,7 @@ export class InsightsController implements vscode.Disposable {
 
   /** Signed out → go quiet; anything else → widen the wait and retry. */
   private onFailure(err: unknown, retry: () => void): void {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = messageOf(err);
     if (msg.includes(NOT_SIGNED_IN)) {
       this.signedIn = false;
       this.stop();

@@ -23,6 +23,7 @@
  */
 
 import * as vscode from "vscode";
+import { messageOf } from "./messageOf";
 import {
   SCAN_STOP,
   SYNC_PASS_BIND_TYPES,
@@ -108,7 +109,7 @@ export function installChatSync(ctx: vscode.ExtensionContext): vscode.Disposable
     pass,
     enabled: () => policy.allows("synchronize") === true,
     debounceMs: DEBOUNCE_MS,
-    onError: (error) => hostLog(`[chat sync] pass failed: ${error instanceof Error ? error.message : String(error)}`),
+    onError: (error) => hostLog(`[chat sync] pass failed: ${messageOf(error)}`),
   });
   const schedule = scheduler.schedule;
 

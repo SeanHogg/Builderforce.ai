@@ -3,6 +3,7 @@ import { logLine } from "./errorReporter";
 import { getBaseUrl } from "./gateway";
 import { makeNonce, renderBundleShell } from "./webviewBundleShell";
 import { handleSharedHostMessage, postToWebview, respondToWebview, type WebviewInbound } from "./webviewHostBridge";
+import { messageOf } from "./messageOf";
 
 // Re-exported for the board panel, which builds its own (non-bundle) shell.
 export { makeNonce };
@@ -153,7 +154,7 @@ export abstract class WebviewPanelBase<M extends WebviewInbound = WebviewInbound
         d.dispose();
       } catch (error) {
         // Reported, then the rest still dispose.
-        logLine(`[webview] panel teardown: a disposable threw: ${error instanceof Error ? error.message : String(error)}`);
+        logLine(`[webview] panel teardown: a disposable threw: ${messageOf(error)}`);
       }
     }
   }

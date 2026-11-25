@@ -12,6 +12,7 @@ import { mentionBudget, type MentionBudget } from "@builderforce/tool-output-pol
 import { authed, authedRaw } from "./bfApi";
 import { desktopCompressProse } from "./desktopContext";
 import { logLine } from "./errorReporter";
+import { messageOf } from "./messageOf";
 import { getBaseUrl } from "./gateway";
 import { hostCostLeverOn } from "./hostCostLevers";
 import { localWindowModels, localWindowProbes, resolveModelRoute, type ModelRoute } from "./modelRouting";
@@ -99,7 +100,7 @@ async function uploadToAccount(secrets: vscode.SecretStorage, file: { name: stri
   try {
     answer = await authedRaw<UploadAnswer>(secrets, BRAIN_UPLOAD_PATH, { method: "POST", body: form });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = messageOf(e);
     if (message === NOT_SIGNED_IN) throw new Error(signInToAttach(file.name));
     logLine(`[ingress] upload of ${file.name} failed: ${message}`);
     throw new Error(vscode.l10n.t("Could not upload {0}: {1}", file.name, vscode.l10n.t("BuilderForce could not be reached.")));

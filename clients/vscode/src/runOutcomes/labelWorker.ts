@@ -6,11 +6,12 @@
 
 import { parentPort } from "node:worker_threads";
 import { labelBatch, type LabelBatch } from "./labelBatch";
+import { messageOf } from "../messageOf";
 
 parentPort?.once("message", (batch: LabelBatch) => {
   try {
     parentPort?.postMessage({ ok: true, labels: labelBatch(batch) });
   } catch (error) {
-    parentPort?.postMessage({ ok: false, error: error instanceof Error ? error.message : String(error) });
+    parentPort?.postMessage({ ok: false, error: messageOf(error) });
   }
 });

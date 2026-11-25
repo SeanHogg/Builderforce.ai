@@ -42,6 +42,7 @@ import { linkedKnowledgeClient, linkedProject, loadGraph, log, openRoot, rootKno
 import { getRun, listRuns } from "./review/reviewRuns";
 import { createAgentRuns, type AgentRuns } from "./agentRuns";
 import { localBrainApplication } from "../localFirstStore";
+import { messageOf } from "../messageOf";
 
 /** Search hits the view shows at most. */
 const SEARCH_HITS = 20;
@@ -264,7 +265,7 @@ export class KnowledgeBridge implements vscode.Disposable {
         return true;
       }, () => graphFields(graph));
     } catch (error) {
-      log("lastSeen", error instanceof Error ? error.message : String(error));
+      log("lastSeen", messageOf(error));
     }
   }
 

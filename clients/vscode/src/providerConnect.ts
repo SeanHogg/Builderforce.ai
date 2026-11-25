@@ -29,6 +29,7 @@ import { LOCAL_RUNTIMES } from "@builderforce/local-inference";
 import { gatewayRequest } from "./gatewayRequest";
 import { connectedAccounts } from "./localProviderCredentials";
 import type { ConnectedAccounts } from "@builderforce/provider-connect/accounts";
+import { messageOf } from "./messageOf";
 
 /** Why a connect did not finish, in the person's language. */
 function failureMessage(label: string, error: unknown): string {
@@ -39,9 +40,9 @@ function failureMessage(label: string, error: unknown): string {
     case "expired":
       return vscode.l10n.t("BuilderForce: the {0} connection request expired before it was approved. Start again.", label);
     case "unavailable":
-      return vscode.l10n.t("BuilderForce: could not start connecting {0} ({1}).", label, error instanceof Error ? error.message : String(error));
+      return vscode.l10n.t("BuilderForce: could not start connecting {0} ({1}).", label, messageOf(error));
     default:
-      return vscode.l10n.t("BuilderForce: could not connect {0} ({1}).", label, error instanceof Error ? error.message : String(error));
+      return vscode.l10n.t("BuilderForce: could not connect {0} ({1}).", label, messageOf(error));
   }
 }
 

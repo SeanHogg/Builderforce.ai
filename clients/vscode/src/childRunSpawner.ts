@@ -40,6 +40,7 @@ import { childSettledState, realChangedFiles, REPORT_NOW_STEER, unfinishedReport
 import { coverageChars, coverageOf } from "./childCoverage";
 import { noteChildFailure, saveCollectedData } from "./childDataFile";
 import type { ChildReport, ChildRuns } from "./childRuns";
+import { messageOf } from "./messageOf";
 import { createChildLedger, type ChildLedger } from "./childLedger";
 import { createLiveChildrenHold, hungChildrenNote, type HeldChild } from "./liveChildrenFinish";
 
@@ -211,7 +212,7 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
         assertCanSpawnChild(owner.depth);
         validateChildStart({ parentRunId: String(owner.key), entryPoint: "vscode", depth, owner: owner.name, task: req.task });
       } catch (error) {
-        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+        return { ok: false, error: messageOf(error) };
       }
       const name = req.asAgent?.name ?? req.persona?.name ?? req.label;
       const registered = host.registry.register({
@@ -280,7 +281,7 @@ export function childControls(host: ChildRunHost, owner: ChildOwner): ChildContr
  * `wait_agents` and the owner's finish hold never wait on a child that already ended.
  */
 export function fallbackReport(lineage: RunLineage, req: ChildRequest, stopped: boolean, error: unknown): ChildReport {
-  const why = error instanceof Error ? error.message : String(error);
+  const why = messageOf(error);
   return {
     handle: lineage.handle,
     name: lineage.agent.name,

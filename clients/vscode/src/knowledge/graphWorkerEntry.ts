@@ -16,6 +16,7 @@ import { parentPort } from "node:worker_threads";
 import { nodeKnowledgeReader, type NodeKnowledgeReader } from "@builderforce/agent-tools/node-knowledge-store";
 import { assembleBounded, isOverBudget, PartsReceiver, postBounded, RESULT_OVER_BUDGET } from "../workers/boundedTransfer";
 import { runGraphBuild, type FolderStores } from "./graphBuildJob";
+import { messageOf } from "../messageOf";
 import {
   EXTRACTED_REQUEST_ARRAYS, GRAPH_RESULT_OVER_BUDGET, GRAPH_STORE_UNAVAILABLE, resultArraysOf,
   type GraphBuildRequest, type GraphWorkerMessage, type GraphWorkerReply,
@@ -36,7 +37,7 @@ const stores: FolderStores = (folderPath) => {
   try {
     opened = nodeKnowledgeReader(folderPath);
   } catch (error) {
-    throw Object.assign(new Error(`${GRAPH_STORE_UNAVAILABLE}: ${error instanceof Error ? error.message : String(error)}`), { code: GRAPH_STORE_UNAVAILABLE });
+    throw Object.assign(new Error(`${GRAPH_STORE_UNAVAILABLE}: ${messageOf(error)}`), { code: GRAPH_STORE_UNAVAILABLE });
   }
   // No file yet is not kept: the folder's first review creates it.
   if (opened) readers.set(folderPath, opened);
@@ -59,7 +60,7 @@ async function build(id: number, head: GraphBuildRequest): Promise<void> {
     }
   } catch (error) {
     const code = (error as { code?: unknown } | null)?.code;
-    send({ type: "error", id, error: error instanceof Error ? error.message : String(error), ...(typeof code === "string" ? { code } : {}) });
+    send({ type: "error", id, error: messageOf(error), ...(typeof code === "string" ? { code } : {}) });
   }
 }
 

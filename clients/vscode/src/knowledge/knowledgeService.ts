@@ -52,6 +52,7 @@ import { storedGraphOffThread } from "./graphWorker";
 import { preemptBackground } from "./indexLevels";
 import { useL3GuardLog } from "./l3CrashGuard";
 import { untilAborted } from "../boundedStep";
+import { messageOf } from "../messageOf";
 
 /** Where the reviewed roots are listed (`workspaceState`), set at activation. */
 let reviewedRootsMemento: RootsMemento | undefined;
@@ -63,7 +64,7 @@ export function configureKnowledgeHost(memento: RootsMemento): void {
 }
 
 export const log = (what: string, error: unknown): void =>
-  logLine(`[knowledge] ${what}: ${error instanceof Error ? error.message : String(error)}`);
+  logLine(`[knowledge] ${what}: ${messageOf(error)}`);
 
 /** The open workspace folders. */
 export function workspaceFolders(): WorkspaceFolderRef[] {

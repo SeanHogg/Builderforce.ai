@@ -4,6 +4,7 @@ import type { RecallProbe } from "@seanhogg/builderforce-memory-mcp/compaction";
 import { canManageActiveWorkspace, getTenantJwt, invalidateProjectEvermind, projectEvermindHooks } from "./bfApi";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
 import { authLabels } from "./authLabels";
+import { messageOf } from "./messageOf";
 import { getSelectedProject } from "./projectState";
 import { renderWebviewHtml } from "./webviewShared";
 import { handleSharedHostMessage, respondToWebview } from "./webviewHostBridge";
@@ -116,7 +117,7 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
       void vscode.window.setStatusBarMessage(vscode.l10n.t("Evermind diagnostics copied to the clipboard."), 4000);
       this.respond(id, true, null);
     } catch (e) {
-      this.respond(id, false, undefined, e instanceof Error ? e.message : String(e));
+      this.respond(id, false, undefined, messageOf(e));
     }
   }
 
@@ -149,7 +150,7 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
       }
       this.respond(id, true, { path: uri.fsPath, fileName: path.basename(uri.fsPath), entries });
     } catch (e) {
-      this.respond(id, false, undefined, e instanceof Error ? e.message : String(e));
+      this.respond(id, false, undefined, messageOf(e));
     }
   }
 
@@ -165,7 +166,7 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
       if (!outcome.ok) { this.respond(id, false, undefined, vscode.l10n.t("Could not re-read the memory file to compact it.")); return; }
       this.respond(id, true, { compacted: outcome.compacted, bytesSaved: outcome.bytesSaved, skipped: outcome.skipped });
     } catch (e) {
-      this.respond(id, false, undefined, e instanceof Error ? e.message : String(e));
+      this.respond(id, false, undefined, messageOf(e));
     }
   }
 
