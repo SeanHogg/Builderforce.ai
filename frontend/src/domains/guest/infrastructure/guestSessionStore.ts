@@ -1,8 +1,8 @@
 /**
  * THE GUEST SESSION — one id per browser, and the edits made against it.
  *
- * `localCanvasStore` is this same idea for BOARDS, and it stays the owner of
- * boards: a canvas has its own schema, its own index and its own claim. This is
+ * The board replica (`localFirst/studioBoards`) is this same idea for BOARDS, and it stays the
+ * owner of boards: a canvas has its own records, its own journal and its own bind. This is
  * the store for everything else a signed-out visitor touches — the sample
  * workspace's rows once they have changed them — so the two do not become one
  * module that knows about both.
@@ -22,7 +22,7 @@
  * — so a deploy must refresh the DATA without making the visitor a different
  * person halfway through their first session.
  *
- * No `'use client'`, matching `localCanvasStore` — the other localStorage store
+ * No `'use client'`, matching the other plain storage modules
  * in this repo. The directive marks a module as belonging to a client COMPONENT
  * tree; this one is a plain module that guards on `typeof window` itself, and is
  * imported by things on both sides of the boundary.

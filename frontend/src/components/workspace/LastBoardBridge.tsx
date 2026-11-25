@@ -37,8 +37,7 @@ import { useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { useOptionalActiveCanvas, type ActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
-import { createLocalCreationSession, listLocalCreationSessions } from '@/domains/canvas/infrastructure/localCanvasStore';
-import { fetchRecentCanvases, readLastCanvas } from '@/lib/pendingWork';
+import { createLocalCreationSession, listLocalCreationSessions, reportStudioFailure, fetchRecentCanvases, readLastCanvas } from '@/lib/pendingWork';
 import { rendersAppShell } from '@/lib/shellRouting';
 import { panelOpen } from '@/lib/workbenchPolicy';
 
@@ -159,10 +158,12 @@ export function LastBoardBridge() {
 
     // Their own board first; a fresh local one only where starting one is
     // allowed (see `mayStartFreshBoard` — never on a public reference page).
-    const sessionId = listLocalCreationSessions()[0]?.sessionId
-      ?? (mayStartFreshBoard(pathname, false) ? createLocalCreationSession('') : null);
-    if (!sessionId) return;
-    open(boardOnStage(sessionId, 'local'));
+    void (async () => {
+      const sessionId = (await listLocalCreationSessions())[0]?.sessionId
+        ?? (mayStartFreshBoard(pathname, false) ? createLocalCreationSession('') : null);
+      if (!sessionId) return;
+      open(boardOnStage(sessionId, 'local'));
+    })().catch((error: unknown) => void reportStudioFailure('LastBoardBridge.guest', error));
   }, [hasBoard, isAuthenticated, open, pathname]);
 
   useEffect(() => {
@@ -197,8 +198,9 @@ export function LastBoardBridge() {
       // started locally and the route opens over it, exactly as it does for
       // someone whose board was restored.
       if (!mayStartFreshBoard(pathname, true)) return;
-      open(boardOnStage(createLocalCreationSession(''), 'local'));
-    })();
+      // Created on this device in the workspace and synced; the pointer to it is set when the server accepts it.
+      open(boardOnStage(createLocalCreationSession(''), 'server'));
+    })().catch((error: unknown) => void reportStudioFailure('LastBoardBridge.account', error));
   }, [hasBoard, hasTenant, isAuthenticated, open, pathname, router, stageHosted]);
 
   return null;

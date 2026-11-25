@@ -2,7 +2,8 @@
 import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect } from 'react';
 import { setBrainAutoApprove } from '@/lib/brain/autoApprove';
 import type { ChatMode } from '@/lib/brain';
-import { readLocalCreationSession, writeLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { reportLocalFirstFailure } from '@/lib/localFirst/reportLocalFirstFailure';
+import { updateLocalCreationSession } from '@/lib/pendingWork';
 import { type CreationSessionInvitation, creationSessionsApi, type CreationTemplate as ServerCreationTemplate } from '@/lib/builderforceApi';
 import type { FramePreset } from '../canvasBoardTypes';
 import { faultText } from '@/lib/apiClient';
@@ -34,23 +35,16 @@ export function useCanvasSessionModes({ autoApplyRef, persistence, sessionId, se
 
   /**
    * Session MODE (migration 0409) — `chat` (author on the board and answer) or `work`
-   * (leave a tracked, dispatched ticket behind). Persisted on the SESSION rather than
-   * in this browser, so a mode a collaborator armed is the mode everyone's next turn
-   * runs in. A local (unsaved) canvas has nowhere to persist it, so it keeps the value
-   * in state only — the same degradation the rest of the local canvas accepts.
+   * (leave a tracked, dispatched ticket behind). Persisted on the BOARD, so a mode a
+   * collaborator armed is the mode everyone's next turn runs in: the header write is
+   * journaled like any other edit and the server importer applies it, so a guest's canvas
+   * and a workspace's keep it the same way and neither loses it on a reload or offline.
    */
   const setSessionMode = useCallback((next: ChatMode) => {
     setSessionMode_(next);
-    if (persistence !== 'server') {
-      // No server row to hold it, so the local snapshot does — otherwise the mode
-      // reset on every reload of a guest canvas.
-      const prior = readLocalCreationSession(sessionId);
-      if (prior) writeLocalCreationSession(sessionId, { ...prior, mode: next, updatedAt: new Date().toISOString() });
-      return;
-    }
-    void creationSessionsApi.update(sessionId, { mode: next })
-      .catch(() => setNotice(t('modeSaveFailed')));
-  }, [persistence, sessionId, setNotice, setSessionMode_, t]);
+    void updateLocalCreationSession(sessionId, { mode: next })
+      .catch((error: unknown) => { reportLocalFirstFailure('canvasMode', error); setNotice(t('modeSaveFailed')); });
+  }, [sessionId, setNotice, setSessionMode_, t]);
 
   useEffect(() => {
     try { setFramePresets(JSON.parse(localStorage.getItem('builderforce:create-frame-presets') || '[]') as FramePreset[]); } catch { setFramePresets([]); }

@@ -11,7 +11,7 @@ import { SERVER_OWNED_CAMPAIGN_FIELDS } from '../canvasSocialCampaignFields';
 import { moveDeal as moveDealOnBoard } from '@/lib/founderOpsApi';
 import { pipelineFieldsFrom } from '@/lib/canvasFounderOpsTools';
 import { faultText } from '@/lib/apiClient';
-import { creationSessionsApi, type CreationTimelineMessage } from '@/lib/builderforceApi';
+import type { CreationTimelineMessage } from '@/lib/builderforceApi';
 import type { CanvasTimelineMessage } from '../canvasBoardTypes';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import type { CanvasTextTranslator } from '@/domains/canvas/domain/canvasText';
@@ -29,8 +29,6 @@ export interface UseCanvasBoardModelDeps {
   lockBlocked: boolean;
   nodes: CanvasObject[];
   noteSaveState: () => void;
-  persistence: 'local' | 'server';
-  sessionId: string;
   setNodes: Dispatch<SetStateAction<CanvasObject[]>>;
   setNotice: (text: string) => void;
   setTimeline: Dispatch<SetStateAction<CanvasTimelineMessage[]>>;
@@ -66,7 +64,7 @@ function useBoardStage(
   return stage;
 }
 
-export function useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edges, layoutViewportRef, lockBlocked, nodes, noteSaveState, persistence, sessionId, setNodes, setNotice, setTimeline, syncSocialCampaign, t }: UseCanvasBoardModelDeps) {
+export function useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edges, layoutViewportRef, lockBlocked, nodes, noteSaveState, setNodes, setNotice, setTimeline, syncSocialCampaign, t }: UseCanvasBoardModelDeps) {
   /**
    * The board, read WITHOUT depending on it.
    *
@@ -206,10 +204,9 @@ export function useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edg
   const appendTimeline = useCallback((role: 'user' | 'assistant' | 'system', body: string, metadata: CreationTimelineMessage['metadata'] = {}, clientMessageId: string = crypto.randomUUID()) => {
     const message: CanvasTimelineMessage = { clientMessageId, messageRole: role, body, metadata, createdAt: new Date().toISOString() };
     setTimeline((current) => current.some((item) => item.clientMessageId === clientMessageId) ? current : [...current, message]);
-    if (persistence === 'server') void creationSessionsApi.timeline.append(sessionId, { clientMessageId, role, body, metadata }).then((saved) => {
-      setTimeline((current) => current.map((item) => item.clientMessageId === clientMessageId ? saved : item));
-    }).catch((error) => setNotice(error instanceof Error ? t('noticeConversationSaveFailedReason', { reason: error.message }) : t('noticeConversationSaveFailed')));
+    // Kept as a record of the board, the one write path: the open board's autosave commits the new
+    // row (an immutable record keyed by `clientMessageId`) and the journal carries it to the server.
     return clientMessageId;
-  }, [persistence, sessionId, setNotice, setTimeline, t]);
+  }, [setTimeline]);
   return { nodesRef, framedBoardRef, stage, appendTimeline, edgesRef, updateNodeData, moveDealFromNode, updateWebsiteViewport };
 }

@@ -66,16 +66,14 @@ export default function NewCreationSessionPage() {
     if (!authReady || !checkedInvite || inviteCode || started.current) return;
     started.current = true;
     setMessage(t('creatingCanvas'));
-    // THE one start-a-session use case (`lib/canvas/startCreationSession.ts`): a server
-    // session for a workspace, a local board if that fails, a guest board otherwise.
+    // THE one start-a-session use case (`lib/canvas/startCreationSession.ts`): the board is
+    // created on this device first — in the workspace when there is one — and synced.
     void startCreationSession({ prompt: initialPrompt, isAuthenticated, hasTenant, surface: 'landing' })
-      .then(({ sessionId, persistence }) => {
-        // A signed-in person who landed on a device board is told so before the redirect.
-        if (persistence === 'local' && isAuthenticated && hasTenant) setMessage(t('startingOnDevice'));
+      .then(({ sessionId }) => {
         router.replace(modelComparisonCanvasHref(sessionId, modelComparisonIds));
       })
       .catch((error: unknown) => {
-        // Only a plan limit reaches here — every other failure already fell back to a local board.
+        // A plan limit can still be thrown by a caller's own check; the board's own refusal arrives as a receipt.
         if (isPlanLimitError(error)) setPlanError(error);
         setMessage('');
       });

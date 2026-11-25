@@ -1,10 +1,9 @@
 import { Icon } from '@/components/ui/Icon';
 import { SessionActionBar } from '@/components/creation-sessions/SessionActionBar';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { listPendingDrafts } from '@/lib/pendingWork';
-import { mergeLocalCreationSessions, removeLocalCreationSession, updateLocalCreationSession, type LocalCreationEntry } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { listPendingDrafts, reportStudioFailure, mergeLocalCreationSessions, removeLocalCreationSession, updateLocalCreationSession, type LocalCreationEntry } from '@/lib/pendingWork';
 
 /**
  * Account-less boards still held in this browser, surfaced in the canvas library.
@@ -12,32 +11,26 @@ import { mergeLocalCreationSessions, removeLocalCreationSession, updateLocalCrea
  * The shell-level <ResumeWorkBridge> claims these automatically once a tenant
  * exists, so in the ordinary flow this renders nothing. It exists for the case
  * the bridge cannot cover: a claim that failed (offline, session quota reached)
- * would otherwise leave real work sitting in localStorage with no surface
+ * would otherwise leave real work sitting on this device with no surface
  * admitting it is there. Self-gating — no pending drafts, no notice.
  */
 export function PendingDraftsNotice() {
   const t = useTranslations('canvasLibrary');
   const [drafts, setDrafts] = useState<LocalCreationEntry[]>([]);
 
-  useEffect(() => { setDrafts(listPendingDrafts()); }, []);
+  const refresh = useCallback(() => {
+    void listPendingDrafts().then(setDrafts).catch((error: unknown) => void reportStudioFailure('PendingDraftsNotice.list', error));
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
 
-  const refresh = () => setDrafts(listPendingDrafts());
-  const rename = (draft: LocalCreationEntry, title: string) => {
-    updateLocalCreationSession(draft.sessionId, { title });
-    refresh();
+  /** One edit of a draft, then the list again — a failed edit is reported, never swallowed. */
+  const edit = (work: Promise<unknown>) => {
+    void work.catch((error: unknown) => void reportStudioFailure('PendingDraftsNotice.edit', error)).finally(refresh);
   };
-  const move = (draft: LocalCreationEntry, folder: string | null) => {
-    updateLocalCreationSession(draft.sessionId, { folder });
-    refresh();
-  };
-  const remove = (draft: LocalCreationEntry) => {
-    removeLocalCreationSession(draft.sessionId);
-    refresh();
-  };
-  const merge = (target: LocalCreationEntry, sourceId: string) => {
-    mergeLocalCreationSessions(target.sessionId, [sourceId]);
-    refresh();
-  };
+  const rename = (draft: LocalCreationEntry, title: string) => edit(updateLocalCreationSession(draft.sessionId, { title }));
+  const move = (draft: LocalCreationEntry, folder: string | null) => edit(updateLocalCreationSession(draft.sessionId, { folder }));
+  const remove = (draft: LocalCreationEntry) => edit(removeLocalCreationSession(draft.sessionId));
+  const merge = (target: LocalCreationEntry, sourceId: string) => edit(mergeLocalCreationSessions(target.sessionId, [sourceId]));
 
   if (drafts.length === 0) return null;
 

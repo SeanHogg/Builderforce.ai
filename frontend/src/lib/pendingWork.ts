@@ -1,15 +1,14 @@
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
-import { getStoredTenant } from '@/lib/auth';
+import { UNBOUND_DESTINATION, type EntityDestination } from '@builderforce/local-first';
+import { getStoredTenant, getStoredTenantToken } from '@/lib/auth';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
-import { persistedGraphFromBoard } from '@/domains/canvas/domain/canvasBoard';
 import { clearGuestSession } from '@/domains/guest/infrastructure/guestSessionStore';
+import type { ChatMode } from '@/lib/brain';
+import type { LocalCreationSnapshot } from '@/domains/canvas/domain/boardSnapshot';
+import type { LocalCreationEntry, writeLocalCreationSession as WriteContent } from '@/domains/canvas/infrastructure/localFirst/studioBoards';
+
+export type { LocalCreationEntry };
 import { readLocalJson, writeLocalJson } from './storage';
-import {
-  listLocalCreationSessions,
-  readLocalCreationSession,
-  removeLocalCreationSession,
-  type LocalCreationEntry,
-} from '@/domains/canvas/infrastructure/localCanvasStore';
 
 /**
  * "What was I working on?" — the ONE answer, for every surface that asks.
@@ -54,51 +53,103 @@ function scopeKey(): string {
 const RECENT_TTL_MS = 30_000;
 
 export interface ClaimedDraft {
-  /** The local id the board had before it was claimed. */
+  /** The id the board had before it was bound (the same id: a board is never re-keyed). */
   localSessionId: string;
-  /** The durable, tenant-scoped id it now has. */
+  /** The board's id on the server, once accepted. */
   sessionId: string;
   title: string;
 }
 
-/** One claim per local session id, however many callers ask for it. */
-const claiming = new Map<string, Promise<ClaimedDraft | null>>();
+/**
+ * The workspace's destination when someone is IN one; unbound otherwise (a guest, or no workspace yet).
+ *
+ * "In a workspace" is the one answer the rest of the app gives: `hasTenant` is "there is a tenant
+ * token" (`AuthContext`), so this reads the same fact — a stale tenant row left behind by a sign-out
+ * must not bind a guest's board to the last account.
+ */
+export function studioDestination(): EntityDestination {
+  const tenant = getStoredTenant();
+  return tenant && getStoredTenantToken() ? { kind: 'bound', tenantId: String(tenant.id) } : UNBOUND_DESTINATION;
+}
+
+/** One bind per board id, however many callers ask for it. */
+const binding = new Map<string, Promise<ClaimedDraft | null>>();
 
 /**
- * Turn one account-less board into a durable, tenant-scoped session.
+ * Bind one account-less board to the workspace the person is in (design §7).
  *
- * Resolves `null` when there is nothing to claim (already claimed, or the board
- * is gone). Rejects only on a real API failure, so a caller can surface it.
+ * Not an HTTP claim: `bindBoardToAccount` re-snapshots the board and every child from unbound to the
+ * workspace's destination and enqueues the whole board as journal events — board first, children
+ * depending on it — in ONE transaction, and the sync driver sends them. The pointer to "what I was
+ * working on" is set when the server ACCEPTS the board (`useBoardSyncOutcome`), not here.
+ *
+ * Resolves `null` when there is nothing to bind: no workspace yet, no such board, or it is already
+ * bound (a second bind is a no-op, so a retry after a crash cannot enqueue it twice). A plan refusal
+ * is not a rejection here — it comes back as a receipt and the board keeps its place on the device.
  */
-export function claimLocalDraft(localSessionId: string): Promise<ClaimedDraft | null> {
-  const existing = claiming.get(localSessionId);
+export function bindLocalBoard(boardId: string): Promise<ClaimedDraft | null> {
+  const existing = binding.get(boardId);
   if (existing) return existing;
 
   const attempt = (async (): Promise<ClaimedDraft | null> => {
-    const snapshot = readLocalCreationSession(localSessionId);
-    if (!snapshot) return null;
-    const created = await creationSessionsApi.claim({
-      clientSessionId: localSessionId,
-      title: snapshot.title,
-      initialPrompt: snapshot.initialPrompt,
-      timeline: snapshot.timeline,
-      ...persistedGraphFromBoard(snapshot),
-    });
-    removeLocalCreationSession(localSessionId);
+    const destination = studioDestination();
+    if (destination.kind !== 'bound') return null;
+    await awaitBoardCreated(boardId);
+    // The board library loads here, on use: the shell reaches this module on every route.
+    const [{ getStudioRuntime }, { readBoard }, { bindBoardToAccount, BoardCommitError }] = await Promise.all([
+      import('@/lib/localFirst/studioRuntime'),
+      import('@/domains/canvas/infrastructure/localFirst/boardReplica'),
+      import('@/domains/canvas/infrastructure/localFirst/boardBind').then(async (bind) => ({ ...bind, ...(await import('@/domains/canvas/infrastructure/localFirst/boardCommit')) })),
+    ]);
+    const runtime = await getStudioRuntime();
+    if (!runtime) return null;
+    const replica = await readBoard(runtime.store, boardId);
+    if (!replica) return null;
+    let outcome;
+    try {
+      outcome = await bindBoardToAccount(runtime.ctx, boardId, destination);
+    } catch (error) {
+      // A board that belongs to ANOTHER account is not this person's to bind: quiet, never a failure notice.
+      if (error instanceof BoardCommitError && error.code === 'cross_destination') return null;
+      throw error;
+    }
+    if (outcome.status !== 'bound') return null;
     invalidateRecentCanvases();
-    const claimed: ClaimedDraft = {
-      localSessionId,
-      sessionId: created.session.id,
-      title: created.session.title ?? snapshot.title,
-    };
-    rememberLastCanvas(claimed.sessionId, claimed.title);
-    return claimed;
+    runtime.driver.trigger();
+    return { localSessionId: boardId, sessionId: boardId, title: replica.header.payload.title };
   })();
 
-  claiming.set(localSessionId, attempt);
+  binding.set(boardId, attempt);
   // A failure must not pin the id as "in flight" forever — the next mount retries.
-  void attempt.catch(() => undefined).finally(() => { claiming.delete(localSessionId); });
+  void attempt.catch(() => undefined).finally(() => { binding.delete(boardId); });
   return attempt;
+}
+
+/**
+ * Resolves true once the server has ACCEPTED the board (the store holds its mapping), false when the
+ * workspace, the store or the wait (default 20 s) runs out. A board is only shareable, invitable and
+ * linkable on the server after this: the caller shows a pending state meanwhile.
+ */
+export async function whenBoardAccepted(boardId: string, timeoutMs = 20_000): Promise<boolean> {
+  const destination = studioDestination();
+  if (destination.kind !== 'bound') return false;
+  const [{ getStudioRuntime }, { isBoardAccepted }] = await Promise.all([
+    import('@/lib/localFirst/studioRuntime'),
+    import('@/domains/canvas/infrastructure/localFirst/boardSyncOutcome'),
+  ]);
+  const runtime = await getStudioRuntime();
+  if (!runtime) return false;
+  if (await isBoardAccepted(runtime.store, boardId, destination)) return true;
+  runtime.driver.trigger();
+  return new Promise<boolean>((resolve) => {
+    let unsubscribe: (() => void) | undefined;
+    const settle = (accepted: boolean): void => { clearTimeout(timer); unsubscribe?.(); resolve(accepted); };
+    const timer = setTimeout(() => settle(false), timeoutMs);
+    unsubscribe = runtime.driver.subscribe(() => {
+      void isBoardAccepted(runtime.store, boardId, destination).then((accepted) => { if (accepted) settle(true); })
+        .catch((error: unknown) => void reportStudioFailure('pendingWork.accepted', error));
+    });
+  });
 }
 
 /**
@@ -110,14 +161,16 @@ export function claimLocalDraft(localSessionId: string): Promise<ClaimedDraft | 
  * counted, never thrown — one bad board must not strand the others.
  */
 export async function claimPendingDrafts(): Promise<{ claimed: ClaimedDraft[]; failed: number }> {
-  const pending = listLocalCreationSessions();
+  const pending = await listLocalCreationSessions();
   const claimed: ClaimedDraft[] = [];
   let failed = 0;
   for (const entry of pending) {
     try {
-      const result = await claimLocalDraft(entry.sessionId);
+      const result = await bindLocalBoard(entry.sessionId);
       if (result) claimed.push(result);
-    } catch {
+    } catch (error) {
+      // Counted for the caller AND reported: one bad board must not strand the others, nor vanish.
+      void reportStudioFailure('pendingWork.bind', error);
       failed += 1;
     }
   }
@@ -136,8 +189,8 @@ export async function claimPendingDrafts(): Promise<{ claimed: ClaimedDraft[]; f
   return { claimed, failed };
 }
 
-/** Account-less boards still waiting to be claimed. */
-export function listPendingDrafts(): LocalCreationEntry[] {
+/** Account-less boards still waiting to be bound. */
+export function listPendingDrafts(): Promise<LocalCreationEntry[]> {
   return listLocalCreationSessions();
 }
 
@@ -184,3 +237,88 @@ export function fetchRecentCanvases(projectId?: number | null): Promise<Creation
     // A failed read must not pin an empty list for the whole window.
     .catch(() => [] as CreationSessionSummary[]), { ttlMs: RECENT_TTL_MS });
 }
+
+// ---------------------------------------------------------------------------
+// The device's boards, loaded on use
+// ---------------------------------------------------------------------------
+//
+// The replica (`studioBoards` and the board library behind it) is large, and the app layout reaches
+// this module on every route: a static import would put the library in the first paint of EVERY route
+// (`check:root-closure`). So each verb below loads it the first time it is called, and hands it its
+// ports (`bindStudioBoardPorts`) — the composition lives here, not inside the domain.
+//
+// `createLocalCreationSession` keeps its old shape — an id AT ONCE, the write tracked — so the creation
+// is registered here, statically, and every verb (and the canvas's open) waits on `awaitBoardCreated`.
+
+async function loadBoards() {
+  const [boards, runtime, checkpoints] = await Promise.all([
+    import('@/domains/canvas/infrastructure/localFirst/studioBoards'),
+    import('@/lib/localFirst/studioRuntime'),
+    import('@/lib/creationCheckpoints'),
+  ]);
+  boards.bindStudioBoardPorts({
+    runtime: runtime.getStudioRuntime,
+    destination: studioDestination,
+    afterRemove: checkpoints.clearLocalCheckpoints,
+  });
+  return boards;
+}
+
+/** Writes in flight. Nothing is keyed by board: a verb that must see a new board waits for all of them. */
+const inFlight = new Set<Promise<void>>();
+
+/** Settles when every board being created has been written (immediately when none is). */
+export async function awaitBoardCreated(_boardId?: string): Promise<void> {
+  await Promise.all([...inFlight]);
+}
+
+/** Report a failure through the local-first sink, loaded on use. */
+export async function reportStudioFailure(where: string, error: unknown): Promise<void> {
+  const { reportLocalFirstFailure } = await import('@/lib/localFirst/reportLocalFirstFailure');
+  reportLocalFirstFailure(where, error);
+}
+
+/** Creations run one after another: two writers opening the one store at once would contend for it. */
+let creations: Promise<void> = Promise.resolve();
+
+function track(write: () => Promise<void>): void {
+  // A board that could not be written is reported here AND on its first commit (the canvas creates the
+  // board then, and tells the person when that fails too) — a failed create is never only a log line.
+  const settled: Promise<void> = creations
+    .then(write)
+    .catch((error: unknown) => reportStudioFailure('studioBoards.create', error))
+    .finally(() => { inFlight.delete(settled); });
+  creations = settled;
+  inFlight.add(settled);
+}
+
+/** A new board from a prompt; the id at once, the write tracked. */
+export function createLocalCreationSession(prompt: string, mode?: ChatMode): string {
+  const boardId = crypto.randomUUID();
+  // The destination is the person's AT CREATION: a sign-in between this call and the write must not rebind it.
+  const destination = studioDestination();
+  track(async () => (await loadBoards()).writeSessionBoard(boardId, prompt, mode, destination));
+  return boardId;
+}
+
+/** A board seeded with notes — the Brain's `show_canvas` landing. */
+export function createLocalCreationBoard(input: { title?: string; text?: string; stickies: readonly string[] }): string {
+  const boardId = crypto.randomUUID();
+  const destination = studioDestination();
+  track(async () => (await loadBoards()).writeNotesBoard(boardId, input, destination));
+  return boardId;
+}
+
+/** Load the verbs once every pending creation has landed. */
+async function ready() {
+  await awaitBoardCreated();
+  return loadBoards();
+}
+
+export const listLocalCreationSessions = async (): Promise<LocalCreationEntry[]> => (await ready()).listLocalCreationSessions();
+export const listWorkspaceBoards = async (): Promise<LocalCreationEntry[]> => (await ready()).listWorkspaceBoards();
+export const readLocalCreationSession = async (boardId: string): Promise<LocalCreationSnapshot | null> => (await ready()).readLocalCreationSession(boardId);
+export const writeLocalCreationSession = async (boardId: string, snapshot: Parameters<typeof WriteContent>[1]): Promise<void> => (await ready()).writeLocalCreationSession(boardId, snapshot);
+export const updateLocalCreationSession = async (boardId: string, patch: { title?: string; folder?: string | null; mode?: ChatMode; role?: 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner' }): Promise<void> => (await ready()).updateLocalCreationSession(boardId, patch);
+export const removeLocalCreationSession = async (boardId: string): Promise<void> => (await ready()).removeLocalCreationSession(boardId);
+export const mergeLocalCreationSessions = async (target: string, sources: string[]): Promise<LocalCreationSnapshot | null> => (await ready()).mergeLocalCreationSessions(target, sources);

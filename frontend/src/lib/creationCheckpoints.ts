@@ -32,7 +32,9 @@
 
 import type { Edge } from '@xyflow/react';
 import type { CanvasObject as CreationFlowNode } from '@/domains/canvas/domain/canvasObject';
-import { creationStorageKey } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { creationStorageKey } from '@/domains/canvas/domain/boardSnapshot';
+import { localStore, removeLocal } from './storage';
+import { reportLocalFirstFailure } from './localFirst/reportLocalFirstFailure';
 
 /**
  * How many checkpoints a local board keeps.
@@ -63,6 +65,31 @@ export interface LocalCheckpointSummary {
 }
 
 const checkpointsKey = (sessionId: string): string => `${creationStorageKey(sessionId)}:checkpoints`;
+
+/**
+ * Every SIDECAR keyed off a board goes with it — the checkpoint stack today, whatever is stored
+ * beside a board next. Swept by prefix rather than from a list of stores: a sidecar that outlives its
+ * board is a permanent leak against the same tiny quota this store already sheds against, and it
+ * would resurface attached to a board it is not about if an id were ever reused. Synchronous, so a
+ * caller that deletes a board has no window in which the board is gone and its stack is not.
+ */
+export function clearLocalCheckpoints(sessionId: string): void {
+  try {
+    const prefix = `${creationStorageKey(sessionId)}:`;
+    // Enumerated through the Storage API (`length` / `key`), not `Object.keys`: a polyfilled or
+    // proxied store has no own enumerable keys, and a sweep that finds nothing leaks the stack.
+    const store = localStore();
+    const keys: string[] = [];
+    for (let position = 0; position < (store?.length ?? 0); position += 1) {
+      const key = store?.key(position);
+      if (key?.startsWith(prefix)) keys.push(key);
+    }
+    for (const key of keys) removeLocal(key);
+  } catch (error) {
+    // Storage that cannot be enumerated holds no stack we can sweep; the failure is still a fact.
+    reportLocalFirstFailure('creationCheckpoints.clear', error);
+  }
+}
 
 interface StoredCheckpoints {
   version: 1;

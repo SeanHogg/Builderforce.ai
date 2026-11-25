@@ -5,6 +5,7 @@ import { UNBOUND_DESTINATION } from '@builderforce/local-first';
 import { afterEach, describe, expect, it } from 'vitest';
 import { importLegacyBoards, type LegacyImportOptions } from './legacyBoardImport';
 import { listBoards, readBoard } from './boardReplica';
+import { legacyBoardId } from './boardRecords';
 import { AT, openTestBlobs, openTestStore, uuid } from './boardTestkit';
 
 const open: Array<{ close(): void }> = [];
@@ -62,8 +63,9 @@ describe('legacy board import', () => {
     const first = await importLegacyBoards(options);
     expect(first.imported.sort()).toEqual(boards.map((board) => board.id).sort());
     expect(first.failed).toEqual([]);
-    // Board keys are gone; the sidecar and the index are not boards and stay.
-    expect([...fake.data.keys()].sort()).toEqual([`${PREFIX}${boards[0]!.id}:checkpoints`, `${PREFIX}index`].sort());
+    // Board keys are gone and the checkpoint stack has moved to the board's new id; the index is not a board and stays.
+    expect([...fake.data.keys()].sort()).toEqual([`${PREFIX}index`]);
+    expect(localStorage.getItem(`${PREFIX}${legacyBoardId(boards[0]!.id)}:checkpoints`)).toBe('[]');
 
     // A crash before removal leaves the keys behind: the re-run skips them and cleans up.
     for (const board of boards) fake.data.set(`${PREFIX}${board.id}`, board.raw);

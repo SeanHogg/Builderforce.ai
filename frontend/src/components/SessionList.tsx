@@ -8,10 +8,10 @@
  * browser still holds, because an unclaimed board is the work most at risk of
  * being lost and therefore the work that most needs to be visible.
  *
- * It reads `fetchRecentCanvases()` and `listPendingDrafts()` — the shared answers
- * to "what was I working on". The PRD recorded this step as blocked on
- * `listLocalCreationSessions()` not existing; it does exist, and the block was
- * stale — a guest's session list is complete.
+ * It reads `fetchRecentCanvases()`, `listPendingDrafts()` and the device's own workspace boards
+ * (`listWorkspaceBoards()`, from the replica) — the shared answers to "what was I working on".
+ * The replica is why a board made a moment ago, or while offline, is listed before the server
+ * has heard of it, and why the list is whole with no network.
  *
  * When a Project is scoped in the TopBar, Recents filters to it: sessions tied
  * to that project (directly, or via a tied folder) plus a separate "Unfiled"
@@ -29,10 +29,10 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
+import { useToast } from '@/components/ToastProvider';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
-import { fetchRecentCanvases, invalidateRecentCanvases, listPendingDrafts } from '@/lib/pendingWork';
-import { isLocalCreationSession, updateLocalCreationSession, type LocalCreationEntry } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { fetchRecentCanvases, invalidateRecentCanvases, listPendingDrafts, reportStudioFailure, createLocalCreationSession, listWorkspaceBoards, updateLocalCreationSession, type LocalCreationEntry } from '@/lib/pendingWork';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { Icon } from '@/components/ui/Icon';
 import { CanvasSyncBadge } from '@/components/canvas/CanvasSyncBadge';
@@ -80,7 +80,9 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
 
   const [recent, setRecent] = useState<CreationSessionSummary[]>([]);
   const [drafts, setDrafts] = useState<LocalCreationEntry[]>([]);
+  const [deviceBoards, setDeviceBoards] = useState<LocalCreationEntry[]>([]);
   const [creating, setCreating] = useState(false);
+  const toast = useToast();
   // Null keeps the default 42%-of-rail height (globals.css) until a drag sets
   // an explicit px value. Seeded from a stored preference, or — the first
   // time this browser sees the panel — from its own rendered height, so the
@@ -115,52 +117,58 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
   const closeActive = closeBoard && currentId ? () => {
     onNavigate?.();
     router.push('/create');
-    closeBoard({ sessionId: currentId, persistence: isLocalCreationSession(currentId) ? 'local' : 'server' });
+    closeBoard({ sessionId: currentId, persistence: hasTenant ? 'server' : 'local' });
   } : null;
 
+  /** The device's boards, from the replica: unbound drafts, and the workspace's own boards held here. */
+  const readDevice = useCallback(() => {
+    void Promise.all([listPendingDrafts(), listWorkspaceBoards()])
+      .then(([pending, workspace]) => { setDrafts(pending); setDeviceBoards(workspace); })
+      .catch((error: unknown) => void reportStudioFailure('SessionList.device', error));
+  }, []);
+
   useEffect(() => {
-    setDrafts(listPendingDrafts());
+    readDevice();
     if (!hasTenant) return;
     // Read-through and shared with the switcher, so this is not a second request.
     void fetchRecentCanvases(currentProjectId).then(setRecent);
-  }, [hasTenant, pathname, currentProjectId]);
+  }, [hasTenant, pathname, currentProjectId, readDevice]);
 
   const newCanvas = useCallback(async () => {
     setCreating(true);
-    const openLocal = () => {
-      // No workspace: the anonymous board is still a real board — a local-first
-      // one this browser holds until sign-in claims it (`pendingWork`). It used
-      // to bounce to `/create`, which for a signed-out visitor was a login
-      // redirect, so "New canvas" was the one control in the guest shell that
-      // could not do the thing it is named after.
+    const openDevice = () => {
+      // The board is made on this device FIRST — in the workspace when there is one, unbound for a
+      // guest — and the sync driver sends it; it is real work the moment it exists, with or without
+      // a network. (It used to bounce to `/create`, a login redirect for a signed-out visitor.)
       onNavigate?.();
-      router.push(`/create/${startGuestCreationSession('', { surface: 'brain' })}`);
+      router.push(`/create/${hasTenant ? createLocalCreationSession('') : startGuestCreationSession('', { surface: 'brain' })}`);
     };
-    if (!hasTenant) {
-      openLocal();
-      setCreating(false);
-      return;
-    }
     try {
-      const created = await creationSessionsApi.create({
-        title: t('untitled'),
-        // Scoped to a project → the new board is born tied to it, so it shows
-        // up under "Tied to this project" without an extra manual step.
-        projectIds: currentProjectId != null ? [currentProjectId] : undefined,
-      });
-      invalidateRecentCanvases();
-      onNavigate?.();
-      router.push(`/create/${created.session.id}`);
-    } catch {
-      openLocal();
+      if (hasTenant && currentProjectId != null) {
+        // Born tied to the scoped Project so it shows up under "Tied to this project" with no manual
+        // step. A project tie is a server-side link outside the sync contract (sync v1), so this one
+        // create stays a server write; if it fails the board is still made on the device.
+        const created = await creationSessionsApi.create({ title: t('untitled'), projectIds: [currentProjectId] });
+        invalidateRecentCanvases();
+        onNavigate?.();
+        router.push(`/create/${created.session.id}`);
+        return;
+      }
+      openDevice();
+    } catch (error) {
+      void reportStudioFailure('SessionList.newCanvas', error);
+      // The board is made on the device anyway; the project tie is a server link and is NOT kept — say so.
+      toast.warning(t('projectTieDropped'));
+      openDevice();
     } finally {
       setCreating(false);
     }
-  }, [hasTenant, onNavigate, router, t, currentProjectId]);
+  }, [hasTenant, onNavigate, router, t, toast, currentProjectId]);
 
   const activeSession = recent.find((session) => session.id === currentId);
   const activeDraft = activeSession ? undefined : drafts.find((draft) => draft.sessionId === currentId);
-  const active = activeSession ?? activeDraft;
+  const activeDevice = activeSession || activeDraft ? undefined : deviceBoards.find((board) => board.sessionId === currentId);
+  const active = activeSession ?? activeDraft ?? activeDevice;
   const activeTitle = active
     ? ('title' in active ? active.title : undefined) ?? t('untitled')
     : null;
@@ -174,9 +182,12 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
     if (!currentId) return;
     const value = titleDraft.trim();
     if (!value) { setTitleDraft(activeTitle ?? ''); return; }
-    if (activeDraft) {
-      updateLocalCreationSession(currentId, { title: value });
-      setDrafts(listPendingDrafts());
+    // A board the device holds is renamed on the device: the header write is journaled, so the
+    // server hears it too — one path, offline or not.
+    if (activeDraft || activeDevice) {
+      void updateLocalCreationSession(currentId, { title: value })
+        .then(readDevice)
+        .catch((error: unknown) => void reportStudioFailure('SessionList.rename', error));
       return;
     }
     if (activeSession && value !== activeSession.title) {
@@ -187,10 +198,15 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
     }
   };
 
+  const serverIds = new Set(recent.map((session) => session.id));
   const allEntries: RecentEntry[] = [
     ...drafts
       .filter((draft) => draft.sessionId !== currentId)
       .map((draft) => ({ id: draft.sessionId, title: draft.title || t('untitled'), draft: true, tied: false })),
+    // The workspace's boards this device holds that the server list does not (yet): made a moment ago, or offline.
+    ...deviceBoards
+      .filter((board) => board.sessionId !== currentId && !serverIds.has(board.sessionId))
+      .map((board) => ({ id: board.sessionId, title: board.title || t('untitled'), draft: false, tied: false })),
     ...recent
       .filter((session) => session.id !== currentId)
       .map((session) => ({

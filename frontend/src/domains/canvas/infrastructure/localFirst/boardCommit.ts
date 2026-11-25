@@ -33,6 +33,7 @@ import {
   edgePayloadOf,
   objectPayloadOf,
   samePayload,
+  sameExceptMediaUrls,
   syncedBoardPayload,
   timelineRecordId,
   type BoardPayload,
@@ -124,6 +125,11 @@ async function writeGraphDiff(
   /** One upsert: written, or kept as a conflict when another tab got there first. */
   const upsert = async <T>(entityType: typeof CANVAS_OBJECT | typeof CANVAS_EDGE, id: string, proposed: T): Promise<void> => {
     const existing = await tx.get<T>(entityType, id);
+    if (existing && editedByAnotherTab(existing, options.baseVersions?.[id], proposed) && sameExceptMediaUrls(existing.payload, proposed)) {
+      // The upload queue moved this object's media to its uploaded url: take that, write nothing.
+      result.versions[id] = existing.version;
+      return;
+    }
     if (existing && editedByAnotherTab(existing, options.baseVersions?.[id], proposed)) {
       await recordTabConflict(tx, ctx, existing, proposed);
       result.conflicts.push(id);

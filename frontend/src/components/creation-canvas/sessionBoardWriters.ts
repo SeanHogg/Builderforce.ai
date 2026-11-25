@@ -14,14 +14,15 @@
  * LOADED instance of the same session; with none, it is held and replayed onto the next
  * one the moment its board has loaded ({@link drainSessionBoardWrites}), after the load
  * wrote the saved board, so the turn's changes land on top of it and the next autosave
- * keeps them. If the turn ends with no board to receive them, a device-only board's
- * held writes are applied to its stored snapshot, so the work is on the device the next
- * time it is opened. (A server board saved each transcript row as it was written; its
- * held object writes replay when it is next opened in this page.)
+ * keeps them. If the turn ends with no board to receive them, the held writes are applied to
+ * the board the device holds, so the work is on the device the next
+ * time it is opened — the board's records, written through the same store the canvas saves to,
+ * for a board with a server behind it as well (its transcript rows are records now, not API calls).
  */
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, useState } from 'react';
 import { getRunSnapshot, subscribeRun } from '@seanhogg/builderforce-brain-embedded';
-import { readLocalCreationSession, writeLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { readLocalCreationSession, writeLocalCreationSession } from '@/lib/pendingWork';
+import { reportLocalFirstFailure } from '@/lib/localFirst/reportLocalFirstFailure';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
 import { type Edge, type Node, useEdgesState, useNodesState } from '@xyflow/react';
 import { canvasRunKey } from './brainTurn/canvasRunKey';
@@ -61,9 +62,9 @@ function applyAction<T>(current: T, action: SetStateAction<unknown>): T {
   return typeof action === 'function' ? (action as (prev: T) => T)(current) : (action as T);
 }
 
-/** Apply a device-only board's held writes to its stored snapshot; false when it has none. */
-function persistHeldLocally(sessionId: string, writes: readonly HeldWrite[]): boolean {
-  const stored = readLocalCreationSession(sessionId);
+/** Apply a board's held writes to the board the device holds; false when it holds none. */
+async function persistHeldLocally(sessionId: string, writes: readonly HeldWrite[]): Promise<boolean> {
+  const stored = await readLocalCreationSession(sessionId);
   if (!stored) return false;
   let nodes: CanvasObject[] = stored.nodes;
   let edges: Edge[] = stored.edges;
@@ -74,7 +75,7 @@ function persistHeldLocally(sessionId: string, writes: readonly HeldWrite[]): bo
     else if (key === 'timeline') timeline = applyAction(timeline, action);
     // Proposals and the auto-apply flag are view state of a board on screen.
   }
-  writeLocalCreationSession(sessionId, { ...stored, nodes, edges, timeline: timelineToLocal(timeline), updatedAt: new Date().toISOString() });
+  await writeLocalCreationSession(sessionId, { nodes, edges, timeline: timelineToLocal(timeline) });
   return true;
 }
 
@@ -87,9 +88,11 @@ function watchForSettle(sessionId: string): void {
     settleWatchers.get(sessionId)?.();
     settleWatchers.delete(sessionId);
     const held = heldBySession.get(sessionId);
-    if (!held || held.persistence !== 'local' || receiverFor(sessionId, 'nodes')) return;
-    // Kept for the next board to open when there is no stored snapshot to write into.
-    if (persistHeldLocally(sessionId, held.writes)) heldBySession.delete(sessionId);
+    if (!held || receiverFor(sessionId, 'nodes')) return;
+    // Kept for the next board to open when the device holds no board to write into.
+    void persistHeldLocally(sessionId, held.writes)
+      .then((kept) => { if (kept) heldBySession.delete(sessionId); })
+      .catch((error: unknown) => reportLocalFirstFailure('sessionBoardWriters.persistHeld', error));
   };
   settleWatchers.set(sessionId, subscribeRun(key, check));
   check();

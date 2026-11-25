@@ -22535,6 +22535,32 @@
     "provenanceOn": "Revisado el {date}"
   },
   "creationCanvas": {
+    "sync": {
+      "state": {
+        "idle": "Guardado",
+        "syncing": "Sincronizando…",
+        "held": "Guardado aquí · pendiente de enviar",
+        "offline": "Sin conexión · guardado en este dispositivo",
+        "denied": "La sincronización está desactivada en este dispositivo",
+        "unbound": "Guardado solo en este dispositivo",
+        "busy": "Sincronizando en otra pestaña"
+      },
+      "pending": "{count, plural, one {# cambio en espera} other {# cambios en espera}}"
+    },
+    "conflicts": {
+      "notice": "{count, plural, one {# edición necesita tu decisión} other {# ediciones necesitan tu decisión}}",
+      "title": "Resolver ediciones en conflicto",
+      "hint": "Alguien cambió el mismo elemento que tú. Tu versión sigue en el tablero. Elige cuál conservar; no se pierde nada hasta que decidas.",
+      "object": "Elemento",
+      "reasonEdited": "Editado en dos dispositivos o pestañas.",
+      "reasonDeleted": "Eliminado en otro lugar mientras lo editabas.",
+      "keepMine": "Conservar el mío",
+      "keepTheirs": "Conservar el otro",
+      "restoreCopy": "Conservar mi edición como copia"
+    },
+    "noticeStorageUnavailable": "Este navegador no puede guardar tableros en este dispositivo, así que nada de lo que hagas aquí se conservaría. Abre Studio en una ventana normal o permite el almacenamiento del sitio.",
+    "noticePlanLimitBoard": "Se alcanzó el límite de tableros guardados de tu plan. Este tablero permanece en este dispositivo hasta que mejores el plan.",
+    "noticeConflictsHeld": "{count, plural, one {# edición entra en conflicto con un cambio de otra pestaña o dispositivo. Revísala en el panel de sincronización.} other {# ediciones entran en conflicto con cambios de otra pestaña o dispositivo. Revísalas en el panel de sincronización.}}",
     "scopeKind": "Alcance",
     "scopeId": "ID de alcance",
     "scopeWorkspace": "Todo el espacio de trabajo",
@@ -24711,7 +24737,6 @@
     "createInviteAgent": "Crear e invitar agente",
     "openingCanvas": "Abriendo tu lienzo de creación…",
     "creatingCanvas": "Creando tu lienzo…",
-    "startingOnDevice": "Iniciando de forma segura en este dispositivo…",
     "sharedStart": "Compartir este lienzo",
     "sharedStarting": "Creando…",
     "sharedStarted": "Compartido: envía el enlace para invitar a alguien",
@@ -24991,7 +25016,6 @@
     "noticeBrainFinished": "Brain terminó de evaluar el lienzo",
     "noticeBrainStopped": "Detuviste esta ejecución. No se envió nada más.",
     "noticeExportFailed": "Error al exportar el lienzo",
-    "noticeConversationSaveFailed": "Error al guardar la conversación",
     "noticeTemplateFailed": "No se pudo aplicar la plantilla",
     "noticeCompareBranchFailed": "No se pudo comparar la rama",
     "noticeCompareProjectsFailed": "No se pudieron comparar los proyectos",
@@ -25032,7 +25056,6 @@
     "noticeClaimFailed": "Todavía no se pudo guardar esta sesión",
     "noticeApplyingBrainChanges": "Aplicando {count, plural, one {# cambio de Brain} other {# cambios de Brain}}…",
     "noticeBrainChangesAwaitReview": "{count, plural, one {# cambio de Brain espera} other {# cambios de Brain esperan}} revisión",
-    "noticeConversationSaveFailedReason": "No se pudo guardar la conversación: {reason}",
     "noticePrdNotSavedReason": "El PRD del proyecto no se guardó: {reason}",
     "noticeGuestLimitReached": "Has usado tus {limit} mensajes de invitado gratuitos de hoy. Regístrate gratis para continuar: tu lienzo te acompaña.",
     "noticeGuestLimitDevice": "Este dispositivo alcanzó su límite de invitado gratuito de hoy. Regístrate gratis para continuar: tu lienzo te acompaña.",
@@ -31154,6 +31177,7 @@
     "moreSeats": "{count} puestos más"
   },
   "sessions": {
+    "projectTieDropped": "Este tablero se creó en tu dispositivo, pero no se pudo guardar su vínculo con el proyecto. Vincúlalo al proyecto cuando tengas conexión.",
     "newCanvas": "+ Nuevo lienzo",
     "active": "Activo",
     "renameAria": "Cambiar el nombre de este lienzo",

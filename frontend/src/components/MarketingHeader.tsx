@@ -19,7 +19,7 @@ import { registerHref } from '@/lib/auth';
 import { rendersAppShell } from '@/lib/shellRouting';
 import { useMobileNav } from '@/lib/useMobileNav';
 import { useDismissOnOutsidePress } from '@/lib/useDismissable';
-import { listLocalCreationSessions } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { listLocalCreationSessions, reportStudioFailure } from '@/lib/pendingWork';
 import { Icon } from '@/components/ui/Icon';
 import { HeaderCartButton } from './HeaderCartButton';
 
@@ -325,8 +325,8 @@ export default function MarketingHeader() {
 
   /**
    * Whether THIS browser already has real canvas work — checked once and held in
-   * state rather than on every render, since `listLocalCreationSessions` scans
-   * every `localStorage` key. Only meaningful `inProduct`; a marketing page keeps
+   * state rather than on every render, since `listLocalCreationSessions` reads
+   * the device's board list. Only meaningful `inProduct`; a marketing page keeps
    * its unconditional "Open the canvas" invitation regardless of what some OTHER
    * tab's guest board holds.
    *
@@ -346,8 +346,12 @@ export default function MarketingHeader() {
    */
   const [hasLocalWork, setHasLocalWork] = useState(false);
   useEffect(() => {
-    if (!inProduct) { setHasLocalWork(false); return; }
-    setHasLocalWork(listLocalCreationSessions().length > 0);
+    if (!inProduct) { setHasLocalWork(false); return undefined; }
+    let cancelled = false;
+    void Promise.resolve(listLocalCreationSessions())
+      .then((sessions) => { if (!cancelled) setHasLocalWork(sessions.length > 0); })
+      .catch((error: unknown) => void reportStudioFailure('MarketingHeader.localWork', error));
+    return () => { cancelled = true; };
   }, [inProduct, pathname]);
   const keepingWork = inProduct && hasLocalWork;
 

@@ -5,38 +5,33 @@
  *
  * Four doors open a session from a sentence — `/create/new?prompt=`, the legacy
  * `/brainstorm?prompt=` redirect, the dashboard's build box and the Studio home — and each
- * had written its own copy of the same three decisions, each slightly differently: the
- * dashboard fell back to a local board but filed nothing, `/create/new` filed a signed-in
- * person's fallback as a GUEST lead, and the brainstorm redirect did not fall back at all.
- * The decisions, written once:
+ * had written its own copy of the same decisions. The decisions, written once, local-first:
  *
- *   - A person with a workspace gets a SERVER session (`creationSessionsApi.create`), the
- *     prompt carried as its `initial:` timeline row so the canvas's first turn runs on it.
- *   - If that fails for any reason but the plan, they still get to work: a LOCAL board
- *     (`createLocalCreationSession`) that is claimed into their workspace on the next
- *     load. Not `startGuestCreationSession` — a signed-in customer is not a guest lead,
- *     and filing their prompt in the funnel would double-count them.
- *   - A plan limit is RETHROWN. It is the one failure a local board would hide: the
- *     person would build on a board their plan then refuses to keep. The caller shows the
- *     upgrade path (`UpgradeModal`).
- *   - Someone SIGNED IN without a workspace (yet — they have not picked one) gets a local
- *     board too, claimed once they have one. Never a guest lead: same reason as above.
- *   - Everyone else gets a guest board, and their prompt is recorded under the door they
- *     used (`startGuestCreationSession`).
+ *   - A board is ALWAYS created on this device first (`createLocalCreationSession`), under the
+ *     destination the person is in: the workspace's for someone in one, unbound for someone with
+ *     none yet. There is no server create to fail and so no fallback branch and no `local-` id:
+ *     the id is the board's id on the server too, and the sync driver sends the board once it can.
+ *   - A plan limit is not thrown here any more. The server refuses a board over the workspace's
+ *     limit as a `rejected` receipt, the board stays on the device, and the board's surface shows
+ *     the upgrade path (`useBoardSyncOutcome` → `UpgradeModal`) — the person never builds on a
+ *     board their plan then silently drops.
+ *   - Someone SIGNED IN without a workspace gets a local board too, bound once they have one.
+ *     Never a guest lead: a signed-in customer's prompt belongs to a tenant canvas, and filing it
+ *     in the funnel would double-count them.
+ *   - Everyone else gets a guest board, and their prompt is recorded under the door they used
+ *     (`startGuestCreationSession`).
  *
- * Pure of routing: it answers with the session id and where it lives, and the caller
- * decides which URL (and which lens) that id opens at.
+ * Pure of routing: it answers with the board id and where it lives, and the caller decides which
+ * URL (and which lens) that id opens at.
  */
-import { createLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
-import { creationSessionsApi } from '@/lib/builderforceApi';
+import { createLocalCreationSession } from '@/lib/pendingWork';
 import { startGuestCreationSession, type GuestPromptSurface } from '@/lib/guestPromptCapture';
-import { isPlanLimitError } from '@/lib/planLimitError';
 
 export interface StartCreationSessionInput {
   prompt: string;
   /** Signed in at all. Without a workspace that still means NOT a guest lead. */
   isAuthenticated: boolean;
-  /** In a workspace — with `isAuthenticated`, the only case a server session can be created for. */
+  /** In a workspace — with `isAuthenticated`, the board is created in it and synced. */
   hasTenant: boolean;
   /** Which door a guest used, for the funnel. Ignored for a signed-in person. */
   surface: GuestPromptSurface;
@@ -44,29 +39,12 @@ export interface StartCreationSessionInput {
 
 export interface StartedCreationSession {
   sessionId: string;
-  /** `local` for a guest, for someone signed in with no workspace, and for a signed-in
-   *  person whose server create failed. */
+  /** `server` for a board in a workspace (it syncs); `local` for a guest and for someone with no workspace yet. */
   persistence: 'local' | 'server';
-}
-
-/** The title a session starts with: the prompt's first 80 characters, or the server's default. */
-function sessionTitle(prompt: string): string | undefined {
-  return prompt.trim().slice(0, 80) || undefined;
 }
 
 export async function startCreationSession({ prompt, isAuthenticated, hasTenant, surface }: StartCreationSessionInput): Promise<StartedCreationSession> {
   const initialPrompt = prompt.trim();
   if (!isAuthenticated) return { sessionId: startGuestCreationSession(initialPrompt, { surface }), persistence: 'local' };
-  if (!hasTenant) return { sessionId: createLocalCreationSession(initialPrompt), persistence: 'local' };
-  const title = sessionTitle(initialPrompt);
-  try {
-    const { session } = await creationSessionsApi.create({
-      ...(title ? { title } : {}),
-      ...(initialPrompt ? { initialPrompt } : {}),
-    });
-    return { sessionId: session.id, persistence: 'server' };
-  } catch (error) {
-    if (isPlanLimitError(error)) throw error;
-    return { sessionId: createLocalCreationSession(initialPrompt), persistence: 'local' };
-  }
+  return { sessionId: createLocalCreationSession(initialPrompt), persistence: hasTenant ? 'server' : 'local' };
 }

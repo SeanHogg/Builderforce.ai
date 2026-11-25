@@ -4,7 +4,7 @@
  * `role`). ONE pair of mappers, so the load, the save, the room adoption and the
  * off-screen settle (`sessionBoardWriters`) cannot drift apart field by field.
  */
-import type { LocalCreationSnapshot } from '@/domains/canvas/infrastructure/localCanvasStore';
+import type { LocalCreationSnapshot } from '@/domains/canvas/domain/boardSnapshot';
 import type { CanvasTimelineMessage } from './canvasBoardTypes';
 
 type LocalTimeline = NonNullable<LocalCreationSnapshot['timeline']>;

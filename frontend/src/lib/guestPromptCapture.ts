@@ -26,7 +26,7 @@ import { apiRequestStream } from './apiClient';
 import { AMBIENT_REQUEST_ERRORS } from './errors/transportFailure';
 import { getVisitorId, getFirstTouch } from './visitor';
 import { getVisitId } from './visitorJourney';
-import { createLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { createLocalCreationSession } from '@/lib/pendingWork';
 import { NEW_CHAT_MODE, type ChatMode } from './brain';
 
 /** Where the prompt was typed. Mirrors `GUEST_PROMPT_SURFACES` on the server;

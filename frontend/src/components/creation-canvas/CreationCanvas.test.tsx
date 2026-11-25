@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installPhoneViewport } from '@/test/phoneViewport';
@@ -15,7 +16,7 @@ import { BrainDock } from './BrainDock';
 import { specsApi } from '@/lib/builderforceApi';
 import type { CreationFlowNode } from './CreationNode';
 import type { ProjectEvermindContributions, ProjectEvermindHead } from '@/lib/projectEvermindApi';
-import { createLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { createLocalCreationSession } from '@/lib/pendingWork';
 import { buildBrowserCreativeArtifact } from '@/lib/creationDeliverables';
 import { AUTHORED_EVALUATION, answerCanvasTurns, canvasTurnRunner, chooseWhereModelsRun, holdCanvasTurns } from '@/test/canvasTurnRunnerMock';
 import { canvasPhaseStorageKey } from '@/lib/canvasPhases';

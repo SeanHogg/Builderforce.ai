@@ -113,8 +113,7 @@ function composeModules(surface: SurfacePorts, ran: { value: boolean }): Partial
  */
 export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: RouteDecision): RunPolicy {
   const { pipeline, start, skipsVerify } = decision;
-  const prior = policy.modelStart;
-  const folded: RunPolicy = skipsVerify ? { ...policy, skipVerifyStage: true } : policy;
+  const prior = policy.modelStart;  const folded: RunPolicy = skipsVerify ? { ...policy, skipVerifyStage: true } : policy;
   if (!prior) {
     if (!pipeline) return folded;
     return {

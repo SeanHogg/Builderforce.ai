@@ -17284,6 +17284,7 @@ async function synthesizeFinal(input, state, hooks, transcript, pack, tally, why
     ...completion.usage ? { usage: completion.usage } : {}
   });
   const raw = completion.content ?? "";
+  if (!raw.trim()) return null;
   const output = hooks.stall.settle ? hooks.stall.settle(pctx, raw) : raw.trim();
   if (!output) return null;
   appendRows(input, transcript, ask, { role: "assistant", content: output });
@@ -21590,4 +21591,4 @@ export {
   computeBrainDiagnostics,
   buildBrainTriageReport
 };
-//# sourceMappingURL=chunk-3LC5AHO2.mjs.map
+//# sourceMappingURL=chunk-ATUTRIKJ.mjs.map

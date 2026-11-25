@@ -22535,6 +22535,32 @@
     "provenanceOn": "审阅于 {date}"
   },
   "creationCanvas": {
+    "sync": {
+      "state": {
+        "idle": "已保存",
+        "syncing": "正在同步…",
+        "held": "已保存在此设备 · 等待发送",
+        "offline": "离线 · 已保存在此设备",
+        "denied": "此设备已关闭同步",
+        "unbound": "仅保存在此设备",
+        "busy": "正在另一个标签页中同步"
+      },
+      "pending": "{count, plural, other {# 项更改等待发送}}"
+    },
+    "conflicts": {
+      "notice": "{count, plural, other {# 项编辑需要你来决定}}",
+      "title": "解决冲突的编辑",
+      "hint": "有人修改了与你相同的项目。你的版本仍在画布上。请选择保留哪一个；在你决定之前不会丢失任何内容。",
+      "object": "项目",
+      "reasonEdited": "在两个设备或标签页中被编辑。",
+      "reasonDeleted": "你编辑时，它已在别处被删除。",
+      "keepMine": "保留我的",
+      "keepTheirs": "保留对方的",
+      "restoreCopy": "将我的编辑保留为副本"
+    },
+    "noticeStorageUnavailable": "此浏览器无法在此设备上保存画布，因此这里的内容不会被保留。请在普通窗口中打开 Studio，或允许网站存储。",
+    "noticePlanLimitBoard": "已达到你的套餐可保存画布的上限。升级之前，此画布仅保留在此设备上。",
+    "noticeConflictsHeld": "{count, plural, other {# 项编辑与来自其他标签页或设备的更改冲突。请在同步面板中查看。}}",
     "costToBuild": "构建成本",
     "costUnderOneCent": "<$0.01",
     "costRunsAndTokens": "{requests} 次运行 · {tokens} 个 token",
@@ -24711,7 +24737,6 @@
     "createInviteAgent": "创建并邀请智能体",
     "openingCanvas": "正在打开你的创作画布……",
     "creatingCanvas": "正在创建你的画布……",
-    "startingOnDevice": "正在此设备上安全启动……",
     "sharedStart": "分享此画布",
     "sharedStarting": "正在创建……",
     "sharedStarted": "已共享——发送链接即可邀请他人",
@@ -24991,7 +25016,6 @@
     "noticeBrainFinished": "Brain 已完成画布评估",
     "noticeBrainStopped": "你已停止本次运行，未再发送任何内容。",
     "noticeExportFailed": "画布导出失败",
-    "noticeConversationSaveFailed": "对话保存失败",
     "noticeTemplateFailed": "无法应用模板",
     "noticeCompareBranchFailed": "无法比较分支",
     "noticeCompareProjectsFailed": "无法比较项目",
@@ -25032,7 +25056,6 @@
     "noticeClaimFailed": "暂时无法保存此会话",
     "noticeApplyingBrainChanges": "正在应用 {count} 项 Brain 更改…",
     "noticeBrainChangesAwaitReview": "{count} 项 Brain 更改待审核",
-    "noticeConversationSaveFailedReason": "对话保存失败：{reason}",
     "noticePrdNotSavedReason": "项目 PRD 未保存：{reason}",
     "noticeGuestLimitReached": "你今天的 {limit} 条免费访客消息已用完。免费注册即可继续——你的画布会一并保留。",
     "noticeGuestLimitDevice": "本设备今天的免费访客额度已用完。免费注册即可继续——你的画布会一并保留。",
@@ -31154,6 +31177,7 @@
     "moreSeats": "另外 {count} 个席位"
   },
   "sessions": {
+    "projectTieDropped": "此画布已创建在你的设备上，但其项目关联未能保存。联网后请重新将其关联到该项目。",
     "newCanvas": "+ 新建画布",
     "active": "进行中",
     "renameAria": "重命名此画布",

@@ -9,7 +9,7 @@
  * `mergeLocalCreationSessions`) are split here into their pure core, and the store
  * keeps a thin wrapper that does the I/O. The cores carry the old bodies verbatim.
  *
- * `localCanvasStore.ts` re-exports everything below, so there is ONE implementation.
+ * `localCanvasStore.ts` is deleted; its localStorage reader lives only in `legacyBoardImport.ts`.
  */
 
 import type { Edge } from '@xyflow/react';
@@ -18,6 +18,14 @@ import { STICKY_COLORS } from './authoredColors';
 import type { CanvasObject } from './canvasObject';
 
 export const LOCAL_CREATION_PREFIX = 'local-';
+
+/** The key prefix of a board's device-side SIDECARS (checkpoints) in `localStorage`. */
+const STORAGE_PREFIX = 'builderforce:create:';
+
+/** The `localStorage` key a board's sidecar stores (`creationCheckpoints`) are filed under. */
+export function creationStorageKey(sessionId: string): string {
+  return `${STORAGE_PREFIX}${sessionId}`;
+}
 
 export interface LocalCreationSnapshot {
   version: 1;

@@ -27,7 +27,7 @@
  * on the existing save debounce. That is deliberately not a CRDT: this is a
  * short-lived ≤8-person free session, and an operational-transform stack has
  * failure modes far worse than "whoever moved a card most recently won".
- * localStorage stays the local cache, so a dropped connection still leaves the
+ * The device store stays the local copy, so a dropped connection still leaves the
  * board on the device that was editing it. (Moved here from `CanvasInner`, where
  * it sat above the call to this hook after the state it described had left.)
  *
@@ -56,11 +56,9 @@ import {
   type SharedSession,
 } from '../application/ShareCanvasSession';
 import { createGuestRoomGateway } from '../infrastructure/guestRoomGateway';
-import {
-  parseLocalCreationSnapshot,
-  writeLocalCreationSession,
-  type LocalCreationSnapshot,
-} from '../infrastructure/localCanvasStore';
+import { parseLocalCreationSnapshot, type LocalCreationSnapshot } from '../domain/boardSnapshot';
+import { writeLocalCreationSession } from '@/lib/pendingWork';
+import { reportLocalFirstFailure } from '@/lib/localFirst/reportLocalFirstFailure';
 import type { CanvasTextTranslator } from '../domain/canvasText';
 
 export interface SharedCanvasRoomOptions {
@@ -196,8 +194,26 @@ export function useSharedCanvasRoom({
     return () => { cancelled = true; };
   }, [enabled, code, room.canvasVersion, shared]);
 
+  // The device write is trailing-debounced: a pan or a drag fires this per frame, and the store is
+  // IndexedDB (a transaction per call), not a string in localStorage. The ROOM push below is not.
+  const deviceWrite = useRef<{ timer: ReturnType<typeof setTimeout>; snapshot: LocalCreationSnapshot } | null>(null);
+  // Leaving the board must not drop the last debounced write: it goes now.
+  useEffect(() => () => {
+    const pending = deviceWrite.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    deviceWrite.current = null;
+    void writeLocalCreationSession(sessionId, pending.snapshot).catch((error: unknown) => reportLocalFirstFailure('sharedCanvasRoom.flush', error));
+  }, [sessionId]);
   const persist = useCallback((snapshot: LocalCreationSnapshot) => {
-    writeLocalCreationSession(sessionId, snapshot);
+    if (deviceWrite.current) clearTimeout(deviceWrite.current.timer);
+    deviceWrite.current = {
+      snapshot,
+      timer: setTimeout(() => {
+        deviceWrite.current = null;
+        void writeLocalCreationSession(sessionId, snapshot).catch((error: unknown) => reportLocalFirstFailure('sharedCanvasRoom.persist', error));
+      }, 200),
+    };
     void shared.push(serializeForRoom(snapshot), t).then((outcome) => {
       if (outcome && !outcome.stored) notifyRef.current(outcome.notice);
     });

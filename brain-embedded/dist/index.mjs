@@ -411,7 +411,7 @@ import {
   workFiledNotStaffedVerdict,
   workFinishPorts,
   workSupportsRoutingSample
-} from "./chunk-3LC5AHO2.mjs";
+} from "./chunk-ATUTRIKJ.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -8686,6 +8686,7 @@ function makeCell() {
     transcript: [],
     priorResearch: null,
     trace: [],
+    workflow: [],
     running: false,
     streamingText: "",
     error: "",
@@ -8814,6 +8815,10 @@ function pushTrace(c, ev) {
   c.trace = [...dropped ? c.trace.slice(dropped) : c.trace, ev];
   if (dropped) c.runTraceFrom = Math.max(0, c.runTraceFrom - dropped);
   c.persistStep?.(ev);
+  emit(c);
+}
+function pushWorkflowSpan(c, ev) {
+  c.workflow = [...c.workflow.slice(1 - MAX_TRACE_EVENTS), ev];
   emit(c);
 }
 function runTrace(c) {
@@ -9041,6 +9046,10 @@ function isLive(chatId) {
 function getRunTrace(chatId) {
   if (chatId == null) return [];
   return cells.get(chatId)?.trace ?? [];
+}
+function getRunWorkflow(chatId) {
+  if (chatId == null) return [];
+  return cells.get(chatId)?.workflow ?? [];
 }
 async function stopBeforeStart(runKey, chatId, persistence, still = () => true) {
   const c = getCell(runKey);
@@ -10706,7 +10715,7 @@ function brainEventSink(c, outcome, on = {}) {
   };
   return {
     workflow(metric) {
-      pushTrace(c, { ts: new Date(metric.endedAt ?? metric.startedAt).toISOString(), category: "message", label: `workflow.stage.${metric.id}.${metric.status}`, args: metric, ...metric.durationMs !== void 0 ? { durationMs: metric.durationMs } : {} });
+      pushWorkflowSpan(c, { ts: new Date(metric.endedAt ?? metric.startedAt).toISOString(), category: "message", label: `workflow.stage.${metric.id}.${metric.status}`, args: metric, ...metric.durationMs !== void 0 ? { durationMs: metric.durationMs } : {} });
     },
     emit(event) {
       const kept = event.kind === "model.coder_reask" ? void 0 : on.turnKept?.();
@@ -15982,8 +15991,9 @@ async function runPrepared(run) {
       budgetStop: (e) => {
         last.contained = e.text;
       },
-      // The turn recorder writes the model downgrade, and the steering port records each direction it drains.
-      recorded: /* @__PURE__ */ new Set(["llm.model_downgrade", "steer.applied"])
+      // The turn recorder writes the model downgrade, and the steering port records each direction it drains. The preamble already
+      // wrote the route's step (`run.pipeline_route`, `runPreamble.ts`), so `openRun`'s own `run.routed` is not a second row for it.
+      recorded: /* @__PURE__ */ new Set(["llm.model_downgrade", "steer.applied", "run.routed"])
     }),
     ship: run.shipPolicy,
     // From here the model policy is the AGENT's: the Brain's guards read `run.policy` (the view's) and report to it through the view.
@@ -17471,7 +17481,7 @@ ${extraSystem}` : resolvedSystemPrompt;
   const buildTriageReport = useCallback12(
     (agentLabel, surface2) => buildBrainTriageReport({
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      events: getRunTrace(chatId),
+      events: [...getRunTrace(chatId), ...getRunWorkflow(chatId)],
       messages,
       chatId,
       agentLabel,

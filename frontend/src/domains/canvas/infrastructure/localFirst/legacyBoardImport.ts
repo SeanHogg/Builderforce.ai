@@ -22,15 +22,15 @@
  *   - The reader is kept ONLY here, and is deleted after one release train.
  */
 
-import { isLocalId, stableEntityId, type EntityDestination, type LocalFirstStore } from '@builderforce/local-first';
-import { localStore, removeLocal } from '@/lib/storage';
+import { stableEntityId, type EntityDestination, type LocalFirstStore } from '@builderforce/local-first';
+import { localStore, removeLocal, writeLocal } from '@/lib/storage';
 import { reportLocalFirstFailure, type LocalFirstFailureSink } from '@/lib/localFirst/reportLocalFirstFailure';
 import { parseLocalCreationSnapshot, LOCAL_CREATION_PREFIX, type LocalCreationSnapshot } from '../../domain/boardSnapshot';
 import type { CanvasBoard } from '../../domain/canvasBoard';
 import type { BlobStore, StoredBlob } from './blobStore';
 import { writeNewBoard } from './boardCommit';
 import { writeRecord, type JournalContext } from './boardJournal';
-import { CANVAS_BOARD, CANVAS_MEDIA, legacyImportMark, mediaUrl, syncableId, type MediaPayload, type TimelinePayload } from './boardRecords';
+import { CANVAS_BOARD, CANVAS_MEDIA, legacyBoardId, legacyImportMark, mediaUrl, syncableId, type MediaPayload, type TimelinePayload } from './boardRecords';
 
 const STORAGE_PREFIX = 'builderforce:create:';
 const DATA_URL = /^data:([^;,]+)(;base64)?,([\s\S]*)$/;
@@ -72,6 +72,27 @@ function legacyKeys(storage: NonNullable<LegacyImportOptions['storage']>): strin
     keys.push(key);
   }
   return keys.sort();
+}
+
+/**
+ * The per-diagnostic boards the old `/tools/<id>` route left behind. Nothing writes them any more and a
+ * person never made them, so they are removed rather than imported — otherwise they would surface in the
+ * library as boards nobody created and be bound into the workspace on the next sign-in.
+ */
+function legacyToolKeys(storage: NonNullable<LegacyImportOptions['storage']>): string[] {
+  const keys: string[] = [];
+  for (let position = 0; position < storage.length; position += 1) {
+    const key = storage.key(position);
+    if (key?.startsWith(`${STORAGE_PREFIX}${LOCAL_CREATION_PREFIX}tool-`)) keys.push(key);
+  }
+  return keys;
+}
+
+/** Move one sidecar value from its legacy key to the board's new one; the old key goes only after the new is written. */
+function moveSidecar(storage: NonNullable<LegacyImportOptions['storage']>, removeKey: (key: string) => void, from: string, to: string): void {
+  const value = storage.getItem(from);
+  if (value === null) return;
+  if (writeLocal(to, value)) removeKey(from);
 }
 
 function decodeDataUrl(value: string): Blob | undefined {
@@ -131,13 +152,13 @@ export async function importLegacyBoards(options: LegacyImportOptions): Promise<
   const removeKey = options.removeKey ?? removeLocal;
   const ctx: JournalContext = { deviceId: options.deviceId, ...(options.now ? { now: options.now } : {}) };
 
+  for (const key of legacyToolKeys(storage)) removeKey(key);
   for (const key of legacyKeys(storage)) {
     const localId = key.slice(STORAGE_PREFIX.length);
     try {
       const snapshot = parseLocalCreationSnapshot(storage.getItem(key) ?? '');
       if (!snapshot) throw new Error('legacy_board_unparseable');
-      const suffix = localId.slice(LOCAL_CREATION_PREFIX.length);
-      const boardId = isLocalId(suffix) ? suffix : stableEntityId(`canvas-legacy:${localId}`);
+      const boardId = legacyBoardId(localId);
       const idOf = (nodeId: string): string => syncableId(`canvas-legacy:${localId}`, nodeId);
       const extracted = extractMedia(localId, snapshot.nodes, idOf);
       const mark = legacyImportMark(localId);
@@ -181,7 +202,9 @@ export async function importLegacyBoards(options: LegacyImportOptions): Promise<
         await tx.setReadMark(mark, stamp);
         return true;
       });
-      // Only now, with the records committed, does the legacy copy go.
+      // Only now, with the records committed, does the legacy copy go — and its checkpoint stack follows
+      // the board to its new id (a stack left under the old key would be unreachable and leak the quota).
+      moveSidecar(storage, removeKey, `${key}:checkpoints`, `${STORAGE_PREFIX}${boardId}:checkpoints`);
       removeKey(key);
       (committed ? result.imported : result.skipped).push(localId);
     } catch (error) {

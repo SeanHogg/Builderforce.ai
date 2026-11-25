@@ -3,7 +3,7 @@ import { Icon } from '@/components/ui/Icon';
 import { GuestSignupCta } from '@/components/GuestSignupCta';
 import { trackActivity } from '@/lib/activity/tracker';
 import { canvasNavigate, canvasSurface } from '@/lib/canvasHost';
-import { claimLocalDraft } from '@/lib/pendingWork';
+import { bindLocalBoard, whenBoardAccepted } from '@/lib/pendingWork';
 import { faultText } from '@/lib/apiClient';
 import type { AccountGate } from '../canvasBoardTypes';
 import { useCanvasSessionFacts } from '../chrome/canvasSessionContext';
@@ -25,7 +25,7 @@ export interface CanvasAccountGateDialogProps {
  * signed-in user on an unsaved board was told to create the account they were
  * already using, and the only button offered took them to /register. What they
  * are actually missing is a SAVED SESSION for the action to point at, and
- * `claimLocalDraft` already turns this board into one. One branch here rather
+ * `bindLocalBoard` already turns this board into one. One branch here rather
  * than eight rewritten call sites: the callers say which action needs it, the
  * gate decides how to ask.
  */
@@ -46,9 +46,10 @@ export function CanvasAccountGateDialog({ gate, onClose, hasAccount, claimingDra
               <button type="button" className={styles.primaryButton} disabled={claimingDraft} onClick={() => {
                 trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: canvasSurface(), action: gate.action } });
                 setClaimingDraft(true);
-                void claimLocalDraft(sessionId)
+                void bindLocalBoard(sessionId)
                   // The saved board opens through the lens it was being seen through (Studio stays Studio).
-                  .then((claimed) => { if (claimed) canvasNavigate(canvasLensSessionPath(lens, claimed.sessionId)); else notify(t('noticeSaveToAccountFailed')); })
+                  // Share and invite are server actions: they wait for the server to have the board (the button shows its pending state meanwhile).
+                  .then(async (claimed) => { const id = claimed?.sessionId ?? sessionId; if (await whenBoardAccepted(id)) canvasNavigate(canvasLensSessionPath(lens, id)); else notify(t('noticeSaveToAccountFailed')); })
                   .catch((error) => notify(faultText(error, t('noticeSaveToAccountFailed'))))
                   .finally(() => { setClaimingDraft(false); onClose(); });
               }}>{claimingDraft ? t('noticeSavingToAccount') : t('gateSaveToAccount')}</button>

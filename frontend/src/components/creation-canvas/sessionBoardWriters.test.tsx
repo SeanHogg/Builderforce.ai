@@ -1,8 +1,9 @@
+import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it } from 'vitest';
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { resetBrainRunStore, startEngineRun } from '@seanhogg/builderforce-brain-embedded';
-import { readLocalCreationSession, writeLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { awaitBoardCreated, createLocalCreationSession, readLocalCreationSession } from '@/lib/pendingWork';
 import { canvasRunKey } from './brainTurn/canvasRunKey';
 import { drainSessionBoardWrites, resetSessionBoardWriters, useSessionBoardWriter } from './sessionBoardWriters';
 
@@ -50,20 +51,24 @@ describe('useSessionBoardWriter', () => {
     expect(second.result.current.list).toEqual(['saved', 'held']);
   });
 
-  it('keeps a device-only board\'s held writes in its stored snapshot when the turn settles off screen', async () => {
-    writeLocalCreationSession(SESSION, { version: 1, title: 'T', nodes: [], edges: [], timeline: [], updatedAt: new Date().toISOString() });
+  it("keeps a board's held writes in the board the device holds when the turn settles off screen", async () => {
+    // A board on this device (records in the local-first store, not a localStorage blob).
+    const board = createLocalCreationSession('');
+    await awaitBoardCreated(board);
     let finish!: () => void;
-    const run = startEngineRun(canvasRunKey(SESSION), () => new Promise<void>((resolve) => { finish = resolve; }));
+    const run = startEngineRun(canvasRunKey(board), () => new Promise<void>((resolve) => { finish = resolve; }));
     const first = renderHook(() => {
       const [timeline, setOnScreen] = useState<Array<{ clientMessageId: string; messageRole: 'assistant'; body: string; createdAt: string }>>([]);
-      return { timeline, set: useSessionBoardWriter(SESSION, 'local', 'timeline', setOnScreen) };
+      return { timeline, set: useSessionBoardWriter(board, 'local', 'timeline', setOnScreen) };
     });
     const staleSet = first.result.current.set;
     first.unmount();
     staleSet((current) => [...current, { clientMessageId: 'reply', messageRole: 'assistant', body: 'Done.', createdAt: '2026-10-17T00:00:00.000Z' }]);
-    expect(readLocalCreationSession(SESSION)?.timeline).toEqual([]);
+    expect((await readLocalCreationSession(board))?.timeline).toEqual([]);
     finish();
     await run;
-    expect(readLocalCreationSession(SESSION)?.timeline).toMatchObject([{ clientMessageId: 'reply', role: 'assistant', body: 'Done.' }]);
+    await waitFor(async () => {
+      expect((await readLocalCreationSession(board))?.timeline).toMatchObject([{ clientMessageId: 'reply', role: 'assistant', body: 'Done.' }]);
+    });
   });
 });

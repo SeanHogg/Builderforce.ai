@@ -14,7 +14,7 @@ import {
   readLocalCheckpoint, readLocalCheckpoints, saveLocalCheckpoint, withCheckpoint,
   type LocalCheckpoint,
 } from './creationCheckpoints';
-import { removeLocalCreationSession, writeLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { removeLocalCreationSession } from '@/lib/pendingWork';
 
 const SESSION = 'local-abc';
 
@@ -112,24 +112,25 @@ describe('readLocalCheckpoints', () => {
 });
 
 describe('a board that goes away takes its checkpoints with it', () => {
+  // The sidecar sweep does not depend on the board's records existing: the checkpoint stack is a
+  // localStorage sidecar and goes synchronously when the board is removed (the store is async now).
   const snapshot = (sessionId: string) => {
-    writeLocalCreationSession(sessionId, { version: 1, title: sessionId, nodes: [], edges: [], updatedAt: '2026-08-19T00:00:00.000Z' });
     saveLocalCheckpoint(sessionId, `${sessionId} work`, board(2));
   };
 
-  it('sweeps the stack when the board is claimed or deleted', () => {
+  it('sweeps the stack when the board is claimed or deleted', async () => {
     // A sidecar that outlives its board is a permanent leak against the same tiny quota
     // the checkpoint store already has to shed against — and it would resurface attached
     // to a board it is not about if an id were ever reused.
     snapshot(SESSION);
-    removeLocalCreationSession(SESSION);
+    await removeLocalCreationSession(SESSION);
     expect(localCheckpointSummaries(SESSION)).toEqual([]);
   });
 
-  it('sweeps ONLY that board', () => {
+  it('sweeps ONLY that board', async () => {
     snapshot(SESSION);
     snapshot('local-other');
-    removeLocalCreationSession(SESSION);
+    await removeLocalCreationSession(SESSION);
     expect(localCheckpointSummaries('local-other')).toHaveLength(1);
   });
 });

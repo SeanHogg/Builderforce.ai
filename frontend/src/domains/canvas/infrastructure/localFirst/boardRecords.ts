@@ -49,9 +49,11 @@ export interface BoardPayload {
   branchParentId?: string;
   viewport?: BoardViewport;
   serverRevision?: number;
+  /** The role the server last gave THIS person on the board: kept so a viewer who opens it offline cannot edit. This device's own; never sent. */
+  role?: 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner';
 }
 
-export type SyncedBoardPayload = Omit<BoardPayload, 'viewport' | 'serverRevision'>;
+export type SyncedBoardPayload = Omit<BoardPayload, 'viewport' | 'serverRevision' | 'role'>;
 
 /** One persisted node (`persistedGraphFromBoard`) plus the board it is on. */
 export type ObjectPayload = PersistableCanvasObject & { boardId: string };
@@ -136,7 +138,7 @@ export function mediaIdsIn(payload: unknown): string[] {
 
 /** What leaves the device: the board without this device's own fields. */
 export function syncedBoardPayload(payload: BoardPayload): SyncedBoardPayload {
-  const { viewport: _viewport, serverRevision: _serverRevision, ...synced } = payload;
+  const { viewport: _viewport, serverRevision: _serverRevision, role: _role, ...synced } = payload;
   return synced;
 }
 
@@ -192,6 +194,20 @@ export function canonicalJson(value: unknown): string {
 
 export const samePayload = (a: unknown, b: unknown): boolean => canonicalJson(a) === canonicalJson(b);
 
+/** A payload without the fields the upload queue rewrites (`url`, `storageKey`) — everything else a person edited. */
+function withoutMediaUrls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutMediaUrls);
+  if (value === null || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).filter(([key]) => key !== 'url' && key !== 'storageKey').map(([key, child]) => [key, withoutMediaUrls(child)]));
+}
+
+/**
+ * Whether two payloads differ ONLY in where their media lives. The upload queue rewrites
+ * `media:<id>` to the uploaded url (a journaled edit); a tab that still holds the old reference has
+ * not edited anything the person could disagree about, so that is a merge, not a conflict.
+ */
+export const sameExceptMediaUrls = (a: unknown, b: unknown): boolean => canonicalJson(withoutMediaUrls(a)) === canonicalJson(withoutMediaUrls(b));
+
 const same = samePayload;
 
 /** The per-object signature diff of design §3: only the changed, added and removed rows. */
@@ -227,6 +243,15 @@ export function rewriteMediaRefs<T>(value: T, mediaId: string, uploaded: { url: 
   };
   return walk(value) as T;
 }
+
+/**
+ * The board id a legacy `local-<uuid>` route id becomes: the uuid itself, or a deterministic id when
+ * the suffix is not one. The legacy import and the route's URL swap name the same board by this one rule.
+ */
+export const legacyBoardId = (localId: string): string => {
+  const suffix = localId.startsWith('local-') ? localId.slice('local-'.length) : localId;
+  return isLocalId(suffix) ? suffix : stableEntityId(`canvas-legacy:${localId}`);
+};
 
 /** The legacy import's marker name for one board (`canvas-legacy-import:<localId>`). */
 export const legacyImportMark = (localId: string): string => `canvas-legacy-import:${localId}`;

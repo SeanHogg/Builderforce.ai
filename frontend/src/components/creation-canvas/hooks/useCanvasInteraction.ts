@@ -20,7 +20,7 @@ import type { CanvasNodePanelId } from '@/lib/canvasNodeAffordances';
 import type { CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 import type { DrawingPreferences } from '../drawingPreferences';
 import type { useTranslations } from 'next-intl';
-import type { LocalCreationSnapshot } from '@/domains/canvas/infrastructure/localCanvasStore';
+import type { LocalCreationSnapshot } from '@/domains/canvas/domain/boardSnapshot';
 
 export interface UseCanvasInteractionDeps {
   canEdit: boolean;

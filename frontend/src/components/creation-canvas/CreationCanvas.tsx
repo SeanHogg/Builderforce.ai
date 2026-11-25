@@ -26,7 +26,6 @@ import { CanvasBoardBridgeProvider } from './canvasBoardBridge';
 import { CanvasSpacePresenceProvider } from './canvasSpacePresence';
 import { cardActFor } from '@/domains/canvas/application/CardAct';
 import { type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationTemplate as ServerCreationTemplate } from '@/lib/builderforceApi';
-import { creationStorageKey } from '@/domains/canvas/infrastructure/localCanvasStore';
 import { useSharedCanvasRoom } from '@/domains/canvas/presentation/useSharedCanvasRoom';
 
 import { useCanvasLiveRoom } from '@/lib/live/useCanvasLiveRoom';
@@ -185,7 +184,6 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const { guestLimit, setGuestLimit, describeTurnError, modelRefusal, setModelRefusal, modeGate, composerId: canvasComposerId } = useCanvasTurnGate({ sessionId, t });
   const confirm = useConfirm();
   const toast = useToast();
-  const storageKey = creationStorageKey(sessionId);
   const [nodes, setNodes, onNodesChange, setNodesOnScreen] = useSessionNodesState<CreationFlowNode>(sessionId, persistence, persistence === 'local' ? initialNodes(canvasText) : []);
   const [evermindLiveByNodeId, setEvermindLiveByNodeId] = useState<Record<string, Partial<CreationNodeData>>>({});
   const [edges, setEdges, onEdgesChange, setEdgesOnScreen] = useSessionEdgesState<Edge>(sessionId, persistence, persistence === 'local' ? initialEdges(canvasText) : []);
@@ -401,7 +399,6 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const saveInFlightRef = useRef(false);
   const activePresenceInitializedRef = useRef(false);
   const activeMemberIdsRef = useRef<Set<string>>(new Set());
-  const pendingSaveRef = useRef<{ signature: string; key: string } | null>(null);
   const viewportRef = useRef({ x: 0, y: 0, zoom: 1 });
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
   /** The live socket, when it is open — the channel pointer frames go out on. */
@@ -468,12 +465,12 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const { setAutoApplyMode, setSessionMode } = useCanvasSessionModes({ autoApplyRef, persistence, sessionId, sessionRole, setAutoApply, setDatasetRowLimit, setFramePresets, setNotice, setPendingInvitations, setServerTemplates, setSessionMode_, shareOpen, t, templateOpen });
   const { memoryEnabled, memoryLoading, setMemoryMode } = useCanvasMemorySwitch({ nodes, sessionId, persistence });
   const runShapingControls = useCanvasRunShaping();
-  const { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, localBoardState, applyRemoteBoard, boardLoaded } = useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, onBoardLoaded: settleLoadedPhase, pendingViewportRef, persistence, revisionRef, saveInFlightRef, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges: setEdgesOnScreen, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes: setNodesOnScreen, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline: setTimelineOnScreen, setTitle, t, timeline, title, viewportRef });
+  const { applyRoomSnapshotRef, currentSnapshotRef, currentSnapshot, refreshFromServer, ensureBoardSession, serverReady, boardLoaded } = useCanvasSession({ commitRevision, currentGraphRef, edges, flowRef, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, onBoardLoaded: settleLoadedPhase, pendingViewportRef, persistence, sessionId, sessionOpenCorrelationRef, setAllMembers, setBranchParentId, setCurrentUserId, setEdges: setEdgesOnScreen, setEvermindLiveByNodeId, setLoadingSession, setMembers, setNodes: setNodesOnScreen, setNotice, setPersistedObjectIds, setSelectedId, setSelectedIds, setSessionMode_, setSessionRole, setTimeline: setTimelineOnScreen, setTitle, t, timeline, title, viewportRef });
   // HOW THIS BOARD IS PRESENTED (`lib/canvasLens.ts`) — every lens decision reads this def, never the id.
   const lensState = useCanvasLens({ lens, sessionId, surface, showSurface: setSurfaceState, chooseSurface: setSurface, phase, setPhase, boardLoaded, updateBrainDock, phoneViewport }), lensDef = lensState.def;
   const showApp = useCallback(() => setSurface('app'), [setSurface]);
   const openApp = useOpenCanvasApp({ setNodes, showApp });
-  useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialSurface, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRelay, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges: setEdgesOnScreen, setJoinedCollaborator, setMembers, setNodes: setNodesOnScreen, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline: setTimelineOnScreen, storageKey, t, thinking, timeline, title, viewportRef });
+  useCanvasSessionSync({ activeMemberIdsRef, activePresenceInitializedRef, ensureBoardSession, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialSurface, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, mobileViewportFittedRef, nodes, noteSaveState, persistence, presenceLive, presenceRelay, receivePresence, refreshFromServer, revisionRef, serverReady, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setJoinedCollaborator, setMembers, setNotice, setRealtimeState, setSelectedId, setTimeline: setTimelineOnScreen, t, thinking, timeline, viewportRef });
   const { liveMembers, presenceSelfId } = useCanvasPresence({ currentUserId, flowRef, followingUserId, inRoom, livePresence, members, sharedRoom });
 
   const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
@@ -525,7 +522,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const cardsEditable = canEdit && !lockBlocked;
 
   const syncSocialCampaign = useCanvasSocialCampaignSync({ setNodes, setNotice, tSocial });
-  const { nodesRef, framedBoardRef, stage, appendTimeline, edgesRef, updateNodeData, moveDealFromNode, updateWebsiteViewport } = useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edges, layoutViewportRef, lockBlocked, nodes, noteSaveState, persistence, sessionId, setNodes, setNotice, setTimeline, syncSocialCampaign, t });
+  const { nodesRef, framedBoardRef, stage, appendTimeline, edgesRef, updateNodeData, moveDealFromNode, updateWebsiteViewport } = useCanvasBoardModel({ canEdit, canvasTextRef, cardsEditable, edges, layoutViewportRef, lockBlocked, nodes, noteSaveState, setNodes, setNotice, setTimeline, syncSocialCampaign, t });
   const sessionApp = useCanvasSessionApp({ nodes, nodesRef, setNodes, stage, placeAppendedRef, persistence });
   // The app the lens expects, made once the loaded board is on screen — before the first turn.
   const entryApp = useCanvasEntryApp({ boardLoaded, nodes, modality: lensDef.appModality, canEdit, appTitle: title.trim() || t('surface.app.defaultAppTitle'), createApp: sessionApp.createApp });

@@ -1,6 +1,7 @@
+import 'fake-indexeddb/auto';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLocalCreationSession, creationStorageKey, writeLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { createLocalCreationSession, readLocalCreationSession, writeLocalCreationSession } from '@/lib/pendingWork';
 import { CreationCanvas } from './CreationCanvas';
 import { AUTHORED_EVALUATION, answerCanvasTurns, chooseWhereModelsRun, holdCanvasTurns } from '@/test/canvasTurnRunnerMock';
 
@@ -64,8 +65,8 @@ describe('CreationCanvas with the real XYFlow store', () => {
    */
   it('keeps every card mounted across a board update', async () => {
     const sessionId = createLocalCreationSession('A board with a dashboard on it');
-    const stored = JSON.parse(localStorage.getItem(creationStorageKey(sessionId))!);
-    writeLocalCreationSession(sessionId, {
+    const stored = (await readLocalCreationSession(sessionId))!;
+    await writeLocalCreationSession(sessionId, {
       ...stored,
       nodes: [
         ...stored.nodes,
@@ -76,6 +77,9 @@ describe('CreationCanvas with the real XYFlow store', () => {
 
     render(<CreationCanvas sessionId={sessionId} persistence="local" />);
 
+    // The board is read from the device's store now (asynchronous), so wait for THIS board's cards — the
+    // starter board that precedes it also has a dashboard card.
+    await screen.findByTestId('canvas-node-density-dash');
     const dashboard = await screen.findByTestId('canvas-node-dashboard');
     // The card is EDITABLE, which is the precondition for it holding the state a remount
     // destroys: this toggle and the dashboard's own "Edit dashboard" button render on the

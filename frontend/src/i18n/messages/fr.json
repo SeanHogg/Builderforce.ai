@@ -22535,6 +22535,32 @@
     "provenanceOn": "Revu le {date}"
   },
   "creationCanvas": {
+    "sync": {
+      "state": {
+        "idle": "Enregistré",
+        "syncing": "Synchronisation…",
+        "held": "Enregistré ici · en attente d'envoi",
+        "offline": "Hors ligne · enregistré sur cet appareil",
+        "denied": "La synchronisation est désactivée sur cet appareil",
+        "unbound": "Enregistré sur cet appareil uniquement",
+        "busy": "Synchronisation dans un autre onglet"
+      },
+      "pending": "{count, plural, one {# modification en attente} other {# modifications en attente}}"
+    },
+    "conflicts": {
+      "notice": "{count, plural, one {# modification demande votre décision} other {# modifications demandent votre décision}}",
+      "title": "Résoudre les modifications en conflit",
+      "hint": "Quelqu'un a modifié le même élément que vous. Votre version est toujours sur le tableau. Choisissez laquelle conserver ; rien n'est perdu tant que vous n'avez pas décidé.",
+      "object": "Élément",
+      "reasonEdited": "Modifié sur deux appareils ou onglets.",
+      "reasonDeleted": "Supprimé ailleurs pendant que vous le modifiiez.",
+      "keepMine": "Garder le mien",
+      "keepTheirs": "Garder l'autre",
+      "restoreCopy": "Garder ma modification comme copie"
+    },
+    "noticeStorageUnavailable": "Ce navigateur ne peut pas enregistrer de tableaux sur cet appareil : rien de ce que vous faites ici ne serait conservé. Ouvrez Studio dans une fenêtre normale ou autorisez le stockage du site.",
+    "noticePlanLimitBoard": "La limite de tableaux enregistrés de votre offre est atteinte. Ce tableau reste sur cet appareil jusqu'à ce que vous passiez à une offre supérieure.",
+    "noticeConflictsHeld": "{count, plural, one {# modification est en conflit avec un changement d'un autre onglet ou appareil. Consultez-la dans le panneau de synchronisation.} other {# modifications sont en conflit avec des changements d'un autre onglet ou appareil. Consultez-les dans le panneau de synchronisation.}}",
     "scopeKind": "Portée",
     "scopeId": "ID de portée",
     "scopeWorkspace": "Tout l'espace de travail",
@@ -24711,7 +24737,6 @@
     "createInviteAgent": "Créer et inviter l’agent",
     "openingCanvas": "Ouverture de votre canevas de création…",
     "creatingCanvas": "Création de votre canevas…",
-    "startingOnDevice": "Démarrage en toute sécurité sur cet appareil…",
     "sharedStart": "Partager ce canevas",
     "sharedStarting": "Création…",
     "sharedStarted": "Partagé — envoyez le lien pour inviter des personnes",
@@ -24991,7 +25016,6 @@
     "noticeBrainFinished": "Brain a terminé l’évaluation du canevas",
     "noticeBrainStopped": "Vous avez arrêté cette exécution. Rien d’autre n’a été envoyé.",
     "noticeExportFailed": "Échec de l’export du canevas",
-    "noticeConversationSaveFailed": "Échec de l’enregistrement de la conversation",
     "noticeTemplateFailed": "Impossible d’appliquer le modèle",
     "noticeCompareBranchFailed": "Impossible de comparer la branche",
     "noticeCompareProjectsFailed": "Impossible de comparer les projets",
@@ -25032,7 +25056,6 @@
     "noticeClaimFailed": "Impossible d'enregistrer cette session pour le moment",
     "noticeApplyingBrainChanges": "Application en cours : {count, plural, one {# modification de Brain} other {# modifications de Brain}}…",
     "noticeBrainChangesAwaitReview": "{count, plural, one {# modification de Brain attend} other {# modifications de Brain attendent}} une révision",
-    "noticeConversationSaveFailedReason": "Échec de l'enregistrement de la conversation : {reason}",
     "noticePrdNotSavedReason": "Le PRD du projet n'a pas été enregistré : {reason}",
     "noticeGuestLimitReached": "Vous avez utilisé vos {limit} messages invité gratuits du jour. Inscrivez-vous gratuitement pour continuer : votre canevas vous suit.",
     "noticeGuestLimitDevice": "Cet appareil a atteint sa limite invité gratuite du jour. Inscrivez-vous gratuitement pour continuer : votre canevas vous suit.",
@@ -31154,6 +31177,7 @@
     "moreSeats": "{count} sièges de plus"
   },
   "sessions": {
+    "projectTieDropped": "Ce tableau a été créé sur votre appareil, mais son lien avec le projet n'a pas pu être enregistré. Associez-le au projet une fois en ligne.",
     "newCanvas": "+ Nouveau tableau",
     "active": "En cours",
     "renameAria": "Renommer ce tableau",

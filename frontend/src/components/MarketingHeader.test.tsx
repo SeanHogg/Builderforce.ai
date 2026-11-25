@@ -14,7 +14,7 @@ vi.mock('./HeaderCartButton', () => ({ HeaderCartButton: () => <span>Cart</span>
 vi.mock('@/components/ThemeToggleButton', () => ({ ThemeToggleButton: () => <span>Theme</span> }));
 
 const localWork = vi.hoisted(() => ({ sessions: [] as Array<{ sessionId: string }> }));
-vi.mock('@/domains/canvas/infrastructure/localCanvasStore', () => ({ listLocalCreationSessions: () => localWork.sessions }));
+vi.mock('@/lib/pendingWork', () => ({ listLocalCreationSessions: () => localWork.sessions }));
 
 const { default: MarketingHeader } = await import('./MarketingHeader');
 
@@ -30,10 +30,11 @@ describe('the marketing header CTA on a canvas route', () => {
     expect(screen.queryByRole('link', { name: 'Keep your work' })).toBeNull();
   });
 
-  it('switches to "Keep your work" once this browser holds real local canvas work', () => {
+  it('switches to "Keep your work" once this browser holds real local canvas work', async () => {
     localWork.sessions = [{ sessionId: 'local-session-1' }];
     render(<MarketingHeader />);
-    const ctas = screen.getAllByRole('link', { name: 'Keep your work' });
+    // The device's board list is read from the replica now, so the offer arrives a tick after the first paint.
+    const ctas = await screen.findAllByRole('link', { name: 'Keep your work' });
     expect(ctas.length).toBeGreaterThan(0);
     for (const cta of ctas) {
       // It carries the board back. This CTA is now the ONLY offer to keep a guest

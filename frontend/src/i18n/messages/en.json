@@ -22510,6 +22510,32 @@
     "provenanceOn": "Reviewed {date}"
   },
   "creationCanvas": {
+    "sync": {
+      "state": {
+        "idle": "Saved",
+        "syncing": "Syncing…",
+        "held": "Saved here · waiting to send",
+        "offline": "Offline · saved on this device",
+        "denied": "Sync is turned off for this device",
+        "unbound": "Saved on this device only",
+        "busy": "Syncing in another tab"
+      },
+      "pending": "{count, plural, one {# change waiting} other {# changes waiting}}"
+    },
+    "conflicts": {
+      "notice": "{count, plural, one {# edit needs your decision} other {# edits need your decision}}",
+      "title": "Resolve conflicting edits",
+      "hint": "Someone else changed the same item you did. Your version is still on the board. Choose which to keep; nothing is lost until you decide.",
+      "object": "Item",
+      "reasonEdited": "Edited on two devices or tabs.",
+      "reasonDeleted": "Deleted elsewhere while you edited it.",
+      "keepMine": "Keep mine",
+      "keepTheirs": "Keep theirs",
+      "restoreCopy": "Keep my edit as a copy"
+    },
+    "noticeStorageUnavailable": "This browser cannot save boards on this device, so nothing here would be kept. Open Studio in a regular window or allow site storage.",
+    "noticePlanLimitBoard": "Your plan's limit for saved boards is reached. This board stays on this device until you upgrade.",
+    "noticeConflictsHeld": "{count, plural, one {# edit conflicts with a change from another tab or device. Review it in the sync panel.} other {# edits conflict with changes from another tab or device. Review them in the sync panel.}}",
     "scopeKind": "Scope",
     "scopeId": "Scope ID",
     "scopeWorkspace": "Whole workspace",
@@ -24686,7 +24712,6 @@
     "createInviteAgent": "Create & invite agent",
     "openingCanvas": "Opening your creation canvas…",
     "creatingCanvas": "Creating your canvas…",
-    "startingOnDevice": "Starting safely on this device…",
     "sharedStart": "Share this canvas",
     "sharedStarting": "Starting…",
     "sharedStarted": "Shared — send the link to invite people",
@@ -24966,7 +24991,6 @@
     "noticeBrainFinished": "Brain finished evaluating the canvas",
     "noticeBrainStopped": "You stopped this run. Nothing further was sent.",
     "noticeExportFailed": "Canvas export failed",
-    "noticeConversationSaveFailed": "Conversation save failed",
     "noticeTemplateFailed": "Could not apply template",
     "noticeCompareBranchFailed": "Could not compare branch",
     "noticeCompareProjectsFailed": "Could not compare projects",
@@ -25007,7 +25031,6 @@
     "noticeClaimFailed": "Could not save this session yet",
     "noticeApplyingBrainChanges": "Applying {count, plural, one {# Brain change} other {# Brain changes}}…",
     "noticeBrainChangesAwaitReview": "{count, plural, one {# Brain change awaits} other {# Brain changes await}} review",
-    "noticeConversationSaveFailedReason": "Conversation save failed: {reason}",
     "noticePrdNotSavedReason": "Project PRD was not saved: {reason}",
     "noticeGuestLimitReached": "You've used your {limit} free guest messages for today. Sign up free to keep going — your canvas comes with you.",
     "noticeGuestLimitDevice": "This device has reached its free guest limit for today. Sign up free to keep going — your canvas comes with you.",
@@ -30412,6 +30435,7 @@
     "moreSeats": "{count} more seats"
   },
   "sessions": {
+    "projectTieDropped": "This board was made on your device, but its project link could not be saved. Link it to the project once you are online.",
     "newCanvas": "+ New canvas",
     "active": "Active",
     "renameAria": "Rename this canvas",

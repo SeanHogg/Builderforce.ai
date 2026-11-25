@@ -5,15 +5,6 @@ import { fetchWithTransportReport } from '@/lib/errors/transportFailure';
 import { BRAIN_UPLOAD_PATH } from '@seanhogg/builderforce-brain-embedded';
 import type { CanvasVideoCaptureKind, CanvasVideoSource, CanvasVideoSourceKind } from '@builderforce/creation-canvas-contract';
 
-function dataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Media could not be read'));
-    reader.onerror = () => reject(reader.error ?? new Error('Media could not be read'));
-    reader.readAsDataURL(file);
-  });
-}
-
 function sourceKind(file: File): CanvasVideoSourceKind {
   if (file.type.startsWith('audio/')) return 'audio';
   if (file.type.startsWith('image/')) return 'image';
@@ -58,7 +49,8 @@ export interface UploadedCanvasFile { url: string; storageKey: string }
  * imported document must NOT inline them — node data is re-serialised into the
  * local-session snapshot on every viewport change, and a report's charts as
  * base64 would push megabytes through that loop on every pan. Each caller
- * decides; this function only ever means "uploaded, here is where it lives".
+ * decides; this function only ever means "uploaded, here is where it lives". Authoring media goes to
+ * the device first (`storeCanvasMedia`); the upload queue calls this to send it.
  */
 export async function uploadCanvasFile(file: File): Promise<UploadedCanvasFile | null> {
   try {
@@ -74,17 +66,37 @@ export async function uploadCanvasFile(file: File): Promise<UploadedCanvasFile |
   }
 }
 
-/** The only browser-side persistence adapter used by Canvas media authoring. */
-export async function storeCanvasMedia(file: File, captureKind: CanvasVideoCaptureKind): Promise<CanvasVideoSource> {
+/**
+ * The only browser-side persistence adapter used by Canvas media authoring.
+ *
+ * The bytes go to the device's `BlobStore` and a `canvas-media` manifest to the store, for a guest and
+ * a signed-in person alike (design §5): no data URL is ever written into a board again. The media
+ * upload queue sends the bytes to the workspace's private storage once there is an account and a
+ * network, and rewrites the object's URL then — so a refusal here is a refusal to store on THIS
+ * device (a storage cap, no storage), which the caller reports, never an inline fallback.
+ *
+ * The returned `url` is what the page renders (an object URL over the stored bytes); the board commit
+ * writes it as `media:<id>` (`boardMediaUrls`). The board is the one on screen, or `boardId`.
+ */
+export async function storeCanvasMedia(file: File, captureKind: CanvasVideoCaptureKind, boardId?: string): Promise<CanvasVideoSource> {
+  // Loaded on use: the store's runtime stays out of the module graph of the upload helpers below.
+  const [{ getStudioRuntime }, { attachBoardMedia }, { registerMediaBlob }, { onScreenBoardId }] = await Promise.all([
+    import('@/lib/localFirst/studioRuntime'),
+    import('@/domains/canvas/infrastructure/localFirst/boardMedia'),
+    import('@/domains/canvas/infrastructure/localFirst/boardMediaUrls'),
+    import('@/domains/canvas/infrastructure/localFirst/boardSession'),
+  ]);
+  const target = boardId ?? onScreenBoardId();
+  if (!target) throw new Error('canvas_media_no_board');
+  const runtime = await getStudioRuntime();
+  if (!runtime) throw new Error('studio_storage_unavailable');
   const kind = sourceKind(file);
-  const uploaded = await uploadCanvasFile(file);
-  const storageKey = uploaded?.storageKey;
-  // Guest canvases have no tenant R2 boundary. A data URL keeps their draft
-  // reloadable and the normal account-upgrade flow moves it server-side later.
-  const url = uploaded?.url ?? await dataUrl(file);
+  const attached = await attachBoardMedia(runtime.ctx, runtime.blobs, { boardId: target, file, name: file.name });
+  const url = registerMediaBlob(attached.mediaId, file);
   const metadata = await probe(url, kind);
+  runtime.driver.trigger();
   return {
-    id: crypto.randomUUID(),
+    id: attached.mediaId,
     kind,
     captureKind,
     url,
@@ -92,7 +104,6 @@ export async function storeCanvasMedia(file: File, captureKind: CanvasVideoCaptu
     mimeType: file.type,
     durationSeconds: metadata.durationSeconds,
     ...(metadata.width ? { width: metadata.width, height: metadata.height } : {}),
-    ...(storageKey ? { storageKey } : {}),
   };
 }
 

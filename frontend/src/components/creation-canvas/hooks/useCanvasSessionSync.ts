@@ -1,10 +1,8 @@
 /** Keeping the session in sync — saving, realtime, polled members and invitations. */
 import { type Dispatch, type RefObject, type SetStateAction, useEffect, useMemo, useRef } from 'react';
-import { useEffectEvent } from '@/hooks/useEffectEvent';
-import { boardSignature, persistBoard, saveAttemptKey } from '@/domains/canvas/application/PersistCanvas';
-import { canvasSessionGateway } from '@/domains/canvas/infrastructure/canvasSessionGateway';
-import { rejectedObjectKinds } from '../canvasBoardLoad';
-import { type LocalCreationSnapshot, readLocalCreationSession } from '@/domains/canvas/infrastructure/localCanvasStore';
+import { boardSignature } from '@/domains/canvas/application/PersistCanvas';
+import type { BoardSession, BoardState } from '@/domains/canvas/infrastructure/localFirst/boardSession';
+import { reportLocalFirstFailure } from '@/lib/localFirst/reportLocalFirstFailure';
 import { usePolledResource } from '@/hooks/usePolledResource';
 import { createReconnector, openSocket } from '@/lib/polling/reconnectPolicy';
 import { createCoalescedRefresh } from '@/lib/polling/coalescedRefresh';
@@ -12,7 +10,6 @@ import { useLatestRef } from './useLatestRef';
 import { fetchTimelineTail, mergeTimelineTail, timelineCursor } from './canvasTimelineTail';
 import { useBoardOnScreen } from '@/lib/canvas/BoardOnScreenContext';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
-import { adoptRemoteBoard, type AdoptRemoteBoardDecision, type LocalBoardState } from '@/domains/canvas/application/AdoptRemoteBoard';
 import { BRAIN_RUN_HEARTBEAT_MS } from '@/lib/canvas/livePresence';
 import { createPresenceTracker } from '@/lib/canvas/presenceDelta';
 import type { CanvasObject } from '@/domains/canvas/domain/canvasObject';
@@ -27,15 +24,14 @@ import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 type PresenceMember = Awaited<ReturnType<typeof creationSessionsApi.presence>>['members'][number];
 
 export interface UseCanvasSessionSyncDeps {
-  commitRevision: (revision: number) => void;
   activeMemberIdsRef: RefObject<Set<string>>;
   activePresenceInitializedRef: RefObject<boolean>;
-  applyRemoteBoard: (decision: AdoptRemoteBoardDecision, notice: string) => void;
+  /** The open board's session (created on the first commit when the device holds no board yet): the ONE writer of this board from this tab. */
+  ensureBoardSession: (state: BoardState) => Promise<BoardSession>;
   brainRunStartedAt: number | null;
   canEdit: boolean;
   clearPresence: () => void;
   currentGraphRef: RefObject<string>;
-  currentSnapshot: (viewport?: { x: number; y: number; zoom: number; }) => LocalCreationSnapshot;
   currentUserId: string | null;
   cursorRef: RefObject<{ x: number; y: number; } | null>;
   edges: Edge[];
@@ -50,41 +46,36 @@ export interface UseCanvasSessionSyncDeps {
   lastSavedGraphRef: RefObject<string>;
   liveSocketRef: RefObject<WebSocket | null>;
   loadingSession: boolean;
-  localBoardState: () => LocalBoardState;
   mobileViewportFittedRef: RefObject<boolean>;
   nodes: CanvasObject[];
   noteSaveState: () => void;
-  pendingSaveRef: RefObject<{ signature: string; key: string; } | null>;
-  persistSnapshot: (snapshot: LocalCreationSnapshot) => void;
   persistence: 'local' | 'server';
   presenceLive: boolean;
   presenceRelay: PresenceRelay;
   receivePresence: (frame: unknown) => void;
+  /** Reconcile the replica with the server's newer board and show the result. */
+  refreshFromServer: (notice: string) => Promise<void>;
   revisionRef: RefObject<number>;
-  saveInFlightRef: RefObject<boolean>;
+  /** The server has this board: its presence poll and live room are worth opening. */
+  serverReady: boolean;
   selectedIds: string[];
   sendPresence: (state: CanvasPresenceState) => void;
   sessionId: string;
   openApp: (nodeId: string) => void;
   setCurrentUserId: Dispatch<SetStateAction<string | null>>;
-  setEdges: Dispatch<SetStateAction<Edge[]>>;
   setJoinedCollaborator: Dispatch<SetStateAction<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number; } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null; } | null>>;
   setMembers: Dispatch<SetStateAction<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number; } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null; }[]>>;
-  setNodes: Dispatch<SetStateAction<CanvasObject[]>>;
   setNotice: (text: string) => void;
-  setPersistedObjectIds: Dispatch<SetStateAction<Set<string>>>;
   setRealtimeState: Dispatch<SetStateAction<'local' | 'connecting' | 'online' | 'reconnecting' | 'offline'>>;
   setSelectedId: Dispatch<SetStateAction<string | null>>;
   setTimeline: Dispatch<SetStateAction<CanvasTimelineMessage[]>>;
-  storageKey: string;
   t: ReturnType<typeof useTranslations<'creationCanvas'>>;
   thinking: boolean;
   timeline: CanvasTimelineMessage[];
-  title: string;
   viewportRef: RefObject<{ x: number; y: number; zoom: number; }>;
 }
 
-export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activePresenceInitializedRef, applyRemoteBoard, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentSnapshot, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialSurface, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, localBoardState, mobileViewportFittedRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, presenceLive, presenceRelay, receivePresence, revisionRef, saveInFlightRef, selectedIds, sendPresence, sessionId, openApp, setCurrentUserId, setEdges, setJoinedCollaborator, setMembers, setNodes, setNotice, setPersistedObjectIds, setRealtimeState, setSelectedId, setTimeline, storageKey, t, thinking, timeline, title, viewportRef }: UseCanvasSessionSyncDeps) {
+export function useCanvasSessionSync({ activeMemberIdsRef, activePresenceInitializedRef, ensureBoardSession, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialSurface, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, mobileViewportFittedRef, nodes, noteSaveState, persistence, presenceLive, presenceRelay, receivePresence, refreshFromServer, revisionRef, selectedIds, serverReady, sendPresence, sessionId, openApp, setCurrentUserId, setJoinedCollaborator, setMembers, setNotice, setRealtimeState, setSelectedId, setTimeline, t, thinking, timeline, viewportRef }: UseCanvasSessionSyncDeps) {
   useEffect(() => { currentGraphRef.current = JSON.stringify({ nodes, edges }); }, [currentGraphRef, edges, nodes]);
 
   // A persisted viewport is expressed in screen pixels, so restoring a camera
@@ -124,71 +115,47 @@ export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activ
   /**
    * AUTOSAVE. Debounced 300ms behind the edit that triggered it.
    *
-   * What is left here is the SCHEDULING and the React state the result lands in.
-   * Everything that decides anything — has the board changed, is this retry the
-   * same write, is `Session changed` a failure or a collaborator having saved
-   * first — is `persistBoard` in `application/PersistCanvas.ts`, which is why the
-   * conflict merge finally has a test that does not mount a canvas.
+   * One path, whoever the person is and whatever the network is doing: the board is committed to the
+   * store through the open `BoardSession` — a per-object diff and its journal events in ONE
+   * transaction — and the sync driver sends it when it can. A server that is down or a network that
+   * is gone is a held count in the sync indicator, never a failed save. What is left here is the
+   * SCHEDULING and the React state the result lands in; what a diff is, which writes are journaled
+   * and what a conflict is live in `boardSession` / `boardCommit`.
    */
   useEffect(() => {
     if (!hydratedRef.current || !canEdit) return;
     const handle = window.setTimeout(() => {
-      const board = { nodes, edges };
-      const signature = boardSignature(board);
-      if (signature === lastSavedGraphRef.current) return;
-      if (persistence === 'local') {
-        const snapshot = currentSnapshot();
-        persistSnapshot(snapshot);
-        lastSavedGraphRef.current = signature;
-        noteSaveState();
-        return;
-      }
+      const signature = boardSignature({ nodes, edges });
       noteSaveState();
-      saveInFlightRef.current = true;
-      // STABLE across retries of the same board, NEW for a different one — so a
-      // retry after a timeout is the same write and an edit made during it is not.
-      pendingSaveRef.current = saveAttemptKey(pendingSaveRef.current, signature);
-      const attempt = pendingSaveRef.current;
-      void persistBoard(
-        { sessionId, board, viewport: viewportRef.current, expectedRevision: revisionRef.current, idempotencyKey: attempt.key, signature },
-        canvasSessionGateway,
-        t,
-      ).then((result) => {
-        if (result.outcome === 'failed') { setNotice(result.notice); return; }
-        commitRevision(result.revision);
-        lastSavedGraphRef.current = result.signature;
-        setPersistedObjectIds(new Set(result.objectIds));
-        if (pendingSaveRef.current?.key === attempt.key) pendingSaveRef.current = null;
-        if (result.outcome === 'saved') { noteSaveState(); return; }
-        setNodes(result.board.nodes);
-        setEdges(result.board.edges);
-        // A collaborator's board can carry a kind this build does not declare, and
-        // the merge is the moment it arrives. Saying so here is the same promise
-        // the initial load makes rather than a second, quieter rule for the same event.
-        if (result.rejected.length) setNotice(t('objectsRejected', { count: result.rejected.length, kinds: rejectedObjectKinds(result.rejected) }));
-        else setNotice(result.notice);
-      }).finally(() => { saveInFlightRef.current = false; });
+      const state: BoardState = { board: { nodes, edges }, timeline: timelineToLocal(timeline), viewport: viewportRef.current };
+      void ensureBoardSession(state)
+        .then((session) => session.commit(state))
+        .then((result) => {
+          lastSavedGraphRef.current = signature;
+          if (result.conflicts.length > 0) setNotice(t('noticeConflictsHeld', { count: result.conflicts.length }));
+          noteSaveState();
+        })
+        .catch((error: unknown) => {
+          reportLocalFirstFailure('canvasAutosave', error);
+          setNotice(t('noticeSaveFailed'));
+        });
     }, 300);
     return () => window.clearTimeout(handle);
-  // `currentSnapshot` changes exactly when edges/nodes/sessionId/timeline/title do, so listing it
-  // does not change when the debounce restarts.
-  }, [canEdit, commitRevision, currentSnapshot, edges, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, pendingSaveRef, persistSnapshot, persistence, revisionRef, saveInFlightRef, sessionId, setEdges, setNodes, setNotice, setPersistedObjectIds, storageKey, t, timeline, title, viewportRef]);
+  }, [ensureBoardSession, canEdit, edges, hydratedRef, lastSavedGraphRef, nodes, noteSaveState, setNotice, t, timeline, viewportRef]);
 
-  // The write reads the room's CURRENT `persistSnapshot` when the debounce fires; the room
-  // changing is not itself a reason to write the board again.
-  const writeLocalSnapshot = useEffectEvent((snapshot: LocalCreationSnapshot) => persistSnapshot(snapshot));
+  /**
+   * TRANSCRIPT ROWS ARE KEPT AT ONCE. A turn's reply is the one thing a person cannot redo, and it must
+   * not wait on the board's debounce — nor on `canEdit`: a commenter's chat turns are theirs to keep.
+   */
   useEffect(() => {
-    if (persistence !== 'local' || !hydratedRef.current) return;
-    const handle = window.setTimeout(() => {
-      const prior = readLocalCreationSession(sessionId); if (!prior) return;
-      // `...prior` carries prior.title forward untouched — a rename now happens in
-      // the session rail, not here, so this write must not overwrite it with the
-      // stale copy this component hydrated `title` from.
-      const snapshot: LocalCreationSnapshot = { ...prior, nodes, edges, timeline: timelineToLocal(timeline), viewport: viewportRef.current, updatedAt: new Date().toISOString() };
-      writeLocalSnapshot(snapshot);
-    }, 150);
-    return () => window.clearTimeout(handle);
-  }, [edges, hydratedRef, nodes, persistence, sessionId, storageKey, timeline, viewportRef]);
+    if (!hydratedRef.current || timeline.length === 0) return;
+    const state: BoardState = { board: { nodes, edges }, timeline: timelineToLocal(timeline), viewport: viewportRef.current };
+    void ensureBoardSession(state)
+      .then((session) => session.appendMessages(state.timeline))
+      .catch((error: unknown) => reportLocalFirstFailure('canvasTimelineAppend', error));
+  // The board in `state` is only what `ensureBoardSession` creates a missing board from.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ensureBoardSession, hydratedRef, timeline]);
 
   // A kept board off stage (or the last board held behind a full-screen route) is
   // not being looked at: it must not announce presence, nor keep the API awake.
@@ -232,11 +199,13 @@ export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activ
         // actually be replaced — and what happens to the objects this build
         // cannot render — belongs to `AdoptRemoteBoard`.
         if (presence.revision <= revisionRef.current) return;
-        const decision = await adoptRemoteBoard(sessionId, localBoardState(), canvasSessionGateway);
-        if (signal.aborted) return;
-        applyRemoteBoard(decision, t('noticeUpdatedByCollaborator'));
-      } catch { /* Presence and polling are best-effort; local edits continue. */ }
-  }, { intervalMs: 8_000, enabled: persistence === 'server' && onScreen, restartKey: sessionId });
+        await refreshFromServer(t('noticeUpdatedByCollaborator'));
+      } catch (error) {
+        // Presence and polling are best-effort and local edits continue — but an online failure is a fact
+        // (offline, the poll failing is the expected shape of the outage, not a report per tick).
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) reportLocalFirstFailure('canvasPresencePoll', error);
+      }
+  }, { intervalMs: 8_000, enabled: persistence === 'server' && serverReady && onScreen, restartKey: sessionId });
 
   useEffect(() => {
     if (!joinedCollaborator) return;
@@ -248,7 +217,7 @@ export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activ
   // re-opening the socket every time a message lands.
   const timelineLatest = useLatestRef(timeline);
   useEffect(() => {
-    if (persistence !== 'server') return;
+    if (persistence !== 'server' || !serverReady) return;
     const liveUrl = creationSessionsApi.liveUrl(sessionId);
     if (!liveUrl) { setRealtimeState('offline'); return; }
     let stopped = false;
@@ -262,10 +231,11 @@ export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activ
         // one place so the two doors cannot answer differently.
         const caughtUp = await creationSessionsApi.events(sessionId, revisionRef.current);
         if (Math.max(Number(hint || 0), Number(caughtUp.revision || 0)) <= revisionRef.current) return;
-        const decision = await adoptRemoteBoard(sessionId, localBoardState(), canvasSessionGateway);
-        if (stopped) return;
-        applyRemoteBoard(decision, t('noticeUpdatedLive'));
-      } catch { /* The presence reconciliation remains a durable fallback. */ }
+        await refreshFromServer(t('noticeUpdatedLive'));
+      } catch (error) {
+        // The presence reconciliation remains a durable fallback; the failure is still reported.
+        if (typeof navigator === 'undefined' || navigator.onLine !== false) reportLocalFirstFailure('canvasLiveRevision', error);
+      }
     };
     // Frames arrive in bursts (a Brain turn writes many rows, a drag saves many
     // revisions); each burst is ONE read, never two in flight. The hints carry the
@@ -337,7 +307,7 @@ export function useCanvasSessionSync({ commitRevision, activeMemberIdsRef, activ
       presenceRelay.dispose();
       socket?.close();
     };
-  }, [applyRemoteBoard, clearPresence, liveSocketRef, localBoardState, persistence, presenceRelay, receivePresence, revisionRef, sessionId, setEdges, setNodes, setRealtimeState, setTimeline, t, timelineLatest]);
+  }, [clearPresence, liveSocketRef, persistence, presenceRelay, receivePresence, refreshFromServer, revisionRef, serverReady, sessionId, setRealtimeState, setTimeline, t, timelineLatest]);
 
   /**
    * Composing a prompt is presence too — the cursor label says so. It changes at

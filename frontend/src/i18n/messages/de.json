@@ -22535,6 +22535,32 @@
     "provenanceOn": "Geprüft am {date}"
   },
   "creationCanvas": {
+    "sync": {
+      "state": {
+        "idle": "Gespeichert",
+        "syncing": "Synchronisiere…",
+        "held": "Hier gespeichert · wartet auf Versand",
+        "offline": "Offline · auf diesem Gerät gespeichert",
+        "denied": "Die Synchronisierung ist auf diesem Gerät deaktiviert",
+        "unbound": "Nur auf diesem Gerät gespeichert",
+        "busy": "Synchronisierung läuft in einem anderen Tab"
+      },
+      "pending": "{count, plural, one {# Änderung wartet} other {# Änderungen warten}}"
+    },
+    "conflicts": {
+      "notice": "{count, plural, one {# Bearbeitung braucht deine Entscheidung} other {# Bearbeitungen brauchen deine Entscheidung}}",
+      "title": "Widersprüchliche Bearbeitungen lösen",
+      "hint": "Jemand hat dasselbe Element geändert wie du. Deine Version ist noch auf dem Board. Wähle, welche bleibt; bis du entscheidest, geht nichts verloren.",
+      "object": "Element",
+      "reasonEdited": "Auf zwei Geräten oder in zwei Tabs bearbeitet.",
+      "reasonDeleted": "Woanders gelöscht, während du es bearbeitet hast.",
+      "keepMine": "Meine behalten",
+      "keepTheirs": "Die andere behalten",
+      "restoreCopy": "Meine Bearbeitung als Kopie behalten"
+    },
+    "noticeStorageUnavailable": "Dieser Browser kann Boards nicht auf diesem Gerät speichern, daher würde hier nichts erhalten bleiben. Öffne Studio in einem normalen Fenster oder erlaube Website-Speicher.",
+    "noticePlanLimitBoard": "Das Limit deines Tarifs für gespeicherte Boards ist erreicht. Dieses Board bleibt auf diesem Gerät, bis du upgradest.",
+    "noticeConflictsHeld": "{count, plural, one {# Bearbeitung kollidiert mit einer Änderung aus einem anderen Tab oder Gerät. Prüfe sie im Synchronisierungsbereich.} other {# Bearbeitungen kollidieren mit Änderungen aus einem anderen Tab oder Gerät. Prüfe sie im Synchronisierungsbereich.}}",
     "scopeKind": "Geltungsbereich",
     "scopeId": "Bereichs-ID",
     "scopeWorkspace": "Gesamter Workspace",
@@ -24711,7 +24737,6 @@
     "createInviteAgent": "Agent erstellen und einladen",
     "openingCanvas": "Deine Kreativ-Canvas wird geöffnet…",
     "creatingCanvas": "Deine Canvas wird erstellt…",
-    "startingOnDevice": "Wird sicher auf diesem Gerät gestartet…",
     "sharedStart": "Diese Canvas teilen",
     "sharedStarting": "Wird gestartet…",
     "sharedStarted": "Geteilt — sende den Link, um Personen einzuladen",
@@ -24991,7 +25016,6 @@
     "noticeBrainFinished": "Brain hat die Canvas-Auswertung abgeschlossen",
     "noticeBrainStopped": "Du hast diesen Lauf gestoppt. Es wurde nichts weiter gesendet.",
     "noticeExportFailed": "Canvas-Export fehlgeschlagen",
-    "noticeConversationSaveFailed": "Speichern der Unterhaltung fehlgeschlagen",
     "noticeTemplateFailed": "Vorlage konnte nicht angewendet werden",
     "noticeCompareBranchFailed": "Branch konnte nicht verglichen werden",
     "noticeCompareProjectsFailed": "Projekte konnten nicht verglichen werden",
@@ -25032,7 +25056,6 @@
     "noticeClaimFailed": "Diese Sitzung konnte noch nicht gespeichert werden",
     "noticeApplyingBrainChanges": "{count, plural, one {# Brain-Änderung wird} other {# Brain-Änderungen werden}} angewendet…",
     "noticeBrainChangesAwaitReview": "{count, plural, one {# Brain-Änderung wartet} other {# Brain-Änderungen warten}} auf Prüfung",
-    "noticeConversationSaveFailedReason": "Konversation konnte nicht gespeichert werden: {reason}",
     "noticePrdNotSavedReason": "Projekt-PRD wurde nicht gespeichert: {reason}",
     "noticeGuestLimitReached": "Sie haben Ihre {limit} kostenlosen Gastnachrichten für heute aufgebraucht. Melden Sie sich kostenlos an, um weiterzumachen – Ihre Leinwand kommt mit.",
     "noticeGuestLimitDevice": "Dieses Gerät hat sein kostenloses Gastlimit für heute erreicht. Melden Sie sich kostenlos an, um weiterzumachen – Ihre Leinwand kommt mit.",
@@ -31154,6 +31177,7 @@
     "moreSeats": "{count} weitere Sitze"
   },
   "sessions": {
+    "projectTieDropped": "Dieses Board wurde auf deinem Gerät erstellt, aber die Projektverknüpfung konnte nicht gespeichert werden. Verknüpfe es mit dem Projekt, sobald du online bist.",
     "newCanvas": "+ Neues Canvas",
     "active": "Aktiv",
     "renameAria": "Dieses Canvas umbenennen",
