@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { L3CacheEntry, L3ResultCache } from "@builderforce/agent-tools";
-import { CACHE_DIR, ensureIgnoredCacheDir } from "../../ignoredCacheDir";
+import { CACHE_DIR, ensureIgnoredCacheDir } from "../../shared/ignoredCacheDir";
 
 const ANALYZER_CACHE_SUBDIR = "run-delta-analyzers";
 

@@ -9,10 +9,12 @@ import { join } from "node:path";
  */
 describe("openWorkspace is the only way into the workspace", () => {
   it("no module but the router opens the editor panel directly", () => {
-    const callers = readdirSync(__dirname)
+    const srcRoot = join(__dirname, "..");
+    const callers = (readdirSync(srcRoot, { recursive: true }) as string[])
+      .map((name) => name.split("\\").join("/"))
       .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
-      .filter((name) => readFileSync(join(__dirname, name), "utf8").includes("BuilderForcePanel.open("));
-    expect(callers).toEqual(["openWorkspace.ts"]);
+      .filter((name) => readFileSync(join(srcRoot, name), "utf8").includes("BuilderForcePanel.open("));
+    expect(callers).toEqual(["workspace/openWorkspace.ts"]);
   });
 
   it("sends a reuse-mode chat to the chat view and boards to the editor", () => {

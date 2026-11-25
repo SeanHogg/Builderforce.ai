@@ -28,7 +28,7 @@
  * with no change set, or one with no changes, is never held.
  */
 
-import { RUN_DELTA_HOLD_PREFIX, RUN_DELTA_UNMEASURED, type RunHold, type RunTerminalStatus } from "../runRecovery";
+import { RUN_DELTA_HOLD_PREFIX, RUN_DELTA_UNMEASURED, type RunHold, type RunTerminalStatus } from "../run/runRecovery";
 
 /** What one run's delta tells the gate. */
 export interface RunHoldPort {

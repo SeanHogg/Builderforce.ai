@@ -23,7 +23,7 @@
  * with the reason instead of asserting a denial that is not in force.
  */
 import { PlatformAccessDenied } from "@builderforce/local-first";
-import { logLine } from "../errorReporter";
+import { logLine } from "../diagnostics/errorReporter";
 import { currentCapabilityInputs } from "../tools/capabilityContext";
 import {
   platformInferenceMode,

@@ -8,7 +8,7 @@
  * panel is handed for a bound chat); a STRING is the chat's local client id.
  */
 
-import type { PresentedSyncStatus } from "../syncStatusPresenter";
+import type { PresentedSyncStatus } from "../sync/syncStatusPresenter";
 import type { SyncSummary } from "../sync/syncSummary";
 
 export type ChatRef = string | number;

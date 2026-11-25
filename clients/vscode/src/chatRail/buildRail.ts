@@ -16,7 +16,7 @@
 
 import { earliestMapping, parseSyncId, syncIdText, type ChatTicketLinkValue, type EntityScope, type LocalEntityType, type LocalRecord, type ServerMapping, type SyncId } from "@builderforce/local-first";
 import type { LocalFirstView } from "../localFirst/localFirstView";
-import { presentRecordSyncStatus } from "../syncStatusPresenter";
+import { presentRecordSyncStatus } from "../sync/syncStatusPresenter";
 import { railProgressKind, railTicketProgress, type RailRunPayload, type RailTicketPayload } from "./railPayloads";
 import { ticketsOfChats } from "./ticketsOfChat";
 import type {

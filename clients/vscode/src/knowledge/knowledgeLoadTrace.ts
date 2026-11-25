@@ -12,7 +12,7 @@
 
 import type { KnowledgeHostLag, KnowledgeLoadInFlight, KnowledgeLoadPhase, KnowledgeLoadTrace, KnowledgeLoadTraceEntry } from "./knowledgeProtocol";
 import { startHostLag, type HostLagMonitor, type LagSampler } from "./review/reviewHostLag";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** Finished calls kept. */
 export const TRACE_CAPACITY = 20;

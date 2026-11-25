@@ -48,7 +48,7 @@ import type { DetectedManifest, DetectManifest, ReadFolderFiles } from "./manife
 import { findFolderManifest, MANIFEST_PATH } from "./manifestLocation";
 import { legacyManifestAction, staleSchemaAction } from "./manifestMove";
 import { APP_MANIFEST_SCHEMA_URL, hasStaleSchema } from "./manifestSchema";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 import { chooseFolder, type ComposerWorkspacePort, type WorkspaceFolderRef } from "./workspacePort";
 import type { EditorBrowser } from "./openExternal";
 import type { ComposerReply, ComposerReplyAction } from "./reply";

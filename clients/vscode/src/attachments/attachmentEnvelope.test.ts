@@ -47,13 +47,13 @@ vi.mock("../bfApi", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("../gateway/gateway", () => ({ getWebBaseUrl: () => "https://web" }));
 vi.mock("../memory/personalityLimbic", () => ({ turnLimbicBlock: vi.fn() }));
 vi.mock("../chat/chatDeletion", () => ({ confirmChatDelete: vi.fn() }));
-vi.mock("./editorContext", () => ({ getEditorContext: vi.fn(), watchEditorContext: () => ({ dispose() {} }) }));
+vi.mock("../context/editorContext", () => ({ getEditorContext: vi.fn(), watchEditorContext: () => ({ dispose() {} }) }));
 vi.mock("../git/gitChanges", () => ({ detectPendingChanges: vi.fn(), detectPendingDiff: vi.fn(), watchPendingChanges: () => ({ dispose() {} }) }));
 vi.mock("../models/modelState", () => ({ setSelectedModel: vi.fn(), setSelectedModelPool: vi.fn() }));
 vi.mock("../panels/pageEngineBridge", () => ({ hostPageEngines: { attach: () => () => undefined } }));
 vi.mock("../panels/canvasHostActions", () => ({ captureFromEditor: vi.fn(), navigateFromCanvas: vi.fn(), openCapturedFile: vi.fn() }));
 vi.mock("../workspace/workspaceInit", () => ({ buildWorkspaceInit: vi.fn() }));
-vi.mock("./contextPicker", () => ({ pickWorkspaceContext: vi.fn() }));
+vi.mock("../context/contextPicker", () => ({ pickWorkspaceContext: vi.fn() }));
 vi.mock("../tools/localFetchProxy", () => ({
   LocalFetchProxy: class {
     dispose(): void {}
@@ -84,7 +84,7 @@ vi.mock("../host/hostIngress", async () => {
   return { hostAttachmentIngress: () => ingress };
 });
 
-import { WorkspaceSurface } from "./workspaceSurface";
+import { WorkspaceSurface } from "../workspace/workspaceSurface";
 import { request } from "../../webview/src/bridge/bridgeTransport";
 import { createHostPersistence } from "../../webview/src/bridge/hostPersistence";
 

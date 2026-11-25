@@ -4,7 +4,7 @@ import type { RecallProbe } from "@seanhogg/builderforce-memory-mcp/compaction";
 import { canManageActiveWorkspace, getTenantJwt, invalidateProjectEvermind, projectEvermindHooks } from "../bfApi";
 import { getBaseUrl, SECRET_KEY } from "../gateway/gateway";
 import { authLabels } from "../auth/authLabels";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 import { getSelectedProject } from "../project/projectState";
 import { renderWebviewHtml } from "./webviewShared";
 import { handleSharedHostMessage, respondToWebview } from "./webviewHostBridge";

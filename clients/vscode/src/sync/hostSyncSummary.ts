@@ -5,7 +5,7 @@
  */
 
 import { chatAccountDestination } from "../auth/chatAccount";
-import type { DurableLocalFirstStore } from "../durableLocalFirstStore";
+import type { DurableLocalFirstStore } from "../localFirst/durableLocalFirstStore";
 import { platformInferenceMode } from "../platform/platformPolicy";
 import type { SyncSummaryPorts } from "./syncSummary";
 

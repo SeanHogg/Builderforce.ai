@@ -23,7 +23,7 @@ vi.mock("vscode", () => ({
 vi.mock("../bfApi", () => ({ fetchAuthed: mocks.fetchAuthed }));
 vi.mock("../project/projectState", () => ({ getSelectedProject: () => ({ id: 7, name: "linked" }) }));
 vi.mock("../tools/capabilityContext", () => ({ currentCapabilityInputs: () => ({ signedIn: true, synchronize: true, gatewayInference: true, connectedFeatures: true }) }));
-vi.mock("../errorReporter", () => ({ logLine: vi.fn() }));
+vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn() }));
 vi.mock("../tools/localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
 vi.mock("../workspace/workspaceSymbols", () => ({ workspaceSymbolIndex: () => ({ filesUnder: async () => [] }) }));
 vi.mock("../platform/platformPolicy", () => ({ platformCapabilityAllows: () => true }));

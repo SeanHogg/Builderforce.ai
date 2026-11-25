@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createMemoryLocalFirstStore, newLocalRecord, type TicketValue } from "@builderforce/local-first";
 import type { ToolDef } from "../tools/fileTools";
-import { installLocalDomainTools } from "../installLocalDomainTools";
+import { installLocalDomainTools } from "../tools/installLocalDomainTools";
 import { routeToLocalDomainTools } from "../tools/localDomainToolRouting";
 import { ticketServerIdLookup } from "../tickets/localTicketIdBridge";
 import { localChatTicketScope, type RunChat } from "../tickets/localTicketScope";

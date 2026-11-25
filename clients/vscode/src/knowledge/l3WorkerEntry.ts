@@ -12,9 +12,9 @@
 
 import * as path from "node:path";
 import { parentPort } from "node:worker_threads";
-import { registerBundledAnalyzers } from "../bundledAnalyzers";
+import { registerBundledAnalyzers } from "../diagnostics/bundledAnalyzers";
 import { postResult, runL3Job, type L3Job, type L3WorkerReply } from "./l3WorkerJob";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 const port = parentPort;
 if (!port) throw new Error("knowledgeL3Worker must run in a worker thread");

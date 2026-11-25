@@ -6,7 +6,7 @@
  * exists for every other on-device runtime.
  */
 import * as vscode from "vscode";
-import { refreshWorkspaceSurfaces } from "../workspaceSurface";
+import { refreshWorkspaceSurfaces } from "../workspace/workspaceSurface";
 import { getLocalModelsConfig } from "../gateway/gateway";
 import { listLocalModels } from "../models/localModels";
 import {

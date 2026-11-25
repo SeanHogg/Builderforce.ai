@@ -16,11 +16,11 @@
 
 import type { ChildProcess } from "child_process";
 import type { ShellJobStart, ShellJobStatus } from "@builderforce/agent-tools";
-import { killProcessTree, spawnCommand } from "../processTree";
+import { killProcessTree, spawnCommand } from "./processTree";
 import { forgetRunOutputs, retainOutput } from "./localShellOutputs";
 import { invalidateRunCache } from "./localShellCache";
 import { isSubAgentHandle } from "../child/childRuns";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** The run a job belongs to; `undefined` = a caller with no run (a hook, a test). */
 export type JobOwner = number | undefined;

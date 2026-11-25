@@ -19,7 +19,7 @@ import { readChatRunHistory, readChatTicketLinks, type BrainPersistenceAdapter, 
 import { linkRows, listedTickets, runRows, ticketRows, type WireRun, type WireTicket } from "./railRows";
 import type { ChatRailRefreshOutcome, ChatRef } from "./railProtocol";
 import { resolveChat } from "./resolveChat";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 export interface RailRefreshPorts {
   /** Whether the platform may be read right now (the `connected-feature` capability). */

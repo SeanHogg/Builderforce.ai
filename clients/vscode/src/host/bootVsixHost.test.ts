@@ -25,7 +25,7 @@ describe("bootVsixHost", () => {
     const specifiers = [...source.matchAll(/from\s+["']([^"']+)["']/g)].map((match) => match[1]);
     expect(specifiers).toEqual([
       "@builderforce/local-first",
-      "./durableLocalFirstStore",
+      "../localFirst/durableLocalFirstStore",
     ]);
     expect(source).toContain("bootDeniedHost(");
     expect(source).not.toMatch(/\bfetch\s*\(/);

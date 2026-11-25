@@ -39,7 +39,7 @@ import {
   type RunWaiver,
   type RunLifecycleDeps,
   type RunTerminalStatus,
-} from "../runRecovery";
+} from "./runRecovery";
 
 /** The slice of `vscode.ExtensionContext` this installer reads. `activate`'s `context` satisfies it. */
 export interface RunRecoveryHostContext {

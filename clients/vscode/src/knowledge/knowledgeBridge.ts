@@ -11,7 +11,7 @@ import * as vscode from "vscode";
 import { factKeyOf, type Finding, type KnowledgeGraph, type NodeRef } from "@seanhogg/builderforce-memory/knowledge";
 import { factRightsCache, humanFactBatch, readSystems, type FactRightsCache } from "@builderforce/agent-tools/knowledge";
 import { knowledgeBaseline } from "./knowledgeBaseline";
-import { openWorkspace } from "../openWorkspace";
+import { openWorkspace } from "../workspace/openWorkspace";
 import { SELECTED_TENANT_KEY } from "../project/projectState";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import {
@@ -43,7 +43,7 @@ import { linkedKnowledgeClient, linkedProject, loadGraph, log, openRoot, rootKno
 import { getRun, listRuns } from "./review/reviewRuns";
 import { createAgentRuns, type AgentRuns } from "./agentRuns";
 import { localBrainApplication } from "../localFirst/localFirstStore";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** Search hits the view shows at most. */
 const SEARCH_HITS = 20;

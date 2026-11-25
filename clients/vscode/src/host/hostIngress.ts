@@ -10,15 +10,15 @@ import { brainUploadUrl, signedBrainFileUrl, BRAIN_UPLOAD_PATH, BRAIN_UPLOAD_SIG
 import { isServableLocalModel } from "@builderforce/local-inference";
 import { mentionBudget, type MentionBudget } from "@builderforce/tool-output-policy";
 import { authed, authedRaw } from "../bfApi";
-import { desktopCompressProse } from "../desktopContext";
-import { logLine } from "../errorReporter";
-import { messageOf } from "../messageOf";
+import { desktopCompressProse } from "../context/desktopContext";
+import { logLine } from "../diagnostics/errorReporter";
+import { messageOf } from "../shared/messageOf";
 import { getBaseUrl } from "../gateway/gateway";
 import { hostCostLeverOn } from "./hostCostLevers";
-import { localWindowModels, localWindowProbes, resolveModelRoute, type ModelRoute } from "../modelRouting";
+import { localWindowModels, localWindowProbes, resolveModelRoute, type ModelRoute } from "../models/modelRouting";
 import { createAttachmentIngress, uploadRefusal, type AttachmentIngress, type OutgoingFile, type UploadedAttachment } from "../attachments/attachmentIngress";
 import { currentInferenceMode } from "../models/inferenceModeSetting";
-import type { IngressDeps } from "../contextIngress";
+import type { IngressDeps } from "../context/contextIngress";
 
 /**
  * The mention budget for a turn on `route`: the local row (sized by the model's reported

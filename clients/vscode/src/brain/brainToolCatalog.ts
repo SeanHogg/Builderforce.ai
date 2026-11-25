@@ -23,7 +23,7 @@ import { subagentControlToolDefs } from "../subagent/subagentControlTools";
 import type { ChildControls } from "../child/childRunSpawner";
 import { withChildCommandGuard } from "../subagent/subagentCommandGuard";
 import { ticketBranchReviewToolDef } from "../tickets/ticketBranchTool";
-import { desktopBackedTools } from "../desktopContext";
+import { desktopBackedTools } from "../context/desktopContext";
 import { withLocalResearch } from "../localResearch/researchPort";
 
 export async function brainToolCatalog(

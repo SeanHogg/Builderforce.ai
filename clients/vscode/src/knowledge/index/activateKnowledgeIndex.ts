@@ -8,8 +8,8 @@
 
 import * as vscode from "vscode";
 import type { KnowledgeIndexFiles } from "@builderforce/agent-tools/knowledge-index";
-import { logLine } from "../../errorReporter";
-import { messageOf } from "../../messageOf";
+import { logLine } from "../../diagnostics/errorReporter";
+import { messageOf } from "../../shared/messageOf";
 import { getLocalModelsConfig } from "../../gateway/gateway";
 import { configureEditorEmbedder } from "./embedderPort";
 import { configureHostKnowledgeIndex, markKnowledgeFileChanged } from "./hostKnowledgeIndex";

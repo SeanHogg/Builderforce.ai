@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { BfTask, deleteTask, invalidateTasks, setTaskArchived, updateTaskStatus } from "../bfApi";
 import { attentionFor } from "../diagnostics/attention";
 import { confirmDeleteInEditor } from "../chat/confirmDeletionUi";
-import { surfaceError } from "../errorReporter";
+import { surfaceError } from "../diagnostics/errorReporter";
 import { getSelectedProject } from "../project/projectState";
 import { TASK_LANES } from "./taskLanes";
 import { taskRowLabel } from "./taskTreeShared";

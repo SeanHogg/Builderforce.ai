@@ -8,7 +8,7 @@
 
 import type * as vscode from "vscode";
 import type { ReviewCallPrice } from "@builderforce/agent-tools/knowledge";
-import { onDeviceModelAvailable } from "../modelRouting";
+import { onDeviceModelAvailable } from "../models/modelRouting";
 import { currentInferenceMode } from "../models/inferenceModeSetting";
 import { linkedKnowledgeClient } from "./knowledgeService";
 

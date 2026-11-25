@@ -12,7 +12,7 @@
  */
 import { submitLocalTurnVerdict } from "@seanhogg/builderforce-brain-embedded";
 import { isLocalPersistenceMethod } from "../panels/bridgeProtocol";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** Refusal sentence for a `local.persistence` method the host cannot run. */
 export const UNKNOWN_PERSISTENCE_METHOD = "Unsupported local persistence operation";

@@ -12,7 +12,7 @@ import {
   type BrainStreamFn,
   type BrainTransport,
 } from "@seanhogg/builderforce-brain-embedded";
-import { observeGatewayResponse } from "../gatewayAuth";
+import { observeGatewayResponse } from "../auth/gatewayAuth";
 
 /**
  * The header that tells the gateway WHICH surface spent the tokens, so BYO / free

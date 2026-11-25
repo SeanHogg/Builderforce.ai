@@ -8,7 +8,7 @@ vi.mock("../gateway/gateway", () => ({
 }));
 vi.mock("./kimiCodeInstall", () => ({ isKimiCodeInstall: () => true }));
 vi.mock("./kimiCodeAuth", () => ({ ensureFreshKimiToken: (...args: unknown[]) => ensureFreshKimiToken(...args) }));
-vi.mock("../errorReporter", () => ({ logLine: vi.fn(), reportExtensionError: vi.fn(async () => undefined) }));
+vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn(), reportExtensionError: vi.fn(async () => undefined) }));
 vi.mock("./providerConnect", () => ({
   editorAccounts: () => ({ providerFor: () => "kimi", credentialFor: () => async () => "ws-token" }),
   ensureLocalProviderCredential: (...args: unknown[]) => ensureLocalProviderCredential(...args),

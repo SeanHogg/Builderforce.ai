@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as bfApi from "../bfApi";
 import { clearPlatformToolsCache } from "../platform/platformTools";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /**
  * Register a bring-your-own MCP server from the editor.

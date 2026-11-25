@@ -12,7 +12,7 @@ import {
   conversationTreeLabel,
   ticketProgressTooltipLine,
   type TicketCountLabels,
-} from "../ticketProgressDisplay";
+} from "../tickets/ticketProgressDisplay";
 import { archive as archiveRows, unarchive, partitionArchived, pruneArchive, sweepArchivable, type ArchiveState } from "./sessionsArchive";
 import { SessionsSnapshotStore, type SessionsSnapshot } from "./sessionsSnapshotStore";
 

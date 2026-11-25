@@ -4,7 +4,7 @@ import { classifyQueue, isDurableUserWorkQueue, isTelemetryQueue } from "@builde
 import { authedRaw, isWorkspaceParked } from "../bfApi";
 import { createDurableOutbox, outboxSecrets, scopeTenantId } from "../sync/outboxStorage";
 import { getSelectedProject } from "../project/projectState";
-import { messageOf } from "./messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /**
  * The extension's ONE log surface, and its OPT-IN path to the platform's error store.

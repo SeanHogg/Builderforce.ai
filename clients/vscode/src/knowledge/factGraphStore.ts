@@ -14,7 +14,7 @@
 import {
   emptyFactGraph, loadFactGraph, saveFactGraph, sweepFactStore, type FactGraph, type FactStorePort, type FactStoreVersion, type StoredFactGraph,
 } from "@seanhogg/builderforce-memory/knowledge";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** How many times one save resolves a conflict before it gives up (the next change saves again). */
 export const SAVE_ATTEMPTS = 3;

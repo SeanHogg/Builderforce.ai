@@ -7,7 +7,7 @@ vi.mock("vscode", () => ({
   workspace: { workspaceFolders: [] },
 }));
 
-vi.mock("./modelRouting", () => ({
+vi.mock("../models/modelRouting", () => ({
   routeComplete: async () => "",
 }));
 

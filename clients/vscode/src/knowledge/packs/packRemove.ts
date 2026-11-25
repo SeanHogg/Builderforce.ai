@@ -9,7 +9,7 @@ import * as vscode from "vscode";
 import { KnowledgeApiError } from "@builderforce/knowledge-client";
 import { provenanceDetail } from "./packProvenanceDetail";
 import { linkedProjectClient } from "./packUi";
-import { messageOf } from "../../messageOf";
+import { messageOf } from "../../shared/messageOf";
 import { registerPackUploadCommand } from "./packUpload";
 
 async function removeUploadedPack(context: vscode.ExtensionContext): Promise<void> {

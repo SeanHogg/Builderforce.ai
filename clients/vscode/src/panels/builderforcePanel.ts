@@ -3,7 +3,7 @@ import { getSessionTabMode, type SessionTabMode } from "../gateway/gateway";
 import { editorChatState, sessionTabIcon, sessionTabPrefix } from "../diagnostics/attention";
 import { WebviewPanelBase } from "./webviewShared";
 import { workspaceCanvasSession, type WorkspaceCanvasSession } from "../workspace/workspaceSession";
-import { WorkspaceSurface, type BrainInbound, type BrainIntent } from "../workspaceSurface";
+import { WorkspaceSurface, type BrainInbound, type BrainIntent } from "../workspace/workspaceSurface";
 
 
 /**

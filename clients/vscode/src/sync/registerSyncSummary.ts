@@ -6,7 +6,7 @@
  */
 
 import * as vscode from "vscode";
-import type { DurableLocalFirstStore } from "../durableLocalFirstStore";
+import type { DurableLocalFirstStore } from "../localFirst/durableLocalFirstStore";
 import { platformPolicy } from "../platform/platformPolicy";
 import { hostSyncSummaryPorts } from "./hostSyncSummary";
 import { readSyncSummary, type SyncSummary } from "./syncSummary";

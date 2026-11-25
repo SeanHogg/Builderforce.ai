@@ -5,7 +5,7 @@ vi.mock("vscode", () => ({}));
 import { MAX_INLINE_TEXT_BYTES } from "@seanhogg/builderforce-brain-embedded";
 import { mentionBudget } from "@builderforce/tool-output-policy";
 import { readChatReferences, referencesTurnBlock, type ReferenceReader } from "./chatReferences";
-import { INGRESS_COMPRESS_MIN_CHARS } from "../contextIngress";
+import { INGRESS_COMPRESS_MIN_CHARS } from "../context/contextIngress";
 
 /** A `Uri`-shaped value (the reader only duck-types `scheme` + `path`). */
 const uri = (path: string) => ({ scheme: "file", path, fsPath: path }) as never;

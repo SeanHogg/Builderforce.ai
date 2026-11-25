@@ -13,7 +13,7 @@ import {
   type MethodologyRole,
   type WriteScopeEntry,
 } from "@builderforce/agent-tools";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** The composer send a passed gate's button replays: the role rides as an argument, never a text prefix. */
 export interface PersonaSend {

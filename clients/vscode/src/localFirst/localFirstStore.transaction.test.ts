@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { getLocalAuditRun, startLocalAuditRun } from "../audit/localAuditStore";
 import { decodeJournalFrames } from "@builderforce/local-first";
 import { createVsCodeLocalFirstStore, localBrainApplication } from "./localFirstStore";
-import { createLocalWorkRepository } from "../localWorkRepository";
+import { createLocalWorkRepository } from "../localWork/localWorkRepository";
 import { changeSetLifecycleId, readChangeSetLifecycle, recordChangeSetBaseline } from "../git/changeSetLifecycle";
-import { recordRunStarted } from "../runRecovery";
+import { recordRunStarted } from "../run/runRecovery";
 import { LOCAL_PERSISTENCE_METHODS } from "../panels/bridgeProtocol";
 import { callLocalPersistence } from "./localPersistenceDispatch";
 

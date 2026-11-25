@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as bfApi from "../bfApi";
 import { currentCapabilityInputs } from "../tools/capabilityContext";
 import { networkDenied } from "../tools/capabilityStates";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /**
  * THE BOARD THIS EDITOR WORKS IN.

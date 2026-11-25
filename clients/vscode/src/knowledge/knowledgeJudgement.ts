@@ -16,7 +16,7 @@ import { completionJudgement, fallbackJudgement, type JudgeCompletion } from "@b
 import type { JudgementPort } from "@seanhogg/builderforce-memory/knowledge";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
 import { NO_LOCAL_MODEL } from "@seanhogg/builderforce-brain-embedded";
-import { onDeviceModelAvailable, onDeviceTasks, resolveModelRoute, routeComplete } from "../modelRouting";
+import { onDeviceModelAvailable, onDeviceTasks, resolveModelRoute, routeComplete } from "../models/modelRouting";
 import { currentInferenceMode } from "../models/inferenceModeSetting";
 import type { ChatMessage } from "../gateway/gateway";
 

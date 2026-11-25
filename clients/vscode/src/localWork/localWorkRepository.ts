@@ -32,7 +32,7 @@
  */
 
 import type { DestinationBinding, EntityDestination, LocalFirstStore } from "@builderforce/local-first";
-import { createProjectRepository } from "./localProjectRepository";
+import { createProjectRepository } from "../project/localProjectRepository";
 import { createTicketRepository } from "../tickets/localTicketRepository";
 import { createOwnershipRepository } from "./localWorkOwnership";
 import { creationDestination, type WorkRepoContext } from "./localWorkShared";

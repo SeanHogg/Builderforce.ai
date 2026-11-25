@@ -19,7 +19,7 @@
 import { composeKit } from "@builderforce/ide-templates/kits";
 import type { ComposerCommandExecutor } from "./dispatch";
 import type { ComposerCommandText } from "./labels";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 import { chooseFolder, inFolder, launchFollowUp, type ComposerWorkspacePort } from "./workspacePort";
 import { WriteRefusedError, writeRefusedReply } from "./writeContainment";
 import { findFolderManifest, LEGACY_MANIFEST_FILES, MANIFEST_PATH, WORKSPACE_DIR } from "./manifestLocation";

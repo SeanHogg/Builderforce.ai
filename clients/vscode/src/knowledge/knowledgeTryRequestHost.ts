@@ -6,7 +6,7 @@
 
 import * as vscode from "vscode";
 import type { KnowledgeTryRequest, KnowledgeTryResponse } from "./knowledgeProtocol";
-import { logLine } from "../errorReporter";
+import { logLine } from "../diagnostics/errorReporter";
 import { createTryRunner, devOriginsFromInspect, userFailureOf, type TryRefusal } from "./knowledgeTryRequest";
 import { nodeOpen } from "./knowledgeTryTransport";
 

@@ -23,7 +23,7 @@
 
 import { isOverBudget } from "../workers/boundedTransfer";
 import { hostMemento } from "./knowledgeSyncStatus";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** The command that lifts a root's quarantine and asks for L3 again (`l3RetryCommand.ts`). */
 export const L3_RETRY_COMMAND = "builderforce.knowledge.retryAnalyzers";

@@ -14,7 +14,7 @@
 
 import { createHash } from "node:crypto";
 import { WORKSPACE_DIR } from "@seanhogg/builderforce-webcontainers/manifest";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** Where in a run a hook fires. */
 export type HookEvent = "stop" | "preTool" | "postTool" | "runEnd";

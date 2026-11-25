@@ -21,7 +21,7 @@ import { createChildRuns } from "./childRuns";
 import { createChildLedger } from "./childLedger";
 import { persistChildrenTo } from "./childRunJournal";
 import { toInterruptedRunView } from "../panels/interruptedRunsView";
-import { recordRunStarted, recoverInterruptedRuns } from "../runRecovery";
+import { recordRunStarted, recoverInterruptedRuns } from "../run/runRecovery";
 import { withChildCommandGuard } from "../subagent/subagentCommandGuard";
 import type { ToolDef } from "../tools/fileTools";
 

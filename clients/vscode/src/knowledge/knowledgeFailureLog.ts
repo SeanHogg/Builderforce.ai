@@ -7,7 +7,7 @@
  */
 
 import type { KnowledgeEvent } from "./knowledgeProtocol";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 export interface ReviewFailureContext {
   /** Which step failed: planning, or the confirmed run. */

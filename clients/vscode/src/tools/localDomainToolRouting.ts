@@ -21,8 +21,8 @@
  * change on a ticket the run's chat does not link is refused (`chatTicketGuard.ts`).
  */
 
-import type { DomainToolRequest } from "../installLocalDomainTools";
-import type { LocalDomainToolName } from "../localDomainTools";
+import type { DomainToolRequest } from "./installLocalDomainTools";
+import type { LocalDomainToolName } from "./localDomainTools";
 import { bridgeLocalTicketIds, type TicketServerIdLookup } from "../tickets/localTicketIdBridge";
 import { unionLocalTicketReads } from "../tickets/localTicketReads";
 import type { ChatTicketScope } from "../tickets/localTicketScope";

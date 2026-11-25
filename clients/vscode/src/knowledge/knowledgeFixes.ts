@@ -37,7 +37,7 @@ import type { KnowledgeFixResult } from "./knowledgeProtocol";
 import { runShell } from "./knowledgeShell";
 import { fixText } from "./knowledgeFixText";
 import { snapshotFix, type FixSnapshot } from "./knowledgeFixUndo";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** One codemod: what it does to the work tree for a finding whose files are `wanted`. Validation that needs no git runs in `prepare`, before the lock. */
 interface Codemod {

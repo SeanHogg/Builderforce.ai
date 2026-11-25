@@ -7,7 +7,7 @@
  * rare path, never pay for it. A reporter that cannot load falls back to `console.warn`.
  */
 export function hostLog(line: string): void {
-  void import("../errorReporter")
+  void import("../diagnostics/errorReporter")
     .then(({ logLine }) => logLine(line))
     .catch((error: unknown) => console.warn(line, error));
 }

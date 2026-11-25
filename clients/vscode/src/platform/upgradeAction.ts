@@ -2,7 +2,7 @@ import { chatErrorAction, type ChatErrorAction } from "@seanhogg/builderforce-br
 import * as vscode from "vscode";
 import { getWebBaseUrl } from "../gateway/gateway";
 import { noLocalModelMessage } from "../models/noLocalModelPrompt";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /**
  * Turn an entitlement failure into somewhere the user can actually GO — the host

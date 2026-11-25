@@ -11,7 +11,7 @@ import { evaluatePolicyGate, toolCallPaths, type PolicyGate } from "@builderforc
 import { publishAllowed, publishVerbOf, type ShipPolicy } from "@builderforce/run-guards";
 import type { RunHooks } from "../hooks/runHooks";
 import type { NativeApprovalRequest, NativeRunEvents, NativeRunLabels } from "./nativeRunTypes";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** Coerce a tool-call argument bag to a plain record. */
 export function argsRecord(value: unknown): Record<string, unknown> {

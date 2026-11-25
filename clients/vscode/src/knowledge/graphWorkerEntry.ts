@@ -16,7 +16,7 @@ import { parentPort } from "node:worker_threads";
 import { nodeKnowledgeReader, type NodeKnowledgeReader } from "@builderforce/agent-tools/node-knowledge-store";
 import { assembleBounded, isOverBudget, PartsReceiver, postBounded, RESULT_OVER_BUDGET } from "../workers/boundedTransfer";
 import { runGraphBuild, type FolderStores } from "./graphBuildJob";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 import {
   EXTRACTED_REQUEST_ARRAYS, GRAPH_RESULT_OVER_BUDGET, GRAPH_STORE_UNAVAILABLE, resultArraysOf,
   type GraphBuildRequest, type GraphWorkerMessage, type GraphWorkerReply,

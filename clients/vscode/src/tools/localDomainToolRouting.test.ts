@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryLocalFirstStore } from "@builderforce/local-first";
 import type { ToolDef } from "./fileTools";
-import { installLocalDomainTools, type DomainToolRequest } from "../installLocalDomainTools";
+import { installLocalDomainTools, type DomainToolRequest } from "./installLocalDomainTools";
 import { LOCAL_DOMAIN_TOOL_SPECS, SERVER_TWIN_TOOL_NAMES, routeToLocalDomainTools } from "./localDomainToolRouting";
 
 const serverTool = (name: string, mutating = true): ToolDef => ({

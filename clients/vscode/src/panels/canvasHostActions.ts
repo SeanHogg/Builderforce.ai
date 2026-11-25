@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { resolveExternalTarget } from "../externalUrl";
+import { resolveExternalTarget } from "../shared/externalUrl";
 import { getWebBaseUrl } from "../gateway/gateway";
 
 /**

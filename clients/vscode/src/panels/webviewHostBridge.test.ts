@@ -21,10 +21,10 @@ const jwt = vi.hoisted(() => ({
   boundToken: vi.fn((token: string | undefined) => (token ? { token } : null)),
 }));
 vi.mock("../bfApi", () => jwt);
-vi.mock("../errorReporter", () => ({ logLine: vi.fn(), reportExtensionError: vi.fn(async () => undefined) }));
+vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn(), reportExtensionError: vi.fn(async () => undefined) }));
 vi.mock("../gateway/gateway", () => ({ getBaseUrl: () => "https://api.example", getWebBaseUrl: () => "https://web.example" }));
 const workRepo = vi.hoisted(() => ({ createLocalWorkRepository: vi.fn() }));
-vi.mock("../localWorkRepository", () => workRepo);
+vi.mock("../localWork/localWorkRepository", () => workRepo);
 // The store the bridge subscribes to for ticket/link writes; the test drives its listener.
 const storeState = vi.hoisted(() => ({
   listener: undefined as undefined | ((change?: unknown) => void),
@@ -51,7 +51,7 @@ vi.mock("../platform/platformPolicy", () => ({
     },
   }),
 }));
-vi.mock("../platformCallGate", () => ({
+vi.mock("../platform/platformCallGate", () => ({
   assertPlatformSocketAllowed: () => undefined,
   platformSocketUrl: () => null,
   platformPolicyFrame: (baseUrl: string, webUrl: string) => ({
@@ -63,7 +63,7 @@ vi.mock("../platformCallGate", () => ({
 }));
 
 import { handleSharedHostMessage, watchedWebviewCount, webviewErrorLines } from "./webviewHostBridge";
-import { logLine, reportExtensionError } from "../errorReporter";
+import { logLine, reportExtensionError } from "../diagnostics/errorReporter";
 import { UNKNOWN_PERSISTENCE_METHOD } from "../localFirst/localPersistenceDispatch";
 
 type Ctx = Parameters<typeof handleSharedHostMessage>[0];

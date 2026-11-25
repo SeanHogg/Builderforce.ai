@@ -30,7 +30,7 @@ import { MIN_QUICK_RUNS_FOR_SUGGESTION, type RouteTotals } from "@builderforce/p
 import { MILLICENTS_PER_USD } from "@builderforce/spend-contract";
 import { localBrainApplication } from "../localFirst/localFirstStore";
 import { ensureWorkspaceDirs, workspacePaths } from "../workspace/workspacePaths";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 export const PIPELINE_ROUTE_REPORT_COMMAND = "builderforce.pipelineRouteReport";
 /** The window the report reads. */

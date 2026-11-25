@@ -54,7 +54,7 @@ import {
   type TicketValue,
 } from "@builderforce/local-first";
 import { namesServerOnlyRecord, resolveLocalReference, writtenEntityIds } from "../localFirst/localEntityRefs";
-import { createLocalWorkRepository, type LocalWorkRepositoryOptions } from "./localWorkRepository";
+import { createLocalWorkRepository, type LocalWorkRepositoryOptions } from "../localWork/localWorkRepository";
 import { DEFAULT_TICKET_STATUS, LOCAL_TICKET_STATUSES } from "../localWork/localWorkShared";
 
 // The classification table is the package's (`packages/local-first/src/domainToolClass.ts`),

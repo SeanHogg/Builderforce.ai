@@ -14,7 +14,7 @@
 
 import * as vscode from "vscode";
 import type { PlanDetail } from "@seanhogg/builderforce-memory/knowledge";
-import { logLine } from "../errorReporter";
+import { logLine } from "../diagnostics/errorReporter";
 import { logReviewFailure } from "./knowledgeFailureLog";
 import type { KnowledgeEvent, KnowledgeReviewRequest } from "./knowledgeProtocol";
 import { rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";

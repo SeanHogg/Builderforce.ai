@@ -29,7 +29,7 @@ import { LOCAL_RUNTIMES } from "@builderforce/local-inference";
 import { gatewayRequest } from "../gateway/gatewayRequest";
 import { connectedAccounts } from "./localProviderCredentials";
 import type { ConnectedAccounts } from "@builderforce/provider-connect/accounts";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** Why a connect did not finish, in the person's language. */
 function failureMessage(label: string, error: unknown): string {

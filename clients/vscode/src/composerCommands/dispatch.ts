@@ -18,7 +18,7 @@ import {
 } from "@seanhogg/builderforce-brain-embedded/composerCommands";
 import type { ComposerCommandText } from "./labels";
 import type { ComposerInputResult, ComposerReply } from "./reply";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 import { WriteRefusedError, writeRefusedReply } from "./writeContainment";
 
 /** Runs one parsed command. `args` are the parser's canonical values. */

@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { LLM_PROVIDER_INFO } from "@builderforce/model-catalog";
 import * as bfApi from "../bfApi";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 import { connectProviderInteractively, editorAccounts } from "./providerConnect";
 import { testAccountFromEditor } from "./localAccountTest";
 

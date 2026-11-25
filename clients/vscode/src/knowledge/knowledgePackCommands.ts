@@ -33,7 +33,7 @@ import { provenanceDetail } from "./packs/packProvenanceDetail";
 import { packOfRoot, reviewForPack } from "./packs/packReview";
 import { registerPackPlatformCommands } from "./packs/packRemove";
 import { PACK_FILTER } from "./packs/packUi";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 const countOf = (pack: PortableKnowledgePack) => ({
   sources: Object.values(pack.snapshot.extracted).reduce((n, list) => n + list.length, 0),

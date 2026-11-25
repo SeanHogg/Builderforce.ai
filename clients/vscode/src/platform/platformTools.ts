@@ -1,13 +1,13 @@
 import type * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "../gateway/gateway";
-import { GATEWAY_WORKSPACE_HEADER, gatewayAuthHeaders, gatewayWorkspaceHeaders, observeGatewayResponse } from "../gatewayAuth";
+import { GATEWAY_WORKSPACE_HEADER, gatewayAuthHeaders, gatewayWorkspaceHeaders, observeGatewayResponse } from "../auth/gatewayAuth";
 import type { ToolDef } from "../tools/fileTools";
 import { hostLog } from "../host/hostLog";
 import { namesRunChat } from "../tickets/localTicketScope";
 import { toolMutating } from "../tools/toolMutating";
 import { ttlCache } from "../localFirst/ttlCache";
 import { describeNetworkError, retryOnConnectFailure } from "@seanhogg/builderforce-brain-embedded";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /**
  * Platform tools = the SHARED, server-side capability catalog (projects, tasks,

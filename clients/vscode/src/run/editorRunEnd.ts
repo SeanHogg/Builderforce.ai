@@ -19,7 +19,7 @@ import type * as vscode from "vscode";
 import { noteRunStep, withRunUsage, type LocalChatIdentity, type RunUsageLedger } from "@seanhogg/builderforce-brain-embedded";
 import { rememberProjectFact } from "../bfApi";
 import { getApiKey } from "../gateway/gateway";
-import { resolveModelRoute, routeStream } from "../modelRouting";
+import { resolveModelRoute, routeStream } from "../models/modelRouting";
 import { appendSessionNote } from "../memory/sessionNotes";
 import { commitRunKnowledgeIfAllowed, MEMORY_COMMIT_SYSTEM, type FinishedRun } from "@builderforce/agent-run/memory";
 import { readChangedExcerpt } from "../git/changedExcerpt";

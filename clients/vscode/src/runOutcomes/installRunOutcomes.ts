@@ -6,7 +6,7 @@
  */
 
 import type { LocalFirstStore } from "@builderforce/local-first";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 export interface RunOutcomeJobs {
   dispose(): void;

@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("../bfApi", () => ({ rememberProjectFact: mocks.rememberProjectFact }));
 vi.mock("../gateway/gateway", () => ({ getApiKey: vi.fn(async () => "k") }));
-vi.mock("../modelRouting", () => ({ resolveModelRoute: vi.fn(async () => ({})), routeStream: mocks.routeStream }));
+vi.mock("../models/modelRouting", () => ({ resolveModelRoute: vi.fn(async () => ({})), routeStream: mocks.routeStream }));
 vi.mock("../memory/sessionNotes", () => ({ appendSessionNote: mocks.appendSessionNote }));
 vi.mock("@seanhogg/builderforce-brain-embedded", () => ({
   noteRunStep: mocks.noteRunStep,

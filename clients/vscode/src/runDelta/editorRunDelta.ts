@@ -15,7 +15,7 @@ import type * as vscode from "vscode";
 import type { RunHostMessage, RunSink } from "../brain/brainRunHostProtocol";
 import { hostLog } from "../host/hostLog";
 import { recordLocalAuditGate } from "../audit/localAuditGate";
-import type { RunHold } from "../runRecovery";
+import type { RunHold } from "../run/runRecovery";
 import type { BaselineCaptureOptions } from "../run/runChangeBaseline";
 import type { FinalizedRunChangeSets } from "../run/runChangeSets";
 import type { LocalChangeSetValue } from "../run/runChangeSets";
@@ -31,7 +31,7 @@ import type { RunEndDeps } from "./atRunEnd";
 import { readRunPredictions, withPredicted, type PredictedCard } from "./runDeltaPredictions";
 import type { StoredRunDelta } from "./runDeltaRecords";
 import type { Prediction } from "@builderforce/run-delta/predict";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 type DeltaHost = typeof import("./runDeltaHost");
 

@@ -16,12 +16,12 @@ import type { ChildProcess } from "child_process";
 import type { ShellJobStart, ShellJobStatus, ShellResult } from "@builderforce/agent-tools";
 import { posixRoute, runRouted, withPipefail } from "@builderforce/agent-tools/node-posix-shell";
 import { resolveShellCwd } from "@builderforce/agent-tools/node-path";
-import { spawnCommand, stopCommand } from "../processTree";
+import { spawnCommand, stopCommand } from "./processTree";
 import { killJob, pollJob, startJob, type JobOwner } from "./localShellJobs";
 import { readOutput, retainOutput } from "./localShellOutputs";
 import { cachedResult, invalidateRunCache, rememberResult, shellCacheEffect, workspaceFingerprint } from "./localShellCache";
-import { withScratchEnv } from "../scratchDir";
-import { messageOf } from "../messageOf";
+import { withScratchEnv } from "../run/scratchDir";
+import { messageOf } from "../shared/messageOf";
 
 // Bound a command's wall-clock + the output handed back to the model. Matches the cloud
 // Container's COMMAND_TIMEOUT_MS (api/container/server.mjs) — a build/type-check/test

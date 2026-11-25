@@ -35,7 +35,7 @@ import { getSelectedProject } from "../project/projectState";
 import { currentCapabilityInputs } from "../tools/capabilityContext";
 import { workspaceLinked } from "../tools/capabilityStates";
 import { buildLocalCapabilityProvider } from "../tools/localCapabilities";
-import { logLine } from "../errorReporter";
+import { logLine } from "../diagnostics/errorReporter";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import { vscodeKnowledgeFs, workspaceKnowledgeFiles } from "./knowledgeFs";
 import { createDirectorySource } from "./vscodeDirectorySource";
@@ -52,7 +52,7 @@ import { storedGraphOffThread } from "./graphWorker";
 import { preemptBackground } from "./indexLevels";
 import { useL3GuardLog } from "./l3CrashGuard";
 import { untilAborted } from "../run/boundedStep";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** Where the reviewed roots are listed (`workspaceState`), set at activation. */
 let reviewedRootsMemento: RootsMemento | undefined;

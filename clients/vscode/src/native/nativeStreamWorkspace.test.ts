@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createNativeStream } from "./nativeGatewayStream";
-import { GATEWAY_WORKSPACE_HEADER, gatewayWorkspaceHeaders } from "../gatewayAuth";
+import { GATEWAY_WORKSPACE_HEADER, gatewayWorkspaceHeaders } from "../auth/gatewayAuth";
 import { setCurrentWorkspace } from "../workspace/workspaceSelection";
 
 describe("the native stream names the workspace", () => {

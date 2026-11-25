@@ -29,8 +29,8 @@ import { requestSymbolLookup } from "../contextPack/requestSymbols";
 import { workspaceSymbolIndex } from "../workspace/workspaceSymbols";
 import { byoPreflight } from "../contextPack/byoPreflight";
 import { killRunJobs } from "../tools/localShellJobs";
-import { logLine } from "../errorReporter";
-import { messageOf } from "../messageOf";
+import { logLine } from "../diagnostics/errorReporter";
+import { messageOf } from "../shared/messageOf";
 
 export function editorRunSetupPorts(
   secrets: vscode.SecretStorage,

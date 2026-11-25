@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { newLocalRecord, type EntityDestination } from "@builderforce/local-first";
-import { createDurableLocalFirstStore } from "../durableLocalFirstStore";
+import { createDurableLocalFirstStore } from "./durableLocalFirstStore";
 
 const BOUND: EntityDestination = { kind: "bound", platformInstance: "https://example.test", tenantId: "1" };
 const directories: string[] = [];

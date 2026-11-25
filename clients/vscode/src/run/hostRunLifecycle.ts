@@ -26,8 +26,8 @@ import { isMidTurnMetadata } from "@builderforce/agent-loop";
 import { isUnsettledAnswer, parseSubagentOrigin, resumeStateOf, STOPPED_TURN_STEP, type ResumeTraceEvent, type RunResumeState } from "@seanhogg/builderforce-brain-embedded";
 import type { RunHostMessage, RunSink } from "../brain/brainRunHostProtocol";
 import type { InstalledRunRecovery } from "./installRunRecovery";
-import type { RunHold, RunTerminalStatus } from "../runRecovery";
-import { messageOf } from "../messageOf";
+import type { RunHold, RunTerminalStatus } from "./runRecovery";
+import { messageOf } from "../shared/messageOf";
 
 /** The slice of a run snapshot the terminal-status decision reads. */
 export interface RunOutcomeSnapshot {

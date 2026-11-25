@@ -21,7 +21,7 @@ import {
 } from "../panels/pageEngineBridgeProtocol";
 import type { LocalDeviceSupport } from "@builderforce/local-inference";
 import type { FileModelStore } from "./modelFiles";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 export interface ModelFileIo {
   respond(id: string | undefined, ok: boolean, result?: unknown, error?: string): void;

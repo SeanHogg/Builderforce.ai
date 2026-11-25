@@ -16,7 +16,7 @@ import { loadedPackRegistry } from "./loadedPackRegistry";
 import { readPackFile } from "./packIndexing";
 import { PackUploadIncomplete, PackUploadUnreachable, pushPack } from "./packPush";
 import { PACK_FILTER, linkedProjectClient } from "./packUi";
-import { messageOf } from "../../messageOf";
+import { messageOf } from "../../shared/messageOf";
 
 /** The pack file to upload: a loaded pack the person picks, else a `.bfpack` they choose. */
 async function pickPackFile(): Promise<string | undefined> {

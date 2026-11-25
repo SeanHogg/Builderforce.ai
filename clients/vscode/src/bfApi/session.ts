@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "../gateway/gateway";
 import { setOutboxScope, trackReachability } from "../sync/outboxStorage";
 import { setCurrentWorkspace } from "../workspace/workspaceSelection";
-import { classifyWorkspaceRefusal, reportWorkspaceRefusal } from "../gatewayAuth";
+import { classifyWorkspaceRefusal, reportWorkspaceRefusal } from "../auth/gatewayAuth";
 
 /**
  * Client for BuilderForce's tenant APIs (projects/tasks/connection). The extension holds

@@ -26,7 +26,7 @@ vi.mock("@builderforce/agent-tools", () => ({
 }));
 
 vi.mock("../gateway/gateway", () => ({ SECRET_KEY: "secret", getLocalModelsConfig: vi.fn() }));
-vi.mock("../modelRouting", () => ({
+vi.mock("../models/modelRouting", () => ({
   resolveModelRoute: async () => ({}),
   routeNeedsLocalModel: () => false,
   routeNeedsSpecificModel: () => false,
@@ -35,7 +35,7 @@ vi.mock("../modelRouting", () => ({
 }));
 vi.mock("../bfApi", () => ({ getCurrentUserId: async () => null, fetchRunContextSection: async () => "", projectEvermindHooks: vi.fn() }));
 vi.mock("../memory/personalityLimbic", () => ({ turnLimbicBlock: async () => "" }));
-vi.mock("../editorContext", () => ({ getEditorContextLive: async () => ({}) }));
+vi.mock("../context/editorContext", () => ({ getEditorContextLive: async () => ({}) }));
 vi.mock("../project/projectState", () => ({ getSelectedProject: () => null }));
 vi.mock("../platform/permissionMode", () => ({ permissionMode: () => "acceptEdits" }));
 vi.mock("../localFirst/localFirstStore", () => ({
@@ -46,7 +46,7 @@ vi.mock("../localFirst/localFirstStore", () => ({
   }),
 }));
 vi.mock("../memory/grounding", () => ({ getGroundingWithHistory: async () => "" }));
-vi.mock("../policyGates", () => ({ PolicyGatesUnavailableError: class extends Error {}, resolveRunPolicyGates: async () => [] }));
+vi.mock("../platform/policyGates", () => ({ PolicyGatesUnavailableError: class extends Error {}, resolveRunPolicyGates: async () => [] }));
 vi.mock("./participantRun", () => ({ runViaHost: async () => { throw reachedRun; } }));
 vi.mock("../run/installRunRecovery", () => ({ installRunRecovery: () => ({ recovered: Promise.resolve([]), safeToResume: () => false }) }));
 vi.mock("../host/hostLog", () => ({ hostLog: vi.fn() }));

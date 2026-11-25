@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import type { DiagnosticsController } from "../diagnostics/diagnostics";
 import type { InboxQuickActionsProvider, InboxTreeProvider } from "../tickets/inboxTree";
 import type { InsightsController } from "../diagnostics/insights";
-import type { MeetingsTreeProvider } from "../meetings";
+import type { MeetingsTreeProvider } from "../meetings/meetings";
 import type { ProjectContextTreeProvider } from "../project/projectContextTree";
 import type { ProjectsTreeProvider } from "../project/projectsTree";
 import type { ClosedTasksTreeProvider } from "../tickets/closedTasksTree";

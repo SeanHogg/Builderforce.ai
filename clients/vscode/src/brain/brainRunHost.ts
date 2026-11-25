@@ -50,7 +50,7 @@ import { createChildRuns } from "../child/childRuns";
 import { createRunRelay } from "../run/runRelay";
 import { createLlmFailureLogger } from "../models/llmFailureLog";
 import { hostLog } from "../host/hostLog";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 import { childControls, ownerFinishHold } from "../child/childRunSpawner";
 import { createChildRunHost, ownerOf, type RunSpec } from "../child/childRunHost";
 import { createChildApprovalRelay } from "../child/childApprovalRelay";

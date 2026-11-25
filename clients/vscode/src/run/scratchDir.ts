@@ -10,7 +10,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { messageOf } from "./messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** The environment variable a command reads its scratch directory from. */
 export const SCRATCH_DIR_ENV = "BF_SCRATCH_DIR";

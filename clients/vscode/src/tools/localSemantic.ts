@@ -13,7 +13,7 @@
  */
 
 import { symbolIndexSemantic, type RepoSemanticCapability } from "@builderforce/agent-tools";
-import { catalogDesktopSemantic } from "../desktopContext";
+import { catalogDesktopSemantic } from "../context/desktopContext";
 import { hostCostLeverOn } from "../host/hostCostLevers";
 import { workspaceSymbolIndex } from "../workspace/workspaceSymbols";
 

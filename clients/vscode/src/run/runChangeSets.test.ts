@@ -89,8 +89,8 @@ vi.mock("../audit/auditToolCatalog", () => ({
 
 vi.mock("../brain/brainToolCatalog", () => ({ brainToolCatalog: async () => [] }));
 
-vi.mock("../modelRouting", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../modelRouting")>()),
+vi.mock("../models/modelRouting", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../models/modelRouting")>()),
   localWindowProbes: async () => ({}),
   resolveModelRoute: async () => ({}),
   routeStream: () => async () => undefined,
@@ -114,7 +114,7 @@ vi.mock("../brain/brainRunHost", () => ({
   }),
 }));
 
-vi.mock("../policyGates", () => ({ resolveRunPolicyGates: async () => ({}) }));
+vi.mock("../platform/policyGates", () => ({ resolveRunPolicyGates: async () => ({}) }));
 
 vi.mock("../hooks/editorDirectives", () => ({ editorRunDirectives: async () => [] }));
 

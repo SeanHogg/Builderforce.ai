@@ -34,11 +34,11 @@ import type {
 } from "@builderforce/agent-tools";
 
 import type { LocalResearchCapability, RepoSemanticCapability, RepoSymbolsCapability } from "@builderforce/agent-tools";
-import { desktopSemanticCapability } from "../desktopContext";
+import { desktopSemanticCapability } from "../context/desktopContext";
 import { createLocalShell } from "./localShell";
 import { SKIP_DIRS, searchWorkspace } from "../workspace/workspaceSearch";
 import { workspaceSymbolIndex } from "../workspace/workspaceSymbols";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 // Bound the bytes pulled off disk per read. The shared `read_file` tool paginates the
 // returned content into line windows, and an oversized file returns a truncated PREFIX

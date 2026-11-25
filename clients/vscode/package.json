@@ -46,7 +46,7 @@
   "main": "./out/extension.js",
   "exports": {
     ".": "./out/extension.js",
-    "./bootVsixHost": "./src/bootVsixHost.ts"
+    "./bootVsixHost": "./src/host/bootVsixHost.ts"
   },
   "l10n": "./l10n",
   "activationEvents": [

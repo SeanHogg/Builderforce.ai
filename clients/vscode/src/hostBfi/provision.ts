@@ -24,7 +24,7 @@ import {
   type LocalDeviceSupport,
 } from "@builderforce/local-inference";
 import type { FileModelStore } from "./modelFiles";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** Bonsai 4B (572 MB) is the largest row downloaded without being asked. */
 export const AUTO_PROVISION_MAX_BYTES = 600_000_000;

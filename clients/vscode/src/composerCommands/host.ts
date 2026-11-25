@@ -15,7 +15,7 @@ import { caTrustCheckCommand, caTrustCommand, createLocalLauncher } from "@seanh
 import { vsixForwardAi } from "./aiRelay";
 import { watchComposerHelp } from "./helpRefresh";
 import { ensureLauncherTrust, trustCommandRunner, type CaTrustDecision, type LauncherTrustDeps } from "./launcherTrust";
-import { logLine } from "../errorReporter";
+import { logLine } from "../diagnostics/errorReporter";
 import { detectWorkspaceManifest } from "./detectManifest";
 import { actionExecutor, handleComposerInput } from "./dispatch";
 import { LAUNCH_COMMAND_ID, MANIFEST_COMMAND_ID, MANIFEST_INIT_ACTION, MANIFEST_MOVE_ACTION, STARTER_KIT_COMMAND_ID } from "./entries";
@@ -29,7 +29,7 @@ import { manifestMoveExecutor } from "./manifestMove";
 import { integratedBrowser, openUrlVerbatim } from "./openExternal";
 import type { ComposerCommandsInit, ComposerInputResult } from "./reply";
 import { folderManifestWatchers } from "./folderManifestWatchers";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 import { starterKitExecutor } from "./starterKit";
 import { registerManifestPreview, vscodeWorkspacePort } from "./vscodeWorkspacePort";
 import { readWorkspaceFiles } from "./workspaceFiles";

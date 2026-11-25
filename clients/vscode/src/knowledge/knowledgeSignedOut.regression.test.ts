@@ -28,7 +28,7 @@ vi.mock("../bfApi", () => ({
 }));
 vi.mock("../project/projectState", () => ({ getSelectedProject: () => ({ id: 7, name: "persisted-while-signed-out" }) }));
 vi.mock("../tools/capabilityContext", () => ({ currentCapabilityInputs: () => mocks.inputs }));
-vi.mock("../errorReporter", () => ({ logLine: vi.fn() }));
+vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn() }));
 vi.mock("../tools/localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
 vi.mock("../workspace/workspaceSymbols", () => ({ workspaceSymbolIndex: () => ({ filesUnder: async () => [] }) }));
 vi.mock("./index/hostKnowledgeIndex", () => ({ getHostKnowledgeIndex: async () => undefined }));

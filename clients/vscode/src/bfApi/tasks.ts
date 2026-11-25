@@ -1,7 +1,7 @@
 import type * as vscode from "vscode";
 import { isClosedTask } from "@builderforce/agent-loop";
 import { ttlCache } from "../localFirst/ttlCache";
-import { reportExtensionError } from "../errorReporter";
+import { reportExtensionError } from "../diagnostics/errorReporter";
 import { authed } from "./transport";
 import { classifyPlatformStatus } from "./platformHealth";
 

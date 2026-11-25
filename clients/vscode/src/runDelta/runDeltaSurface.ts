@@ -12,7 +12,7 @@
 import { RUN_DELTA_OPEN_REFUSED, RUN_DELTA_RELEASE_REFUSED } from "@builderforce/run-delta/contract";
 import type { Prediction } from "@builderforce/run-delta/predict";
 import type { BrainRunHost } from "../brain/brainRunHost";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** The request types this module answers. */
 export const RUN_DELTA_SURFACE_REQUESTS = ["run-delta/open", "run-delta/release", "run-delta/get", "run-delta/prediction-shown"] as const;

@@ -18,7 +18,7 @@
  */
 import { createHash } from "node:crypto";
 import type { LocalCa, TrustCommand, TrustPlan } from "@seanhogg/builderforce-webcontainers/launcher/server";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 import type { ComposerCommandText } from "./labels";
 
 /** The CA fields the trust step reads (`LocalLauncher.ca`, less its private key). */

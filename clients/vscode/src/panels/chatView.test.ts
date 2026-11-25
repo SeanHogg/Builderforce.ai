@@ -31,7 +31,7 @@ vi.mock("vscode", () => ({
   Uri: { joinPath: (...parts: unknown[]) => parts.join("/") },
   l10n: { t: (message: string) => message },
 }));
-vi.mock("../errorReporter", () => reporter);
+vi.mock("../diagnostics/errorReporter", () => reporter);
 vi.mock("./webviewShared", () => ({ renderWebviewHtml: () => "<html></html>" }));
 vi.mock("./webviewHostBridge", () => ({
   handleSharedHostMessage: async () => {
@@ -42,7 +42,7 @@ vi.mock("./webviewHostBridge", () => ({
 vi.mock("../workspace/workspaceSession", () => ({
   workspaceCanvasSession: () => new Promise((resolve, reject) => { registry.lookups.push({ resolve, reject }); }),
 }));
-vi.mock("../workspaceSurface", () => ({
+vi.mock("../workspace/workspaceSurface", () => ({
   WorkspaceSurface: class {
     handle = vi.fn(async () => undefined);
     sendIntent = vi.fn();

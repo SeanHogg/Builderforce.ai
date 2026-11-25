@@ -6,8 +6,8 @@
 
 import * as vscode from "vscode";
 import type { LocalFirstStore } from "@builderforce/local-first";
-import { EXPORT_DEAD_LETTERS_COMMAND, runExportDeadLetters } from "../deadLetterCommand";
-import { surfaceError } from "../errorReporter";
+import { EXPORT_DEAD_LETTERS_COMMAND, runExportDeadLetters } from "./deadLetterCommand";
+import { surfaceError } from "../diagnostics/errorReporter";
 import { runJournalDeadLetters } from "./journalDeadLetters";
 
 export function registerDeadLetterExport(context: vscode.ExtensionContext, store: LocalFirstStore): void {

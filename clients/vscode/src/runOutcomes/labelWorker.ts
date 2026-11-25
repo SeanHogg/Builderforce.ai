@@ -6,7 +6,7 @@
 
 import { parentPort } from "node:worker_threads";
 import { labelBatch, type LabelBatch } from "./labelBatch";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 parentPort?.once("message", (batch: LabelBatch) => {
   try {

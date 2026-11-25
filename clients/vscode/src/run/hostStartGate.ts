@@ -10,7 +10,7 @@
 
 import { stopIntent } from "@builderforce/run-guards";
 import type { BrainRunHost } from "../brain/brainRunHostContract";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 type Gated = Pick<BrainRunHost, "start" | "stop" | "steer" | "steerTurns">;
 type StartPayload = Parameters<BrainRunHost["start"]>[0];

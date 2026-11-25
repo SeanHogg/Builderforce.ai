@@ -28,7 +28,7 @@ import {
   type LocalFirstStore,
   type LocalTicket,
 } from "@builderforce/local-first";
-import { createDurableLocalFirstStore, SNAPSHOT_FILE } from "./durableLocalFirstStore";
+import { createDurableLocalFirstStore, SNAPSHOT_FILE } from "../localFirst/durableLocalFirstStore";
 
 export const VSIX_LOCAL_SNAPSHOT_FILE = SNAPSHOT_FILE;
 

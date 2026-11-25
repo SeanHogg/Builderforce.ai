@@ -11,7 +11,7 @@ const api = vi.hoisted(() => ({
   authed: vi.fn(),
 }));
 vi.mock("../bfApi", () => api);
-vi.mock("../errorReporter", () => ({ logLine: vi.fn() }));
+vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn() }));
 
 import { byoPreflight } from "./byoPreflight";
 import { preflightFallback, unresolvedByoEntries } from "./byoPreflightVerdict";

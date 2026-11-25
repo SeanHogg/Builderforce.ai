@@ -1,9 +1,9 @@
 import * as vscode from "vscode";
 import { renderWebviewHtml } from "./webviewShared";
 import { handleSharedHostMessage } from "./webviewHostBridge";
-import { reportExtensionError } from "../errorReporter";
+import { reportExtensionError } from "../diagnostics/errorReporter";
 import { workspaceCanvasSession } from "../workspace/workspaceSession";
-import { WorkspaceSurface, type BrainInbound, type BrainIntent } from "../workspaceSurface";
+import { WorkspaceSurface, type BrainInbound, type BrainIntent } from "../workspace/workspaceSurface";
 
 /** The chat view in the SECONDARY sidebar — the agent chat area, beside Chat / Claude
  *  Code / Codex. Contributed under `viewsContainers.secondarySidebar`. */

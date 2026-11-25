@@ -20,8 +20,8 @@ import { resolveLocalSemantic } from "./localSemantic";
 import { editorResearchCapability } from "../localResearch/researchCapability";
 import { isFolderManifest } from "../composerCommands/manifestLocation";
 import { manifestRefusal } from "../composerCommands/manifestGate";
-import { publishGateFor } from "../publishGate";
-import { SCRATCH_DIR_NOTE } from "../scratchDir";
+import { publishGateFor } from "../git/publishGate";
+import { SCRATCH_DIR_NOTE } from "../run/scratchDir";
 
 /**
  * One definition per tool: name, JSON-schema params, whether it mutates the

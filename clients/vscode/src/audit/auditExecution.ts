@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { BrainRunHost } from '../brain/brainRunHost';
 import { startSystemAudit, getSystemAuditRun } from './systemAuditApi';
-import { openWorkspace } from '../openWorkspace';
+import { openWorkspace } from '../workspace/openWorkspace';
 import { getSelectedProject, onProjectChange } from '../project/projectState';
 import { listSystemAudits } from '../bfApi';
 import { AuditResultsPanel } from './auditResultsPanel';
@@ -10,7 +10,7 @@ import { findRepository, getGitApi } from '../git/gitApi';
 import { localBrainApplication } from '../localFirst/localFirstStore';
 import { readRunHold } from '../runDelta/runHoldState';
 import { platformPolicy } from '../platform/platformPolicy';
-import { closeAuditLocally, readClosedAudit, refuseCloudLaunch, type DurableAuditClose } from '../auditCloseCheckpoint';
+import { closeAuditLocally, readClosedAudit, refuseCloudLaunch, type DurableAuditClose } from './auditCloseCheckpoint';
 import {
   ensureLocalAuditDefinitions,
   ensureLocalAuditDeviceId,

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createMemoryLocalFirstStore, type ExecutionValue } from "@builderforce/local-first";
 import { createChildLedger, type PersistedChild } from "./childLedger";
 import { INTERRUPTED_CHILD_NOTE, childrenOfRecord, describeInterruptedChildren, persistChildrenTo, recordRunChildren } from "./childRunJournal";
-import { recordRunCheckpoint, recordRunFinished, recordRunStarted, recoverInterruptedRuns } from "../runRecovery";
+import { recordRunCheckpoint, recordRunFinished, recordRunStarted, recoverInterruptedRuns } from "../run/runRecovery";
 
 /**
  * Chat #61651: the owner fanned out six children, the editor closed, and on resume the

@@ -17,7 +17,7 @@
 import * as vscode from "vscode";
 import { MAX_INLINE_TEXT_BYTES } from "@seanhogg/builderforce-brain-embedded";
 import type { MentionBudget } from "@builderforce/tool-output-policy";
-import { ingressBlock, type IngressDeps, type IngressText } from "../contextIngress";
+import { ingressBlock, type IngressDeps, type IngressText } from "../context/contextIngress";
 
 /** A reference's value, as the participant receives it (`ChatPromptReference.value`). */
 export interface ChatReferenceLike {

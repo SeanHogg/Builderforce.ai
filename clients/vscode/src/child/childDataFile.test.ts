@@ -3,7 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CHILD_DATA_MAX_AGE_MS, MAX_CHILD_DATA_FILES, pruneChildDataFiles, writeChildDataFile } from "./childDataFile";
-import { ensureIgnoredCacheDir } from "../ignoredCacheDir";
+import { ensureIgnoredCacheDir } from "../shared/ignoredCacheDir";
 
 const roots: string[] = [];
 const tempRoot = (): string => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryLocalFirstStore } from "@builderforce/local-first";
-import { createLocalWorkRepository } from "../localWorkRepository";
+import { createLocalWorkRepository } from "./localWorkRepository";
 import { boundChatOf, createLocalWorkModel } from "./localWorkModel";
 
 function harness() {

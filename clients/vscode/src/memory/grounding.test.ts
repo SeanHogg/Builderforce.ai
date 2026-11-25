@@ -8,7 +8,7 @@ const repoMap = vi.hoisted(() => vi.fn(async () => "## Repo map"));
 const symbols = vi.hoisted(() => vi.fn(async () => "## Symbol index"));
 const workspaceMap = vi.hoisted(() => vi.fn(async () => "## Workspace map\n- api [type-check test]"));
 
-vi.mock("../desktopContext", () => ({ desktopRepoMapSection: repoMap }));
+vi.mock("../context/desktopContext", () => ({ desktopRepoMapSection: repoMap }));
 vi.mock("../workspace/workspaceSymbols", () => ({ symbolIndexGrounding: symbols }));
 vi.mock("../contextPack/workspaceMapScan", () => ({ workspaceMapFor: workspaceMap }));
 vi.mock("../host/hostCostLevers", () => ({ hostCostLeverOn: () => false }));

@@ -29,7 +29,7 @@ import {
   type FactChange, type FactGraph, type FactKind, type FactRule, type FileFacts, type Finding, type MountFact, type RuleTraceEntry,
 } from "@seanhogg/builderforce-memory/knowledge";
 import type { FactGraphStore } from "./factGraphStore";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /**
  * A restored file's raw facts with its raw candidate mounts back in place: each candidate's registration `order` names

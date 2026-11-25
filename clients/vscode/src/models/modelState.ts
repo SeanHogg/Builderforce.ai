@@ -4,7 +4,7 @@ import { getProjectEvermindHead } from "../bfApi";
 import { getModels, isModelAllowed } from "../gateway/gateway";
 import { isLocalModelRef } from "./localModels";
 import { getSelectedProject } from "../project/projectState";
-import { explicitRoleModelPin, NATIVE_RUN_ROLE, reviewModelPin, roleModelPin } from "../roleModelPin";
+import { explicitRoleModelPin, NATIVE_RUN_ROLE, reviewModelPin, roleModelPin } from "./roleModelPin";
 import { stageModels, type ModelPolicy, type StageModels } from "./stageModels";
 
 /**

@@ -14,7 +14,7 @@ import {
 } from "./insightsCadence";
 import { getSelectedProject, onProjectChange } from "../project/projectState";
 import { NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** One row in the Insights tree. */
 interface InsightRow {

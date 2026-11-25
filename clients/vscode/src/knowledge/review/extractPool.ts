@@ -19,7 +19,7 @@
 import { availableParallelism, cpus } from "node:os";
 import { Worker } from "node:worker_threads";
 import { ExtractFailed, type ExtractJob, type ExtractJobResult, type ExtractPool } from "@seanhogg/builderforce-memory/knowledge";
-import { messageOf } from "../../messageOf";
+import { messageOf } from "../../shared/messageOf";
 
 /** What the pool uses of a `worker_threads` Worker (a test hands in its own). */
 export interface PoolWorker {

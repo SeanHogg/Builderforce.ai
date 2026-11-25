@@ -9,7 +9,7 @@ import { gitRunner } from "./execRunner";
 import { getModels } from "../gateway/gateway";
 import { isServableLocalModel } from "@builderforce/local-inference";
 import { currentInferenceMode } from "../models/inferenceModeSetting";
-import { localFirstCandidates } from "../modelRouting";
+import { localFirstCandidates } from "../models/modelRouting";
 import { createShipPorts, type ShipPortsRun } from "./shipPorts";
 
 /**

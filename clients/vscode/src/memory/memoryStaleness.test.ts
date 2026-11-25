@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { EvermindRunHooks } from "@seanhogg/builderforce-brain-embedded";
-import { setDesktopFetchForTests } from "../desktopContext";
+import { setDesktopFetchForTests } from "../context/desktopContext";
 import { staleNote, staleReferences, withWorkspaceStaleness } from "./memoryStaleness";
 
 const hooks: EvermindRunHooks = {

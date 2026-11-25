@@ -21,7 +21,7 @@ import * as crypto from "crypto";
 import { destinationKey, type EntityDestination } from "@builderforce/local-first";
 import { classifyQueue } from "@builderforce/write-outbox";
 import { forgetProjectFact, rememberProjectFact } from "../bfApi";
-import type { ScanResult } from "../codebaseScan";
+import type { ScanResult } from "../diagnostics/codebaseScan";
 import { invalidateStableGrounding } from "../memory/grounding";
 import { getSelectedProject, type SelectedProject } from "../project/projectState";
 import { buildWorkspaceFacts, WORKSPACE_FACT_PREFIX, type WorkspaceDigest } from "./workspaceFacts";

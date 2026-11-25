@@ -25,7 +25,7 @@ import { undoSnapshot, UndoPartial, type FixSnapshot } from "./knowledgeFixUndo"
 import { previewOf, runKnipReport, stillReported } from "./knowledgeKnipReport";
 import type { KnowledgeCheckReply, KnowledgeFixPreview, KnowledgeFixResult } from "./knowledgeProtocol";
 import { DETAIL_CAP, ShellFailure } from "./knowledgeShell";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 export interface FixSessionHost {
   trusted(): boolean;

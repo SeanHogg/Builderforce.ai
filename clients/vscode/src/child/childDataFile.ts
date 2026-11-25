@@ -17,9 +17,9 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { noteRunStep, type RunLineage } from "@seanhogg/builderforce-brain-embedded";
 import { collectedDataText, type CoverageStep } from "./childCoverage";
-import { CACHE_DIR, ensureIgnoredCacheDir } from "../ignoredCacheDir";
+import { CACHE_DIR, ensureIgnoredCacheDir } from "../shared/ignoredCacheDir";
 import type { ChildRunHost } from "./childRunSpawner";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** The sub-folder of the workspace cache the data files live in. */
 export const CHILD_DATA_SUBDIR = "subagents";

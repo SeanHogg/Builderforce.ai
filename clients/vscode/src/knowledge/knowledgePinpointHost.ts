@@ -15,7 +15,7 @@ import * as path from "path";
 import type * as vscode from "vscode";
 import { checkPinpointDataUrl, matchAnchors, parseVisionReply, pinpointVisionRequest } from "@builderforce/agent-tools/knowledge";
 import type { ChatMessage } from "../gateway/gateway";
-import { resolveModelRoute, routeComplete } from "../modelRouting";
+import { resolveModelRoute, routeComplete } from "../models/modelRouting";
 import { findRipgrep } from "../tools/ripgrep";
 import { searchWorkspace } from "../workspace/workspaceSearch";
 import type { KnowledgePinpointResult } from "./knowledgeProtocol";

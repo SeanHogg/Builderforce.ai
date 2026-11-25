@@ -9,8 +9,8 @@
  * Call after `activateKnowledgeIndex` (it replaces the index registry the packs go into).
  */
 
-import { logLine } from "../../errorReporter";
-import { messageOf } from "../../messageOf";
+import { logLine } from "../../diagnostics/errorReporter";
+import { messageOf } from "../../shared/messageOf";
 import { configureLoadedPacks, type PackMemento } from "./loadedPackRegistry";
 import { configurePackErrors, reindexLoadedPacks } from "./packIndexing";
 

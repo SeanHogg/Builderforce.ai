@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { BfAttention, BfAttentionManager, BfAttentionState, getAttention } from "../bfApi";
 import { getSelectedProject } from "../project/projectState";
-import { createRefreshCoalescer } from "../refreshCoalescer";
+import { createRefreshCoalescer } from "../shared/refreshCoalescer";
 
 /**
  * The extension's single source of truth for cross-surface "what's live / what

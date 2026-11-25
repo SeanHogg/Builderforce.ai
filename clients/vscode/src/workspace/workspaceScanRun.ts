@@ -10,8 +10,8 @@
  * Ports are injected so the signed-out path is testable without the extension host.
  */
 
-import type { ModelRoute } from "../modelRouting";
-import type { ScanResult } from "../codebaseScan";
+import type { ModelRoute } from "../models/modelRouting";
+import type { ScanResult } from "../diagnostics/codebaseScan";
 
 export interface WorkspaceScanPorts {
   /** The first workspace folder's fs path, if any. */

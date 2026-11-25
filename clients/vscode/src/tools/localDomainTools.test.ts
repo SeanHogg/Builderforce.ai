@@ -9,7 +9,7 @@ import {
   type LocalFirstStore,
 } from "@builderforce/local-first";
 import { readRailFromFacts } from "../chatRail/buildRail";
-import { createLocalWorkRepository, type LocalWorkRepository } from "./localWorkRepository";
+import { createLocalWorkRepository, type LocalWorkRepository } from "../localWork/localWorkRepository";
 import {
   LocalDomainToolError,
   classifyLocalDomainTool,

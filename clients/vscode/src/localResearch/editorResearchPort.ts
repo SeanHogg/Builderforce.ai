@@ -9,7 +9,7 @@
  */
 
 import { NO_LOCAL_MODEL } from "@seanhogg/builderforce-brain-embedded";
-import { onDeviceModelAvailable, onDeviceTasks } from "../modelRouting";
+import { onDeviceModelAvailable, onDeviceTasks } from "../models/modelRouting";
 import type { LocalResearchPort } from "./researchPort";
 
 export function editorResearchPort(): LocalResearchPort {

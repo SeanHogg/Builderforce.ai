@@ -34,7 +34,7 @@ vi.mock("../subagent/subagentTool", () => ({ subagentToolDef: () => ({ name: "sp
 vi.mock("../subagent/subagentFanOutTool", () => ({ subagentFanOutToolDef: () => ({ name: "spawn_agents", description: "", parameters: {}, mutating: false, execute: async () => "" }) }));
 vi.mock("../subagent/subagentControlTools", () => ({ subagentControlToolDefs: () => [] }));
 vi.mock("../tickets/ticketBranchTool", () => ({ ticketBranchReviewToolDef: () => ({ name: "ticket_branch_review", description: "", parameters: {}, mutating: false, execute: async () => "" }) }));
-vi.mock("../desktopContext", () => ({ desktopBackedTools: async (tools: unknown) => tools }));
+vi.mock("../context/desktopContext", () => ({ desktopBackedTools: async (tools: unknown) => tools }));
 vi.mock("../localResearch/researchPort", () => ({ withLocalResearch: async (tools: unknown) => tools }));
 
 import type * as vscode from "vscode";

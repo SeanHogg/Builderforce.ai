@@ -7,13 +7,13 @@
 
 import * as vscode from "vscode";
 import { LOCAL_TICKET_STATUSES } from "./localWorkShared";
-import { surfaceError } from "../errorReporter";
+import { surfaceError } from "../diagnostics/errorReporter";
 import { localBrainApplication } from "../localFirst/localFirstStore";
-import { createLocalWorkRepository } from "../localWorkRepository";
-import { openWorkspace } from "../openWorkspace";
+import { createLocalWorkRepository } from "./localWorkRepository";
+import { openWorkspace } from "../workspace/openWorkspace";
 import { boundChatOf, type LocalWorkNode } from "./localWorkModel";
 import { LocalWorkTreeProvider, ticketStatusText } from "./localWorkTreeProvider";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 export const LOCAL_WORK_VIEW = "builderforce.localWork";
 const CREATE_TICKET = "builderforce.localWork.createTicket";

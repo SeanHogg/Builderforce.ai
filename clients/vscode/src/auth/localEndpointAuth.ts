@@ -26,7 +26,7 @@ import { currentKimiInstall } from "../gateway/gateway";
 import { ensureFreshKimiToken } from "./kimiCodeAuth";
 import { isKimiCodeInstall } from "./kimiCodeInstall";
 import { editorAccounts, ensureLocalProviderCredential } from "./providerConnect";
-import { logLine, reportExtensionError } from "../errorReporter";
+import { logLine, reportExtensionError } from "../diagnostics/errorReporter";
 import nodeFs from "node:fs";
 
 export type LocalEndpointAuthorization =

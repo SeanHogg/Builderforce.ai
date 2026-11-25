@@ -44,7 +44,7 @@ import { installRunRecovery } from "../run/installRunRecovery";
 import { finalizeRunDelta, RUN_DELTA_BUDGET_MS, startRunDelta, type RepoHostSources, type RunDeltaDeps } from "./finalizeRunDelta";
 import { createRunHoldGate, UNMEASURED_HOLD, type RunHoldPort } from "./runHoldGate";
 import { holdStateOf, withHold } from "./runHoldState";
-import { isReleasableHold } from "../runRecovery";
+import { isReleasableHold } from "../run/runRecovery";
 import { repoGit } from "./gitSide";
 import { PreimageBudget, PREIMAGE_MAX_FILE_BYTES } from "./preimageBudget";
 import { readRunDeltas, type RunDeltaCard, type RunDeltaRecordValue } from "./runDeltaRecords";

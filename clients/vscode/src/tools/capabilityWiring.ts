@@ -6,7 +6,7 @@
 
 import * as vscode from "vscode";
 import * as bfApi from "../bfApi";
-import { registerBundledAnalyzers } from "../bundledAnalyzers";
+import { registerBundledAnalyzers } from "../diagnostics/bundledAnalyzers";
 import { setAnalyzerStorage } from "../runDelta/analyzers/analyzerStorage";
 import { currentCapabilityInputs, syncCapabilityContexts } from "./capabilityContext";
 import { networkDenied } from "./capabilityStates";

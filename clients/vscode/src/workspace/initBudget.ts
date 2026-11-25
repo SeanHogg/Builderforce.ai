@@ -1,6 +1,6 @@
 import { withinMs } from "../contextPack/withinMs";
 import { hostLog } from "../host/hostLog";
-import { messageOf } from "./messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /**
  * How long ONE slow step of the panel's `init` (token, project names, personality, model

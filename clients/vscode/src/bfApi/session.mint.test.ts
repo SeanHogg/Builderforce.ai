@@ -10,7 +10,7 @@ vi.mock("vscode", () => ({
 vi.mock("../gateway/gateway", () => ({ getApiKey: async () => "bfk_stored", getBaseUrl: () => "https://api.example" }));
 vi.mock("../sync/outboxStorage", () => ({ setOutboxScope: () => undefined, trackReachability: <T>(p: T) => p }));
 
-import { onWorkspaceRefused } from "../gatewayAuth";
+import { onWorkspaceRefused } from "../auth/gatewayAuth";
 import { getCurrentWorkspace } from "../workspace/workspaceSelection";
 import {
   clearJwt,

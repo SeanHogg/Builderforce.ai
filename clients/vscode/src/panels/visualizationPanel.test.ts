@@ -80,7 +80,7 @@ vi.mock("vscode", () => ({
   l10n: { t: (message: string) => message },
 }));
 vi.mock("../gateway/gateway", () => ({ getBaseUrl: () => "https://api.example" }));
-vi.mock("./errorReporter", () => ({ logLine: vi.fn(), reportExtensionError: vi.fn(async () => undefined) }));
+vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn(), reportExtensionError: vi.fn(async () => undefined) }));
 vi.mock("./webviewBundleShell", () => ({ makeNonce: () => "n", renderBundleShell: () => "<html></html>" }));
 vi.mock("./webviewHostBridge", () => ({
   handleSharedHostMessage: async () => false,
@@ -92,7 +92,7 @@ vi.mock("./webviewHostBridge", () => ({
   },
 }));
 vi.mock("../workspace/workspaceSession", () => ({ workspaceCanvasSession: async () => ({}) }));
-vi.mock("./workspaceSurface", () => ({
+vi.mock("../workspace/workspaceSurface", () => ({
   WorkspaceSurface: class {
     handle = async () => undefined;
     dispose = () => undefined;

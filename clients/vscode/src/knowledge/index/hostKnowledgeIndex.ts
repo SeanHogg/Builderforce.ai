@@ -33,7 +33,7 @@ import type { EmbedderPort } from "@seanhogg/builderforce-memory/knowledge";
 import { knowledgeRootId } from "../knowledgeRoots";
 import { workspaceSymbolIndex } from "../../workspace/workspaceSymbols";
 import { editorEmbedder } from "./embedderPort";
-import { messageOf } from "../../messageOf";
+import { messageOf } from "../../shared/messageOf";
 
 export type { HostKnowledgeIndex, HostKnowledgeIndexCore };
 export type { IndexHit, SimilarPair } from "@seanhogg/builderforce-memory/knowledge";

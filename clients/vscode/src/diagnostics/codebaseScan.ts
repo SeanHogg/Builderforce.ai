@@ -3,7 +3,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as crypto from "crypto";
 import { gitIgnoredMatcher } from "@builderforce/agent-tools/node-git-ignore";
-import { routeComplete, type ModelRoute } from "./modelRouting";
+import { routeComplete, type ModelRoute } from "../models/modelRouting";
 
 const SKIP_DIRS = new Set([
   ".git", "node_modules", "dist", "out", "build", ".next", "coverage", ".turbo",

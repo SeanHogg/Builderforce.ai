@@ -1,5 +1,5 @@
 import { readRecentSessionNotes } from "./sessionNotes";
-import { desktopRepoMapSection } from "../desktopContext";
+import { desktopRepoMapSection } from "../context/desktopContext";
 import { hostCostLeverOn } from "../host/hostCostLevers";
 import { symbolIndexGrounding } from "../workspace/workspaceSymbols";
 import { withinMs } from "../contextPack/withinMs";

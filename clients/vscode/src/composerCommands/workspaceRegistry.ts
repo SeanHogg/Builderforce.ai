@@ -12,7 +12,7 @@ import {
 import { buildComposerCommands } from "./entries";
 import type { ComposerCommandText } from "./labels";
 import { findFolderManifest } from "./manifestLocation";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 import type { ComposerWorkspacePort, WorkspaceFolderRef } from "./workspacePort";
 
 /** Where a failure the registry survives goes (the output channel, `logLine`). */

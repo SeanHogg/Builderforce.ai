@@ -32,7 +32,7 @@ import type { ChildLedger } from "./childLedger";
 import type { WebviewRunStart } from "../brain/brainRunHostProtocol";
 import { establishedCalls } from "./childCoverage";
 import { writeChildDataFile } from "./childDataFile";
-import { modelForChildRun } from "../roleModelPin";
+import { modelForChildRun } from "../models/roleModelPin";
 import { HostStartSetupError } from "../run/hostStartGate";
 
 /** A run as the host executes it: what the panel sends, plus what only the host knows. */

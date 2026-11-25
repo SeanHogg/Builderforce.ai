@@ -8,7 +8,7 @@ import { parentPort } from "node:worker_threads";
 import { isOverBudget, postBounded } from "../workers/boundedTransfer";
 import { RUN_DELTA_ARRAYS, RUN_DELTA_OVER_BUDGET, type DeltaWorkerReply } from "./deltaWorkerProtocol";
 import { computePrepared, type PreparedDelta } from "./preparedPorts";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 const send = (reply: DeltaWorkerReply): void => parentPort?.postMessage(reply);
 

@@ -7,7 +7,7 @@ import { installRunRecovery, type RunRecoveryHostContext } from "./installRunRec
 import { interruptedResumeTurn, RESUME_TURN_DEFAULTS } from "./interruptedResumeTurn";
 import { toInterruptedRunView } from "../panels/interruptedRunsView";
 import { liveChildrenBlock } from "../child/liveChildrenFinish";
-import { recordRunFinished, recordRunStarted, recoverInterruptedRuns } from "../runRecovery";
+import { recordRunFinished, recordRunStarted, recoverInterruptedRuns } from "./runRecovery";
 
 const at = new Date("2026-11-08T10:00:00.000Z");
 const deps = { deviceId: "device-1", now: () => at };

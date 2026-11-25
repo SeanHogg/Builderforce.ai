@@ -25,7 +25,7 @@ import type { RunHostMessage, RunSink } from "../brain/brainRunHostProtocol";
 import { interruptedChildrenOf } from "../child/childRunJournal";
 import type { InstalledRunRecovery } from "../run/installRunRecovery";
 import type { InterruptedRunResume, InterruptedRunView, ResumeStateView } from "../run/interruptedRunTypes";
-import type { InterruptedRun } from "../runRecovery";
+import type { InterruptedRun } from "../run/runRecovery";
 
 export type { InterruptedRunResume, InterruptedRunView } from "../run/interruptedRunTypes";
 

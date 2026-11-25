@@ -55,8 +55,8 @@ vi.mock("vscode", () => ({
   l10n: { t: (message: string) => message },
 }));
 
-import { bootVsixHost, VSIX_LOCAL_SNAPSHOT_FILE } from "../bootVsixHost";
-import { assertPlatformSocketAllowed } from "../platformCallGate";
+import { bootVsixHost, VSIX_LOCAL_SNAPSHOT_FILE } from "../host/bootVsixHost";
+import { assertPlatformSocketAllowed } from "./platformCallGate";
 import { bindPlatformPolicy, platformPolicy, platformRequestAccount } from "./platformPolicy";
 import {
   DENIED_NETWORK_ERROR,

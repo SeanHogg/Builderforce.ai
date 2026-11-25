@@ -23,7 +23,7 @@
  */
 
 import * as vscode from "vscode";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 import {
   SCAN_STOP,
   SYNC_PASS_BIND_TYPES,
@@ -39,7 +39,7 @@ import { getTenantJwt } from "../bfApi";
 import { chatAccountDestination, invalidateServerChatSpend } from "../auth/chatAccount";
 import { getBaseUrl } from "../gateway/gateway";
 import { hostLog } from "../host/hostLog";
-import { installSyncCoordinator } from "../installSyncCoordinator";
+import { installSyncCoordinator } from "../sync/installSyncCoordinator";
 import { drainSync } from "../sync/syncDrain";
 import { createPassScheduler, type PassOutcome } from "../sync/syncPassScheduler";
 import { localBrainApplication } from "../localFirst/localFirstStore";

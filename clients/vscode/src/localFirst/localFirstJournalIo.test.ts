@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_JOURNAL_COMPACTION, decodeJournalFrames, encodeJournalFrame, newLocalRecord } from "@builderforce/local-first";
-import { createDurableLocalFirstStore } from "../durableLocalFirstStore";
+import { createDurableLocalFirstStore } from "./durableLocalFirstStore";
 import { createNodeJournalIo } from "./localFirstJournalIo";
 
 const directories: string[] = [];

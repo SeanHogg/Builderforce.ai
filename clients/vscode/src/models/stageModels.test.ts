@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ROLE_MODEL_DEFAULT_ENV, ROLE_MODELS_ENV } from "@builderforce/learned-routing";
 import { editorRunSettingsFrom, runRequestFields, stageModels, TIP_MODELS } from "./stageModels";
-import { explicitRoleModelPin, modelForChildRun } from "../roleModelPin";
+import { explicitRoleModelPin, modelForChildRun } from "./roleModelPin";
 
 describe("stageModels", () => {
   it("takes the settings over the env pins, stage by stage", () => {

@@ -3,7 +3,7 @@ import { createMemoryLocalFirstStore, type LocalFirstStore } from "@builderforce
 import type { RunHostMessage } from "../brain/brainRunHostProtocol";
 import { installRunRecovery, type RunRecoveryHostContext } from "../run/installRunRecovery";
 import { createInterruptedRuns, toInterruptedRunView } from "./interruptedRunsView";
-import { recordRunStarted, type RunLifecycleDeps } from "../runRecovery";
+import { recordRunStarted, type RunLifecycleDeps } from "../run/runRecovery";
 
 const at = new Date("2026-10-18T12:00:00.000Z");
 const deps: RunLifecycleDeps = { deviceId: "device-1", now: () => at };

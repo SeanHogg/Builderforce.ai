@@ -13,7 +13,7 @@
  */
 
 import type { EvermindRecallResult, EvermindRunHooks } from "@seanhogg/builderforce-brain-embedded";
-import { checkReferences, type MissingReference } from "../desktopContext";
+import { checkReferences, type MissingReference } from "../context/desktopContext";
 
 /** Model-facing annotation for a memory whose references are gone. */
 export function staleNote(missing: readonly MissingReference[]): string {

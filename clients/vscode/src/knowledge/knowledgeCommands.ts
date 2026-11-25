@@ -13,9 +13,9 @@
  */
 
 import * as vscode from "vscode";
-import { openWorkspace } from "../openWorkspace";
+import { openWorkspace } from "../workspace/openWorkspace";
 import { onProjectChange } from "../project/projectState";
-import { VisualizationPanel } from "../visualizationPanel";
+import { VisualizationPanel } from "../panels/visualizationPanel";
 import { rootIdOfSourceRef } from "@builderforce/agent-tools/knowledge";
 import { reviewArgumentOf, rootForPath } from "./knowledgeRoots";
 import { registerKnowledgePackCommands } from "./knowledgePackCommands";

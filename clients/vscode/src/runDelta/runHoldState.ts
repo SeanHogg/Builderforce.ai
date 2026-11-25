@@ -8,7 +8,7 @@
 
 import type { ExecutionValue, LocalFirstStore, LocalFirstTransaction } from "@builderforce/local-first";
 import type { RunDeltaCardPayload, RunDeltaHeld } from "@builderforce/run-delta/contract";
-import { isRunDeltaHold, RUN_DELTA_UNMEASURED } from "../runRecovery";
+import { isRunDeltaHold, RUN_DELTA_UNMEASURED } from "../run/runRecovery";
 
 export interface RunHoldState {
   blocked: RunDeltaHeld;

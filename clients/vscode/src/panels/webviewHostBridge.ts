@@ -1,20 +1,20 @@
 import * as vscode from "vscode";
 import { boundToken, refreshTenantJwt } from "../bfApi";
 import type { LocalFirstChange } from "@builderforce/local-first";
-import { logLine, reportExtensionError } from "../errorReporter";
+import { logLine, reportExtensionError } from "../diagnostics/errorReporter";
 import { getBaseUrl, getWebBaseUrl } from "../gateway/gateway";
 import { localBrainApplication } from "../localFirst/localFirstStore";
 import { platformInferenceMode, platformPolicy } from "../platform/platformPolicy";
-import { assertPlatformSocketAllowed, platformPolicyFrame, platformSocketUrl } from "../platformCallGate";
+import { assertPlatformSocketAllowed, platformPolicyFrame, platformSocketUrl } from "../platform/platformCallGate";
 import { isInferenceMode } from "@builderforce/local-first";
 import { setInferenceMode } from "../models/inferenceModeSetting";
 import { DOWNLOAD_LOCAL_MODEL_COMMAND } from "../models/noLocalModelPrompt";
 import { callLocalPersistence } from "../localFirst/localPersistenceDispatch";
-import { createLocalWorkRepository } from "../localWorkRepository";
+import { createLocalWorkRepository } from "../localWork/localWorkRepository";
 import { handleChatRailRequest } from "../chatRail/chatRailHost";
 import { signInToAccountProvider } from "../auth/providerConnect";
 import { withFreshNonce } from "./webviewBundleShell";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /**
  * The host half of the webview bridge — the three things EVERY bundled-React

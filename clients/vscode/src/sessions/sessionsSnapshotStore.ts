@@ -3,7 +3,7 @@ import { BfBrainChat, BfCreationSessionSummary, listAgentPool, listBrainChats, l
 import { SECRET_KEY } from "../gateway/gateway";
 import { getSelectedProject } from "../project/projectState";
 import { getProjectNames } from "../project/projectNames";
-import { createRefreshCoalescer } from "../refreshCoalescer";
+import { createRefreshCoalescer } from "../shared/refreshCoalescer";
 
 /** What the server said about the account's sessions and chats, as of `ts`. */
 export type SessionsSnapshot = {

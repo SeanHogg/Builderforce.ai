@@ -67,11 +67,11 @@ import {
 import { hasImageParts, IMAGE_NEEDS_GATEWAY, textOnly } from "../chat/chatContent";
 import { authorizeLocalEndpoint } from "../auth/localEndpointAuth";
 import { editorAccounts } from "../auth/providerConnect";
-import { logLine } from "./errorReporter";
+import { logLine } from "../diagnostics/errorReporter";
 import { declaredLocalModels, lastProbedLocalModels, probeLocalFirstRuntimes, probeOnDeviceRuntimes, type LocalModelsConfig } from "./localModels";
 import { resolveEffectiveModelChoice, type EffectiveModelChoice } from "./modelState";
 import { createNativeStream } from "../native/nativeGatewayStream";
-import { gatewayWorkspaceHeaders } from "./gatewayAuth";
+import { gatewayWorkspaceHeaders } from "../auth/gatewayAuth";
 import { hostModelProvisioner } from "../hostBfi/provision";
 import { hostPageEngines } from "../panels/pageEngineBridge";
 import { localSuccessFederation, localSuccessStore, localSuccessTuning } from "../localFirst/localSuccessStorage";

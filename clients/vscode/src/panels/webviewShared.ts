@@ -1,9 +1,9 @@
 import * as vscode from "vscode";
-import { logLine } from "../errorReporter";
+import { logLine } from "../diagnostics/errorReporter";
 import { getBaseUrl } from "../gateway/gateway";
 import { makeNonce, renderBundleShell } from "./webviewBundleShell";
 import { handleSharedHostMessage, postToWebview, respondToWebview, type WebviewInbound } from "./webviewHostBridge";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 // Re-exported for the board panel, which builds its own (non-bundle) shell.
 export { makeNonce };

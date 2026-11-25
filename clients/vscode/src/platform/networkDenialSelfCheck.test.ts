@@ -30,7 +30,7 @@ vi.mock("vscode", () => ({
 // Stub the log surface so the self-check's module does not drag in `../errorReporter`'s
 // whole chain (`bfApi` → `bfApi/session.ts` instantiates `vscode.EventEmitter` at module
 // scope). We assert on the report, not the log line.
-vi.mock("../errorReporter", () => ({ logLine: vi.fn() }));
+vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn() }));
 
 import { bindPlatformPolicy, platformPolicy, platformPolicyResolved, platformRequestAccount } from "./platformPolicy";
 import {

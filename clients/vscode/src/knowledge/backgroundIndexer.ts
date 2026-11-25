@@ -22,7 +22,7 @@
  */
 
 import * as vscode from "vscode";
-import { logLine } from "../errorReporter";
+import { logLine } from "../diagnostics/errorReporter";
 import { osPowerSource, type PowerSourcePort } from "../power/powerSource";
 import { emitProductEvent } from "../telemetry/productEvents";
 import { beforeKnowledgeShutdown } from "./folderKnowledge";

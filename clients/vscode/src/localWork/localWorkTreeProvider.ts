@@ -10,9 +10,9 @@
 
 import * as vscode from "vscode";
 import type { LocalFirstStore } from "@builderforce/local-first";
-import type { PresentedSyncStatus } from "../syncStatusPresenter";
+import type { PresentedSyncStatus } from "../sync/syncStatusPresenter";
 import { createLocalWorkModel, type LocalWorkFacts, type LocalWorkModel, type LocalWorkNode } from "./localWorkModel";
-import type { LocalWorkRepository } from "../localWorkRepository";
+import type { LocalWorkRepository } from "./localWorkRepository";
 import { TASK_LANES } from "../tickets/taskLanes";
 
 const REFRESH_DELAY_MS = 150;

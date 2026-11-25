@@ -1,9 +1,9 @@
 import type * as vscode from "vscode";
 import type { BrainMessage, EvermindLearnOutcome } from "@seanhogg/builderforce-brain-embedded";
-import { registerDeadLetterQueue } from "../deadLetterCommand";
+import { registerDeadLetterQueue } from "../sync/deadLetterCommand";
 import { createDurableOutbox, outboxSecrets, scopeTenantId } from "../sync/outboxStorage";
 import { authed } from "./transport";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** One turn row as the messages endpoint takes it. `eventKey` is its idempotency key. */
 interface BrainMessageInput {

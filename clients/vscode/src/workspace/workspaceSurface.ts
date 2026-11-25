@@ -3,12 +3,12 @@ import { isSubscriptionSignInUrl } from "@builderforce/model-catalog";
 import { artifactRoutePath, type ChatInputAttachment, type SteerTurn } from "@seanhogg/builderforce-brain-embedded";
 import { steerFromMessage } from "../run/steerMessage";
 import { getCurrentUserId } from "../bfApi";
-import { logLine } from "./errorReporter";
+import { logLine } from "../diagnostics/errorReporter";
 import type { BrainRunHost, WebviewRunStart } from "../brain/brainRunHost";
 import { getWebBaseUrl } from "../gateway/gateway";
 import { turnLimbicBlock } from "../memory/personalityLimbic";
 import { confirmChatDelete } from "../chat/chatDeletion";
-import { getEditorContext, watchEditorContext } from "./editorContext";
+import { getEditorContext, watchEditorContext } from "../context/editorContext";
 import { detectPendingChanges, detectPendingDiff, watchPendingChanges } from "../git/gitChanges";
 import { setSelectedModel, setSelectedModelPool } from "../models/modelState";
 import { hostPageEngines } from "../panels/pageEngineBridge";
@@ -19,7 +19,7 @@ import { postToWebview, respondToWebview, type WebviewInbound, type WebviewOwner
 import { buildWorkspaceInit } from "./workspaceInit";
 import { createLateRepushLimit } from "./initBudget";
 import { LocalFetchProxy } from "../tools/localFetchProxy";
-import { pickWorkspaceContext } from "./contextPicker";
+import { pickWorkspaceContext } from "../context/contextPicker";
 import { hostAttachmentIngress } from "../host/hostIngress";
 import { hostAttachmentDownload } from "../attachments/hostAttachmentDownload";
 import type { AttachmentDownloadRequest } from "../attachments/attachmentDownload";
@@ -29,7 +29,7 @@ import type { AttachmentIngressRequest } from "../attachments/attachmentIngress"
 import { composerCommandHost } from "../composerCommands/host";
 import type { ComposerCommandsInit } from "../composerCommands/reply";
 import { COMPOSER_COMMANDS_FRAME, type ComposerCommandsFrame } from "../panels/bridgeProtocol";
-import { messageOf } from "./messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** Inbound messages unique to the workspace surface (the shared cases live in the bridge). */
 export interface BrainInbound extends WebviewInbound {

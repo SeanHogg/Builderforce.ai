@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as bfApi from "../bfApi";
 import { classifyQueue } from "@builderforce/write-outbox";
-import { registerDeadLetterQueue } from "../deadLetterCommand";
+import { registerDeadLetterQueue } from "../sync/deadLetterCommand";
 import { createDurableOutbox, outboxSecrets, scopeTenantId } from "../sync/outboxStorage";
 
 /**

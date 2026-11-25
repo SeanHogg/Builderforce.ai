@@ -10,8 +10,8 @@
 import * as vscode from "vscode";
 import { resolveStageModels } from "../models/modelState";
 import { editorRunSettingsFrom, type EditorRunSettings } from "../models/stageModels";
-import { resolveRunShipPolicy } from "../policyGates";
-import { logLine } from "../errorReporter";
+import { resolveRunShipPolicy } from "../platform/policyGates";
+import { logLine } from "../diagnostics/errorReporter";
 
 export { runRequestFields, type EditorRunSettings } from "../models/stageModels";
 

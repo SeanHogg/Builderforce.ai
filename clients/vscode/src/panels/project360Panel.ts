@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { getTenantJwt } from "../bfApi";
-import { openWorkspace } from "../openWorkspace";
+import { openWorkspace } from "../workspace/openWorkspace";
 import { getBaseUrl, SECRET_KEY } from "../gateway/gateway";
 import { authLabels } from "../auth/authLabels";
 import { WebviewPanelBase, type WebviewInbound } from "./webviewShared";

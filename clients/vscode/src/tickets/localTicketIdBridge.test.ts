@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryLocalFirstStore } from "@builderforce/local-first";
 import type { ToolDef } from "../tools/fileTools";
-import { installLocalDomainTools } from "../installLocalDomainTools";
+import { installLocalDomainTools } from "../tools/installLocalDomainTools";
 import { routeToLocalDomainTools } from "../tools/localDomainToolRouting";
 import { SERVER_TICKET_ID_ARGS, bridgeLocalTicketIds, ticketIdArgsOf, ticketServerIdLookup } from "./localTicketIdBridge";
 

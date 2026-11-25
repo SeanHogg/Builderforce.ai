@@ -21,7 +21,7 @@ import { railProgressKind, railTicketProgress } from "../chatRail/railPayloads";
 import type { ToolDef } from "../tools/fileTools";
 import { isLocalId } from "@builderforce/local-first";
 import type { ChatTicketScope, UnsyncedTicket } from "./localTicketScope";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 type Args = Record<string, unknown>;
 type ReadAdapter = (args: Args, server: () => Promise<string>, scope: ChatTicketScope) => Promise<string>;

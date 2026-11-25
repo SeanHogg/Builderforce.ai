@@ -13,13 +13,13 @@ import {
 } from "@builderforce/local-inference";
 import type { ChatContentPart } from "../chat/chatContent";
 import { type LocalModelsConfig } from "../models/localModels";
-import { readDesktopModelsEndpoint } from "../desktopContext";
+import { readDesktopModelsEndpoint } from "../context/desktopContext";
 import { isKimiCodeInstall, kimiModelOf, loadKimiCodeInstall, type KimiCodeInstallResult, type KimiCodeModel } from "../auth/kimiCodeInstall";
 import { localCredentialSnapshot } from "../auth/localProviderCredentials";
 import { classifyQueue } from "@builderforce/write-outbox";
-import { registerDeadLetterQueue } from "../deadLetterCommand";
+import { registerDeadLetterQueue } from "../sync/deadLetterCommand";
 import { createDurableOutbox, outboxSecrets, scopeTenantId, trackReachability } from "../sync/outboxStorage";
-import { gatewayAuthHeaders, observeGatewayResponse } from "../gatewayAuth";
+import { gatewayAuthHeaders, observeGatewayResponse } from "../auth/gatewayAuth";
 
 /** Single source of truth for the SecretStorage key (DRY). */
 export const SECRET_KEY = "builderforce.apiKey";

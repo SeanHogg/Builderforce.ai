@@ -27,13 +27,13 @@ import {
   type LocalChatIdentity,
   type RunUsageLedger,
 } from "@seanhogg/builderforce-brain-embedded";
-import { createDurableLocalFirstStore, type DurableLocalFirstStore } from "../durableLocalFirstStore";
+import { createDurableLocalFirstStore, type DurableLocalFirstStore } from "./durableLocalFirstStore";
 import { chatAccountDestination, chatBindingPort, serverChatSpend, serverChatSpendCache } from "../auth/chatAccount";
 import { gatewaySummaryCompletion } from "../chat/chatSummarizer";
 import { pruneRailReadMarkOnDelete } from "../chatRail/refreshRail";
 import { mergeLocalTicketSummaries } from "../chatRail/localTicketSummary";
 import { hostLog } from "../host/hostLog";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** The durable store over this extension's global storage. */
 export function createVsCodeLocalFirstStore(

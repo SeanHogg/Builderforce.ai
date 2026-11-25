@@ -2,7 +2,7 @@
 import { MAX_BLOCKING_REVIEW_ROUNDS, type ReviewVerdict } from "@builderforce/run-guards";
 import { pricedId } from "@builderforce/local-inference";
 import type { ReviewerPort } from "./types";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** The shape the reviewer sub-run reports back (the model's own structured verdict). */
 export interface ReviewSubRunResult {

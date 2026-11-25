@@ -40,7 +40,7 @@ import { childSettledState, realChangedFiles, REPORT_NOW_STEER, unfinishedReport
 import { coverageChars, coverageOf } from "./childCoverage";
 import { noteChildFailure, saveCollectedData } from "./childDataFile";
 import type { ChildReport, ChildRuns } from "./childRuns";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 import { createChildLedger, type ChildLedger } from "./childLedger";
 import { createLiveChildrenHold, hungChildrenNote, type HeldChild } from "./liveChildrenFinish";
 

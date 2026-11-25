@@ -11,7 +11,7 @@ vi.mock("../bfApi", () => ({ getProjectEvermindHead: async () => undefined }));
 vi.mock("../gateway/gateway", () => ({ getModels: async () => undefined, isModelAllowed: () => true }));
 vi.mock("./localModels", () => ({ isLocalModelRef: (model: string) => model.startsWith("local/") }));
 vi.mock("../project/projectState", () => ({ getSelectedProject: () => undefined }));
-vi.mock("../roleModelPin", () => ({ NATIVE_RUN_ROLE: "coder", roleModelPin: () => undefined }));
+vi.mock("./roleModelPin", () => ({ NATIVE_RUN_ROLE: "coder", roleModelPin: () => undefined }));
 
 const memento = () => {
   const data = new Map<string, unknown>();

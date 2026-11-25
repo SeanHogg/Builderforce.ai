@@ -27,7 +27,7 @@ import * as path from "node:path";
 import type { PreparedDelta } from "../preparedPorts";
 import { whichOnPath } from "../../process/programSearch";
 import { pool } from "./pool";
-import { CACHE_DIR, ensureIgnoredCacheDir } from "../../ignoredCacheDir";
+import { CACHE_DIR, ensureIgnoredCacheDir } from "../../shared/ignoredCacheDir";
 
 export const MAX_TREE_FILES = 60_000;
 const LIST_TIMEOUT_MS = 30_000;

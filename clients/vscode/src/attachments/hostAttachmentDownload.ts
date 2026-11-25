@@ -10,8 +10,8 @@ import * as vscode from "vscode";
 import { fetchAuthed } from "../bfApi";
 import { downloadAttachment, type AttachmentDownloadRequest } from "./attachmentDownload";
 import { ATTACHMENT_DOWNLOAD_MAX_BYTES } from "./attachmentLimits";
-import { logLine } from "../errorReporter";
-import { messageOf } from "../messageOf";
+import { logLine } from "../diagnostics/errorReporter";
+import { messageOf } from "../shared/messageOf";
 import { getBaseUrl } from "../gateway/gateway";
 
 /**

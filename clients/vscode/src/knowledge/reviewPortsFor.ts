@@ -36,7 +36,7 @@ import { sharedAnalysis } from "./l3SharedAnalysis";
 import { workspaceRunner } from "./l3Worker";
 import { editorJudgement, judgeConfigured } from "./knowledgeJudgement";
 import type { OpenRoot } from "./knowledgeService";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 /** Longest the plan waits on a step it needs (the code layers, whether a judge is configured). */
 export const PLAN_STEP_MS = 10_000;

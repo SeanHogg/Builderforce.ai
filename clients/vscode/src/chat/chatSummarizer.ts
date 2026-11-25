@@ -9,7 +9,7 @@ import type * as vscode from "vscode";
 import { streamSummaryCompletion } from "@seanhogg/builderforce-brain-embedded";
 import type { SummaryCompletion } from "@seanhogg/builderforce-memory/working";
 import { getApiKey } from "../gateway/gateway";
-import { onDeviceTasks, resolveModelRoute, routeStream } from "../modelRouting";
+import { onDeviceTasks, resolveModelRoute, routeStream } from "../models/modelRouting";
 
 export function gatewaySummaryCompletion(secrets: vscode.SecretStorage): SummaryCompletion {
   return async (request) => {

@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   mode: vi.fn(() => "hybrid"),
   client: vi.fn(),
 }));
-vi.mock("../modelRouting", () => ({ onDeviceModelAvailable: mocks.onDevice }));
+vi.mock("../models/modelRouting", () => ({ onDeviceModelAvailable: mocks.onDevice }));
 vi.mock("../models/inferenceModeSetting", () => ({ currentInferenceMode: mocks.mode }));
 vi.mock("./knowledgeService", () => ({ linkedKnowledgeClient: mocks.client }));
 

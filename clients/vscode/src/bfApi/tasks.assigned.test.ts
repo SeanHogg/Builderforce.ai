@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const authed = vi.fn();
 const reportExtensionError = vi.fn(async () => undefined);
 vi.mock("./transport", () => ({ authed: (...a: unknown[]) => authed(...a) }));
-vi.mock("../errorReporter", () => ({ reportExtensionError: (...a: unknown[]) => reportExtensionError(...(a as [])) }));
+vi.mock("../diagnostics/errorReporter", () => ({ reportExtensionError: (...a: unknown[]) => reportExtensionError(...(a as [])) }));
 
 import { listAssignedTasks } from "./tasks";
 

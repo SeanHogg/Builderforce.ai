@@ -16,7 +16,7 @@ import { linkTierFields, ticketMappingOf } from "./railPayloads";
 import type { ChatRailMutationOutcome, ChatRef, RailLinkType, RailTicketRef } from "./railProtocol";
 import { ticketRows } from "./railRows";
 import { resolveChat, type ResolvedChat } from "./resolveChat";
-import { messageOf } from "../messageOf";
+import { messageOf } from "../shared/messageOf";
 
 export interface RailLinkPorts {
   deviceId: string;
