@@ -493,8 +493,8 @@ importers:
         specifier: ^0.26.2
         version: 0.26.2(apache-arrow@18.1.0)
       '@seanhogg/builderforce-memory':
-        specifier: ^2026.10.84
-        version: 2026.10.84(@seanhogg/builderforce-memory-engine@2026.10.65)
+        specifier: ^2026.10.85
+        version: 2026.10.85(@seanhogg/builderforce-memory-engine@2026.10.65)
       '@seanhogg/builderforce-memory-engine':
         specifier: ^2026.10.65
         version: 2026.10.65
@@ -2598,12 +2598,6 @@ packages:
         optional: true
       fake-indexeddb:
         optional: true
-
-  '@seanhogg/builderforce-memory@2026.10.84':
-    resolution: {integrity: sha512-Y09JN3yh4Mhs28treNWQ2IfQsgAKO9V2ysNTx/as81VHV7VNmS9UIbWcayAwuiUDI4kHMQ+F3NAqEoOpudki/A==}
-    engines: {node: '>=18.0.0'}
-    peerDependencies:
-      '@seanhogg/builderforce-memory-engine': ^2026.10.65
 
   '@seanhogg/builderforce-memory@2026.10.85':
     resolution: {integrity: sha512-fyJjiRXGF58ozXxXGgg1QQyYW/6/RTqv2J/lYYlbo/3ZF9sA1ZbWAffJZ3bzg/9D1YFLXIGuGQ2ZKk47syHtbw==}
@@ -7411,14 +7405,9 @@ snapshots:
       - supports-color
     optional: true
 
-  '@seanhogg/builderforce-memory@2026.10.84(@seanhogg/builderforce-memory-engine@2026.10.65)':
-    dependencies:
-      '@seanhogg/builderforce-memory-engine': 2026.10.65
-
   '@seanhogg/builderforce-memory@2026.10.85(@seanhogg/builderforce-memory-engine@2026.10.65)':
     dependencies:
       '@seanhogg/builderforce-memory-engine': 2026.10.65
-    optional: true
 
   '@selderee/plugin-htmlparser2@0.11.0':
     dependencies:
