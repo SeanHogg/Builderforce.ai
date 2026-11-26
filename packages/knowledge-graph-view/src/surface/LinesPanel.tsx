@@ -15,6 +15,7 @@ import { camelKind, fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { counted } from './plural';
 import { kindTones } from './system/systemModel';
 import { cssVar } from '../scene/themeColors';
+import { LINES_RAIL_WIDTH } from '../layout';
 import { list, muted, swatch } from '../styles';
 import { TYPE } from './ui/type';
 import { LegendGlyph } from './LegendGlyph';
@@ -77,7 +78,7 @@ export function LinesPanel({ lines, stations, overlay, labels, lineId, selectedS
             data-testid="kg-lines-rail"
             style={{
                 display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0, boxSizing: 'border-box',
-                ...(rail ? { width: 250, flex: 'none', overflow: 'auto', padding: 12, background: cssVar('panel'), borderInlineEnd: `1px solid ${cssVar('border')}` } : null),
+                ...(rail ? { width: LINES_RAIL_WIDTH, flex: 'none', overflow: 'auto', padding: 12, background: cssVar('panel'), borderInlineEnd: `1px solid ${cssVar('border')}` } : null),
             }}
         >
             <section aria-label={s.linesTitle} style={{ display: 'grid', gap: 6 }}>

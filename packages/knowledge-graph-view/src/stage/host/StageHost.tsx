@@ -32,7 +32,8 @@ import { showsTowers } from '../../surface/useShowInTower';
 import { TYPE } from '../../surface/ui/type';
 import { codePaneWidth, SPLIT_MIN_PX } from '../overlay/CodeDock';
 import { ColourLegend } from './ColourLegend';
-import { LevelRail } from './LevelRail';
+import { LevelRail, useLevelRail } from './LevelRail';
+import { depthCrumbs } from '../../surface/DepthTrail';
 import { toggleButton } from '../overlay/cardStyles';
 import { CODE_BAR_PX } from '../overlay/CodeTrail';
 import { STATUS_PX } from '../overlay/StatusStrip';
@@ -97,9 +98,7 @@ export default function StageHost({ fallback: Fallback, ...p }: StageHostProps) 
     return renderer ? <StageBody {...p} renderer={renderer} onLost={onLost} /> : <div style={BOX} data-stage-host />;
 }
 
-/** The Sequence's semantic-zoom band (`req.lod`): 0 system, 1 class, 2 method (B1a rule 10). */
-const BANDS = ['system', 'class', 'method'] as const;
-/** The Map's ladder: the same bands plus the code. Going in stays with the wheel, double-click and Enter. */
+/** The Map's ladder: system, class, method, code (drill depth 0..3). Going in stays with the wheel, double-click and Enter. */
 const MAP_BANDS: readonly ZoomBand[] = ZOOM_BANDS.map((b) => b.band);
 
 function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, compare, flat = false, ...p }: SceneProps & StageCodeProps & StageCompareProps & StageFlatProps & { camera: PlacementCamera; scale?: ReactNode; renderer: StageRenderer; onLost(): void }) {
@@ -121,14 +120,19 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
         shown: codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, compare: codeCompare, sequence: camera === 'sequence', factsGraph: compare?.sideGraph,
     });
     const drilled = !!surface.drill.view;
-    // The map's own box: beside the docked pane, under the Code | Picture switch (a narrow box) and the zoom-path bar, above the status strip (the last two while a file is read).
+    // The map's own box: beside the docked pane, under the zoom-path bar and above the status strip (the last two while a file is read).
     const code = wiring.code;
     const codeWidth = code.split ? codePaneWidth(boxWidth) : 0;
     const narrow = code.visible && !code.split;
-    // A box up to 900px wide shows ONE of the two: the pane while the viewer's `code` slot is on (the header's Code | Picture switch), else the picture.
-    const showCodeHalf = narrow;
-    const switchPx = 0, barPx = code.reading ? CODE_BAR_PX : 0, statusPx = code.reading ? STATUS_PX : 0;
-    const width = boxWidth - codeWidth, height = boxHeight - switchPx - barPx - statusPx;
+    // A box up to 900px wide shows ONE of the two, as the header's Code | Picture switch says: the pane while the viewer's
+    // `code` slot is on, else the picture (a file being read stays open behind it).
+    const slotOn = codeShown ?? true;
+    const showCodeHalf = narrow && slotOn;
+    // Opening a file in a narrow box shows it: the switch flips to Code (once per opening, so Picture can still be picked).
+    const opensCode = code.reading && !code.split && boxWidth < SPLIT_MIN_PX;
+    useEffect(() => { if (opensCode && !slotOn) onToggleCode?.(); }, [opensCode]); // eslint-disable-line react-hooks/exhaustive-deps
+    const barPx = code.reading ? CODE_BAR_PX : 0, statusPx = code.reading ? STATUS_PX : 0;
+    const width = boxWidth - codeWidth, height = boxHeight - barPx - statusPx;
 
     // Paint: the lens, the overlay, the question (+ its family) and what it lights; Show in towers' roles while a tower
     // picture is on show (the 3D scene, or the Map tilted).
@@ -201,16 +205,19 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
         : drill.notice ? fillTemplate(labels.surface.map.drillReset, { name: drill.notice }) : drill.view?.noSymbols ? labels.surface.map.noSymbolsNote : null;
     const sc = labels.surface.code;
     const caption = ready ? placement.caption : null;
-    // The level rail: the Sequence has three levels (no code band), every other camera the Map's four; a click goes to that level.
-    const narrowStage = boxWidth <= SPLIT_MIN_PX - 1;
+    // The level rail: the Sequence has its three bands, every other camera the Map's five levels; a click goes to that level.
+    const narrowStage = boxWidth < SPLIT_MIN_PX;
     const sequenceRail = camera === 'sequence';
     const picked = wiring.map.stationOfKey(selected);
-    const rail = {
-        bands: sequenceRail ? MAP_BANDS.slice(0, BANDS.length) : MAP_BANDS,
-        current: Math.max(0, sequenceRail ? seqBand : MAP_BANDS.indexOf(wiring.zoom.band)),
-        go: (i: number) => (sequenceRail ? zoomToBand(i) : wiring.toBand(i)),
-    };
-    const intoName = picked && drill.canEnter(picked.id).can ? picked.name : null;
+    const crumbs = depthCrumbs(drill.stack, null, labels.surface.depth);
+    const rail = useLevelRail({
+        zoom, sequence: sequenceRail, band: sequenceRail ? seqBand : MAP_BANDS.indexOf(wiring.zoom.band), linePicked: !!wiring.zoom.code && !!selected,
+        toBand: sequenceRail ? zoomToBand : wiring.toBand, into: picked && drill.canEnter(picked.id).can ? picked.name : null,
+        // The next zoom out lands in the drilled level (from the code), else in the level above it.
+        backTo: sequenceRail ? null : (wiring.zoom.code ? crumbs.at(-1) : crumbs.at(-2))?.name ?? null, selected,
+    });
+    const { wheelStep } = wiring, noteStep = rail.noteStep;
+    const onWheelStep = useCallback((dir: 1 | -1) => { noteStep(dir); wheelStep(dir); }, [noteStep, wheelStep]);
 
     // Esc clears the pick, else goes out, from anywhere over a shown map (not while typing, in a dialog, or when a pane already took it).
     const onEscape = wiring.onEscape;
@@ -243,13 +250,10 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
                     <span aria-hidden="true">›</span>
                 </button>
             )}
-            {code.reading && <div style={{ position: 'absolute', top: switchPx, left: codeWidth, width }}>{code.bar}</div>}
-            <div data-map-pane style={{ position: 'absolute', top: switchPx + barPx, left: codeWidth, width, height, ...(showCodeHalf ? { visibility: 'hidden', pointerEvents: 'none' } : null) }}>
+            {code.reading && <div style={{ position: 'absolute', top: 0, left: codeWidth, width }}>{code.bar}</div>}
+            <div data-map-pane style={{ position: 'absolute', top: barPx, left: codeWidth, width, height, ...(showCodeHalf ? { visibility: 'hidden', pointerEvents: 'none' } : null) }}>
                 {levelNote && <p data-level-note style={{ position: 'absolute', zIndex: 1, insetBlockEnd: 74, insetInlineStart: 10, maxWidth: 'calc(100% - 80px)', margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'), ...TYPE.bodyMuted }}>{levelNote}</p>}
-                <LevelRail
-                    zoom={zoom} bands={rail.bands} current={rail.current} onGo={rail.go} narrow={narrowStage}
-                    deepest={rail.current >= rail.bands.length - 1} into={intoName}
-                />
+                <LevelRail zoom={zoom} rail={rail} narrow={narrowStage} />
                 {ready && <ColourLegend labels={labels} surface={surface} types={legendTypesOf(shownMarks?.type)} comparing={!!compare} narrow={narrowStage} scale={scale} />}
                 {shownMarks && (
                     <Stage
@@ -257,7 +261,7 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
                         width={width} height={height} reducedMotion={p.reducedMotion} selected={selected} onSelect={wiring.onSelect} onDrill={wiring.onDrill}
                         nav={nav} description={labels.regionLabel}
                         onOut={wiring.onEscape} onClear={wiring.clearSelection}
-                        {...(camera === 'map' ? { tilt: flat ? 0 : 1, onWheelStep: wiring.wheelStep } : {})} flat={flat} onContextLost={onLost}
+                        {...(camera === 'map' ? { tilt: flat ? 0 : 1, onWheelStep } : {})} flat={flat} onContextLost={onLost}
                     />
                 )}
                 {!ready && <LayingOut labels={labels} corner={!!frame} />}
@@ -271,7 +275,7 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
                 <EdgesCapped caption={caption} labels={labels} text={camera === 'map' ? labels.surface.scene.stationsCapped : undefined} />
             </div>
             {showCodeHalf && (
-                <div data-code-narrow style={{ position: 'absolute', insetInline: 0, insetBlockStart: switchPx + barPx, insetBlockEnd: statusPx, background: cssVar('bg') }}>{code.pane}</div>
+                <div data-code-narrow style={{ position: 'absolute', insetInline: 0, insetBlockStart: barPx, insetBlockEnd: statusPx, background: cssVar('bg') }}>{code.pane}</div>
             )}
             {wiring.status}
         </div>

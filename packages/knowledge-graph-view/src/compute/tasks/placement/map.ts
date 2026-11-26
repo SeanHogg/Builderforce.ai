@@ -94,6 +94,8 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
         // Each route polyline (`group`) names its line, so a route pick selects the line (as the SVG map's hop does).
         links: [{ ...linkBatch('hall', paths, 0), lineIds: layout.routes.map((r) => r.lineId) }, ...decor],
         planes, labels, captions, a11y,
+        // The roof miniatures stand on their parents' roofs: their y lowers with the extrude in Flat.
+        liftWithDepth: true,
         caption: { shown: layout.drawn.length, total: stations.stations.length, capped: layout.drawn.length < stations.stations.length },
         bounds,
         rig: {

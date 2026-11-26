@@ -18,7 +18,7 @@ import { entryRoute } from './pathNotes';
 import type { QuestionId } from './questions';
 import type { CameraDef } from './registry';
 import type { SceneOverlayProps } from './SceneOverlay';
-import type { MapCap } from './ScaleLine';
+import type { MapCap, ScaleLineProps } from './ScaleLine';
 import { stationOfRef } from './stations';
 import type { SurfaceModel } from './useSurface';
 import type { ZoomApi } from './zoom';
@@ -87,7 +87,11 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
         labels, cameras: i.cameras, mode: i.mode, onMode: i.setMode, narrow: layout.phone,
         stations: surface.stations.stations, question: surface.question, onQuestion: i.pickQuestion, lenses: kg.lenses, lens: i.lens.id, onLens: i.pickLens,
         family: surface.family, onClearFamily: () => surface.setFamily(null),
-        stats: graph.stats, truncated, compact: layout.compact, showAll: i.showAll, drawn: i.visibleNodes, total: graph.nodes.length, onShowAll: () => i.setShowAll(true), capped: mapCap,
     };
-    return { layout, out, spineItems, onSpinePick, scopeName, pathTitle, truncated, overlayProps, askName: surface.station?.name ?? surface.line?.name ?? i.titleOf(graph.scope.rootId) };
+    // The scale sentence: the stage draws it under its Colour-by legend (`StageHost`'s `scale`).
+    const scaleProps: ScaleLineProps = {
+        labels, stats: graph.stats, truncated, compact: layout.compact, showAll: i.showAll, drawn: i.visibleNodes, total: graph.nodes.length, onShowAll: () => i.setShowAll(true), capped: mapCap,
+        stations: surface.stations.stations.length, files: graph.stats.sources,
+    };
+    return { layout, out, spineItems, onSpinePick, scopeName, pathTitle, truncated, overlayProps, scaleProps, askName: surface.station?.name ?? surface.line?.name ?? i.titleOf(graph.scope.rootId) };
 }

@@ -62,12 +62,14 @@ export function Drawer(p: DrawerProps) {
     if (!drawer.open) return null;
     const tabs = drawerTabs(graph, env, p.panels);
     const open = tabs.find((t) => t.id === drawer.tab) ?? null;
+    // A panel this graph does not offer (asked for by id from elsewhere) shows the Act tab rather than an empty body.
+    const tabId = open ? open.id : ACT_TAB;
     const Body = open?.component;
     const nameOf = (t: PanelDef) => (t.id === 'run' && p.rootTitle ? p.rootTitle : labels[t.labelKey]);
     const subtitle = open ? (labels.surface.drawerSubtitle as Record<string, string | undefined>)[open.id] : undefined;
     const placement = p.sheet
         ? { position: 'absolute' as const, left: 0, right: 0, bottom: 0, height: '55%', zIndex: 5, borderTop: `1px solid ${cssVar('border')}` }
-        : { width: 340, flex: 'none' as const, borderInlineStart: `1px solid ${cssVar('border')}` };
+        : { width: DRAWER_WIDTH, flex: 'none' as const, borderInlineStart: `1px solid ${cssVar('border')}` };
     const tab = (id: string, name: string, on: boolean) => (
         <button
             key={id} type="button" role="tab" id={`kg-drawer-tab-${id}`} aria-selected={on} aria-controls="kg-drawer-body" title={name} aria-label={name} data-tab={id} onClick={() => drawer.pick(id)}

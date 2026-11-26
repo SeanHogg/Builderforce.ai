@@ -213,6 +213,11 @@ export interface Placement {
     append?: SlotAppend;
     /** Per slot, 1 = a ghost (outside the level on show: a drill's neighbour); the mark layer ORs `FLAG.GHOST` into its paint. Absent = none. */
     ghost?: Uint8Array;
+    /**
+     * The slots' heights (`position` y) collapse with the depth like their extrude: a roof miniature stands on its parent's
+     * roof, which Flat lowers. Absent = y is a placement coordinate (the mind map's sink, a sequence's planes) and stays put.
+     */
+    liftWithDepth?: boolean;
 }
 
 /** Slots appended after the MarkSet (B1a rule 1: a drill APPENDS into the preallocated headroom). Same fields as the MarkSet's, per appended slot. */

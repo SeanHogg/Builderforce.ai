@@ -50,14 +50,16 @@ in vec4 placeB;      // posB.xyz, scaleB
 in vec2 extrudeAB;   // extrudeA, extrudeB
 in vec4 paint;       // tone, tone2, fill, flags
 uniform float uForm; uniform float uHoverInst;
-uniform float uT; uniform float uLin; uniform float uSpan; uniform float uDur; uniform float uFlip; uniform float uPxPerWorld; uniform float uDpr; uniform float uDepth; uniform vec2 uMinMarkPx;
+uniform float uT; uniform float uLin; uniform float uSpan; uniform float uDur; uniform float uFlip; uniform float uPxPerWorld; uniform float uDpr; uniform float uDepth; uniform vec2 uMinMarkPx; uniform vec2 uLiftDepth;
 uniform vec3 uPalette[${PALETTE_SIZE}];
 out vec2 vUv; out float vPart; out vec3 vColor; out vec3 vColor2; out float vFill; out float vFlags; out float vPx;
 out float vLight; out float vY; out float vHover; out float vFade;
+${FLAG_GLSL}
 ${LIGHT_GLSL}
 void main() {
     vec4 from = mix(placeA, placeB, uFlip), to = mix(placeB, placeA, uFlip);
-    // Each mark runs its own cubic in-out, started STAGGER_MS after the one before it (by index); a mark leaving shrinks and fades.
+    // Each mark runs its own cubic in-out, started STAGGER_MS after the one before it (by index); a mark leaving shrinks and
+    // fades. \`staggerAt\` (tween.ts) is the same clock on the CPU (a mid-tween bake).
     float lt = clamp((uLin * uSpan - min(float(gl_InstanceID), ${STAGGER_STEPS.toFixed(1)}) * ${STAGGER_MS.toFixed(1)}) / max(uDur, 1.0), 0.0, 1.0);
     float tt = uLin >= 1.0 ? 1.0 : (lt < 0.5 ? 4.0 * lt * lt * lt : 1.0 - pow(-2.0 * lt + 2.0, 3.0) / 2.0);
     vFade = (from.w > 0.0 && to.w <= 0.0) ? 1.0 - tt : 1.0;
@@ -67,8 +69,12 @@ void main() {
     // set shows the mark and blended with uT: a mark shrinking to hidden or growing from it never pops to the floor.
     float floorFrom = mix(uMinMarkPx.x, uMinMarkPx.y, uFlip) * step(1e-9, from.w), floorTo = mix(uMinMarkPx.y, uMinMarkPx.x, uFlip) * step(1e-9, to.w);
     s = max(s, mix(floorFrom, floorTo, tt) * 0.5 / max(uPxPerWorld, 1e-6));
+    // A placement that lifts with the depth (\`Placement.liftWithDepth\`, per set like the floor: A in x, B in y) lowers its
+    // heights with the extrude — a roof miniature stands on its parent's roof, which Flat collapses. Other placements' y
+    // is a coordinate (the mind map's sink, a sequence's planes) and stays put.
+    float liftFrom = mix(uLiftDepth.x, uLiftDepth.y, uFlip), liftTo = mix(uLiftDepth.y, uLiftDepth.x, uFlip);
     vec3 p = mix(from.xyz, to.xyz, tt);
-    p.y *= uDepth;   // a roof miniature stands on its parent's roof, which collapses with the depth (Flat)
+    p.y = mix(from.y * mix(1.0, uDepth, liftFrom), to.y * mix(1.0, uDepth, liftTo), tt);
     float e = mix(mix(extrudeAB.x, extrudeAB.y, uFlip), mix(extrudeAB.y, extrudeAB.x, uFlip), tt) * uDepth;
     float tone = paint.x, tone2 = paint.y, fillv = paint.z, flags = paint.w;
     float px = s * uPxPerWorld * uDpr;
@@ -78,7 +84,7 @@ void main() {
         // The contact shadow: the cap's quad on the ground under the mark, thrown away from the sun by its height, soft-edged.
         float extent = ${f1(SHAPE_EXTENT)} + max(0.9, (${f1(CAP_PAD_PX)} + 1.5) * uDpr / max(px, 0.001));
         vUv = position.xz * extent;
-        bool caged = mod(floor(flags / 256.0), 2.0) > 0.5;
+        bool caged = mod(floor(flags / F_CAGE), 2.0) > 0.5;
         vec2 off = caged ? vec2(0.0) : -SUN.xz / SUN.y * e * 0.45;
         local = vec3(vUv.x * s + off.x, s * 0.01, vUv.y * s + off.y);
     } else if (aPart > 0.5) {
@@ -106,7 +112,7 @@ uniform int uCount; uniform float uDashed; uniform vec3 uBg; uniform float uDpr;
 uniform float uTime; uniform float uMotion;
 uniform vec3 uPalette[${PALETTE_SIZE}];
 uniform float uTextTone; uniform float uViolationTone; uniform float uChangedTone; uniform float uWallTone;
-uniform float uForm; uniform float uHoverTone; uniform float uEdgeTone;
+uniform float uForm; uniform float uHoverTone; uniform float uEdgeTone; uniform float uNodeTopTone; uniform float uStoreTopTone;
 in float vFade;
 in float vLight; in float vY; in float vHover;
 in vec2 vUv; in float vPart; in vec3 vColor; in vec3 vColor2; in float vFill; in float vFlags; in float vPx;
@@ -114,8 +120,13 @@ out vec4 fragColor;
 const float PI = 3.14159265;
 bool bit(float flags, float b) { return mod(floor(flags / b), 2.0) > 0.5; }
 vec3 toneOf(float t) { return uPalette[int(t + 0.5)]; }
-// A cap is the lighter top of its body (a box and a drum a clear step, a prism a hint, a slab and a puck none).
-vec3 capOf(vec3 b) { float k = (uForm > 0.5 && uForm < 1.5) || (uForm > 2.5 && uForm < 3.5) ? 0.3 : (uForm < 0.5 ? 0.12 : 0.0); return mix(b, vec3(1.0), k); }
+// A cap is the lighter top of its body, toward the theme's top tone (the design's --s-node-top / --s-store-top): a box and
+// a drum a clear step, a prism a hint, a slab and a puck none.
+vec3 capOf(vec3 b) {
+    bool drum = uForm > 2.5 && uForm < 3.5;
+    float k = (uForm > 0.5 && uForm < 1.5) || drum ? 0.45 : (uForm < 0.5 ? 0.15 : 0.0);
+    return mix(b, toneOf(drum ? uStoreTopTone : uNodeTopTone), k);
+}
 // The hover tint: the lit accent as emissive, on top of the lighting.
 vec3 shaded(vec3 base) { return mix(clamp(base * vLight, 0.0, 1.0), toneOf(uHoverTone), 0.4 * vHover); }
 // Exact signed distance to the outline polygon (negative inside).
@@ -246,6 +257,11 @@ export interface SharedMarkUniforms {
     /** The hover tint (the lit accent) and the slab's edge line. */
     uHoverTone: IUniform<number>;
     uEdgeTone: IUniform<number>;
+    /** The lighter top a box / prism cap and a drum lid lean toward (`nodeTop`, `storeTop`). */
+    uNodeTopTone: IUniform<number>;
+    uStoreTopTone: IUniform<number>;
+    /** 1 where a placement set's heights lower with the depth (`Placement.liftWithDepth`; set A in x, B in y). */
+    uLiftDepth: IUniform<Vector2>;
     /** The least drawn mark size, CSS px across, per placement set (`Placement.minMarkPx`; set A in x, B in y; 0 = world size). */
     uMinMarkPx: IUniform<Vector2>;
 }
@@ -258,6 +274,7 @@ export function sharedMarkUniforms(): SharedMarkUniforms {
         uDepth: { value: 0 }, uTime: { value: 0 }, uMotion: { value: 1 }, uMinMarkPx: { value: new Vector2(0, 0) },
         uTextTone: { value: toneIndex('text') }, uViolationTone: { value: toneIndex('violation') }, uChangedTone: { value: toneIndex('changed') }, uWallTone: { value: toneIndex('towerSide') },
         uHoverTone: { value: toneIndex('lit') }, uEdgeTone: { value: toneIndex('edge') },
+        uNodeTopTone: { value: toneIndex('nodeTop') }, uStoreTopTone: { value: toneIndex('storeTop') }, uLiftDepth: { value: new Vector2(0, 0) },
     };
 }
 

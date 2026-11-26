@@ -10,6 +10,19 @@ export const STAGGER_STEPS = 12;
 /** The whole placement tween for a per-mark duration `ms`: one mark's run plus the stagger (0 stays 0: reduced motion jumps). */
 export const spanOf = (ms: number): number => (ms > 0 ? ms + STAGGER_STEPS * STAGGER_MS : 0);
 
+/** A staggered tween's clock: its linear progress over the span, the span and one mark's run (ms). */
+export interface StaggerClock { lin: number; span: number; dur: number }
+
+/**
+ * The eased progress of the mark at instance `index` — the mark shader's per-instance clock, on the CPU, so a placement
+ * replacing a running tween bakes each mark where it IS (not where the unstaggered tween would put it).
+ */
+export function staggerAt(c: StaggerClock, index: number): number {
+    if (c.lin >= 1) return 1;
+    const x = Math.min(1, Math.max(0, (c.lin * c.span - Math.min(index, STAGGER_STEPS) * STAGGER_MS) / Math.max(c.dur, 1)));
+    return ease(x);
+}
+
 /** The stage's ONE clock (ms): the tween, the rig, the label fade and decorative motion all read it. */
 export const now = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 

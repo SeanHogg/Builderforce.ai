@@ -6,6 +6,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from '../labels';
+import { DOCK_RAIL } from '../layout';
 import { cssVar } from '../scene/themeColors';
 import { PANELS } from './panels';
 import type { PanelDef, SurfaceEnv } from './registry';
@@ -15,8 +16,8 @@ import type { PanelSlot } from './usePanelVisibility';
 export const availablePanels = (graph: KnowledgeGraph, env: SurfaceEnv, panels: readonly PanelDef[] = PANELS): PanelDef[] =>
     panels.filter((p) => p.available(graph, env));
 
-/** A collapsed dock keeps this much of itself: a thin rail the edge chevron sits on. */
-export const DOCK_RAIL = 28;
+/** A collapsed dock keeps this much of itself (`layout.ts`, with the other widths). */
+export { DOCK_RAIL };
 
 const TOGGLE_NAMES = { left: ['showLeft', 'hideLeft'] } as const;
 

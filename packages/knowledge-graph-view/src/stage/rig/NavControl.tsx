@@ -1,7 +1,7 @@
 /**
  * The stage's camera column (the design's `#nav`), bottom-right of every stage camera: a vertical box of 28px ghost icon
  * buttons — rotate left, rotate right, tilt up, tilt down (the orbit buttons: `rig.orbitBy`, the arrow keys' step), zoom in,
- * zoom out, look from above (pitched to the placement's steepest tilt), reset the camera (the SAME `panZoomOf` Fit the
+ * zoom out, look from above (`rig.topView`: squared to the axes, pitched near-down within the tilt range), reset the camera (the SAME `panZoomOf` Fit the
  * overlay calls) and help (the controls, as a tooltip). Rotate / tilt / top show only while the rig orbits; tilt and top
  * are hidden in Flat. Real <button>s with localized names; press-and-hold repeats. Colours are theme tokens only.
  */
@@ -12,6 +12,7 @@ import { cssVar } from '../../scene/themeColors';
 import type { PanZoom } from '../../surface/zoom';
 import { ZOOM_STEP } from '../../surface/zoom';
 import { Glyph } from '../../surface/ui/glyphs';
+import { now } from '../tween';
 import { ORBIT_DEG_PER_PX, ORBIT_KEY_DEG, type RigController } from './rig';
 
 export interface NavLabels { nav: SceneLabels['nav']; zoomIn: string; zoomOut: string; zoomReset: string }
@@ -79,18 +80,16 @@ export function NavControl({ rig, panZoom, labels, onSettle }: NavControlProps) 
     return (
         <div role="group" aria-label={n.group} data-stage-nav style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: 3, border: `1px solid ${cssVar('border')}`, borderRadius: 6, background: cssVar('panel'), pointerEvents: 'auto' }}>
             {orbiting && (
-                <>
-                    <span data-stage-nav-orbit style={{ display: 'contents' }}>
-                        {b(n.rotateLeft, ICON.rotl, () => rig.orbitBy(-ORBIT_STEP_PX, 0))}
-                        {b(n.rotateRight, ICON.rotr, () => rig.orbitBy(ORBIT_STEP_PX, 0))}
-                        {!flat && b(n.tiltUp, ICON.tiltu, () => rig.orbitBy(0, ORBIT_STEP_PX))}
-                        {!flat && b(n.tiltDown, ICON.tiltd, () => rig.orbitBy(0, -ORBIT_STEP_PX))}
-                    </span>
-                </>
+                <span data-stage-nav-orbit style={{ display: 'contents' }}>
+                    {b(n.rotateLeft, ICON.rotl, () => rig.orbitBy(-ORBIT_STEP_PX, 0))}
+                    {b(n.rotateRight, ICON.rotr, () => rig.orbitBy(ORBIT_STEP_PX, 0))}
+                    {!flat && b(n.tiltUp, ICON.tiltu, () => rig.orbitBy(0, ORBIT_STEP_PX))}
+                    {!flat && b(n.tiltDown, ICON.tiltd, () => rig.orbitBy(0, -ORBIT_STEP_PX))}
+                </span>
             )}
             {b(labels.zoomIn, ICON.zin, () => rig.zoomBy(ZOOM_STEP))}
             {b(labels.zoomOut, ICON.zout, () => rig.zoomBy(1 / ZOOM_STEP))}
-            {orbiting && !flat && b(n.top, ICON.top, () => rig.orbitBy(0, TOP_PX), false)}
+            {orbiting && !flat && b(n.top, ICON.top, () => rig.topView(now(), rig.motionMs), false)}
             {b(labels.zoomReset, ICON.home, () => panZoom.reset(), false)}
             <button type="button" aria-label={n.help} title={n.helpText} style={{ ...BUTTON, color: cssVar('muted') }} data-nav-help>{ICON.help}</button>
         </div>

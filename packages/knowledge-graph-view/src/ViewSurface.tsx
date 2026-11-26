@@ -5,22 +5,25 @@
  * List is the DOM camera and the stage's no-WebGL fallback. This dispatcher names none of them.
  */
 
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { CAMERAS } from './surface/cameras';
 import { LayingOut } from './surface/LayingOut';
 import type { CameraDef, SceneProps } from './surface/registry';
 import { SurfaceErrorBoundary } from './surface/SurfaceErrorBoundary';
 import type { StageCodeProps, StageCompareProps, StageFlatProps } from './stage/host/StageHost';
 
-/** The scene's props, plus what the stage host threads to its code pane (visibility, Simulate, Restructure), the open comparison and the 3D / Flat switch. */
-export type ViewSurfaceProps = SceneProps & StageCodeProps & StageCompareProps & StageFlatProps;
+/**
+ * The scene's props, plus what the stage host threads to its code pane (visibility, Simulate, Restructure), the open comparison, the 3D / Flat switch and
+ * the scale sentence (`scale`, drawn by the stage under its Colour-by legend; a DOM camera draws none).
+ */
+export type ViewSurfaceProps = SceneProps & StageCodeProps & StageCompareProps & StageFlatProps & { scale?: ReactNode };
 
 const StageHost = lazy(() => import('./stage/host/StageHost'));
 
 /** The DOM camera a stage camera falls back to (the List). */
 const FALLBACK = CAMERAS.find((c) => c.fallback)!;
 
-export function ViewSurface(p: ViewSurfaceProps) {
+export function ViewSurface({ scale, ...p }: ViewSurfaceProps) {
     const camera: CameraDef = CAMERAS.find((c) => c.id === p.mode) ?? CAMERAS.find((c) => c.id === 'graph')!;
     // A camera that throws shows the boundary, never a blank host; another camera, root or drill level draws afresh.
     const { drill } = p.surface;
@@ -29,7 +32,7 @@ export function ViewSurface(p: ViewSurfaceProps) {
             {camera.placement
                 ? (
                     <Suspense fallback={<LayingOut labels={p.labels} />}>
-                        <StageHost {...p} camera={camera.placement} fallback={FALLBACK.component!} />
+                        <StageHost {...p} camera={camera.placement} scale={scale} fallback={FALLBACK.component!} />
                     </Suspense>
                 )
                 : <camera.component {...p} />}
