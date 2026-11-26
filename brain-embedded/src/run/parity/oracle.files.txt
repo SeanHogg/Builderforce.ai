@@ -57,8 +57,8 @@ brain-embedded/src/useChatTurns.waiting.test.tsx
 brain-embedded/src/useContinuation.test.tsx
 clients/chrome/src/host/rovrRunHost.entryPoint.test.ts
 clients/chrome/src/host/rovrRunHost.test.ts
-clients/vscode/src/brainRunHost.entryPoint.test.ts
-clients/vscode/src/brainRunHost.identityTimeout.test.ts
+clients/vscode/src/brain/brainRunHost.entryPoint.test.ts
+clients/vscode/src/brain/brainRunHost.identityTimeout.test.ts
 clients/vscode/src/knowledge/backgroundIndexer.test.ts
-clients/vscode/src/oneRunDoor.test.ts
-clients/vscode/src/participantRun.test.ts
+clients/vscode/src/run/oneRunDoor.test.ts
+clients/vscode/src/chat/participantRun.test.ts

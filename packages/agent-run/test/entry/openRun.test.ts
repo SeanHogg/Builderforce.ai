@@ -323,7 +323,7 @@ describe("openRun", () => {
     const outcome = await openRun({ task, policy: TEST_POLICY, ports: { ...ports, platform } });
     expect(outcome.state.pipeline?.route).toBe("full");
     expect(events.find((event) => event.kind === "run.routed")).toMatchObject({ route: "full" });
-    expect(complete.mock.calls[0]?.[0].role).toBe("plan");
+    expect(complete.mock.calls[0]?.[0].role).toBe("code");
     const advertised = complete.mock.calls[0]?.[0].tools?.map((tool) => tool.function.name);
     expect(advertised).toContain("read_file");
     expect(advertised).not.toContain("sessions_spawn");
