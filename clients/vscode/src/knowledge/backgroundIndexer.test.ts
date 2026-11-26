@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("vscode", () => ({}));
 vi.mock("../telemetry/productEvents", () => ({ emitProductEvent: vi.fn() }));
-vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn(), reportExtensionError: vi.fn() }));
+vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn() }));
 vi.mock("./indexHostPorts", () => ({ hostIndexPorts: vi.fn() }));
 vi.mock("./activeRuns", () => ({ onRunStarted: vi.fn() }));
 vi.mock("./knowledgeService", () => ({ log: vi.fn(), workspaceFolders: () => [] }));
