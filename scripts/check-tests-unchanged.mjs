@@ -27,7 +27,7 @@
  *   4. BOUND APPROVALS: an approval that carries a `blob` (the git blob hash of the file as it was approved) fails once the file's content
  *      differs, so a permanent exemption cannot be ridden by a later edit; re-approve it with the new `git hash-object`.
  */
-import { execFileSync } from 'node:child_process';
+import { git as runGit } from './lib/git.mjs';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -54,7 +54,7 @@ const IN_CI = Boolean(process.env.CI) && !['false', '0'].includes(String(process
 const approvedByFile = new Map(APPROVED.map((entry) => [entry.file, entry]));
 
 function git(args) {
-  return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 256 * 1024 * 1024 });
+  return runGit(args, { cwd: repoRoot, stderr: 'ignore', maxBuffer: 256 * 1024 * 1024, timeout: 0 });
 }
 
 function readable(ref) {

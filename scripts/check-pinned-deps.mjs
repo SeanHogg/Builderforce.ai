@@ -35,14 +35,41 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { git } from './lib/git.mjs';
 import { PINNED_DEPENDENCIES, declaredPins, lockedVersions, statesOverride } from './pinnedDependencies.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Directories that never hold a project of ours. */
-const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.wrangler', 'coverage', '.turbo']);
+const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.wrangler', 'coverage', '.turbo', '.builderforce', '.claude']);
 
 const LOCKFILES = ['pnpm-lock.yaml', 'package-lock.json'];
+
+const projectAt = (dir) => ({
+  dir,
+  manifestPath: join(dir, 'package.json'),
+  lockPaths: LOCKFILES.map((name) => join(dir, name)).filter((path) => existsSync(path)),
+});
+
+/**
+ * The projects git knows (tracked plus untracked-but-not-ignored), so a gitignored scratch directory —
+ * `.builderforce/cache`, `.builderforce/worktrees`, whole checkouts of this repo — is never scanned. `null` where git
+ * cannot answer (no git binary, not a checkout): the caller then walks the disk, as it always did.
+ */
+function gitProjects() {
+  try {
+    const listed = git(['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', '*package.json'], { cwd: repoRoot, stderr: 'ignore' });
+    const dirs = new Set();
+    for (const file of listed.split('\0').filter(Boolean)) {
+      const parts = file.split('/');
+      if (parts.pop() !== 'package.json' || parts.some((part) => SKIP.has(part))) continue;
+      if (existsSync(join(repoRoot, file))) dirs.add(join(repoRoot, ...parts));
+    }
+    return dirs.size ? [...dirs].sort().map(projectAt) : null; // an empty listing (no git data) falls back to the disk walk
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Every directory holding a `package.json`, with whatever lockfiles sit beside it.
@@ -57,11 +84,7 @@ function discoverProjects(dir, found = []) {
     return found;
   }
   if (entries.some((entry) => entry.isFile() && entry.name === 'package.json')) {
-    found.push({
-      dir,
-      manifestPath: join(dir, 'package.json'),
-      lockPaths: LOCKFILES.map((name) => join(dir, name)).filter((path) => existsSync(path)),
-    });
+    found.push(projectAt(dir));
   }
   for (const entry of entries) {
     if (!entry.isDirectory() || SKIP.has(entry.name)) continue;
@@ -71,7 +94,7 @@ function discoverProjects(dir, found = []) {
 }
 
 const failures = [];
-const projects = discoverProjects(repoRoot);
+const projects = gitProjects() ?? discoverProjects(repoRoot);
 let lockfilesRead = 0;
 let projectsHolding = 0;
 

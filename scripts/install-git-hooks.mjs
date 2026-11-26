@@ -10,22 +10,21 @@
  * is left alone; only an unset one, or agent-runtime's retired `git-hooks`, is replaced.
  * NEVER fails the install: a git error is printed as a warning and the install goes on.
  */
-import { execFileSync } from 'node:child_process';
-
 const HOOKS_PATH = '.githooks';
 const REPLACEABLE = new Set(['', 'git-hooks', HOOKS_PATH]);
 
-function git(args) {
-  return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-}
+// Loaded inside main's try: a context that copies only this file must not break `pnpm install` (see main).
+let runGit;
+const git = (args) => runGit(args, { trim: true });
 
 function warn(what, error) {
   console.warn(`[install-git-hooks] warning: ${what} — ${error instanceof Error ? error.message.split('\n')[0] : String(error)}. Hooks not wired; the install continues.`);
 }
 
-function main() {
+async function main() {
   if (process.env.CI) return;
   try {
+    ({ git: runGit } = await import('./lib/git.mjs'));
     if (git(['rev-parse', '--is-inside-work-tree']) !== 'true') return;
   } catch {
     return; // not a git checkout, or no git binary: nothing to wire, nothing to warn about
@@ -56,4 +55,4 @@ function main() {
   }
 }
 
-main();
+main().catch((error) => warn('unexpected error', error));

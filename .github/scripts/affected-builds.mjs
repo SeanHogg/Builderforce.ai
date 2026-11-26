@@ -26,8 +26,13 @@ function dependencyDirs(roots) {
   return [...visited].map((dir) => path.relative(root, dir).split(path.sep).join('/'));
 }
 
+/** True when any of `files` is one of `prefixes` or lies under one (repo-relative POSIX paths). */
+export function pathTouches(files, prefixes) {
+  return files.some((file) => prefixes.some((name) => file === name || file.startsWith(`${name}/`)));
+}
+
 export function affectedBuilds(files, full = false) {
-  const touches = (...paths) => full || files.some((file) => paths.some((name) => file === name || file.startsWith(`${name}/`)));
+  const touches = (...paths) => full || pathTouches(files, paths);
   const sharedBuild = touches('.github', 'scripts', '.nvmrc', '.dockerignore');
   // These consumers compile source aliases and enforce the shared package registry.
   const sharedSource = touches('packages');

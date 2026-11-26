@@ -1,0 +1,26 @@
+#!/bin/sh
+# Repo pre-push hook — wired by `scripts/install-git-hooks.mjs` (core.hooksPath .githooks).
+# (Renamed `.githooks/pre-push` when committed; it must be executable.)
+#
+# Catches what would turn CI red, fast: affected-area typecheck + guards (no tests by default; BF_PREPUSH_TESTS=1 turns
+# related tests on), within BF_PREPUSH_BUDGET_S seconds (default 90). It blocks ONLY on a real finding (guard, typecheck
+# or test failure); a missing tool, stale install, timeout or crash of the check itself is a warning and the push goes on.
+# Skip once: `git push --no-verify`, or BF_SKIP_PREPUSH=1.
+
+[ "${BF_SKIP_PREPUSH:-}" = "1" ] && exit 0
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[ -f "$ROOT/scripts/pre-push-check.mjs" ] || exit 0
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-push: 'node' is not on PATH, so the pre-push check was SKIPPED (CI will still run it)." >&2
+  exit 0
+fi
+
+# git feeds the pushed refs on stdin; the check inherits it. Only the check's explicit "finding" status (3) blocks; 1 or any
+# other code (a Node crash, a bad import, a syntax error in the check) means the check itself broke, and the push goes on.
+BF_PREPUSH_HOOK=1 node "$ROOT/scripts/pre-push-check.mjs"
+status=$?
+[ "$status" -eq 3 ] && exit 1
+[ "$status" -ne 0 ] && echo "pre-push: the check itself exited $status (not a finding); push allowed, CI will check." >&2
+exit 0

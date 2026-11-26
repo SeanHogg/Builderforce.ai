@@ -1,0 +1,193 @@
+diff --git a/dist/index.js b/dist/index.js
+index 5ee7d946e53665c918fe27abc3d6d86417ae9d9b..2f7be9cbfd3bf05dde1c278c5909457b4c0b83b8 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -12494,10 +12494,76 @@ var builtInModulesPlugin = {
+ // src/buildApplication/processVercelFunctions/dedupeEdgeFunctions.ts
+ async function dedupeEdgeFunctions({ edgeFunctions }, opts) {
+   const identifiers = await getFunctionIdentifiers({ edgeFunctions }, opts);
++  nopPatchStats.fast = 0;
++  nopPatchStats.total = 0;
++  nopPatchStats.verified = 0;
++  const nopStartedAt = Date.now();
+   await processFunctionIdentifiers({ edgeFunctions }, identifiers, opts);
++  console.log(`[nop-patch] processFunctionIdentifiers ${((Date.now() - nopStartedAt) / 1e3).toFixed(1)}s`);
++  console.log(`[nop-patch] fast path ${nopPatchStats.fast}/${nopPatchStats.total} functions, verified ${nopPatchStats.verified} identical`);
+   await processBundledAssets({ edgeFunctions }, opts);
+   return identifiers;
+ }
++// [nop-patch] Performance patch. The original loop below did
++// replaceLastSubstringInstance(fileContents, ...) once per identifier: a lastIndexOf plus a
++// full-file slice/concat each time, i.e. O(identifiers x fileSize) per function (minutes in CI).
++// When it is provably equivalent we instead cut the ORIGINAL contents once, back to front.
++var nopPatchStats = { fast: 0, total: 0, verified: 0 };
++// Equivalence proof run in CI: replay the (codeBlock, replacement) pairs through the ORIGINAL
++// sequential replaceLastSubstringInstance and require the identical string, else fail the build.
++function nopPatchVerify(path2, original, pairs, fastResult) {
++  let slow = original;
++  for (let i = 0; i < pairs.length; i += 2) {
++    slow = replaceLastSubstringInstance(slow, pairs[i], pairs[i + 1]);
++  }
++  if (slow !== fastResult) {
++    let at = 0;
++    while (at < slow.length && at < fastResult.length && slow[at] === fastResult[at]) at++;
++    throw new Error(`[nop-patch] fast path output differs from original algorithm for ${path2} at offset ${at}`);
++  }
++  nopPatchStats.verified++;
++}
++// What an identifier is replaced with, or null when its block is left in place.
++function nopPatchReplacement({ type, identifier: identifier2, importPath }, info) {
++  if (importPath) return "";
++  if (info.consumers.length > 1) {
++    if (type === "webpack") return `__chunk_${identifier2}`;
++    if (type === "manifest") return `self.${identifier2}=${identifier2};`;
++    return identifier2;
++  }
++  return null;
++}
++// True when "cut the original at [start,end)" gives exactly what repeatedly replacing the LAST
++// occurrence of each block in the current string gives. Pure: no side effects, so a rejected
++// function simply runs the untouched original algorithm. Requires:
++//  1. identifier ranges are disjoint (descending order, so end <= start of the previous one),
++//  2. every replaced block is longer than the longest replacement text so far (it cannot sit inside one),
++//  3. no copy of a replaced block exists after its own start, except copies that are themselves
++//     replaced identifiers (already gone when the original reaches this block).
++// Cost: one indexOf per replaced identifier from its end; indexOf with a long needle is sublinear
++// and there is no string rebuild. Not checked: a match straddling a replacement boundary.
++function nopPatchCanFastReplace(contents, identifiers, identifierMaps) {
++  let cursor = contents.length;
++  let maxReplacementLength = 0;
++  const replaced = /* @__PURE__ */ new Map();
++  for (const ident of identifiers) {
++    const { start, end } = ident;
++    if (end > cursor || end <= start) return false;
++    const replacement = nopPatchReplacement(ident, identifierMaps[ident.type].get(ident.identifier));
++    if (replacement === null) continue;
++    maxReplacementLength = Math.max(maxReplacementLength, replacement.length);
++    if (end - start <= maxReplacementLength) return false;
++    replaced.set(start, end);
++    cursor = start;
++  }
++  for (const [start, end] of replaced) {
++    const block = contents.slice(start, end);
++    for (let at = contents.indexOf(block, start + 1); at !== -1; at = contents.indexOf(block, at + 1)) {
++      if (replaced.get(at) !== at + block.length) return false;
++    }
++  }
++  return true;
++}
+ async function processFunctionIdentifiers({ edgeFunctions }, { entrypointsMap, identifierMaps }, opts) {
+   const functionBuildPromises = [];
+   const wasmIdentifierKeys = [...identifierMaps.wasm.keys()];
+@@ -12510,10 +12576,27 @@ async function processFunctionIdentifiers({ edgeFunctions }, { entrypointsMap, i
+     const wasmImportsToPrepend = /* @__PURE__ */ new Map();
+     const newFnLocation = (0, import_node_path8.join)("functions", `${fnInfo.relativePath}.js`);
+     const newFnPath = (0, import_node_path8.join)(opts.nopDistDir, newFnLocation);
++    // [nop-patch] fast path: keep fileContents as the original and collect the pieces back to front.
++    const nopFast = nopPatchCanFastReplace(fileContents, identifiers, identifierMaps);
++    nopPatchStats.total++;
++    if (nopFast) nopPatchStats.fast++;
++    const nopParts = [];
++    const nopPairs = [];
++    const nopOriginal = fileContents;
++    let nopCursor = fileContents.length;
++    const nopReplace = (codeBlock, replacement, start, end) => {
++      if (nopFast) {
++        nopPairs.push(codeBlock, replacement);
++        nopParts.push(fileContents.slice(end, nopCursor), replacement);
++        nopCursor = start;
++      } else {
++        fileContents = replaceLastSubstringInstance(fileContents, codeBlock, replacement);
++      }
++    };
+     for (const { type, identifier: identifier2, start, end, importPath } of identifiers) {
+       const identifierInfo = identifierMaps[type].get(identifier2);
+       if (importPath) {
+-        const { updatedContents, newImportToPrepend } = await processImportIdentifier(
++        const { codeBlock, replacement, newImportToPrepend } = await processImportIdentifier(
+           { type, identifier: identifier2, start, end, importPath, info: identifierInfo },
+           {
+             fileContents,
+@@ -12523,15 +12606,15 @@ async function processFunctionIdentifiers({ edgeFunctions }, { entrypointsMap, i
+           },
+           opts
+         );
+-        fileContents = updatedContents;
++        nopReplace(codeBlock, replacement, start, end);
+         importsToPrepend.push(newImportToPrepend);
+       } else if (identifierInfo.consumers.length > 1) {
+-        const { updatedContents, newFilePath, newImport, wasmImports } = await processCodeBlockIdentifier(
++        const { codeBlock, replacement, newFilePath, newImport, wasmImports } = await processCodeBlockIdentifier(
+           { type, identifier: identifier2, start, end, info: identifierInfo },
+           { fileContents, wasmIdentifierKeys },
+           opts
+         );
+-        fileContents = updatedContents;
++        nopReplace(codeBlock, replacement, start, end);
+         if (newFilePath)
+           identifierPathsToBuild.add(newFilePath);
+         if (newImport)
+@@ -12552,6 +12635,13 @@ async function processFunctionIdentifiers({ edgeFunctions }, { entrypointsMap, i
+         }
+       }
+     }
++    if (nopFast) {
++      nopParts.push(fileContents.slice(0, nopCursor));
++      fileContents = nopParts.reverse().join("");
++      if (nopPatchStats.verified < 5 || process.env.NOP_PATCH_VERIFY === "1") {
++        nopPatchVerify(path2, nopOriginal, nopPairs, fileContents);
++      }
++    }
+     await Promise.all(
+       [...identifierPathsToBuild].map(async (path3) => {
+         const fileContents2 = await functionifyFileContent(path3);
+@@ -12689,8 +12779,7 @@ async function processImportIdentifier(ident, {
+   fnConfig
+ }, { nopDistDir, workerJsDir }) {
+   const { type, identifier: identifier2, start, end, importPath, info } = ident;
+-  let updatedContents = fileContents;
+-  const codeBlock = updatedContents.slice(start, end);
++  const codeBlock = fileContents.slice(start, end);
+   if (!info.newDest) {
+     const importPathWithoutLeadingDots = importPath.replace(/^(\.\.\/)+/, "");
+     const importPathWithoutType = importPathWithoutLeadingDots.replace(new RegExp(`^/${type}/`), "/");
+@@ -12709,13 +12798,9 @@ async function processImportIdentifier(ident, {
+     relativeTo: nopDistDir
+   });
+   const newImportPath = normalizePath((0, import_node_path8.join)(relativeImportPath, info.newDest));
+-  updatedContents = replaceLastSubstringInstance(
+-    updatedContents,
+-    codeBlock,
+-    ""
+-  );
+   return {
+-    updatedContents,
++    codeBlock,
++    replacement: "",
+     newImportToPrepend: {
+       key: identifier2,
+       path: newImportPath
+@@ -12724,8 +12809,7 @@ async function processImportIdentifier(ident, {
+ }
+ async function processCodeBlockIdentifier(ident, { fileContents, wasmIdentifierKeys }, { nopDistDir, workerJsDir }) {
+   const { type, identifier: identifier2, start, end, info } = ident;
+-  let updatedContents = fileContents;
+-  const codeBlock = updatedContents.slice(start, end);
++  const codeBlock = fileContents.slice(start, end);
+   let identifierKey = identifier2;
+   let newCodeBlock = identifier2;
+   if (type === "webpack") {
+@@ -12751,12 +12835,7 @@ async function processCodeBlockIdentifier(ident, { fileContents, wasmIdentifierK
+     await (0, import_promises9.appendFile)(newFilePath, buffer);
+   }
+   const newImport = { key: identifierKey, path: info.newDest };
+-  updatedContents = replaceLastSubstringInstance(
+-    updatedContents,
+-    codeBlock,
+-    newCodeBlock
+-  );
+-  return { updatedContents, newFilePath, newImport, wasmImports };
++  return { codeBlock, replacement: newCodeBlock, newFilePath, newImport, wasmImports };
+ }
+ async function getFunctionIdentifiers({ edgeFunctions }, { disableChunksDedup }) {
+   const entrypointsMap = /* @__PURE__ */ new Map();

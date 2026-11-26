@@ -1353,40 +1353,11 @@ jobs:
           NEXT_SKIP_BUILD_CHECKS: '1'
         run: |
           pnpm install --frozen-lockfile
-          # TEMPORARY PROFILING (remove once the build's long pole is found; then run `pnpm run cf-build` again):
-          # `cf-build` is these two scripts in order. Only next-on-pages is profiled: V8 CPU profiles (10 ms
-          # sampling, to keep them small) of every Node process it starts, written OUTSIDE the output tree, so the
-          # deployed output is unchanged. The install above and the finishing scripts are not profiled; the
-          # 12 GiB heap is kept.
-          NODE_OPTIONS="$NODE_OPTIONS --cpu-prof --cpu-prof-interval=10000 --cpu-prof-dir=${{ runner.temp }}/nop-prof" pnpm run cf-build:pages
-          pnpm run cf-build:finish
-
-      # TEMPORARY PROFILING: how many functions next-on-pages saw and how big they are. Read-only. `if: always()`
-      # so a failed build still reports. fail-open by design: diagnostics only, every command's absence of output
-      # (no functions dir after a failed build) is itself the answer.
-      - name: Report the Vercel functions output (profiling)
-        if: always()
-        working-directory: frontend
-        run: |
-          dir=.vercel/output/functions
-          if [ ! -d "$dir" ]; then echo "$dir does not exist"; exit 0; fi
-          du -sh "$dir"
-          echo "*.func dirs: $(find "$dir" -type d -name '*.func' | wc -l)"
-          echo "15 largest *.func dirs (KiB):"
-          find "$dir" -type d -name '*.func' -prune -exec du -sk {} + | sort -rn | head -15 || true
-
-      # TEMPORARY PROFILING: the CPU profiles and next-on-pages' own build log. The log is written to
-      # `_worker.js/nop-build-log.json` (node_modules/@cloudflare/next-on-pages: writeBuildInfo, outputDir =
-      # the `_worker.js` dir); it already ships inside frontend-output, this copy is just easy to download.
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: nop-profile
-          path: |
-            ${{ runner.temp }}/nop-prof
-            frontend/.vercel/output/static/_worker.js/nop-build-log.json
-          if-no-files-found: ignore
-          retention-days: 7
+          # next-on-pages' chunk dedup is patched (frontend/patches/@cloudflare__next-on-pages@1.13.16.patch):
+          # upstream rebuilt each function file once per deduped chunk (quadratic, ~440s of CPU here). The patch
+          # logs `[nop-patch]` lines: the dedup phase's time, and how many functions took the fast path and were
+          # verified byte-identical to the original algorithm (a mismatch fails this step).
+          pnpm run cf-build
 
       # Exactly what wrangler.toml deploys: the worker (`_worker.js/`) and the static
       # assets beside it. Hidden files included — `.assetsignore` is what keeps the
