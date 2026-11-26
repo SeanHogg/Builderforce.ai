@@ -29,7 +29,7 @@ beforeAll(async () => {
   await pg.exec(`CREATE TABLE tenants (id serial PRIMARY KEY); CREATE TABLE projects (id serial PRIMARY KEY);
     INSERT INTO tenants DEFAULT VALUES; INSERT INTO projects DEFAULT VALUES;`);
   await pg.exec(createScopes());
-  for (const m of ['1279_knowledge_scope_previous_digest.sql', '1294_knowledge_scope_provenance.sql', '1343_knowledge_scope_measured_with.sql']) await pg.exec(migration(m));
+  for (const m of ['1279_knowledge_scope_previous_digest.sql', '1294_knowledge_scope_provenance.sql', '1343_knowledge_scope_measured_with.sql', '1367_knowledge_scope_commit_sha.sql']) await pg.exec(migration(m));
   store = drizzleKnowledgeStore(drizzle(pg) as unknown as Db, 1, 1);
 });
 

@@ -238,7 +238,7 @@ describe('registries', () => {
         expect(ids({})).toEqual(['transit', 'system', 'graph', 'map', 'heat', 'style', 'features', 'flow', 'sequence', 'list']);
         expect(ids({ hasLines: false })).toEqual(['system', 'graph', 'map', 'heat', 'style', 'features', 'list']);
         // Tower is the SVG map (needs lines); 3D is the WebGL view (needs WebGL): both are listed when both are available.
-        expect(ids({ webgl: true })).toEqual(['transit', 'system', 'graph', 'map', '3d', 'heat', 'style', 'features', 'sequence', 'list']);
+        expect(ids({ webgl: true })).toEqual(['transit', 'system', 'graph', 'map', '3d', 'heat', 'style', 'features', 'flow', 'sequence', 'list']);
     });
 
     it('holds the eight drawers (the Reviews drawer comes first, with no header button), and a toggle with no panel available draws nothing', () => {
