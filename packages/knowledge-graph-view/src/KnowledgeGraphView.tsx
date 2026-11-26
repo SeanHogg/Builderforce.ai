@@ -16,7 +16,7 @@
  * width it is a sheet. With no reviewed folder it offers **Review a folder**.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Finding } from '@seanhogg/builderforce-memory/knowledge';
 import { resolveLabels, fillTemplate, type KnowledgeGraphLabels } from './labels';
 import { useKnowledgeGraph } from './useKnowledgeGraph';

@@ -5,6 +5,7 @@
  * (`hostKnowledgeGraphSource.ts`). A new focus (Open in graph) remounts the view on it.
  */
 
+import type { ReactNode } from 'react';
 import {
   KnowledgeGraphView, setWorkerFactory, type EditorView, type KnowledgeGraphLabels, type KnowledgeGraphSource, type SourceLocation,
 } from '@builderforce/knowledge-graph-view';
@@ -27,9 +28,11 @@ export interface KnowledgeViewProps {
   onOpenSource?(location: SourceLocation): void;
   /** What the editor shows of a file of the loaded root: the code band follows it. */
   editorView?: EditorView | null;
+  /** The panel's view switch, drawn in the visualizer header's right group (there is no separate bar). */
+  headerTools?: ReactNode;
 }
 
-export function KnowledgeView({ source, labels, focus, focusKey = 0, onCompose, onOpenSource, editorView }: KnowledgeViewProps) {
+export function KnowledgeView({ source, labels, focus, focusKey = 0, onCompose, onOpenSource, editorView, headerTools }: KnowledgeViewProps) {
   return (
     <div className="bf-viz__knowledge" data-testid="viz-knowledge">
       <KnowledgeGraphView
@@ -40,6 +43,7 @@ export function KnowledgeView({ source, labels, focus, focusKey = 0, onCompose, 
         {...(onCompose ? { onCompose } : {})}
         {...(onOpenSource ? { onOpenSource } : {})}
         {...(editorView !== undefined ? { editorView } : {})}
+        {...(headerTools ? { headerTools } : {})}
       />
     </div>
   );

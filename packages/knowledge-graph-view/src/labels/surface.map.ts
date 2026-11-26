@@ -13,7 +13,7 @@ export type CountedWord =
     | 'familyLights' | 'checkFile' | 'checkStation' | 'issueAt' | 'notLayered' | 'branchFiles' | 'packFiles'
     | 'sectionUnjudged' | 'fixBatch' | 'findingCollapsed' | 'topNodes' | 'modelCalls' | 'endpointsCapped' | 'commitsCapped'
     | 'moreChecks' | 'fileEndpoints' | 'filesPlotted' | 'applyV8' | 'applyV8Request' | 'entryPointsOmitted' | 'interchange'
-    | 'entryPoint' | 'fileServerOnly' | 'fileLocalOnly' | 'pinFindings' | 'moreStations' | 'pipesCapped' | 'commitRow' | 'commitRowAuthor' | 'moreStops' | 'antiTip'
+    | 'entryPoint' | 'fileServerOnly' | 'fileLocalOnly' | 'pinFindings' | 'pipesCapped' | 'commitRow' | 'commitRowAuthor' | 'antiTip'
     | 'replicaQueued' | 'replicaAwaitingReview' | 'replicaFailed' | 'runFailure' | 'runRetryAll' | 'runStep' | 'awaitingJudge'
     | 'link' | 'group' | 'kind' | 'antiPattern' | 'groupSelected' | 'previewFix' | 'applyFixes' | 'applyFailed'
     | 'dependent' | 'caller' | 'moreFeatures';
@@ -26,10 +26,6 @@ export interface MapLabels {
     legendRow: string;
     terminus: Record<'data' | 'external' | 'end', string>;
     untestedSegment: string;
-    /** The map's SVG description: `{lines}`, `{stations}`. */
-    mapDescription: string;
-    /** A station's accessible name: `{name}`, `{layer}`, `{files}`. */
-    stationAria: string;
     layers: Record<Layer | 'other', string>;
     /**
      * The System camera: a component's `{name}`, `{files}`, `{findings}`; a card's meta `{files}` (already pluralised, see
@@ -59,8 +55,6 @@ export interface MapLabels {
     sequence: Record<'description' | 'empty' | 'messageAria' | 'backToMap' | 'hop' | 'noReference', string>;
     /** The transit map's own words: the station card, the drill levels, docs, termini. `{count}`, `{name}`. */
     map: {
-        wall: string;
-        describes: string;
         doc: string;
         deadEnd: string;
         reported: string;
@@ -70,8 +64,6 @@ export interface MapLabels {
         world: string;
         /** Why the view went back out of a level the map no longer has: `{name}`. */
         drillReset: string;
-        /** A satellite sub-station of an unfolded station: `{name}`, `{parent}`. */
-        satelliteAria: string;
         /** The Map's look toggle (the group's name, its two choices and their tips): flat, or towers and pipes. */
         look: Record<'label' | 'flat' | 'towers' | 'flatTip' | 'towersTip', string>;
         card: Record<'close' | 'issueMore' | 'goInside' | 'unfold' | 'fold' | 'whoCalls' | 'apiContract' | 'patterns' | 'noSymbols' | 'leaf' | 'loading' | 'callSite' | 'openAtLine'
@@ -106,8 +98,6 @@ export const MAP_DEFAULTS: MapLabels = {
     legendRow: '{channel}: {metric}',
     terminus: { data: 'Data store', external: 'External service', end: 'Ends here' },
     untestedSegment: 'Dashed: no test covers it',
-    mapDescription: '{lines} across {stations}. Select a station for its details.',
-    stationAria: '{name}, {layer}, {files}',
     layers: {
         entry: 'Entry points', presentation: 'Presentation', application: 'Application', domain: 'Domain',
         infrastructure: 'Infrastructure', other: 'Other',
@@ -182,11 +172,9 @@ export const MAP_DEFAULTS: MapLabels = {
         fileServerOnlyOne: '{server} file on the server · not reviewed on this machine', fileServerOnlyOther: '{server} files on the server · not reviewed on this machine',
         fileLocalOnlyOne: '{local} file here · not on the server', fileLocalOnlyOther: '{local} files here · not on the server',
         pinFindingsOne: '{count} finding at {name}', pinFindingsOther: '{count} findings at {name}',
-        moreStationsOne: '+{count} more station is not drawn.', moreStationsOther: '+{count} more stations are not drawn.',
         pipesCappedOne: 'Showing only the first {count} pipe.', pipesCappedOther: 'Showing only the first {count} pipes.',
         commitRowOne: '{sha} · {count} file · {when}', commitRowOther: '{sha} · {count} files · {when}',
         commitRowAuthorOne: '{sha} · {author} · {count} file · {when}', commitRowAuthorOther: '{sha} · {author} · {count} files · {when}',
-        moreStopsOne: '+{count} more stop', moreStopsOther: '+{count} more stops',
         antiTipOne: 'from {count} warning', antiTipOther: 'from {count} warnings',
         linkOne: '{count} link', linkOther: '{count} links',
         groupOne: '{count} group', groupOther: '{count} groups',
@@ -219,15 +207,12 @@ export const MAP_DEFAULTS: MapLabels = {
         noReference: 'no direct reference',
     },
     map: {
-        wall: 'HTTP boundary',
-        describes: 'describes',
         doc: 'Document',
         deadEnd: 'Dead end: nothing reads it',
         reported: 'Reported ✓',
         noSymbolsNote: 'This graph has no symbols, so the levels below a package show files.',
         world: 'the whole map',
         drillReset: 'The map changed, so the view went back out of {name}.',
-        satelliteAria: '{name}, inside {parent}',
         look: {
             label: 'Map look', flat: 'Flat', towers: 'Towers',
             flatTip: 'Draw the stations as flat marks', towersTip: 'Draw each station as a tower and each line as a pipe',

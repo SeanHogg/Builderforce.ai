@@ -81,51 +81,23 @@
 .bf-viz__add { color: var(--vscode-gitDecoration-addedResourceForeground, #81b88b); }
 .bf-viz__del { color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39); }
 
-.bf-viz__toggle {
-  flex: 0 0 auto;
-  /* A real VS Code button, so it inherits focus rings and hover/active colours. */
-  appearance: none;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  padding: 3px 12px;
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
-  background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.2));
-}
-
-.bf-viz__toggle:hover {
-  background: var(--vscode-button-secondaryHoverBackground, rgba(128, 128, 128, 0.32));
-}
-
-.bf-viz__toggle:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 1px;
-}
-
-/* ── The view switch: Knowledge · Canvas · Changes ──────────────────────────────────
-   One segmented group; the pressed view reads as the primary button. It wraps under
-   the meters on a narrow (360px) panel instead of overflowing. */
+/* ── The view switch on Canvas / Changes: the knowledge-graph-view `Seg`, right-aligned in the slim row.
+   (In the Knowledge view the same switch sits in the visualizer's own header.) It wraps under the meters
+   on a narrow (360px) panel instead of overflowing. */
 .bf-viz__bar { flex-wrap: wrap; }
 
-.bf-viz__views {
+.bf-viz__switch {
   display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  /* Stays end-aligned when the meters are absent (Knowledge view). */
+  min-width: 0;
+  max-width: 100%;
   margin-inline-start: auto;
 }
 
-.bf-viz__views .bf-viz__toggle { min-height: 28px; }
-
-.bf-viz__toggle[aria-pressed="true"] {
-  color: var(--vscode-button-foreground);
-  background: var(--vscode-button-background);
-}
-
-.bf-viz__toggle[aria-pressed="true"]:hover {
-  background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+/* The switch's buttons carry inline styles but no focus ring: the editor's focus border, inset so adjacent segments do not clip it.
+   Scoped to the panel, so it covers the switch in the Knowledge header too. */
+.bf-viz [data-seg]:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
 }
 
 /* ── The Knowledge slot (PRD 38) ──────────────────────────────────────────────────

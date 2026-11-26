@@ -270,7 +270,7 @@ function VisualizationBody({ init, diff, canvas }: { init: InitData; diff: strin
       diffText={diff}
       knowledgeRequests={knowledge.focusRequests}
       reviewing={knowledge.reviewing}
-      knowledge={(
+      knowledge={(viewSwitch) => (
         // A Knowledge view that throws past its own camera boundary leaves the tabs and the other views working.
         <CanvasBoundary
           fallback={null}
@@ -286,6 +286,7 @@ function VisualizationBody({ init, diff, canvas }: { init: InitData; diff: strin
             onCompose={knowledge.compose}
             onOpenSource={knowledge.openSource}
             editorView={knowledge.editor}
+            headerTools={viewSwitch}
           />
         </CanvasBoundary>
       )}

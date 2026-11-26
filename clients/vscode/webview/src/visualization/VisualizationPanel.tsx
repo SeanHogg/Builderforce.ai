@@ -55,6 +55,7 @@ import type { PendingChange, PendingChangeSet } from '../../../src/git/gitChange
 import { parseUnifiedDiff, type FileDiff } from './diffModel';
 import { buildChangeGraph, type ChangeGraph } from './changeGraph';
 import { ChangeTree } from './ChangeTree';
+import { ViewSwitch } from './ViewSwitch';
 import {
   hasChanges,
   isRunActive,
@@ -106,22 +107,16 @@ export interface VisualizationPanelProps {
   /** The canvas, mounted and mounted UNCHANGED. See AC3 above. */
   children?: ReactNode;
   /**
-   * The Knowledge view (PRD 38), handed in mounted like the canvas — this file never
-   * imports the graph view. Absent ⇒ the switch offers Canvas and Changes only.
+   * The Knowledge view (PRD 38), handed in as a render function that receives the view
+   * switch to draw in its own header — this file never imports the graph view. Absent ⇒
+   * the switch offers Canvas and Changes only.
    */
-  knowledge?: ReactNode;
+  knowledge?: (viewSwitch: ReactNode) => ReactNode;
   /** Moves whenever the host asks for the Knowledge view (Open in graph): it is shown and pinned. */
   knowledgeRequests?: number;
   /** A knowledge review is in flight: auto-swap holds the view so the review is not unseen. */
   reviewing?: boolean;
 }
-
-/** The views, in the switch's order. */
-const VIEWS: ReadonlyArray<{ id: VisualizationView; action: 'showKnowledge' | 'showCanvas' | 'showChanges'; label: [string, string]; hint: [string, string] }> = [
-  { id: 'knowledge', action: 'showKnowledge', label: ['viz.button.knowledge', 'Knowledge'], hint: ['viz.showKnowledge', 'Show what this workspace knows: its knowledge graph'] },
-  { id: 'canvas', action: 'showCanvas', label: ['viz.button.canvas', 'Canvas'], hint: ['viz.showCanvas', 'Back to the Creation Canvas'] },
-  { id: 'changes', action: 'showChanges', label: ['viz.button.changes', 'Changes'], hint: ['viz.showChanges', 'Show the code changes this run made'] },
-];
 
 /**
  * Read the panel's working tree off the shared bridge, when the host pushed one.
@@ -224,15 +219,23 @@ export function VisualizationPanel({
   );
 
   const running = isRunActive(state);
-  const views = knowledge === undefined ? VIEWS.filter((v) => v.id !== 'knowledge') : VIEWS;
+
+  // AC5. Always mounted, in EVERY view, never disabled — including mid-run, which is exactly when a user reaches for it.
+  // Memoised on the view and labels only: the run frames re-render this panel often, and a fresh switch element would re-render the whole
+  // graph view through its header on every one (before the switch moved into the header, the Knowledge element was stable across them).
+  const hasKnowledge = knowledge !== undefined;
+  const viewSwitch = useMemo(
+    () => <ViewSwitch view={state.view} hasKnowledge={hasKnowledge} t={makeT(labels ?? {})} onPick={(action) => dispatch({ type: action })} />,
+    [state.view, hasKnowledge, labels],
+  );
+  const knowledgeView = useMemo(() => knowledge?.(viewSwitch), [knowledge, viewSwitch]);
 
   return (
     <section className="bf-viz" aria-label={t('viz.ariaLabel', 'BuilderForce Visualization')} data-view={state.view}>
-      <header className="bf-viz__bar">
-        {/* The meters describe the chat run's pending changes (Canvas / Changes). The
-            Knowledge view carries its own review action, so the two status rows are
-            consolidated: no meters there. */}
-        {state.view !== 'knowledge' && (
+      {/* The Knowledge view has NO bar of its own here: the switch sits in the visualizer's header (below). Canvas and Changes
+          keep ONE slim row: the run's meters and the same switch, right-aligned. */}
+      {state.view !== 'knowledge' && (
+        <header className="bf-viz__bar">
           <div className="bf-viz__meters" role="status">
             <span className="bf-viz__stat" data-active={running || undefined}>
               {running ? t('viz.running', 'Run in progress') : t('viz.idle', 'Idle')}
@@ -241,30 +244,14 @@ export function VisualizationPanel({
             <span className="bf-viz__stat bf-viz__stat--add">+{visible.added}</span>
             <span className="bf-viz__stat bf-viz__stat--del">-{visible.removed}</span>
           </div>
-        )}
-
-        {/* AC5. Always mounted, in EVERY view, never disabled — including mid-run,
-            which is exactly when a user reaches for it. */}
-        <div className="bf-viz__views" role="group" aria-label={t('viz.views', 'Visualization views')}>
-          {views.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              className="bf-viz__toggle"
-              onClick={() => dispatch({ type: v.action })}
-              aria-pressed={state.view === v.id}
-              title={t(v.hint[0], v.hint[1])}
-            >
-              {t(v.label[0], v.label[1])}
-            </button>
-          ))}
-        </div>
-      </header>
+          <div className="bf-viz__switch">{viewSwitch}</div>
+        </header>
+      )}
 
       {/* Mounted for as long as it is provided and merely hidden off-view: unmounting it would
           abort a running review (the review hook stops on unmount). */}
       {knowledge !== undefined && (
-        <div className="bf-viz__knowledge-slot" hidden={state.view !== 'knowledge'}>{knowledge}</div>
+        <div className="bf-viz__knowledge-slot" hidden={state.view !== 'knowledge'}>{knowledgeView}</div>
       )}
       {state.view === 'changes' ? (
         <ChangeTree graph={visible} labels={labels ?? {}} hasEverWritten={hasChanges(state)} />
