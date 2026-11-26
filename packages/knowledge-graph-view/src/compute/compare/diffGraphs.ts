@@ -6,8 +6,9 @@
  * so the same two graphs always give the same diff.
  */
 
-import type { KEdge, KnowledgeGraph, KNode } from '@seanhogg/builderforce-memory/knowledge';
+import type { KnowledgeGraph, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from '../../order';
+import { edgeKey, EDGE_KEY_SEP } from './edgeKey';
 
 export type DiffKind = 'added' | 'changed' | 'removed';
 
@@ -19,8 +20,7 @@ export interface GraphDiff {
     edgesRemoved: [string, string][];
 }
 
-const SEP = '\u0000';
-const edgeKey = (e: Pick<KEdge, 'from' | 'to' | 'kind'>): string => `${e.from}${SEP}${e.to}${SEP}${e.kind}`;
+const SEP = EDGE_KEY_SEP;
 
 /** A node's badges as one comparable string (keys sorted, so insertion order never reads as a change). */
 function badgeKey(n: KNode): string {

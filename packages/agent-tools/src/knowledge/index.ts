@@ -140,3 +140,4 @@ export {
     type PumpSource, type ReplicaHost, type ReplicaHostOptions, type UploadMarks,
 } from './replicaHost.js';
 export { type ReplicaHostClient, type SeedPort } from './replicaHostParts.js';
+export { readReviewCommit, writeReviewCommit } from './reviewCommit.js';

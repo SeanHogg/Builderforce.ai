@@ -239,7 +239,7 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
     // The wire type is the extension's; the view's `Commit` is mapped from it HERE, once.
     history: async (rootId: string) => {
         const out = await t.call<KnowledgeHistoryResult>({ op: 'history', rootId });
-        return { commits: out.commits.map((c) => ({ sha: c.sha, title: c.title, at: c.at, refs: c.refs, ...(c.author ? { author: c.author } : {}) })) };
+        return { commits: out.commits.map((c) => ({ sha: c.sha, ...(c.parent ? { parent: c.parent } : {}), title: c.title, at: c.at, refs: c.refs, ...(c.author ? { author: c.author } : {}) })) };
     },
     syncStatus: (rootId: string) => t.call<SyncStatus>({ op: 'syncStatus', rootId }),
     // Retry upload: the extension clears the root's recorded failures and drains its replica queue now.

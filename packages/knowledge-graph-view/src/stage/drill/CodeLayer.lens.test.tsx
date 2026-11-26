@@ -15,7 +15,8 @@ const PLACE: Lens = { ref: 'src:sys::order.ts#place', kind: 'method', count: 1 }
 const lens = new Map<number, Lens>([[3, ORDER], [10, PLACE]]);
 const facts: SymbolFacts = {
     untested: (ref) => ref === PLACE.ref,
-    antiPatternOf: (ref) => (ref === ORDER.ref ? { kind: 'god-module', findingId: 'f1' } : null),
+    testReach: (ref) => (ref === PLACE.ref ? 'none' : 'reached'),
+    antiPatternOf: (ref) => (ref === ORDER.ref ? { kind: 'god-module', findingId: 'f1', restructurable: true } : null),
 };
 const ctx = (over: Partial<LensCtx> = {}): LensCtx => ({ facts, inside: PLACE.ref, has: () => true, ...over });
 const layer = (extra: Partial<CodeLayerProps> = {}) => <CodeLayer target={target} reader={reader} labels={L} onClose={vi.fn()} lens={lens} {...extra} />;

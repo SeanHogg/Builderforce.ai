@@ -10,7 +10,7 @@ import { buildStageModel } from '../stageModel';
 import { PLACEMENTS, type PlacementReq } from './index';
 
 const graph = withSymbols(surfaceFixture());
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const place = (camera: PlacementReq['camera']): Placement => {
     const t = PLACEMENTS[camera](graph, model, { graph: 1, generation: model.marks.generation, camera, drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0 });
     while (!t.step());

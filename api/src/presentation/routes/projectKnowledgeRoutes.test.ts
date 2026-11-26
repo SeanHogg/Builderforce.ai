@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   graph: vi.fn(),
   putAnalysis: vi.fn(async () => undefined),
   upsertRelations: vi.fn(async (rows: unknown[]) => rows.length),
+  upsertScope: vi.fn(async (_scope: unknown) => undefined),
   scopes: vi.fn(async () => []),
   deleteRoot: vi.fn(),
   role: { value: 'developer' as string },
@@ -91,7 +92,7 @@ beforeEach(() => {
     env: {}, db, tenantId, projectId,
     store: {
       upsertRelations: mocks.upsertRelations, scopes: vi.fn(async () => []), factAuthor: vi.fn(async () => undefined),
-      scope: vi.fn(async () => mocks.scopeRow.value), upsertScope: vi.fn(async () => undefined),
+      scope: vi.fn(async () => mocks.scopeRow.value), upsertScope: mocks.upsertScope,
       factSources: vi.fn(async () => new Map()), humanRelationKeys: vi.fn(async () => new Set()),
     },
     extracted: { setSource: vi.fn(), snapshotReview: vi.fn() },
@@ -206,6 +207,18 @@ describe('project knowledge routes', () => {
     const scope = { rootId: 'pack:x-1', title: 'x', packs: [], provenance: { reviewedBy: 'a'.repeat(256) } };
     const res = await appWithErrors().request('/42/knowledge/write', post({ scope }), {});
     expect(res.status).toBe(400);
+  });
+
+  it('stores the commit a review ran at lower-cased, whatever case the client sent, and refuses a malformed one with 400', async () => {
+    const scope = { rootId: 'ws:a', title: 'a', packs: ['code'], lastDigest: 'd1' };
+    const ok = await routes().request('/42/knowledge/write', post({ scope: { ...scope, commitSha: 'ABCDEF1234567890'.repeat(2) } }), {});
+    expect(ok.status).toBe(200);
+    expect(mocks.upsertScope).toHaveBeenCalledWith(expect.objectContaining({ rootId: 'ws:a', commitSha: 'abcdef1234567890'.repeat(2) }));
+    mocks.upsertScope.mockClear();
+    for (const bad of ['HEAD', '--output=x', 'abc123', 'a'.repeat(65)]) {
+      expect((await appWithErrors().request('/42/knowledge/write', post({ scope: { ...scope, commitSha: bad } }), {})).status).toBe(400);
+    }
+    expect(mocks.upsertScope).not.toHaveBeenCalled();
   });
 
   it('answers a write of more than 500 rows with 413', async () => {

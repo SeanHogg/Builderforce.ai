@@ -21,10 +21,16 @@ import type { CameraRig, Placement } from '../types';
 import { bindGestures } from './gestures';
 import { RigController } from './rig';
 
-/** What a re-home is keyed by: the camera (the cache key's camera field) and the placement's extent. */
+/**
+ * What a re-home is keyed by: the camera (the cache key's camera field) and the placement's extent. A GROUND view's
+ * extent is its footprint (x, z): the height is the extrude, which the 3D / Flat switch changes, and a switch keeps the
+ * person's pan and zoom. An orbit view's height is part of what it frames, so it keeps y.
+ */
 export function homeKeyOf(p: Pick<Placement, 'cacheKey' | 'bounds' | 'rig'>): string {
     const camera = p.cacheKey.split('|')[1] ?? '';
-    return `${camera}|${p.rig.frame}|${p.bounds.min.join(',')}|${p.bounds.max.join(',')}`;
+    const { min, max } = p.bounds;
+    const extent = p.rig.view ? `${min.join(',')}|${max.join(',')}` : `${min[0]},${min[2]}|${max[0]},${max[2]}`;
+    return `${camera}|${p.rig.frame}|${extent}`;
 }
 
 /**

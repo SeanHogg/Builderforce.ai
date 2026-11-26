@@ -2,12 +2,12 @@
  * The docked pane above the code band (PRD 43 Part C1): the outline of the level on show, built from the stations the
  * stage already holds (no records walk, no `symbolsOf`). One row per member: its shape glyph, its name, a "No test" mark
  * and an anti-pattern mark (`SymbolFacts`, computed once by the wiring), and at the end its actions: Go inside when it
- * has an inside, Restructure when it carries an anti-pattern and the host handles it. A click on the row picks the
+ * has an inside, Restructure when it carries a restructurable anti-pattern and the host handles it. The marks come
+ * from `selectionFacts` over ALL the station's files (the same function the cards use). A click on the row picks the
  * member through the stage's own `onSelect` (the path the station card takes), so the picture moves to it.
  */
 
 import type { CSSProperties } from 'react';
-import { findingTitle } from '../../findingText';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
 import { typeShape, type MarkType } from '../../shapes';
@@ -15,9 +15,12 @@ import { CONTROL, list } from '../../styles';
 import { ShapeGlyph } from '../../surface/LegendGlyph';
 import type { Station } from '../../surface/stations';
 import type { SymbolFacts } from '../../surface/symbolFacts';
+import { selectionFacts } from '../../surface/transit/cardModel';
+import { actionGlyph } from '../../surface/ui/glyphs';
 import { TYPE } from '../../surface/ui/type';
-import { LINK_BUTTON, WarnGlyph } from '../drill/CodeLayer';
+import { LINK_BUTTON } from '../drill/linkButton';
 import { toggleButton } from './cardStyles';
+import { restructureTargetOf } from './restructureTarget';
 
 const ICON_PX = 12;
 
@@ -58,14 +61,17 @@ export function CodeOutline({ stations, keyOf, types, facts, selected, canEnter,
         <aside data-code-dock data-code-pane data-level-outline role="complementary" aria-label={t.dockAria} style={{ position: 'absolute', inset: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0, color: cssVar('text') }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <b style={TYPE.sectionHeading}>{t.outline}</b>
-                {onHide && <button type="button" data-action="dock-hide" aria-label={t.dockHide} title={t.dockHide} onClick={onHide} style={{ ...toggleButton, minHeight: 24 }}><span aria-hidden="true">‹</span></button>}
+                {onHide && <button type="button" data-action="dock-hide" aria-label={t.dockHide} title={t.dockHide} onClick={onHide} style={{ ...toggleButton, minHeight: 24 }}><span aria-hidden="true" style={{ display: 'inline-flex' }}>{actionGlyph('close')}</span></button>}
             </div>
             {note && <p role="note" data-outline-note style={{ margin: 0, ...TYPE.meta }}>{note}</p>}
             {stations.length === 0 && <p role="note" data-outline-empty style={{ margin: 0, ...TYPE.meta }}>{t.levelEmpty}</p>}
             <ul aria-label={t.levelAria} style={{ ...list, gap: 0, flex: '1 1 0', minHeight: 0, overflow: 'auto' }}>
                 {stations.map((s) => {
                     const key = keyOf(s), ref = s.refs[0] ?? s.id;
-                    const anti = facts.antiPatternOf(ref), untested = facts.untested(ref);
+                    // The ONE selection-facts function the cards use, over EVERY file of the station (the offender may be refs[1]).
+                    const sel = selectionFacts(facts, s.refs.length > 0 ? s.refs : [ref], labels);
+                    const anti = sel?.antiPattern ?? null, untested = sel?.tests === 'none';
+                    const restructurable = anti?.restructurable === true;
                     const type = types.get(s.id);
                     return (
                         <li key={s.id} data-outline-member={ref} style={rowBox(key === selected)}>
@@ -73,16 +79,16 @@ export function CodeOutline({ stations, keyOf, types, facts, selected, canEnter,
                                 {type && <ShapeGlyph shape={typeShape(type)} size={ICON_PX} />}
                                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{s.name}</span>
                                 {untested && <span data-mark="no-test" style={{ ...TYPE.meta, whiteSpace: 'nowrap' }}>{t.rowNoTest}</span>}
-                                {anti && <span data-mark="anti-pattern" style={{ display: 'inline-flex' }}><WarnGlyph size={ICON_PX} label={fillTemplate(t.rowAntiPattern, { name: findingTitle({ kind: anti.kind }, labels) })} /></span>}
+                                {anti && <span data-mark="anti-pattern" role="img" aria-label={fillTemplate(t.rowAntiPattern, { name: anti.name })} title={fillTemplate(t.rowAntiPattern, { name: anti.name })} style={{ display: 'inline-flex', color: cssVar('violation') }}>{actionGlyph('warning')}</span>}
                             </button>
                             {canEnter(s.id) && (
                                 <button type="button" data-row-action="enter" aria-label={fillTemplate(t.rowGoInside, { name: s.name })} title={fillTemplate(t.rowGoInside, { name: s.name })} onClick={() => onEnter(s.id)} style={act}>
-                                    <span aria-hidden="true">⤓</span>
+                                    {actionGlyph('inside')}
                                 </button>
                             )}
-                            {anti && onRestructure && (
-                                <button type="button" data-row-action="restructure" aria-label={fillTemplate(t.rowRestructure, { name: s.name })} title={fillTemplate(t.rowRestructure, { name: s.name })} onClick={() => onRestructure(ref)} style={act}>
-                                    <span aria-hidden="true">⚒</span>
+                            {restructurable && onRestructure && (
+                                <button type="button" data-row-action="restructure" aria-label={fillTemplate(t.rowRestructure, { name: s.name })} title={fillTemplate(t.rowRestructure, { name: s.name })} onClick={() => onRestructure(restructureTargetOf(facts, s.refs) ?? ref)} style={act}>
+                                    {actionGlyph('restructure')}
                                 </button>
                             )}
                         </li>

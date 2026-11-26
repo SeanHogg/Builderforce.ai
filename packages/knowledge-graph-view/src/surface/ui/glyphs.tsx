@@ -37,6 +37,9 @@ export function cameraGlyph(id: string): ReactNode {
         case 'flow': return <Glyph><path d="M2.5 13.5h3v-3h3v-3h3v-3h2" /></Glyph>;
         // Sequence: two lifelines with a call and its return.
         case 'sequence': return <Glyph><path d="M4 2.5v11M12 2.5v11M4 6h7M9.5 4.5 11 6 9.5 7.5M12 10H5M6.5 8.5 5 10l1.5 1.5" /></Glyph>;
+        // 3D / Flat switch (not cameras): a tilted sheet standing over its ground line, and a top-down sheet.
+        case 'depth3d': return <Glyph><path d="M3.5 6.5 8 3l4.5 3.5L8 10 3.5 6.5z" /><path d="M3.5 9.5 8 13l4.5-3.5" /></Glyph>;
+        case 'flat': return <Glyph><rect x="2.5" y="4.5" width="11" height="7" rx="1" /><path d="M2.5 8h11" /></Glyph>;
         // List: three horizontal lines.
         case 'list': return <Glyph><path d="M3 4.5h10M3 8h10M3 11.5h10" /></Glyph>;
         default: return undefined;

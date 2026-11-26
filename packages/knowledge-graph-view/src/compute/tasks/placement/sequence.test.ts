@@ -14,7 +14,7 @@ const calls = (from: string, to: string, sites: CallSite[]): KEdge => ({ from: f
 
 const base = withSymbols(surfaceFixture());
 const graph: KnowledgeGraph = { ...base, edges: [...base.edges, calls(RUN_REF, FAIL_REF, [site(0, 12)])] };
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 
 const ROUTES = 'src:sys::api/routes.ts';
 const ROUTER = `${ROUTES}#Router@1`, HANDLE = `${ROUTES}#Router.handle@2`, LOG = `${ROUTES}#Router.log@5`;
@@ -120,7 +120,7 @@ describe('the Sequence placement (PRD 43 B1a rule 10)', () => {
             nodes: [...graph.nodes, ...chain.map((ref, i) => ({ ref: ref as never, kind: 'symbol' as const, label: `f${i}`, pack: 'code', importance: 0.3, origin: 'extracted' as const, badges: { symbolKind: 'function', line: i + 1 } }))],
             edges: [...graph.edges, ...chain.slice(1).map((to, i) => calls(chain[i]!, to, [site(0, i + 1)]))],
         };
-        const m = buildStageModel(deep, []);
+        const m = buildStageModel(deep);
         const p = run(deep, req({ generation: m.marks.generation, lod: 2, pathId: `node:${chain[0]}` }), m);
         expect(p.caption.shown).toBe(SEQUENCE_MAX_DEPTH);
 
@@ -130,7 +130,7 @@ describe('the Sequence placement (PRD 43 B1a rule 10)', () => {
             nodes: [...graph.nodes, ...[`${ROUTES}#hub`, ...fan].map((ref) => ({ ref: ref as never, kind: 'symbol' as const, label: ref.split('#')[1]!, pack: 'code', importance: 0.3, origin: 'extracted' as const, badges: { symbolKind: 'function' } }))],
             edges: [...graph.edges, ...fan.map((to, i) => calls(`${ROUTES}#hub`, to, [site(i, i + 1)]))],
         };
-        const w = buildStageModel(wide, []);
+        const w = buildStageModel(wide);
         const q = run(wide, req({ generation: w.marks.generation, lod: 2, pathId: `node:${ROUTES}#hub` }), w);
         expect(q.caption).toEqual({ shown: SEQUENCE_MAX_MESSAGES, total: 100, capped: true });
     });

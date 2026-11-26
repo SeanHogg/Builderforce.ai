@@ -5,30 +5,36 @@
  * new question, family or graph).
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useContext, useEffect } from 'react';
 import type { ViewMode } from '../types';
 import type { AntiPatternGroup } from './drawers/antiPatternGroups';
 import type { PanelProps } from './registry';
 import { highlightFor, towerCameraOf, type TowerHighlight } from './towerHighlight';
+import { FlatViewContext } from './useFlatView';
 
 /** Files per group handed to the scene's focus (the highlight itself covers every finding). */
 export const TOWER_FOCUS = 40;
 
-/** Goes to the tower picture: the 3D view as it is, the Map with its towers look turned on. */
-export function goToTowers(camera: '3d' | 'transit' | null, setTowers: (on: boolean) => void, onCamera: ((mode: ViewMode) => void) | undefined): void {
+/**
+ * Goes to the tower picture: the 3D view as it is, the Map in 3D. The Map's towers ARE the 3D / Flat switch (the view
+ * derives them from it), so with the view's `setFlat` the switch is the one thing set; without it (a panel outside a
+ * view) the towers look is set directly.
+ */
+export function goToTowers(camera: '3d' | 'transit' | null, setTowers: (on: boolean) => void, onCamera: ((mode: ViewMode) => void) | undefined, setFlat?: ((flat: boolean) => void) | null): void {
     if (!camera) return;
-    if (camera === 'transit') setTowers(true);
+    if (camera === 'transit') { if (setFlat) setFlat(false); else setTowers(true); }
     onCamera?.(camera);
 }
 
 export function useShowInTower({ surface, onShow, onCamera, cameras }: Pick<PanelProps, 'surface' | 'onShow' | 'onCamera' | 'cameras'>): { canShow: boolean; show(groups: readonly AntiPatternGroup[]): void } {
     const camera = towerCameraOf(cameras);
     const { setHighlight, setTowers } = surface;
+    const setFlat = useContext(FlatViewContext);
     const show = useCallback((groups: readonly AntiPatternGroup[]) => {
         setHighlight(highlightFor(groups.flatMap((g) => g.findings)));
         onShow([...new Set(groups.flatMap((g) => g.files.slice(0, TOWER_FOCUS)))]);
-        goToTowers(camera, setTowers, onCamera);
-    }, [setHighlight, setTowers, onShow, onCamera, camera]);
+        goToTowers(camera, setTowers, onCamera, setFlat);
+    }, [setHighlight, setTowers, onShow, onCamera, camera, setFlat]);
     return { canShow: camera !== null, show };
 }
 

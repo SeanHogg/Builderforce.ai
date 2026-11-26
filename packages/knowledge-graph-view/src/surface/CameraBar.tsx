@@ -1,6 +1,6 @@
 /**
- * The camera bar: the segmented *View* group (the cameras from the registry, minus those marked
- * `switcher: false` such as Sequence, which the path strip owns) and, at the far end, an icon for
+ * The camera bar: the segmented *View* group (the cameras from the registry, minus any marked
+ * `switcher: false`, which the path strip owns; Sequence is in the switcher) and, at the far end, an icon for
  * "Out to …" (while a station is open). Right after the View group sits the `tools` slot
  * (the Panels and overlay icons; on a phone their own scrolling line). Zoom and Fit live only on the stage nav
  * (`stage/rig/NavControl`); the shape key is docked on the stage corner, not here.
@@ -28,6 +28,9 @@ export interface CameraBarProps {
     tools?: ReactNode;
     /** On a phone the tools take their own sideways-scrolling line instead of sharing the View row. */
     stacked?: boolean | undefined;
+    /** The ONE 3D / Flat switch (PRD 43 C4): `flat` is its state; absent `onFlat` ⇒ no switch. */
+    flat?: boolean | undefined;
+    onFlat?: ((flat: boolean) => void) | undefined;
 }
 
 export const zoomButton: CSSProperties = {
@@ -48,12 +51,30 @@ function IconButton({ label, onClick, testId, children }: { label: string; onCli
     );
 }
 
-export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, tools, stacked = false }: CameraBarProps) {
+/** The 3D / Flat switch: one pressed-state button; the glyph and (off a phone) the word name the state it is in. */
+function FlatSwitch({ labels, flat, onFlat, compact }: { labels: KnowledgeGraphLabels; flat: boolean; onFlat(flat: boolean): void; compact: boolean }) {
+    const word = flat ? labels.surface.scene.viewFlat : labels.surface.scene.view3d;
+    const label = labels.surface.scene.flatToggle;
+    return (
+        <button
+            type="button" data-testid="kg-flat-toggle" aria-pressed={flat} aria-label={label} title={`${label}: ${word}`}
+            style={{ ...iconButtonStyle, ...(compact ? {} : { width: 'auto', padding: '0 10px', gap: 6 }), ...(flat ? { background: cssVar('accent'), color: cssVar('onAccent') } : {}) }}
+            onClick={() => onFlat(!flat)}
+        >
+            {cameraGlyph(flat ? 'flat' : 'depth3d')}
+            {!compact && <span>{word}</span>}
+        </button>
+    );
+}
+
+export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, tools, stacked = false, flat = false, onFlat }: CameraBarProps) {
     // The row WRAPS: the right cluster (Out) never shrinks or scrolls away — on a narrow
     // container it drops to a second line, end-aligned. The scene sits below the MEASURED controls block
     // (`SceneOverlay`, `--kg-scene-top`), so a wrapped bar only moves the scene down. One line that never wrapped
     // pushed the cluster off-screen at ~700px and made the whole overlay wider than the scene (a sideways scrollbar).
     // Only the View group scrolls sideways, when it alone is wider than the row. Zoom and Fit are the stage nav's.
+    // The switch drives the stage: a camera that names a placement is drawn on it, the List (a DOM component) is not.
+    const drawsOnStage = !!cameras.find((c) => c.id === mode)?.placement;
     const backLabel = labels.surface.sequence.backToMap;
     const outLabel = outTo ? fillTemplate(labels.surface.overlay.outTo, { name: outTo }) : '';
     return (
@@ -67,6 +88,7 @@ export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, tools, 
                         onChange={(id) => onMode(id as ViewMode)}
                     />
                 </div>
+                {onFlat && drawsOnStage && <div style={{ flex: 'none', pointerEvents: 'auto' }}><FlatSwitch labels={labels} flat={flat} onFlat={onFlat} compact={stacked} /></div>}
                 {tools && !stacked && <div data-testid="kg-scene-tools" style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flex: 'none', pointerEvents: 'auto' }}>{tools}</div>}
                 {/* The Sequence camera has no button in the View group (the path strip's Enlarge opens it): this is its way back. */}
                 {mode === 'sequence' && (

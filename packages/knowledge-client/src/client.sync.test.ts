@@ -27,6 +27,14 @@ describe('client.sync (PRD 41 A11)', () => {
     expect(calls[0]!.path).toBe('/api/projects/5/knowledge/sync?syncId=abcdefgh&part=0&parts=3');
   });
 
+  it('sends the commit the review ran at beside the pack as ?commitSha=, and omits it when there is none', async () => {
+    const { client, calls } = clientWith(() => json({ ok: true, applied: true, generation: 1, digest: 'd' }));
+    await client.sync('r', { bytes: new Uint8Array([1]), commitSha: 'a'.repeat(40) });
+    await client.sync('r', { bytes: new Uint8Array([1]) });
+    expect(calls[0]!.path).toBe(`/api/projects/5/knowledge/sync?commitSha=${'a'.repeat(40)}`);
+    expect(calls[1]!.path).toBe('/api/projects/5/knowledge/sync');
+  });
+
   it('maps 409, 413 and 422 to typed errors that keep status and code', async () => {
     const mk = (status: number, code: string, extra: object = {}) => clientWith(() => json({ error: 'no', code, ...extra }, status)).client.sync('r', { bytes: new Uint8Array([1]) });
     const conflict = await mk(409, 'generation_mismatch', { generation: 9, digest: 'abc' }).catch((e) => e);

@@ -85,7 +85,11 @@ export interface KnowledgeScopeRecord extends ScopeRecord {
    * comparison reads as unknown, never as equal.
    */
   previousMeasured?: MeasuredWith;
-  /** `pack` = an uploaded portable knowledge pack, `review` = a reviewed folder. Computed by
+  /** The git commit the review at `lastDigest` ran at, when its client stated one (absent = unknown, e.g. not a git folder). */
+  commitSha?: string;
+  /** The same for the review at `previousDigest` — Compare's baseline: the editor reads that review's source at it. */
+  previousCommitSha?: string;
+  /** `pack` =an uploaded portable knowledge pack, `review` = a reviewed folder. Computed by
    *  the server from the root id (`isPackRootId`); absent from an older server (= `review`). */
   kind?: 'pack' | 'review';
 }
@@ -168,7 +172,11 @@ export interface SyncHavePair { hash: string; sourceRef: string }
  * One request of a sync: the pack's bytes, or one ordered part of them. What the review was measured with rides IN the
  * pack (its scope's `measured`, BFKP MEAS section, PRD 41 §C9) — never beside it.
  */
-export interface SyncPart { bytes: Uint8Array; syncId?: string; part?: number; parts?: number }
+export interface SyncPart {
+  bytes: Uint8Array; syncId?: string; part?: number; parts?: number;
+  /** The git commit the pack's review ran at (7-64 hex), as the host RECORDED it when that review completed (never read live at send time): rides BESIDE the pack as `?commitSha=` (the BFKP codec has no field for it). */
+  commitSha?: string;
+}
 
 /** The server's answer to a pack (or to a part that is not the last). */
 export type SyncAck =

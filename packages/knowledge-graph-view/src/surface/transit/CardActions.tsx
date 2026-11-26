@@ -58,17 +58,23 @@ export interface SelectionActionsProps {
     onCallers?: (() => void) | undefined;
     onSimulate?: (() => void) | undefined;
     onRestructure?: (() => void) | undefined;
+    /** False while the file's definitions are being read: Restructure shows disabled, with the loading tooltip. Default true. */
+    restructureReady?: boolean | undefined;
 }
 
-/** Callers, then Restructure in place of Simulate when the selection carries an anti-pattern. */
-export function SelectionActions({ labels, facts, onCallers, onSimulate, onRestructure }: SelectionActionsProps) {
+/**
+ * Callers, then Restructure in place of Simulate when the selection carries a RESTRUCTURABLE anti-pattern and the host
+ * handles it; otherwise Simulate (an anti-pattern with no proposer, or no handler, falls back to it).
+ */
+export function SelectionActions({ labels, facts, onCallers, onSimulate, onRestructure, restructureReady = true }: SelectionActionsProps) {
     const t = labels.surface.map.card;
     const anti = facts?.antiPattern ?? null;
+    const restructure = anti && anti.restructurable && onRestructure ? { anti, run: onRestructure } : null;
     return (
         <>
             {onCallers && <CardAction id="callers" glyph="callers" label={t.callers} ariaLabel={t.whoCalls} onClick={onCallers} />}
-            {anti
-                ? onRestructure && <CardAction id="restructure" glyph="restructure" label={t.restructure} title={fillTemplate(t.restructureTip, { name: anti.name })} onClick={onRestructure} />
+            {restructure
+                ? <CardAction id="restructure" glyph="restructure" label={t.restructure} disabled={!restructureReady} title={restructureReady ? fillTemplate(t.restructureTip, { name: restructure.anti.name }) : t.loading} onClick={restructure.run} />
                 : onSimulate && <CardAction id="simulate" glyph="simulate" label={t.simulate} title={t.simulateTip} onClick={onSimulate} />}
         </>
     );

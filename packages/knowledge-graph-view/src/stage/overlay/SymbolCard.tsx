@@ -45,9 +45,11 @@ export interface SymbolCardProps {
     onCallers?: (() => void) | undefined;
     onSimulate?: (() => void) | undefined;
     onRestructure?: (() => void) | undefined;
+    /** False while the restructure's file is being read: Restructure shows disabled. Default true. */
+    restructureReady?: boolean | undefined;
 }
 
-export function SymbolCard({ slotKey, symbolRef, name, state, records, markType, labels, onDrill, onCode, onZoomIn, onZoomOut, onOpenSource, facts: symbolFacts, onCallers, onSimulate, onRestructure }: SymbolCardProps) {
+export function SymbolCard({ slotKey, symbolRef, name, state, records, markType, labels, onDrill, onCode, onZoomIn, onZoomOut, onOpenSource, facts: symbolFacts, onCallers, onSimulate, onRestructure, restructureReady }: SymbolCardProps) {
     const el = useRef<HTMLElement | null>(null);
     const { missing } = useSlotAnchor(slotKey, el);
     if (!slotKey) return null;
@@ -76,7 +78,7 @@ export function SymbolCard({ slotKey, symbolRef, name, state, records, markType,
             <CardFacts labels={labels} facts={selection} />
             <div style={cardActionRow}>
                 {counts.calls > 0 && <CardAction id="drill-in" primary glyph="inside" label={t.drillInAction} onClick={onDrill} />}
-                <SelectionActions labels={labels} facts={selection} onCallers={onCallers} onSimulate={onSimulate} onRestructure={onRestructure} />
+                <SelectionActions labels={labels} facts={selection} onCallers={onCallers} onSimulate={onSimulate} onRestructure={onRestructure} restructureReady={restructureReady} />
                 <CardAction id="zoom-in" label={labels.zoomIn} onClick={onZoomIn} />
                 <CardAction id="show-code" label={t.showCode} onClick={onCode} />
                 {target && onOpenSource && (

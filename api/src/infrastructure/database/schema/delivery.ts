@@ -917,6 +917,10 @@ export const knowledgeScopes = pgTable('knowledge_scopes', {
   /** The same for `previousDigest`: moves with it when a new digest is recorded. */
   previousExtractorVersion: varchar('previous_extractor_version', { length: 64 }),
   previousToolVersions:     jsonb('previous_tool_versions').$type<Record<string, string>>(),
+  /** The git commit the review at `lastDigest` ran at (migration 1367); null = unknown (not a git folder, or a client that sent none). */
+  commitSha:         varchar('commit_sha', { length: 64 }),
+  /** The same for `previousDigest`: moves with it when a new digest is recorded. */
+  previousCommitSha: varchar('previous_commit_sha', { length: 64 }),
 }, (t) => [
   unique('uq_knowledge_scope').on(t.tenantId, t.projectId, t.rootId),
 ]);

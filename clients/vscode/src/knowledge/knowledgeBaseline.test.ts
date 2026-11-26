@@ -44,6 +44,12 @@ describe("knowledgeBaseline (PRD 41 §C9)", () => {
     expect(knowledgeBaseline(graph(["code"]), old, here(["code"], old))).toMatchObject({ comparable: true });
   });
 
+  it("carries the commit the before review ran at as `rev`, and none when unknown", () => {
+    const sha = "a".repeat(40);
+    expect(knowledgeBaseline(graph(["code"]), same(["code"]), here(["code"]), sha).rev).toBe(sha);
+    expect(knowledgeBaseline(graph(["code"]), same(["code"]), here(["code"]))).not.toHaveProperty("rev");
+  });
+
   it("treats a review stored before versions were recorded as unknown — never comparable", () => {
     expect(knowledgeBaseline(graph(["code"]), undefined, here(["code"])).comparable).toBe(false);
     expect(knowledgeBaseline(graph(["docs"]), undefined, here(["docs"])).reasons).toContain("measured-unknown");

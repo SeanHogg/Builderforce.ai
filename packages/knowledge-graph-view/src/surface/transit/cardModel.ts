@@ -42,21 +42,29 @@ export interface CardModel {
     leaf: boolean;
     /** Test reach and the anti-pattern's name; absent when the wiring passed no facts. */
     facts?: SelectionFacts | null;
+    /** Restructure is shown but disabled while false (see `CardInput.restructureReady`). */
+    restructureReady?: boolean;
 }
 
 /** What the selection's facts row and its Restructure action read: computed once by `symbolFacts`, only named here. */
 export interface SelectionFacts {
-    /** `none` = no test reaches it; null = unknown. */
+    /** `none` = no test reaches it; null = unknown (no coverage was collected). */
     tests: 'reached' | 'none' | null;
-    antiPattern: { kind: string; name: string; findingId: string } | null;
+    /** `restructurable` gates the Restructure action; the name and warning show for every kind. */
+    antiPattern: { kind: string; name: string; findingId: string; restructurable: boolean } | null;
 }
 
-/** The facts of a selection made of `refs` (a symbol, or a station's files): the first anti-pattern found, untested if any ref is. */
+/**
+ * The facts of a selection made of `refs` (a symbol, or a station's files): the anti-pattern found (a restructurable
+ * one wins, else the first), `none` if any ref has no test, `reached` if one is reached, else unknown.
+ */
 export function selectionFacts(facts: SymbolFacts | undefined, refs: readonly string[], labels: KnowledgeGraphLabels): SelectionFacts | null {
     if (!facts || refs.length === 0) return null;
-    const found = refs.map((r) => facts.antiPatternOf(r)).find((a) => a !== null) ?? null;
+    const all = refs.flatMap((r) => facts.antiPatternOf(r) ?? []);
+    const found = all.find((a) => a.restructurable) ?? all[0] ?? null;
+    const reach = refs.map((r) => facts.testReach(r));
     return {
-        tests: refs.some((r) => facts.untested(r)) ? 'none' : 'reached',
+        tests: reach.includes('none') ? 'none' : reach.includes('reached') ? 'reached' : null,
         antiPattern: found && { ...found, name: findingTitle({ kind: found.kind }, labels) },
     };
 }
@@ -75,6 +83,8 @@ export interface CardInput {
     stations?: readonly Station[] | undefined;
     /** The graph's facts, computed once by the wiring; absent ⇒ the card shows none. */
     facts?: SymbolFacts | undefined;
+    /** False while the anti-pattern's file is still being read (a `needsSymbols` kind): Restructure shows disabled. Default true. */
+    restructureReady?: boolean | undefined;
 }
 
 const ANTI_WORDS = ['none', 'low', 'medium', 'high', 'severe'] as const;
@@ -112,5 +122,6 @@ export function buildCard(i: CardInput): CardModel {
         hasPatterns: s.patterns.length > 0,
         leaf: i.leaf,
         facts: selectionFacts(i.facts, s.refs, labels),
+        restructureReady: i.restructureReady ?? true,
     };
 }

@@ -13226,6 +13226,10 @@
         "title": "Un tableau gagne désormais son budget, et vos collègues ont enfin une page",
         "description": "La livraison n’apparaissait ni dans ce qu’un tableau gagne ni dans ce que voient les investisseurs. Désormais chaque ticket qui passe à Terminé fait gagner du budget à son tableau, les jalons remontent vers le canal investisseurs et chaque collègue a un profil accessible depuis une mention."
       },
+      "see-your-code-as-a-3d-picture": {
+        "title": "Voyez votre code en image 3D, avec le code à côté",
+        "description": "La vue Connaissance affiche désormais le code et une image 3D du système côte à côte, à un emplacement partagé. Cliquez sur une forme pour lire son code, sur une méthode pour y entrer, et prévisualisez une restructuration avant que quiconque ne modifie une ligne."
+      },
       "run-your-app-on-the-canvas": {
         "title": "Exécutez l'application que votre tableau vient de construire, sans quitter le tableau",
         "description": "Un canevas qui écrit un backend, une page et une note de mise en place n'avait nulle part où les exécuter. La surface Application assemble chaque carte de code en une application qui fonctionne, aux largeurs d'appareil réelles, sur le même tableau que celui où vous l'avez construite."
@@ -39034,6 +39038,7 @@
     "viewSystem": "Système",
     "viewHeat": "Chaleur",
     "viewSequence": "Séquence",
+    "viewFlow": "Flux",
     "panelRun": "Examens",
     "panelCoverage": "Couverture",
     "panelPatterns": "Motifs",
@@ -39747,7 +39752,15 @@
           "leaf": "Hors de ce niveau",
           "loading": "Lecture des symboles…",
           "callSite": "Site d'appel",
-          "openAtLine": "Ouvrir à la ligne {line}"
+          "openAtLine": "Ouvrir à la ligne {line}",
+          "callers": "Appelants",
+          "simulate": "Simuler",
+          "simulateTip": "Faire passer le chemin par ici et voir ce qu’il atteint",
+          "restructure": "Restructurer",
+          "restructureTip": "Voir {name} restructuré",
+          "risk": "Risque",
+          "testReached": "Un test l’atteint",
+          "testNone": "Aucun test ne l’atteint"
         },
         "stats": {
           "issues": "Antimodèles",
@@ -40064,7 +40077,9 @@
         "errorTitle": "Cette vue a rencontré une erreur",
         "errorRetry": "Réessayer",
         "errorBack": "Retour",
-        "depth": "Profondeur"
+        "view3d": "3D",
+        "viewFlat": "À plat",
+        "flatToggle": "Vue à plat"
       },
       "nav": {
         "group": "Déplacer la vue",
@@ -40138,12 +40153,6 @@
         "outline": "Structure",
         "outlineAria": "Symboles de ce fichier",
         "tabsAria": "Fichiers ouverts",
-        "layoutAria": "Disposition du niveau code",
-        "flow": "Flux",
-        "sequence": "Séquence",
-        "viewAria": "Vue de la carte",
-        "view3d": "3D",
-        "view2d": "2D",
         "followsEditor": "Suit l’éditeur",
         "stateSelected": "sélectionné",
         "stateReading": "en lecture",
@@ -40158,7 +40167,46 @@
         "status": "Visualisation · niveau {level} · {state}",
         "following": "suit {file}",
         "pinnedStatus": "épinglé",
-        "statusLine": "L. {line}"
+        "statusLine": "L. {line}",
+        "dockAria": "Code et plan",
+        "dockHide": "Masquer le code",
+        "dockShow": "Afficher le code",
+        "levelAria": "Membres de ce niveau",
+        "levelEmpty": "Rien à ce niveau pour l’instant.",
+        "levelNoSource": "Le source n’est pas disponible ici : le plan est affiché.",
+        "rowNoTest": "Aucun test",
+        "rowAntiPattern": "Anti-patron : {name}",
+        "rowGoInside": "Entrer dans {name}",
+        "rowRestructure": "Restructurer {name}",
+        "paneSwitchAria": "Afficher le code ou l’image",
+        "paneCode": "Code",
+        "panePicture": "Image",
+        "lensOut": "Sortie",
+        "lensSimulate": "Aucun test · Simuler",
+        "lensRestructure": "{name}",
+        "gutterWarn": "Anti-patron : {name}"
+      },
+      "compare": {
+        "aria": "Comparaison",
+        "sourceBaseline": "Comparé à la dernière revue",
+        "sourceSnapshot": "Comparé à l’instantané précédent",
+        "sourceRestructure": "Restructuration : {kind} dans {target}",
+        "sourceCommit": "Commit {sha} : {title}",
+        "sideGroup": "Avant ou après",
+        "playRestructure": "Rejouer la restructuration",
+        "playHistory": "Rejouer l’historique",
+        "playBaseline": "Rejouer le changement",
+        "apply": "Appliquer sur une branche",
+        "applyTip": "Ouvre le flux de correction pour ce constat. Rien ne change tant que vous ne l’appliquez pas.",
+        "close": "Arrêter la comparaison",
+        "notComparable": "Ces deux côtés ne peuvent pas être comparés : {reasons}",
+        "noBefore": "Il n’y a pas de version antérieure à afficher.",
+        "oldNotAvailable": "La version antérieure n’est pas disponible ici.",
+        "seeRestructured": "Le voir restructuré",
+        "restructureLoading": "Lecture du fichier pour proposer une restructuration…",
+        "restructureNone": "Aucune restructuration ne peut être proposée pour celui-ci.",
+        "codeMarks": "{added} lignes ajoutées, {removed} lignes supprimées",
+        "movedOut": "Les définitions marquées passent dans {modules}"
       },
       "api": {
         "notSetUpTitle": "Aucun endpoint trouvé",

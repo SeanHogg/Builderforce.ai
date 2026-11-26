@@ -28,7 +28,7 @@ import { FLAG, SLOT_NODE, type Placement } from './types';
 
 const g = codeFixture();
 const strings = Object.fromEntries(PLACEMENT_WORD_KEYS.map((k) => [k, L[k]]));
-const model = buildStageModel(g, [], strings);
+const model = buildStageModel(g, strings);
 const { marks } = model;
 const req: PlacementReq = { graph: 1, generation: marks.generation, camera: 'graph', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0 };
 const t = PLACEMENTS.graph(g, model, req);
@@ -38,7 +38,7 @@ const graph: Placement = t.result();
 const mount = (over: Partial<Parameters<typeof Stage>[0]> = {}) => {
     const onSelect = vi.fn();
     const utils = render(
-        <Stage renderer={createNoopStage()} marks={marks} paint={null} placement={graph} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={onSelect} depthLabel="Depth" {...over} />,
+        <Stage renderer={createNoopStage()} marks={marks} paint={null} placement={graph} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={onSelect} {...over} />,
     );
     return { onSelect, ...utils };
 };
@@ -93,7 +93,7 @@ describe('the Graph camera on the stage (was Graph2D)', () => {
         const host = { register: (a: ZoomApi) => { api = a; }, unregister: (a: ZoomApi) => { if (api === a) api = null; } };
         const { container } = render(
             <ZoomProvider host={host}>
-                <Stage renderer={createNoopStage()} marks={marks} paint={null} placement={graph} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={() => {}} depthLabel="Depth" />
+                <Stage renderer={createNoopStage()} marks={marks} paint={null} placement={graph} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={() => {}} />
             </ZoomProvider>,
         );
         expect(screen.queryByRole('button', { name: L.zoomIn })).toBeNull();

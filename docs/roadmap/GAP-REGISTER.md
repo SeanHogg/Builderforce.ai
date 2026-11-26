@@ -399,6 +399,7 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 - `AE-G053` **Duplicate label tables:** audit each host.
 - `AE-G054` **`DEFAULT_CHAT_TITLE` has two homes.** Give the Brain chat contract one shared home.
 - `AE-G055` **Project #11 still carries a placeholder key, so every ticket key reads `1-UNTITLED-1773010025035-N`** (found 2026-11-19, chats #273/#275). The key was stored before `buildProjectKey` stopped generating placeholders; `tickets.from_delta` and normal creation both build keys correctly from it. Fix: rename the project key, which re-keys every ticket on the board via `rekeyProject`. *Blocker: operator decision to re-key project #11's tickets.*
+- `AE-G056` **The god-module restructure preview cannot be checked against what the codemod moves (PRD 43 Part C, C6).** `compute/compare/restructure.ts` splits a god module into connected components of its members' internal calls/uses; `surface/codemods.ts` only names the `god-module → splitByCommand` row (kind, label, `builtin`) and exposes no split plan, so a test can only assert the row exists. Fix: give the codemod a pure planner (`planSplit(graph, finding, symbols) → { moves: Map<memberRef, newModuleRef> }`) that both the codemod and the preview call, then delete the proposer's own grouping. *Blocker: the `splitByCommand` codemod's grouping rule lives in the host fix flow and is not specified anywhere this repo can read; it needs its owner to state the rule.* [make.md › PRD 43 Part C](../../docs/specs/make.md)
 
 ### Evermind / SSM `[agents]`
 

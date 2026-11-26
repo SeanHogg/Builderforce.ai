@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { readStored, writeStored } from './viewerStorage';
 
 /** The three docks `DockEdge` draws an edge for. */
 export type PanelSlot = 'left' | 'bottom' | 'right';
@@ -15,23 +16,12 @@ export const PANEL_VISIBILITY_KEY = 'kg.panelVisibility.v1';
 const ALL_SHOWN: PanelVisibility = { left: true, bottom: true, right: true, code: true };
 
 function read(): PanelVisibility {
-    try {
-        const raw = window.localStorage.getItem(PANEL_VISIBILITY_KEY);
-        const parsed = raw ? JSON.parse(raw) as Partial<Record<VisibilitySlot, unknown>> : null;
-        if (!parsed || typeof parsed !== 'object') return ALL_SHOWN;
-        return { left: parsed.left !== false, bottom: parsed.bottom !== false, right: parsed.right !== false, code: parsed.code !== false };
-    } catch {
-        return ALL_SHOWN;
-    }
+    const parsed = readStored(PANEL_VISIBILITY_KEY) as Partial<Record<VisibilitySlot, unknown>> | null;
+    if (!parsed || typeof parsed !== 'object') return ALL_SHOWN;
+    return { left: parsed.left !== false, bottom: parsed.bottom !== false, right: parsed.right !== false, code: parsed.code !== false };
 }
 
-function write(v: PanelVisibility): void {
-    try {
-        window.localStorage.setItem(PANEL_VISIBILITY_KEY, JSON.stringify(v));
-    } catch {
-        /* storage blocked: the choice lasts for this session only */
-    }
-}
+const write = (v: PanelVisibility): void => writeStored(PANEL_VISIBILITY_KEY, v);
 
 export function usePanelVisibility() {
     // All shown on the first render (server and client agree); the stored choice is read after mount.

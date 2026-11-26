@@ -14,7 +14,7 @@ import { PLACEMENTS, type PlacementReq } from './index';
 import { drillFrameOf, drillKeyOf } from './request';
 
 const graph = surfaceFixture();
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const { marks } = model;
 const base = marks.keys.length;
 const CLS = `${USE_CASE}#UseCase`;

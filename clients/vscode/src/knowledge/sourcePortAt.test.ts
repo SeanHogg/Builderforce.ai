@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const git = vi.hoisted(() => ({
   calls: [] as { cwd: string; args: string[] }[],
-  answer: (_args: string[]): { stdout?: string; failure?: string } => ({ failure: "error" }),
+  answer: (_args: string[]): { stdout?: string; stderr?: string; failure?: string } => ({ failure: "error" }),
 }));
+const reported = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock("../diagnostics/errorReporter", () => ({ reportExtensionError: reported }));
 
 vi.mock("vscode", () => ({ Uri: { file: (fsPath: string) => ({ fsPath }) }, workspace: { fs: {} }, window: {}, Range: class {} }));
 vi.mock("@builderforce/agent-tools/node-git-history", () => ({
@@ -11,7 +13,8 @@ vi.mock("@builderforce/agent-tools/node-git-history", () => ({
 }));
 
 import { slash, type KnowledgeRoot } from "./knowledgeRoots";
-import { COMMIT_SHA, MAX_SOURCE_FILE_BYTES, readSourceAt } from "./sourcePort";
+import { COMMIT_SHA } from "./commitSha";
+import { MAX_SOURCE_FILE_BYTES, readSourceAt } from "./sourcePort";
 
 const root: KnowledgeRoot = { rootId: "r", title: "root", rootPath: slash("/repo/root"), folderPath: slash("/repo/root"), rel: "" };
 const SHA = "abc1234def";
@@ -23,13 +26,15 @@ const repoHas = (blob: string, size = Buffer.byteLength(blob)): void => {
 
 beforeEach(() => {
   git.calls = [];
+  reported.mockClear();
   git.answer = () => ({ failure: "error" });
 });
 
 describe("sourcePort.readSourceAt", () => {
-  it("accepts only a 7-40 hex sha", () => {
-    for (const ok of ["abc1234", "ABC1234", "a".repeat(40)]) expect(COMMIT_SHA.test(ok)).toBe(true);
-    for (const bad of ["abc123", "a".repeat(41), "HEAD", "main", "HEAD~1", "abc1234..def5678", "--output=x", "-abc1234", "abc1234\n", "abc1234 ", "abc123g"]) {
+  // The SAME table as the API's `commitSha.test.ts` (COMMIT_SHA_PATTERN): the two packages state one shape, 7-64 hex (SHA-256 repos).
+  it("accepts only a 7-64 hex sha (parity table with the API's COMMIT_SHA_PATTERN)", () => {
+    for (const ok of ["abc1234", "ABC1234", "a".repeat(40), "a".repeat(64)]) expect(COMMIT_SHA.test(ok)).toBe(true);
+    for (const bad of ["", "abc123", "a".repeat(65), "HEAD", "main", "HEAD~1", "abc1234..def5678", "--output=x", "-abc1234", "abc1234\n", "abc1234 ", "abc123g"]) {
       expect(COMMIT_SHA.test(bad)).toBe(false);
     }
   });
@@ -65,7 +70,31 @@ describe("sourcePort.readSourceAt", () => {
     expect(git.calls.map((c) => c.args[1])).toEqual(["-s"]);
   });
 
-  it("answers null when git fails (unknown commit, file absent then, not a repository)", async () => {
+  it("answers null only when the path is absent at a commit that exists", async () => {
+    git.answer = (args) => (args[1] === "-e" ? { stdout: "" } : { failure: "error", stderr: `fatal: Not a valid object name ${SHA}:./a.ts` });
     expect(await readSourceAt(root, "a.ts", SHA, 1, 1)).toBeNull();
+    git.answer = (args) => (args[1] === "-e" ? { stdout: "" } : { failure: "error", stderr: `fatal: path 'a.ts' does not exist in '${SHA}'` });
+    expect(await readSourceAt(root, "a.ts", SHA, 1, 1)).toBeNull();
+    expect(reported).not.toHaveBeenCalled();
+  });
+
+  it("throws and reports every other failure: unknown commit, not a repository, timeout, buffer, git missing", async () => {
+    const failures: { failure: "error" | "timeout" | "buffer"; stderr?: string }[] = [
+      { failure: "error", stderr: `fatal: Not a valid object name ${SHA}:./a.ts` }, // commit unknown: the -e check fails below
+      { failure: "error", stderr: "fatal: not a git repository (or any of the parent directories): .git" },
+      { failure: "timeout" },
+      { failure: "buffer" },
+      { failure: "error" }, // git missing: no stderr
+    ];
+    for (const f of failures) {
+      git.answer = () => f;
+      await expect(readSourceAt(root, "a.ts", SHA, 1, 1)).rejects.toThrow(/git could not read a\.ts/);
+    }
+    expect(reported).toHaveBeenCalledTimes(failures.length);
+  });
+
+  it("throws when the blob read fails after its size was read", async () => {
+    git.answer = (args) => (args[1] === "-s" ? { stdout: "3\n" } : { failure: "error", stderr: "fatal: bad object" });
+    await expect(readSourceAt(root, "a.ts", SHA, 1, 1)).rejects.toThrow(/bad object/);
   });
 });

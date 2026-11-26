@@ -13,6 +13,12 @@ const mocks = vi.hoisted(() => ({
   generation: vi.fn(),
   leaves: vi.fn(),
   have: vi.fn(),
+  reportCaught: vi.fn(),
+}));
+
+vi.mock('../../application/observability/caughtErrorReporter', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../application/observability/caughtErrorReporter')>()),
+  reportCaughtError: mocks.reportCaught,
 }));
 
 vi.mock('../middleware/authMiddleware', () => ({
@@ -73,6 +79,47 @@ describe.each([['tenant door', () => createProjectKnowledgeRoutes({} as never)],
     const { url, init } = send(new Uint8Array([1]), KPACK, `?extractorVersion=5&toolVersions=${tools}`);
     expect((await make().request(url, init)).status).toBe(200);
     expect(mocks.apply.mock.calls[0]![1]).not.toHaveProperty('measured');
+  });
+
+  it('passes the commit the review ran at (?commitSha=) on, lower-cased, without reporting anything', async () => {
+    mocks.apply.mockResolvedValue({ applied: true, generation: 4, digest: 'd' });
+    const sha = 'ABCDEF1234567890'.repeat(2);
+    const good = send(new Uint8Array([1]), KPACK, `?commitSha=${sha}`);
+    expect((await make().request(good.url, good.init)).status).toBe(200);
+    expect(mocks.apply.mock.calls[0]![1]).toMatchObject({ commitSha: sha.toLowerCase() });
+    expect(mocks.reportCaught).not.toHaveBeenCalled();
+  });
+
+  it('drops anything that is not a 7-64 hex sha, still applies the pack, and REPORTS the drop', async () => {
+    mocks.apply.mockResolvedValue({ applied: true, generation: 4, digest: 'd' });
+    for (const bad of ['HEAD', 'main~1', '--output=x', 'abc123', 'a'.repeat(65)]) {
+      mocks.apply.mockClear();
+      mocks.reportCaught.mockClear();
+      const { url, init } = send(new Uint8Array([1]), KPACK, `?commitSha=${encodeURIComponent(bad)}`);
+      expect((await make().request(url, init)).status).toBe(200);
+      expect(mocks.apply.mock.calls[0]![1]).not.toHaveProperty('commitSha');
+      expect(mocks.reportCaught).toHaveBeenCalledWith(expect.any(Error), expect.objectContaining({ operation: 'knowledgeSync.commitSha', level: 'warning' }));
+    }
+  });
+
+  it('a 64-hex (SHA-256) commit is accepted', async () => {
+    mocks.apply.mockResolvedValue({ applied: true, generation: 4, digest: 'd' });
+    const { url, init } = send(new Uint8Array([1]), KPACK, `?commitSha=${'c'.repeat(64)}`);
+    await make().request(url, init);
+    expect(mocks.apply.mock.calls[0]![1]).toMatchObject({ commitSha: 'c'.repeat(64) });
+  });
+
+  it('carries the commit on every part of a multi-part pack, beside syncId, part and parts', async () => {
+    mocks.apply.mockResolvedValue({ applied: false, syncId: 'abcdefgh', received: 1, parts: 2 });
+    const sha = 'a'.repeat(40);
+    for (const part of [0, 1]) {
+      const { url, init } = send(new Uint8Array([1]), KPACK, `?syncId=abcdefgh&part=${part}&parts=2&commitSha=${sha}`);
+      await make().request(url, init);
+    }
+    expect(mocks.apply.mock.calls.map((c) => c[1])).toEqual([
+      expect.objectContaining({ syncId: 'abcdefgh', part: 0, parts: 2, commitSha: sha }),
+      expect.objectContaining({ syncId: 'abcdefgh', part: 1, parts: 2, commitSha: sha }),
+    ]);
   });
 
   it.each([[409, 'generation_mismatch'], [413, 'pack_too_large'], [422, 'bad_pack']] as const)('maps %i %s to a typed answer', async (status, code) => {

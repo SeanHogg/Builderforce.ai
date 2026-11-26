@@ -10,8 +10,11 @@ const METHOD: Lens = { ref: 'src:sys::order.ts#place', kind: 'method', count: 1 
 
 const facts = (over: Partial<{ untested: string[]; anti: Record<string, string> }> = {}): SymbolFacts => ({
     untested: (ref) => (over.untested ?? []).includes(ref),
-    antiPatternOf: (ref) => (over.anti?.[ref] ? { kind: over.anti[ref]!, findingId: `f:${ref}` } : null),
+    testReach: (ref) => ((over.untested ?? []).includes(ref) ? 'none' : 'reached'),
+    antiPatternOf: (ref) => (over.anti?.[ref] ? { kind: over.anti[ref]!, findingId: `f:${ref}`, restructurable: RESTRUCTURABLE.has(over.anti[ref]!) } : null),
 });
+/** The kinds with a Restructure proposer (a cycle is an anti-pattern with none). */
+const RESTRUCTURABLE: ReadonlySet<string> = new Set(['god-module', 'partition-violation']);
 const ctx = (f: SymbolFacts, handled: LensActionId[] = [], inside: string | null = null): LensCtx => ({ facts: f, inside, has: (id) => handled.includes(id) || ['references', 'show', 'callers', 'drill'].includes(id) });
 const ids = (lens: Lens, c: LensCtx | null) => visibleLensActions(lens, c).map((r) => r.id);
 
@@ -52,6 +55,11 @@ describe('the lens actions table', () => {
         expect(rows.find((r) => r.id === 'restructure')!.label(t, CLASS, ctx(f, ['restructure']))).toBe('god-module');
         expect(ids(CLASS, ctx(f, []))).not.toContain('restructure');
         expect(ids(METHOD, ctx(f, ['restructure']))).not.toContain('restructure');
+    });
+
+    it('restructure is hidden for an anti-pattern kind that has no proposer (the warning still shows elsewhere)', () => {
+        const f = facts({ anti: { [CLASS.ref]: 'cycle' } });
+        expect(ids(CLASS, ctx(f, ['restructure']))).not.toContain('restructure');
     });
 
     it('keeps the display order with every new row on', () => {

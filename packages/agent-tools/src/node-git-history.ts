@@ -32,8 +32,11 @@ export const AUTHOR_END = "\u001f";
 /** A control character as a git `--format` escape (`%xNN`), so each `--format` below is spelled from the constants the parsers read. */
 const formatEscape = (char: string): string => `%x${char.charCodeAt(0).toString(16).padStart(2, "0")}`;
 
-/** THE `--format` of `recentCommits`, read back by `parseRecentCommits`: `<RS>%H|%cI|%an<US>%s`. */
-export const RECENT_COMMITS_FORMAT = `${formatEscape(COMMIT_MARK)}%H|%cI|%an${formatEscape(AUTHOR_END)}%s`;
+/** Separates the sha from its parents (a GROUP SEPARATOR, `%x1d`) in a `recentCommits` header: `%H<GS>%P`. */
+export const PARENT_SEP = "\u001d";
+
+/** THE `--format` of `recentCommits`, read back by `parseRecentCommits`: `<RS>%H<GS>%P|%cI|%an<US>%s`. */
+export const RECENT_COMMITS_FORMAT = `${formatEscape(COMMIT_MARK)}%H${formatEscape(PARENT_SEP)}%P|%cI|%an${formatEscape(AUTHOR_END)}%s`;
 
 /** THE `--format` of the history port's `-z` log, read back by `commitFilesParser`: `<RS><US>%cI` (committer time, what `--since` filters on). */
 export const HISTORY_FORMAT = `${formatEscape(COMMIT_MARK)}${formatEscape(AUTHOR_END)}%cI`;
@@ -73,7 +76,13 @@ export function runGit(cwd: string, args: string[], opts: { timeoutMs?: number }
 const git = runGit;
 
 /** One commit of `git log`, with the root-relative paths it touched. */
-export interface RecentCommit { sha: string; at: string; title: string; paths: string[]; /** `%an`; absent when the log did not carry one. */ author?: string }
+export interface RecentCommit {
+  sha: string; at: string; title: string; paths: string[];
+  /** `%an`; absent when the log did not carry one. */
+  author?: string;
+  /** The FIRST parent's sha (`%P`); absent for a root commit or a log without parents. */
+  parent?: string;
+}
 
 /** `git log --format=${RECENT_COMMITS_FORMAT} --name-only` output as commits (a header with no author separator is the older `%H|%cI|%s`). Pure. */
 export function parseRecentCommits(log: string): RecentCommit[] {
@@ -89,9 +98,12 @@ export function parseRecentCommits(log: string): RecentCommit[] {
       const rest = body.slice(second + 1);
       const split = rest.indexOf(AUTHOR_END);
       const author = split > 0 ? rest.slice(0, split).trim() : "";
+      const [sha = "", parents = ""] = body.slice(0, first).split(PARENT_SEP);
+      const parent = parents.split(" ")[0] ?? "";
       current = {
-        sha: body.slice(0, first), at: body.slice(first + 1, second), title: split >= 0 ? rest.slice(split + 1) : rest, paths: [],
+        sha, at: body.slice(first + 1, second), title: split >= 0 ? rest.slice(split + 1) : rest, paths: [],
         ...(author ? { author } : {}),
+        ...(parent ? { parent } : {}),
       };
       commits.push(current);
       continue;

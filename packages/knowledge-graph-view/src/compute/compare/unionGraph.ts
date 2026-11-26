@@ -6,6 +6,7 @@
  */
 
 import type { KEdge, KnowledgeGraph, KNode } from '@seanhogg/builderforce-memory/knowledge';
+import { edgeKey } from './edgeKey';
 
 export interface UnionGraph {
     graph: KnowledgeGraph;
@@ -36,11 +37,10 @@ export function unionGraph(before: KnowledgeGraph, after: KnowledgeGraph): Union
 
     // After's copy wins an edge too: walk after first for the value, but keep before's order for stable slots.
     const edgeOf = new Map<string, KEdge>();
-    const key = (e: KEdge): string => `${e.from}\u0000${e.to}\u0000${e.kind}`;
-    for (const e of after.edges) if (!edgeOf.has(key(e))) edgeOf.set(key(e), e);
+    for (const e of after.edges) if (!edgeOf.has(edgeKey(e))) edgeOf.set(edgeKey(e), e);
     const edges: KEdge[] = [], taken = new Set<string>();
     for (const e of [...before.edges, ...after.edges]) {
-        const k = key(e);
+        const k = edgeKey(e);
         if (taken.has(k)) continue;
         taken.add(k);
         edges.push(edgeOf.get(k) ?? e);

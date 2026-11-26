@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Finding, KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { codeFixture } from '../../testing';
+import { CODEMODS } from '../../surface/codemods';
 import type { SymbolRecord } from '../../types';
 import { isRestructurable, needsSymbols, PROPOSERS, proposeRestructure } from './restructure';
 
@@ -44,6 +45,12 @@ describe('restructure: the table', () => {
         for (const k of ['cycle', 'clone-group', 'unused-file', 'constructor', 'toString']) expect(isRestructurable(k), k).toBe(false);
         expect(needsSymbols('god-module')).toBe(true);
         expect(needsSymbols('partition-violation')).toBe(false);
+    });
+
+    it('agrees with the codemod table on the kind: god-module is the split-by-command row (what moves is not exposed there)', () => {
+        const row = CODEMODS.find((r) => r.kind === 'god-module');
+        expect(row?.labelKey).toBe('splitByCommand');
+        expect(isRestructurable(row!.kind)).toBe(true);
     });
 
     it('proposeRestructure is null for a kind with no row', () => {
@@ -90,11 +97,19 @@ describe('restructure: god-module', () => {
         const a = R('api/big.fetchUsers.ts'), b = R('api/big.renderPage.ts');
         expect(p.after.nodes.map((n) => n.ref)).toEqual([R('web/caller.ts'), a, b, R('lib/util.ts')]);
         expect([...p.bornFrom]).toEqual([[a, R('api/big.ts')], [b, R('api/big.ts')]]);
+        // every definition (and member) that leaves the file names the module it lands in; the two modules between them hold them all
+        expect(new Set(p.moved.values())).toEqual(new Set([a, b]));
+        // the lines come from the symbols the proposer held, so the code pane loads none: fetchUsers (1) runs to line 4, the last definition to the end
+        expect(p.spans[0]).toMatchObject({ path: 'api/big.ts', from: 1, to: 4 });
+        expect(p.spans.at(-1)!.to).toBe(Infinity);
+        expect(p.moved.size).toBe(SYMBOLS.filter((s) => s.ref.startsWith(R('api/big.ts'))).length);
         const edges = p.after.edges.map((e) => `${e.from}>${e.to}`);
-        // a caller of the file depends on every part; the part whose definition reaches util owns that edge.
-        expect(edges.sort()).toEqual([`${R('web/caller.ts')}>${a}`, `${R('web/caller.ts')}>${b}`, `${b}>${R('lib/util.ts')}`].sort());
+        // a file importer with no owning symbol lands on the largest group only (b: 5 of 7), never every part; the part
+        // whose definition reaches util owns that edge.
+        expect(edges.sort()).toEqual([`${R('web/caller.ts')}>${b}`, `${b}>${R('lib/util.ts')}`].sort());
+        expect(edges).not.toContain(`${R('web/caller.ts')}>${a}`);
         expect(p.after.findings).toEqual([]);
-        expect(p.after.stats).toMatchObject({ nodes: 4, edges: 3 });
+        expect(p.after.stats).toMatchObject({ nodes: 4, edges: 2 });
     });
 
     it('groups components of internal calls; a lone definition joins the nearest by line; a class keeps its methods', () => {

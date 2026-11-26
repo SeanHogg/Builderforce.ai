@@ -24,7 +24,7 @@ const strings = { ...bandStrings(L), ...cameraStrings(L) };
 type RowCamera = 'system' | 'heat' | 'style';
 
 function place(graph: KnowledgeGraph, camera: RowCamera, channels?: PlacementReq['channels']): { p: Placement; model: StageModel } {
-    const model = buildStageModel(graph, [], strings);
+    const model = buildStageModel(graph, strings);
     const req: PlacementReq = { graph: 1, generation: model.marks.generation, camera, drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0, ...(channels ? { channels } : {}) };
     const t = PLACEMENTS[camera](graph, model, req);
     while (!t.step());
@@ -88,12 +88,12 @@ describe('System placement (was SystemTiers)', () => {
 describe('row-camera paint (was the System card\'s colour dot and ring bar, the Heat cell\'s colour and bar)', () => {
     it('the ring channel paints the coverage band where it has data, and nothing where the metric is not set up', () => {
         const graph = surfaceFixture();
-        const model = buildStageModel(graph, [], strings);
+        const model = buildStageModel(graph, strings);
         const paint = paintMarks(graph, model, { lensId: 'structure', overlay: PRESETS.risk, lit: null, roles: null });
         const api = model.stationSlot.get(model.stations.stations.find((s) => s.name === 'API')!.id)!;
         expect(paint.tone2[api]).not.toBe(BG_TONE);
         const bare = codeFixture();
-        const bareModel = buildStageModel(bare, [], strings);
+        const bareModel = buildStageModel(bare, strings);
         const barePaint = paintMarks(bare, bareModel, { lensId: 'structure', overlay: PRESETS.risk, lit: null, roles: null });
         for (const slot of bareModel.stationSlot.values()) { expect(barePaint.tone2[slot]).toBe(BG_TONE); expect(barePaint.fill[slot]).toBe(0); }
     });

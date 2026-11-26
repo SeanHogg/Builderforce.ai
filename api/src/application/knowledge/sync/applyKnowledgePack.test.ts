@@ -186,6 +186,32 @@ describe('applyKnowledgePack', () => {
     expect(scopes).toEqual([expect.objectContaining({ rootId: ROOT, lastDigest: 'abcdef12', measured })]);
   });
 
+  it('writes the commit the review ran at — sent beside the pack — onto the scope it records, and none when none was sent', async () => {
+    const scopes: unknown[] = [];
+    const tx = atomically(w);
+    const spying = (<T>(work: (unit: Parameters<Parameters<typeof tx>[0]>[0]) => Promise<T>) => tx((unit) => {
+      unit.store.upsertScope = async (s) => { scopes.push(s); };
+      return work(unit);
+    })) as ApplyDeps['atomically'];
+    const pack = { ...packOf(rowsFor(3)), scope: { rootId: ROOT, title: 't', packs: ['code'], lastDigest: 'abcdef12' } };
+    const commitSha = 'a'.repeat(40);
+    await applyKnowledgePack(deps({ atomically: spying }), { body: await encodePack(pack), commitSha });
+    expect(scopes).toEqual([expect.objectContaining({ rootId: ROOT, lastDigest: 'abcdef12', commitSha })]);
+  });
+
+  it('writes no commitSha onto the scope when the request carried none', async () => {
+    const scopes: unknown[] = [];
+    const tx = atomically(w);
+    const spying = (<T>(work: (unit: Parameters<Parameters<typeof tx>[0]>[0]) => Promise<T>) => tx((unit) => {
+      unit.store.upsertScope = async (s) => { scopes.push(s); };
+      return work(unit);
+    })) as ApplyDeps['atomically'];
+    const pack = { ...packOf(rowsFor(3)), scope: { rootId: ROOT, title: 't', packs: ['code'], lastDigest: 'abcdef12' } };
+    await applyKnowledgePack(deps({ atomically: spying }), { body: await encodePack(pack) });
+    expect(scopes).toHaveLength(1);
+    expect(scopes[0]).not.toHaveProperty('commitSha');
+  });
+
   it.each([
     ['an extractor version over 64 characters', { extractorVersion: 'x'.repeat(65), toolVersions: {} }],
     ['more than 32 tools', { extractorVersion: '5', toolVersions: Object.fromEntries(Array.from({ length: 33 }, (_, i) => [`t${i}`, '1'])) }],

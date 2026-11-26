@@ -14,7 +14,7 @@ import { createWebGLStage, MOTION_FRAME_MS } from './renderer';
 import { FLAG, LINK_FAMILIES, type MarkPaint, type Placement } from './types';
 
 const graph = withSymbols(surfaceFixture());
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const place = (camera: PlacementReq['camera'], depth = 0): Placement => {
     const t = PLACEMENTS[camera](graph, model, { graph: 1, generation: model.marks.generation, camera, drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0, depth });
     while (!t.step());

@@ -30,12 +30,13 @@ import type { SceneProps } from '../../surface/registry';
 import { codeCompareOf, paintDiffEntries, type CompareView } from '../../surface/compareModel';
 import { showsTowers } from '../../surface/useShowInTower';
 import { Segmented } from '../../surface/ui';
+import { actionGlyph } from '../../surface/ui/glyphs';
 import { TYPE } from '../../surface/ui/type';
 import { codePaneWidth } from '../overlay/CodeDock';
 import { toggleButton } from '../overlay/cardStyles';
 import { CODE_BAR_PX } from '../overlay/CodeTrail';
 import { STATUS_PX } from '../overlay/StatusStrip';
-import { useStageWiring, type CodeLayout } from '../overlay/useStageWiring';
+import { useStageWiring } from '../overlay/useStageWiring';
 import type { StageRenderer } from '../renderer';
 import { legendTypesOf } from '../rig/stageLegend';
 import { Stage } from '../Stage';
@@ -59,6 +60,8 @@ export interface StageCodeProps {
     /** Simulate / Restructure a symbol by ref; the lens row and the outline action are hidden while absent. */
     onSimulate?: ((ref: string) => void) | undefined;
     onRestructure?: ((ref: string) => void) | undefined;
+    /** The restructure's file read is in flight: the card's Restructure is disabled meanwhile. */
+    restructureLoading?: boolean | undefined;
 }
 
 /** The open comparison, if any (PRD 43 C5): the side on show, what it lacks, how it differs. The graph the host hands in is already the union. */
@@ -66,7 +69,12 @@ export interface StageCompareProps {
     compare?: CompareView | null | undefined;
 }
 
-export interface StageHostProps extends SceneProps, StageCodeProps, StageCompareProps {
+/** The ONE 3D / Flat switch's state (PRD 43 C4), owned by the view: flat = tilt 0 on every camera. */
+export interface StageFlatProps {
+    flat?: boolean | undefined;
+}
+
+export interface StageHostProps extends SceneProps, StageCodeProps, StageCompareProps, StageFlatProps {
     /** The placement the active camera row names. */
     camera: PlacementCamera;
     /** The DOM camera shown when the stage cannot draw (no WebGL, a lost context). */
@@ -94,7 +102,7 @@ const BANDS = ['system', 'class', 'method'] as const;
 /** The Map's ladder: the same bands plus the code. Going in stays with the wheel, double-click and Enter. */
 const MAP_BANDS: readonly ZoomBand[] = ZOOM_BANDS.map((b) => b.band);
 
-function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimulate, onRestructure, compare, ...p }: SceneProps & StageCodeProps & StageCompareProps & { camera: PlacementCamera; renderer: StageRenderer; onLost(): void }) {
+function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, compare, flat = false, ...p }: SceneProps & StageCodeProps & StageCompareProps & StageFlatProps & { camera: PlacementCamera; renderer: StageRenderer; onLost(): void }) {
     const box = useRef<HTMLDivElement>(null);
     // Before the box is measured (and where nothing measures it: jsdom) the stage is laid out for a standard box.
     const measured = useContainerSize(box);
@@ -104,13 +112,14 @@ function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimula
     // The box's band, not the map's: opening the code pane does not lay the map out again.
     const band = viewportBandOf(boxWidth);
     const strings = useStageStrings(labels);
-    const [seqBand, setSeqBand] = useState(0);
 
     // The MarkSet is built once per graph: a comparison hands the union graph for its whole run, and a commit's changed set is paint, never an input here.
     const marks = useComputed('markSet', { graph, strings }, [graph, strings], null, { keep: false }).value;
     const generation = marks?.generation ?? 0;
     const codeCompare = useMemo(() => codeCompareOf(compare), [compare]);
-    const wiring = useStageWiring(p, renderer, marks, boxWidth, { shown: codeShown, onToggleCode, onSimulate, onRestructure, compare: codeCompare });
+    const wiring = useStageWiring(p, renderer, marks, boxWidth, {
+        shown: codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, compare: codeCompare, sequence: camera === 'sequence', factsGraph: compare?.sideGraph,
+    });
     const drilled = !!surface.drill.view;
     // The map's own box: beside the docked pane, under the Code | Picture switch (a narrow box) and the zoom-path bar, above the status strip (the last two while a file is read).
     const code = wiring.code;
@@ -140,20 +149,38 @@ function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimula
     // Placement: Map always (its drill and unfold wiring read it; the worker caches it), and the camera on show.
     const channels = useMemo(() => ({ size: bindings.size, width: bindings.width }), [bindings.size, bindings.width]);
     const lineId = surface.line?.id ?? null;
+    // The Sequence's band is the semantic zoom's (its participants' size, or the band control that flies to it): one state, not two.
+    const seqBand = wiring.zoom.sequenceLod;
     const lod = camera === 'sequence' ? seqBand : 0;
-    const pathId = camera === 'sequence' ? lineId : null;
+    // Flow and Sequence follow the selected line; at code depth the Sequence draws the open method's calls (`PlacementReq.method`);
+    // Flow follows the drilled level (system, component, class).
+    const walks = camera === 'sequence' || camera === 'flow';
+    const pathId = walks ? lineId : null;
+    const method = camera === 'sequence' ? wiring.method : null;
+    const otherDrill = camera === 'flow' ? wiring.map.drill : null;
     const symbols = wiring.map.symbols;
-    const place = (cam: PlacementCamera, depth: number, drill: string | null, l: number, path: string | null) => ({
-        graph, generation, camera: cam, drill, unfolded: null, pins: [], pathId: path, viewportBand: band, lod: l, depth, channels,
+    // The Sequence draws a method's calls (no bands): the zoom gates on the same condition the request does.
+    const { setMethodOpen, zoomToBand } = wiring.zoom;
+    const methodOpen = camera === 'sequence' && !!method;
+    useEffect(() => { setMethodOpen(methodOpen); }, [setMethodOpen, methodOpen]);
+    // The tilt the worker bakes in: Flat is 0 on every placement; 3D is the Map's full tower, the orbit's, else the placement's resting tilt.
+    const mapDepth = flat ? 0 : 1;
+    const place = (cam: PlacementCamera, depth: number | undefined, drill: string | null, l: number, path: string | null, m: string | null = null) => ({
+        graph, generation, camera: cam, drill, unfolded: null, pins: [], pathId: path, viewportBand: band, lod: l, channels,
+        ...(depth === undefined ? {} : { depth }),
+        ...(m ? { method: m } : {}),
+        // Flow reads symbols only inside a drilled level; at system level they are not an input (nor part of its key).
         ...(drill || cam === 'sequence' ? { symbols } : {}),
     });
-    const map = useComputed('placement', place('map', 1, wiring.map.drill, 0, null), [graph, generation, band, channels, wiring.map.drill, symbols], null, { enabled: !!marks }).value;
+    const map = useComputed('placement', place('map', mapDepth, wiring.map.drill, 0, null), [graph, generation, band, channels, wiring.map.drill, symbols, mapDepth], null, { enabled: !!marks }).value;
     const other = camera === 'map' ? 'graph' : camera;
     // The zoom's nesting survives a rebuilt world: its entries are re-derived from the ancestor levels' placements of the new generation.
-    const nestBasis = useNestBasis(marks, surface.drill.stack, camera === 'map' && wiring.zoom.nests, (d) => place('map', 1, d, 0, null), [graph, generation, band, channels, symbols]);
+    const nestBasis = useNestBasis(marks, surface.drill.stack, camera === 'map' && wiring.zoom.nests, (d) => place('map', mapDepth, d, 0, null), [graph, generation, band, channels, symbols, mapDepth]);
     const setBasis = wiring.zoom.setBasis;
     useEffect(() => { setBasis(nestBasis.basis); }, [setBasis, nestBasis.basis]);
-    const otherPlacement = useComputed('placement', place(other, other === '3d' ? 1 : 0, null, lod, pathId), [graph, generation, band, channels, other, lod, pathId, symbols], null, { enabled: !!marks }).value;
+    const otherDepth = other === '3d' ? 1 : flat ? 0 : undefined;
+    const otherSymbols = otherDrill || other === 'sequence' ? symbols : null;
+    const otherPlacement = useComputed('placement', place(other, otherDepth, otherDrill, lod, pathId, method), [graph, generation, band, channels, other, lod, pathId, otherSymbols, otherDepth, otherDrill, method], null, { enabled: !!marks }).value;
     // Before / After: the same placement with the slots the side lacks shrunk onto their anchor (the tween moves them).
     const placement = useSideMask(camera === 'map' ? wiring.patchMap(map) : otherPlacement, marks, compare);
     // A zoom-entered level whose entry went stale with the rebuilt world waits for the placements it re-nests from (not when they failed: nothing is coming).
@@ -167,8 +194,6 @@ function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimula
 
     // The selection: the stage's own (a mark picked here), else the surface's (a search hit, the List).
     const selected = wiring.selected ?? (p.selected && p.selected !== wiring.dismissed ? `node:${p.selected}` : null);
-    const setTowers = surface.setTowers;
-    const onTilt = useCallback((d: number) => setTowers(d > 0), [setTowers]);
     const bus = useMemo(() => stageBus(renderer), [renderer]);
 
     const zoom = labels.surface.zoom;
@@ -212,6 +237,12 @@ function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimula
                         label={sc.paneSwitchAria} value={paneView} onChange={(id) => setPaneView(id as 'code' | 'picture')}
                         items={[{ id: 'code', label: sc.paneCode }, { id: 'picture', label: sc.panePicture }]}
                     />
+                    {/* The same icon close button as the docked pane's, on the picture half (the code half carries its own). */}
+                    {!showCodeHalf && (
+                        <button type="button" data-action="dock-hide" aria-label={sc.dockHide} title={sc.dockHide} onClick={code.hide} style={{ ...toggleButton, marginInlineStart: 'auto', minHeight: 24 }}>
+                            <span aria-hidden="true">{actionGlyph('close')}</span>
+                        </button>
+                    )}
                 </div>
             )}
             {code.show && (
@@ -227,8 +258,8 @@ function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimula
                 {/* Over the stage's top-left corner, so the stage box (and every projection into it) starts at the map's origin. */}
                 {(camera === 'sequence' || camera === 'map' || levelNote) && (
                     <div style={{ position: 'absolute', zIndex: 1, insetBlockStart: 8, insetInlineStart: 8, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, maxWidth: 'calc(100% - 16px)' }}>
-                        {camera === 'sequence' && (
-                            <Segmented label={zoom.group} value={BANDS[seqBand]!} onChange={(id) => setSeqBand(Math.max(0, BANDS.indexOf(id as typeof BANDS[number])))} items={BANDS.map((b) => ({ id: b, label: zoom[b] }))} />
+                        {camera === 'sequence' && !method && (
+                            <Segmented label={zoom.group} value={BANDS[seqBand]!} onChange={(id) => zoomToBand(Math.max(0, BANDS.indexOf(id as typeof BANDS[number])))} items={BANDS.map((b) => ({ id: b, label: zoom[b] }))} />
                         )}
                         {camera === 'map' && (
                             <Segmented
@@ -236,21 +267,7 @@ function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimula
                                 items={MAP_BANDS.map((b) => ({ id: b, label: zoom[b] }))}
                             />
                         )}
-                        {camera === 'map' && (
-                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                                <Segmented
-                                    label={sc.viewAria} value={surface.towers ? '3d' : '2d'} onChange={(id) => setTowers(id === '3d')}
-                                    items={[{ id: '3d', label: sc.view3d }, { id: '2d', label: sc.view2d }]}
-                                />
-                                {surface.towers && <button type="button" data-action="reset-view" onClick={resetView} style={toggleButton}>{sc.resetView}</button>}
-                            </div>
-                        )}
-                        {camera === 'map' && wiring.zoom.code && (
-                            <Segmented
-                                label={sc.layoutAria} value={wiring.codeLayout} onChange={(id) => wiring.setCodeLayout(id as CodeLayout)}
-                                items={[{ id: 'flow', label: sc.flow }, { id: 'sequence', label: sc.sequence }]}
-                            />
-                        )}
+                        {camera === 'map' && surface.towers && <button type="button" data-action="reset-view" onClick={resetView} style={toggleButton}>{sc.resetView}</button>}
                         {camera === 'map' && <p data-stage-hint style={{ margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'), ...TYPE.bodyMuted }}>{zoom.hint}</p>}
                         {levelNote && <p data-level-note style={{ margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'),...TYPE.bodyMuted }}>{levelNote}</p>}
                     </div>
@@ -259,9 +276,9 @@ function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimula
                     <Stage
                         renderer={renderer} marks={shownMarks} paint={frame?.paint ?? paint} placement={frame?.placement ?? null} colors={colors}
                         width={width} height={height} reducedMotion={p.reducedMotion} selected={selected} onSelect={wiring.onSelect} onDrill={wiring.onDrill}
-                        depthLabel={labels.surface.scene.depth} nav={nav} description={labels.regionLabel} legend={{ types: legendTypesOf(shownMarks.type), labels, links: camera === 'map' && wiring.zoom.band !== 'system' }}
+                        nav={nav} description={labels.regionLabel} legend={{ types: legendTypesOf(shownMarks.type), labels, links: camera === 'map' && wiring.zoom.band !== 'system' }}
                         onOut={wiring.onEscape} onClear={wiring.clearSelection}
-                        {...(camera === 'map' ? { tilt: surface.towers ? 1 : 0, onTilt, resetTilt: resets, onWheelStep: wiring.wheelStep } : {})} onContextLost={onLost}
+                        {...(camera === 'map' ? { tilt: flat ? 0 : 1, resetTilt: resets, onWheelStep: wiring.wheelStep } : {})} flat={flat} onContextLost={onLost}
                     />
                 )}
                 {!ready && <LayingOut labels={labels} corner={!!frame} />}

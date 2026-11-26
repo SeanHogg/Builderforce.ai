@@ -109,7 +109,7 @@ export interface TaskTable {
     focus: { req: { graph: GraphId; max: number; keep: string[] }; raw: FocusRaw };
     antiPatterns: { req: { graph: GraphId; layer: string | null; stations?: StationLookup }; raw: AntiPatternGroupRaw[] };
     /** PRD 43 B1a: the stage's marks, once per graph. */
-    markSet: { req: { graph: GraphId; changed?: string[]; strings: Record<string, string> }; raw: MarkSet };
+    markSet: { req: { graph: GraphId; strings: Record<string, string> }; raw: MarkSet };
     /** The marks' tone / flags from the lens, the question (+ its pattern `family`) and the overlay, as data. */
     markPaint: {
         req: {
@@ -133,7 +133,7 @@ export interface TaskTable {
  * realm answers — the worker, or the main thread after a fail-over — builds the SAME model, under the SAME deterministic
  * MarkSet generation, and its answers still match the marks on show.
  */
-export interface ModelInputs { changed: string[]; strings: Record<string, string> }
+export interface ModelInputs { strings: Record<string, string> }
 
 export type TaskKind = keyof TaskTable;
 

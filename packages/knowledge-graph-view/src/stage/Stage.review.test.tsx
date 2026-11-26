@@ -16,14 +16,14 @@ import { useStageRenderer } from './stageHooks';
 import type { Placement } from './types';
 
 const graph = surfaceFixture();
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const t = PLACEMENTS.map(graph, model, { graph: 1, generation: model.marks.generation, camera: 'map', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0 });
 while (!t.step());
 const map = t.result();
 
 const props = (over: Partial<StageProps> = {}): StageProps => ({
     renderer: createNoopStage(), marks: model.marks, paint: null, placement: map, colors: null, width: 800, height: 500,
-    reducedMotion: true, selected: null, onSelect: () => {}, depthLabel: 'Depth', ...over,
+    reducedMotion: true, selected: null, onSelect: () => {}, ...over,
 });
 
 function zoomHost() {
@@ -76,21 +76,20 @@ describe('the rig re-homes only on a camera or bounds change', () => {
 });
 
 describe('the 3D (orbit) placement on the stage', () => {
-    it('holds the marks\' extrude at 1 and hides the depth control; back on Map the control and its depth return', () => {
+    it('holds the marks\' extrude at 1; back on Map the resting depth returns (no depth control: the flat prop drives the extrude)', () => {
         const t3 = PLACEMENTS['3d'](graph, model, { graph: 1, generation: model.marks.generation, camera: '3d', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0, depth: 1 });
         while (!t3.step());
         const scene = t3.result();
         expect(scene.rig.view).toBeDefined();
         const renderer = createNoopStage();
         const { container, rerender } = render(<Stage {...props({ renderer, placement: map })} />);
-        expect(container.querySelector('[data-stage-depth]')).not.toBeNull();
+        expect(container.querySelector('[data-stage-depth]')).toBeNull();
         expect(renderer.depth).toBe(RESTING_DEPTH);
         rerender(<Stage {...props({ renderer, placement: scene })} />);
         expect(renderer.depth).toBe(1);
-        expect(container.querySelector('[data-stage-depth]')).toBeNull();
         rerender(<Stage {...props({ renderer, placement: map })} />);
         expect(renderer.depth).toBe(RESTING_DEPTH);
-        expect(container.querySelector('[data-stage-depth]')).not.toBeNull();
+        expect(container.querySelector('[data-stage-depth]')).toBeNull();
     });
 });
 

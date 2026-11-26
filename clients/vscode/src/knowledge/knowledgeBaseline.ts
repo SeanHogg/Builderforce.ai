@@ -18,11 +18,12 @@ export interface BaselineAfter { rootId: string; packs: readonly string[]; measu
 
 /** The baseline the view compares against, with memory's verdict and its reasons. */
 export function knowledgeBaseline(
-  before: KnowledgeGraph, measured: MeasuredWith | undefined, after: BaselineAfter,
-): { graph: KnowledgeGraph; comparable: boolean; reasons: ComparabilityReason[] } {
+  before: KnowledgeGraph, measured: MeasuredWith | undefined, after: BaselineAfter, rev?: string,
+): { graph: KnowledgeGraph; comparable: boolean; reasons: ComparabilityReason[]; rev?: string } {
   const verdict = knowledgeComparability(
     { rootId: before.scope.rootId, packs: before.scope.packs, measured },
     { rootId: after.rootId, packs: after.packs, measured: after.measured, ...(after.local ? { contentHashRule: CONTENT_HASH_RULE } : {}) },
   );
-  return { graph: before, comparable: verdict.comparable, reasons: verdict.reasons };
+  // `rev`: the commit the before review ran at (the platform's `previousCommitSha`), so the code pane reads the old file with `readSourceAt`; absent = unknown.
+  return { graph: before, comparable: verdict.comparable, reasons: verdict.reasons, ...(rev ? { rev } : {}) };
 }

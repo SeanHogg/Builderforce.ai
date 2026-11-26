@@ -23,7 +23,8 @@ import { TYPE } from '../../surface/ui/type';
 import { fileRefOf } from '../../surface/stations';
 import type { SymbolFacts } from '../../surface/symbolFacts';
 import type { SourceLocation, SourceReader, SourceReaderAt, SourceText, SymbolRecord } from '../../types';
-import { CodeLayer, LINK_BUTTON, RAIL_TONE, type LensAction } from '../drill/CodeLayer';
+import { CodeLayer, RAIL_TONE, type LensAction } from '../drill/CodeLayer';
+import { LINK_BUTTON } from '../drill/linkButton';
 import {
     baseName, callerIndex, codeTargetOf, lensRows, MAX_SPAN, railKindOf, railKinds, railShape, spanInFile, stickyChain, symbolChain,
     type CodeTarget, type Lens,
@@ -223,7 +224,7 @@ export function CodeDock({
                 target={target} reader={diff.reader} labels={labels} records={records} scrollLine={reading.jump ?? scrollLine}
                 onDrill={onDrill} onOpenSource={onOpenSource} onClose={onClose} onOut={onOut}
                 onReadingLine={reading.onReadingLine} steps={reading.steps} currentStep={reading.current} span={reading.span} onStep={reading.goStep} marked={marked}
-                onViewport={reading.onViewport} onText={onText} onPickLine={reading.pickLine} cursorLine={reading.cursor} marks={diff.marks} diffNote={diff.unavailable}
+                onViewport={reading.onViewport} onText={onText} onPickLine={reading.pickLine} cursorLine={reading.cursor} marks={diff.marks} diffNote={diff.unavailable} movedTo={diff.movedTo}
                 rails={rails} railSpan={railSpan} lens={lens} onLens={onLens} lensCtx={lensCtx} sticky={sticky} onJump={jumpTo}
             />
         </aside>

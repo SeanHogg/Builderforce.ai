@@ -9,7 +9,7 @@
  */
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { absentOn, diffGraphs, diffKindOf, unionGraph, type DiffKind, type GraphDiff, type Proposal, type UnionGraph } from '../compute/compare';
+import { absentOn, diffGraphs, diffKindOf, unionGraph, type DiffKind, type GraphDiff, type MovedSpan, type Proposal, type UnionGraph } from '../compute/compare';
 import type { Commit } from '../types';
 import { stationOfRef, type StationModel } from './stations';
 
@@ -30,6 +30,12 @@ export interface CompareModel {
     diff: GraphDiff;
     /** Where a slot absent on a side parks: a restructure's `bornFrom` (new module to file) and its inverse (file to its first module). */
     anchors: ReadonlyMap<string, string>;
+    /** The two graphs themselves (the union keeps both sides' findings; what a side's facts read is its own). */
+    sides: Readonly<Record<CompareSide, KnowledgeGraph>>;
+    /** A restructure's definitions that leave their file (definition ref to the new module's ref); empty for any other source. */
+    moved: ReadonlyMap<string, string>;
+    /** The lines those definitions occupy (`Proposal.spans`), for the code pane's marks. */
+    spans: readonly MovedSpan[];
 }
 
 /** The revision each side's source is read at; null = today's working tree. */
@@ -46,6 +52,11 @@ export interface CompareView {
     /** How each ref differs, as `paintMarks`' diff input (a changed set for a commit). */
     diff: ReadonlyMap<string, DiffKind>;
     revs: CompareRevs;
+    /** The shown side's OWN graph (facts such as an anti-pattern read it, never the union); null with no two-graph source. */
+    sideGraph?: KnowledgeGraph | null | undefined;
+    /** A restructure's moved definitions (`Proposal.moved`): the code pane marks their lines. */
+    moved?: ReadonlyMap<string, string> | undefined;
+    spans?: readonly MovedSpan[] | undefined;
 }
 
 const NONE: ReadonlySet<string> = new Set();
@@ -53,7 +64,7 @@ const NO_ANCHORS: ReadonlyMap<string, string> = new Map();
 
 /** The two graphs of a two-graph source; null for a commit or when a side is missing. */
 export function compareModel(source: CompareSource, current: KnowledgeGraph | null, baseline: KnowledgeGraph | null, proposal: Proposal | null): CompareModel | null {
-    const pair = source === 'restructure' ? (current && proposal ? [current, proposal.after] : null)
+    const pair: readonly [KnowledgeGraph, KnowledgeGraph] | null = source === 'restructure' ? (current && proposal ? [current, proposal.after] : null)
         : source === 'commit' ? null
         : current && baseline ? [baseline, current] : null;
     if (!pair) return null;
@@ -61,15 +72,16 @@ export function compareModel(source: CompareSource, current: KnowledgeGraph | nu
     if (source === 'restructure' && proposal) {
         for (const [born, from] of proposal.bornFrom) { anchors.set(born, from); if (!anchors.has(from)) anchors.set(from, born); }
     }
-    return { union: unionGraph(pair[0], pair[1]), diff: diffGraphs(pair[0], pair[1]), anchors };
+    return { union: unionGraph(pair[0], pair[1]), diff: diffGraphs(pair[0], pair[1]), anchors, sides: { before: pair[0], after: pair[1] }, moved: source === 'restructure' && proposal ? proposal.moved : NO_ANCHORS, spans: source === 'restructure' && proposal ? proposal.spans : [] };
 }
 
-/** Which revision each side reads: a baseline's `rev` is Before, a snapshot's `rev` its After, a commit's sha is Before. A restructure has none. */
+/** Which revision each side reads: a baseline's `rev` is Before, a snapshot's `rev` its After, a commit's parent is Before and its sha After. A restructure has none. */
 export function compareRevs(state: CompareState, baselineRev: string | null, snapshotRev: string | null): CompareRevs {
     switch (state.source) {
         case 'baseline': return { before: baselineRev, after: null };
         case 'snapshot': return { before: baselineRev, after: snapshotRev };
-        case 'commit': return { before: state.commit?.sha ?? null, after: null };
+        // A commit's Before is the file as the commit found it (its first parent; none known ⇒ not available), After is the commit itself.
+        case 'commit': return { before: state.commit?.parent ?? null, after: state.commit?.sha ?? null };
         default: return { before: null, after: null };
     }
 }
@@ -80,12 +92,17 @@ export function compareView(state: CompareState, model: CompareModel | null, rev
         return { state, graph: null, absent: NONE, anchors: NO_ANCHORS, diff, revs };
     }
     if (!model) return { state, graph: null, absent: NONE, anchors: NO_ANCHORS, diff: new Map(), revs };
-    return { state, graph: model.union.graph, absent: absentOn(model.union, state.side), anchors: model.anchors, diff: diffKindOf(model.diff, state.side), revs };
+    return { state, graph: model.union.graph, absent: absentOn(model.union, state.side), anchors: model.anchors, diff: diffKindOf(model.diff, state.side), revs, sideGraph: model.sides[state.side], moved: model.moved, spans: model.spans };
 }
 
-/** What the code pane compares: the side on show and the revision each reads. A restructure has no file at a revision, so the pane is left as it was. */
-export function codeCompareOf(view: CompareView | null | undefined): { side: CompareSide; revs: CompareRevs } | undefined {
-    return view && view.state.source !== 'restructure' ? { side: view.state.side, revs: view.revs } : undefined;
+/**
+ * What the code pane compares: the side on show and the revision each reads. A restructure has no file at a revision (both
+ * sides read today's file), so it carries `moved` instead: the pane marks the lines of the definitions that leave the file.
+ */
+export function codeCompareOf(view: CompareView | null | undefined): { side: CompareSide; revs: CompareRevs; moved?: ReadonlyMap<string, string>; spans?: readonly MovedSpan[] } | undefined {
+    if (!view) return undefined;
+    if (view.state.source !== 'restructure') return { side: view.state.side, revs: view.revs };
+    return view.moved && view.moved.size > 0 ? { side: view.state.side, revs: view.revs, moved: view.moved, spans: view.spans ?? [] } : undefined;
 }
 
 /** The diff plus the station of each ref it names: a station mark is painted by its id, a node mark by its ref (`paintMarks`). */

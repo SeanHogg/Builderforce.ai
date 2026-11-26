@@ -28,8 +28,10 @@ export function leavesOf(pack: Pack): LeafRow[] {
 /**
  * Facts, relations and the scope, through the single writer, on the transaction's handle. The scope carries its own
  * `measured` (PRD 41 §C9: recorded when the review ran, the pack's MEAS section); the store keeps it only with a digest.
+ * `commitSha` is the commit that review ran at: it travels beside the pack (the codec has no field for it) and rides the
+ * scope write, which the store likewise keeps only with a digest.
  */
-export async function writeRows(deps: ApplyDeps, unit: PackUnit, pack: Pack): Promise<{ facts: number; relations: number }> {
+export async function writeRows(deps: ApplyDeps, unit: PackUnit, pack: Pack, commitSha?: string): Promise<{ facts: number; relations: number }> {
   const root = pack.rootId;
   // The pack already wrote the sources and the review snapshot; the writer only writes rows here.
   const blobs: ExtractedCachePort = { ...deps.extracted, setSource: async () => undefined, snapshotReview: async () => undefined };
@@ -46,7 +48,7 @@ export async function writeRows(deps: ApplyDeps, unit: PackUnit, pack: Pack): Pr
   // Facts first, then relations: a relation to a fact never lands before the fact.
   for (let i = 0; i < facts.length; i += MAX_KNOWLEDGE_WRITE_ROWS) written.facts += (await write({ facts: facts.slice(i, i + MAX_KNOWLEDGE_WRITE_ROWS) })).factsWritten;
   for (let i = 0; i < relations.length; i += MAX_KNOWLEDGE_WRITE_ROWS) written.relations += (await write({ relations: relations.slice(i, i + MAX_KNOWLEDGE_WRITE_ROWS) })).relationsWritten;
-  if (pack.scope) await write({ scope: pack.scope });
+  if (pack.scope) await write({ scope: commitSha ? { ...pack.scope, commitSha } : pack.scope });
   return written;
 }
 

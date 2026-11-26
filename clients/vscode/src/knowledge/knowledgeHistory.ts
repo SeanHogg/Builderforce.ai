@@ -11,6 +11,7 @@
 import { recentCommits, type GitHistoryOptions, type RecentCommit } from "@builderforce/agent-tools/node-git-history";
 import { srcRef } from "@seanhogg/builderforce-memory/knowledge";
 import type { KnowledgeHistoryResult } from "./knowledgeProtocol";
+import { COMMIT_SHA } from "./commitSha";
 
 /** Commits the slider shows. */
 export const HISTORY_COMMITS = 20;
@@ -22,6 +23,8 @@ export function historyOf(commits: readonly RecentCommit[], rootId: string): Kno
   return commits.map((c) => ({
     sha: c.sha, at: c.at, title: c.title,
     ...(c.author ? { author: c.author } : {}),
+    // The first parent, only when it is a real sha (it reaches `git show <rev>:<path>`): a compare's Before reads the file there.
+    ...(c.parent && COMMIT_SHA.test(c.parent) ? { parent: c.parent.toLowerCase() } : {}),
     refs: c.paths.slice(0, MAX_REFS_PER_COMMIT).map((p) => srcRef(rootId, p)),
   }));
 }

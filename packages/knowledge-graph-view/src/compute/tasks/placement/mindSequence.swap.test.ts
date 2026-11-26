@@ -12,7 +12,7 @@ import { PLACEMENTS, type PlacementReq } from './index';
 const base = withSymbols(surfaceFixture());
 const call: KEdge = { from: RUN_REF as KEdge['from'], to: FAIL_REF as KEdge['to'], kind: 'calls', weight: 1, origin: 'extracted', sites: [{ path: 'api/useCase.ts', line: 3, column: 2, order: 0 }] };
 const graph: KnowledgeGraph = { ...base, edges: [...base.edges, call] };
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const place = (camera: PlacementReq['camera'], over: Partial<PlacementReq> = {}): Placement => {
     const t = PLACEMENTS[camera](graph, model, { graph: 1, generation: model.marks.generation, camera, drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0, ...over });
     while (!t.step());

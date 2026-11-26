@@ -52,6 +52,7 @@ import { parseBody, z } from './requestBody';
 import { KnowledgeSyncError } from '../../application/knowledge/sync/knowledgeSyncPorts';
 import { registerKnowledgeSyncRoutes, syncRefusal } from './projectKnowledgeSyncRoutes';
 import { measuredProblem } from '../../application/knowledge/measuredBounds';
+import { COMMIT_SHA_PATTERN } from '../../application/knowledge/commitSha';
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -125,6 +126,8 @@ const zScope = z.object({
   measured: z.object({ extractorVersion: z.string(), toolVersions: z.record(z.string(), z.string()) })
     .superRefine((m, ctx) => { const problem = measuredProblem(m); if (problem) ctx.addIssue({ code: 'custom', message: problem }); })
     .optional(),
+  /** The git commit the review at `lastDigest` ran at (7-64 hex, stored lower-cased like the sync door's); stored only with a digest. */
+  commitSha: z.string().regex(COMMIT_SHA_PATTERN).transform((s) => s.toLowerCase()).optional(),
 });
 const WriteBody = z.object({
   /** The root every row of this chunk belongs to (a pack upload sends it on each chunk). */

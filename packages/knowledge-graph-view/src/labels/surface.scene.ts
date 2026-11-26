@@ -2,7 +2,7 @@
 
 export interface SceneLabels {
     /** The scenes draw only part of the links: `{shown}`, `{total}` (already formatted for the locale). */
-    scene: Record<'edgesCapped' | 'layingOut' | 'errorTitle' | 'errorRetry' | 'errorBack' | 'depth', string>;
+    scene: Record<'edgesCapped' | 'layingOut' | 'errorTitle' | 'errorRetry' | 'errorBack' | 'view3d' | 'viewFlat' | 'flatToggle', string>;
     /**
      * The mind map's "+N folders" leaf and its accessible name, in One and Other forms (`{count}`); a language with no
      * plural form repeats the one. Read through `isOne` (surface/plural.ts), like `counted()`.
@@ -24,7 +24,7 @@ export interface SceneLabels {
         | 'lensReferences' | 'lensCallers' | 'lensCaller' | 'referencesToast' | 'calledBy' | 'showInMap' | 'drillIn' | 'stickyAria'
         | 'kindCalls' | 'kindReads' | 'kindSuper' | 'awaited' | 'sync' | 'openCallee' | 'callers'
         | 'outline' | 'outlineAria' | 'tabsAria'
-        | 'layoutAria' | 'flow' | 'sequence' | 'viewAria' | 'view3d' | 'view2d' | 'followsEditor'
+        | 'followsEditor'
         | 'stateSelected' | 'stateReading' | 'statePinned' | 'methodsCount' | 'fieldsCount' | 'callsCount' | 'imported' | 'drillInAction' | 'showCode' | 'openFile'
         | 'status' | 'following' | 'pinnedStatus' | 'statusLine' | 'resetView'
         | 'dockAria' | 'dockHide' | 'dockShow' | 'levelAria' | 'levelEmpty' | 'levelNoSource' | 'rowNoTest' | 'rowAntiPattern' | 'rowGoInside' | 'rowRestructure'
@@ -46,8 +46,10 @@ export const SCENE_DEFAULTS: SceneLabels = {
         errorTitle: 'This view hit an error',
         errorRetry: 'Try again',
         errorBack: 'Back',
-        /** The stage's depth control (PRD 43 B2): tilts the view into depth; Map's stations rise into towers. */
-        depth: 'Depth',
+        /** The ONE 3D / Flat switch beside the view switcher (PRD 43 C4): the two states' words, and the switch's accessible name. */
+        view3d: '3D',
+        viewFlat: 'Flat',
+        flatToggle: 'Flat view',
     },
     mind: {
         moreFoldersOne: '+{count} folder',
@@ -116,13 +118,7 @@ export const SCENE_DEFAULTS: SceneLabels = {
         outline: 'Outline',
         outlineAria: 'Symbols in this file',
         tabsAria: 'Open files',
-        /** The map bar: the code band's layout switch, the 3D / 2D switch, and the crumb that follows the editor. */
-        layoutAria: 'Code band layout',
-        flow: 'Flow',
-        sequence: 'Sequence',
-        viewAria: 'Map view',
-        view3d: '3D',
-        view2d: '2D',
+        /** The map bar's crumb that follows the editor. */
         followsEditor: 'Follows the editor',
         /** The symbol card: why it shows (selected, reading, pinned), its chips (`{count}`), its actions. */
         stateSelected: 'selected',

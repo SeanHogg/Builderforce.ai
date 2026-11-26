@@ -18,7 +18,7 @@ import { buildPerfGraph } from './syntheticGraph';
 describe.skipIf(!process.env.KG_PERF)('Graph placement time (KG_PERF=1)', () => {
     it.each([['harness, lod 0', 1, 0], ['10k, lod 1', 3.19, 1]] as const)('%s', (name, scale, lod) => {
         const graph = buildPerfGraph({ scale }).graph;
-        const model = buildStageModel(graph, []);
+        const model = buildStageModel(graph);
         const t0 = performance.now();
         const task = PLACEMENTS.graph(graph, model, { graph: 1, generation: model.marks.generation, camera: 'graph', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 3, lod });
         let steps = 0, longest = 0;

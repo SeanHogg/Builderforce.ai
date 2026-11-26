@@ -37,7 +37,7 @@ const BOX = { width: 860, height: 480 };
 
 describe('the Mind map names on a big repo', () => {
     const g = bigRepo();
-    const model = buildStageModel(g, [], STRINGS);
+    const model = buildStageModel(g, STRINGS);
     const req: PlacementReq = { graph: 1, generation: model.marks.generation, camera: 'mind', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: viewportBandOf(BOX.width), lod: 0 };
     const t = PLACEMENTS.mind(g, model, req);
     while (!t.step());

@@ -65,6 +65,9 @@ export interface SceneOverlayProps {
     tools?: ReactNode;
     /** The commit scrubber, at the trailing end of the question row. */
     time?: ReactNode;
+    /** The ONE 3D / Flat switch (PRD 43 C4), shown beside the View group when `onFlat` is given. */
+    flat?: boolean | undefined;
+    onFlat?: ((flat: boolean) => void) | undefined;
 }
 
 /** The CSS variable the scene's top edge reads: the measured height of the controls block, set on the overlay's parent (the scene's box). */
@@ -107,7 +110,7 @@ export function SceneOverlay(p: SceneOverlayProps) {
             <div ref={controls} data-testid="kg-scene-controls" style={{ display: 'grid', gap: narrow ? 6 : 0, minWidth: 0 }}>
             <CameraBar
                 labels={labels} cameras={p.cameras} mode={p.mode} onMode={p.onMode} outTo={p.outTo} onOut={p.onOut}
-                tools={p.tools} stacked={narrow}
+                tools={p.tools} stacked={narrow} flat={p.flat} onFlat={p.onFlat}
             />
             <div style={{ padding: '0 12px 8px', pointerEvents: 'none', minWidth: 0, display: 'flex', gap: 8, alignItems: 'center', flexWrap: narrow ? 'nowrap' : 'wrap' }}>
                 <div style={{ pointerEvents: 'auto', width: narrow ? '100%' : 'fit-content', maxWidth: '100%' }}>

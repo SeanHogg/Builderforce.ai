@@ -25,7 +25,7 @@ describe('picking a Sequence message reveals its call site', () => {
 
     it('opens a path:line card whose "Open at line" goes through the host\'s open port, and fits a 360 px stage', () => {
         const graph = surfaceFixture();
-        const model = buildStageModel(graph, []);
+        const model = buildStageModel(graph);
         const onOpenSource = vi.fn();
         const drill = { stack: [], view: null, canOut: false, parent: null, selected: null, select: vi.fn(), canEnter: () => ({ can: false, reason: 'noSymbols' as const }), enter: vi.fn(), out: vi.fn(), loading: false, notice: null, symbols: [], reanchored: { seq: 0, moves: new Map() } };
         const p = { graph, labels: L, onSelect: vi.fn(), onOpenSource, surface: { stations: model.stations, drill, line: null, selectLine: vi.fn(), selectStation: vi.fn(), setQuestion: vi.fn(), openPanel: vi.fn() } } as unknown as SceneProps;
@@ -55,7 +55,7 @@ describe('picking a Sequence message reveals its call site', () => {
 
     it('closes when another placement comes on show (camera, band, drill, generation) and when a mark is selected', () => {
         const graph = surfaceFixture();
-        const model = buildStageModel(graph, []);
+        const model = buildStageModel(graph);
         const drill = { stack: [], view: null, canOut: false, parent: null, selected: null, select: vi.fn(), canEnter: () => ({ can: false, reason: 'noSymbols' as const }), enter: vi.fn(), out: vi.fn(), loading: false, notice: null, symbols: [], reanchored: { seq: 0, moves: new Map() } };
         const p = { graph, labels: L, onSelect: vi.fn(), surface: { stations: model.stations, drill, line: null, selectLine: vi.fn(), selectStation: vi.fn(), setQuestion: vi.fn(), openPanel: vi.fn() } } as unknown as SceneProps;
         const renderer = createNoopStage();

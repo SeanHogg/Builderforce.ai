@@ -89,3 +89,13 @@ describe('the Map ladder goes back out to a band', () => {
         expect(drill.climb).toHaveBeenCalledWith(1);
     });
 });
+
+describe('the Sequence band control sets the band itself', () => {
+    it('an explicit click on System sets band 0 even though that band only fits, and a click on Method sets 2', () => {
+        const { result } = setup();
+        act(() => { result.current.zoomToBand(2); });
+        expect(result.current.sequenceLod).toBe(2);
+        act(() => { result.current.zoomToBand(0); });
+        expect(result.current.sequenceLod).toBe(0);
+    });
+});

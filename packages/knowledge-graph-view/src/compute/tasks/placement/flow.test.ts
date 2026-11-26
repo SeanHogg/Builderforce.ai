@@ -9,7 +9,7 @@ import { PLACEMENTS, type PlacementReq } from './index';
 import { drillKeyOf } from './request';
 
 const graph = withSymbols(surfaceFixture());
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const CLS = `${USE_CASE}#UseCase`;
 const records: SymbolRecord[] = [
     { ref: CLS, name: 'UseCase', kind: 'class', parent: USE_CASE, line: 3, exported: true },
@@ -24,8 +24,8 @@ const at = (p: Placement, s: number) => [0, 1, 2].map((k) => p.position[s * 3 + 
 const shownByX = (p: Placement) => p.a11y.map((a) => a.slot).sort((a, b) => at(p, a)[0]! - at(p, b)[0]!);
 
 /** Every slot has a finite position; hidden ones have scale 0 (anchored); the shown ones scale > 0. */
-function expectEverySlotPlaced(p: Placement): void {
-    expect(p.scale.length).toBeGreaterThanOrEqual(model.marks.keys.length);
+function expectEverySlotPlaced(p: Placement, slots = model.marks.keys.length): void {
+    expect(p.scale.length).toBeGreaterThanOrEqual(slots);
     expect(p.position.length).toBe(p.scale.length * 3);
     expect([...p.position].every(Number.isFinite)).toBe(true);
     const shown = new Set(p.a11y.map((a) => a.slot));
@@ -39,7 +39,7 @@ describe('the Flow placement (PRD 43 C7)', () => {
         const onPath = line.stops.map((id) => model.stationSlot.get(id)!);
         expect(shownByX(p).filter((s) => onPath.includes(s))).toEqual(onPath);
         onPath.forEach((slot, i) => expect(at(p, slot)[1]).toBeCloseTo(i * DECK_RISE, 4));
-        expect(at(p, onPath[onPath.length - 1]!)[1]).toBeGreaterThan(at(p, onPath[0]!)[1]);
+        expect(at(p, onPath[onPath.length - 1]!)[1]).toBeGreaterThan(at(p, onPath[0]!)[1]!);
         for (const { slot } of p.a11y) {
             expect(model.marks.slotKind[slot]).toBe(SLOT_STATION);
             if (!onPath.includes(slot)) expect(at(p, slot)[1]).toBe(0);
@@ -73,9 +73,15 @@ describe('the Flow placement (PRD 43 C7)', () => {
     });
 
     it('class depth: the loaded definitions are appended slots and are placed', () => {
-        const p = run(req({ drill: drillKeyOf({ level: 'class', ref: USE_CASE }), symbols: records }));
-        expect(p.append?.keys.length ?? 0).toBeGreaterThan(0);
+        // The host-loaded definitions are only appended when the resident graph lacks them: use the symbol-free graph here
+        // (the module-level one already holds the symbols as resident slots, so nothing is left to append).
+        const bare = surfaceFixture();
+        const bareModel = buildStageModel(bare);
+        const t = PLACEMENTS.flow(bare, bareModel, { ...req({ drill: drillKeyOf({ level: 'class', ref: USE_CASE }), symbols: records }), generation: bareModel.marks.generation });
+        while (!t.step());
+        const p = t.result();
+        expect(p.append?.keys).toEqual([`node:${CLS}`, `node:${CLS}.run`]);
         expect(p.a11y.length).toBeGreaterThan(0);
-        expectEverySlotPlaced(p);
+        expectEverySlotPlaced(p, p.append!.keys.length); // the drilled level is its own MarkSet (not the symbol-ful module model): at least the appended definitions are placed
     });
 });

@@ -6,7 +6,7 @@
  * - {@link useLiveKeys}: the renderer's live slot keys (MarkSet + appended), re-read when they change;
  * - {@link useTweening}: true for a tween's length after a placement change (picking and proxies are off meanwhile);
  * - {@link useStageMotion}: decorative motion only while on screen, the page visible, and motion allowed;
- * - {@link useDepth}: the depth control — the uniform on every drag tick, the label pass and overlay once it settles.
+ * - {@link useDepth}: the tilt — the uniform on every step (the 3D / Flat switch's tween), the label pass and overlay once it settles.
  */
 
 import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';

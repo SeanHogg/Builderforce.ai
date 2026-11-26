@@ -30,19 +30,21 @@ export interface SimulatePanelProps {
     /** The selected mark's name, for the entry line and the toggle. */
     fromName?: string;
     path: PathModel;
+    /** A stop (station id) on `path` the journey starts from (Simulate from a card or lens); absent or not on the path ⇒ the path's first stop. */
+    startAt?: string | null | undefined;
     labels: KnowledgeGraphLabels;
     /** Moves the journey step to the stop the shown hop leaves from, so the stage and the PathStrip highlight it. */
     onStep?(stopIndex: number): void;
     onClose(): void;
 }
 
-export function SimulatePanel({ graph, from, fromName, path, labels, onStep, onClose }: SimulatePanelProps) {
+export function SimulatePanel({ graph, from, fromName, path, startAt = null, labels, onStep, onClose }: SimulatePanelProps) {
     const t = labels.surface.simulate;
     const [rows, setRows] = useState<CarriedValue[]>([{ name: '', value: '' }]);
     const [entry, setEntry] = useState<string | null>(null);
     const [at, setAt] = useState(0);
     const pathKey = path.stops.map((s) => s.id).join('|');
-    useEffect(() => { setEntry(null); setAt(0); }, [pathKey, from]);
+    useEffect(() => { setEntry(startAt && path.stops.some((s) => s.id === startAt) ? startAt : null); setAt(0); }, [pathKey, from, startAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const hops = useMemo(() => {
         const journey = hopsFromStops(path.stops, path.hops.map((h) => h.kind));

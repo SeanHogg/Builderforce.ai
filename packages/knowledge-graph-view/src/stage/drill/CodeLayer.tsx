@@ -18,6 +18,7 @@ import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
 import { CONTROL } from '../../styles';
 import { ShapeGlyph } from '../../surface/LegendGlyph';
+import { actionGlyph, type ActionGlyphName } from '../../surface/ui/glyphs';
 import { TYPE } from '../../surface/ui/type';
 import type { SourceLocation, SourceReader, SourceText, SymbolRecord } from '../../types';
 import {
@@ -25,6 +26,7 @@ import {
     type CallStep, type CodeTarget, type Lens, type RailKind, type TokenKind,
 } from './codeText';
 import type { CodeMarks } from './codeDiff';
+import { LINK_BUTTON } from './linkButton';
 import { visibleLensActions, type LensActionId, type LensCtx } from './lensActions';
 
 export interface CodeLayerProps {
@@ -79,6 +81,8 @@ export interface CodeLayerProps {
     marks?: CodeMarks | null | undefined;
     /** Comparing, and the earlier version cannot be read here: today's file is shown, and the pane says so. */
     diffNote?: boolean | undefined;
+    /** A restructure: the new modules the marked (removed) definitions move to, named in a note. */
+    movedTo?: readonly string[] | undefined;
 }
 
 /** A lens link (`LENS_ACTIONS`): a class's references, Show in map; a method's callers, Drill in; and Out, Simulate, Restructure. */
@@ -101,9 +105,6 @@ const STICKY_SHADOW = '0 2px 6px color-mix(in srgb, currentColor 18%, transparen
 
 /** The gutter rail's tone per symbol kind (the rows of the symbol being read take the accent instead). */
 export const RAIL_TONE: Readonly<Record<RailKind, ThemeTone>> = { class: 'line3', method: 'nodeSymbol', field: 'nodeEntity' };
-
-/** A name in running text that acts (a drillable method, a trail crumb): underlined, otherwise the text. */
-export const LINK_BUTTON: CSSProperties = { border: 0, padding: 0, font: 'inherit', color: 'inherit', background: 'transparent', cursor: 'pointer', textDecoration: 'underline' };
 
 const TOKEN_TONE: Readonly<Record<TokenKind, ThemeTone>> = { plain: 'text', comment: 'muted', string: 'line3', number: 'line5', keyword: 'accent' };
 
@@ -150,9 +151,9 @@ const button: CSSProperties = {
 };
 
 /** A lens link: muted, the acting one (Show in map, Drill in) on the accent; plain text when nothing handles it. */
-function LensLink({ text, glyph, go = false, onClick }: { text: string; glyph?: string | undefined; go?: boolean | undefined; onClick?: (() => void) | undefined }) {
+function LensLink({ text, glyph, go = false, onClick }: { text: string; glyph?: ActionGlyphName | undefined; go?: boolean | undefined; onClick?: (() => void) | undefined }) {
     const style: CSSProperties = { color: cssVar(go ? 'accent' : 'muted') };
-    const body = <>{glyph && <span aria-hidden="true">{glyph} </span>}{text}</>;
+    const body = <>{glyph && <span aria-hidden="true" style={{ display: 'inline-flex', verticalAlign: 'middle', marginRight: 4 }}>{actionGlyph(glyph)}</span>}{text}</>;
     if (!onClick) return <span style={style}>{body}</span>;
     return <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} style={{ ...LINK_BUTTON, ...style, textDecoration: 'none' }}>{body}</button>;
 }
@@ -172,19 +173,9 @@ function LensLine({ lens, labels, ctx, onLens }: { lens: Lens; labels: Knowledge
     );
 }
 
-/** The warning mark for a symbol carrying an anti-pattern: the gutter's, in place of its shape, and the outline's. */
-export function WarnGlyph({ label, size = GLYPH_PX - 4 }: { label: string; size?: number }) {
-    return (
-        <svg width={size} height={size} viewBox="0 0 10 10" role="img" aria-label={label} data-gutter-warn style={{ flex: 'none' }}>
-            <title>{label}</title>
-            <path d="M5 1 L9.5 9 H0.5 Z" fill={cssVar('violation')} />
-        </svg>
-    );
-}
-
 export function CodeLayer({
     target, reader, labels, onOpenSource, onClose, onOut, scrollLine, records = [], onDrill, onReadingLine, steps, currentStep = -1, span, onStep, marked,
-    onViewport, onText, onPickLine, cursorLine, rails, railSpan, lens, onLens, lensCtx = null, sticky, onJump, marks, diffNote,
+    onViewport, onText, onPickLine, cursorLine, rails, railSpan, lens, onLens, lensCtx = null, sticky, onJump, marks, diffNote, movedTo,
 }: CodeLayerProps) {
     const t = labels.surface.code, card = labels.surface.map.card;
     const linesRef = useRef<HTMLDivElement | null>(null);
@@ -256,8 +247,8 @@ export function CodeLayer({
         const l = n1 === null ? undefined : lens?.get(n1);
         const warn = l ? lensCtx.facts.antiPatternOf(l.ref) : null;
         return (
-            <span data-gutter-glyph={l?.ref} style={{ flex: `0 0 ${GLYPH_PX}px`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                {l && (warn ? <WarnGlyph label={fillTemplate(t.gutterWarn, { name: lensCtx.kindName?.(warn.kind) ?? warn.kind })} /> : <ShapeGlyph shape={railShape(l.kind)} tone={RAIL_TONE[l.kind]} size={GLYPH_PX - 4} />)}
+            <span data-gutter-glyph={l?.ref ?? ''} style={{ flex: `0 0 ${GLYPH_PX}px`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                {l && (warn ? <span role="img" aria-label={fillTemplate(t.gutterWarn, { name: lensCtx.kindName?.(warn.kind) ?? warn.kind })} data-gutter-warn style={{ display: 'inline-flex', flex: 'none', color: cssVar('violation') }}>{actionGlyph('warning')}</span> : <ShapeGlyph shape={railShape(l.kind)} tone={RAIL_TONE[l.kind]} size={GLYPH_PX - 4} />)}
             </span>
         );
     };
@@ -281,8 +272,9 @@ export function CodeLayer({
         >
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 0 }}>
                 <b data-code-where style={{ ...TYPE.monoName, overflowWrap: 'anywhere', minWidth: 0 }}>{where}</b>
-                <button type="button" aria-label={card.close} onClick={onClose} style={{ border: 0, background: 'transparent', color: cssVar('muted'), cursor: 'pointer', minHeight: 24, minWidth: 24, padding: 0 }}><span aria-hidden="true">×</span></button>
+                <button type="button" aria-label={card.close} onClick={onClose} style={{ border: 0, background: 'transparent', color: cssVar('muted'), cursor: 'pointer', minHeight: 24, minWidth: 24, padding: 0 }}><span aria-hidden="true" style={{ display: 'inline-flex' }}>{actionGlyph('close')}</span></button>
                 {diffNote && <span role="note" data-code-diff-note style={{ flexBasis: '100%', ...TYPE.monoMeta }}>{labels.surface.compare.oldNotAvailable}</span>}
+                {movedTo && movedTo.length > 0 && <span role="note" data-code-moved-to style={{ flexBasis: '100%', ...TYPE.monoMeta }}>{fillTemplate(labels.surface.compare.movedOut, { modules: movedTo.join(', ') })}</span>}
                 {marks && (marks.added.size > 0 || marks.removed.size > 0) && (
                     <span role="note" data-code-marks style={{ flexBasis: '100%', ...TYPE.monoMeta }}>{fillTemplate(labels.surface.compare.codeMarks, { added: marks.added.size, removed: marks.removed.size })}</span>
                 )}

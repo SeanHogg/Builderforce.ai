@@ -15,7 +15,7 @@ import type { Placement } from './types';
 
 // A graph of files only (the stored graph): every drilled symbol is an APPENDED slot.
 const graph = surfaceFixture();
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const { marks } = model;
 const base = marks.keys.length;
 const CLS = `${USE_CASE}#UseCase`;

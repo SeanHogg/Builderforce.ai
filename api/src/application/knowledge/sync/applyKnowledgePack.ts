@@ -83,6 +83,8 @@ export interface ApplyInput {
   syncId?: string;
   part?: number;
   parts?: number;
+  /** The git commit the pack's review ran at (the route validates it as 7-64 hex); beside the pack — the BFKP codec has no field for it. Recorded with the scope's digest. */
+  commitSha?: string;
 }
 
 /** A tombstone whose leaf was removed but whose row was kept, and why. */
@@ -260,7 +262,7 @@ export async function applyKnowledgePack(deps: ApplyDeps, input: ApplyInput): Pr
       await unit.ledger.sources.upsert(root, plan.upsert);
       await unit.ledger.sources.mark(root, plan.remove);
       if (plan.stale.length > 0) await unit.store.markRelationsStaleMany(plan.stale);
-      const written = await writeRows(deps, unit, pack);
+      const written = await writeRows(deps, unit, pack, input.commitSha);
       // The digest of THIS ROOT'S leaves, from the stored bucket digests with only the touched buckets recomputed.
       const committed = await commitLeaves(unit.ledger, root, {
         leaves: leavesOf(pack), touched: [...tomb.keys, ...legacy.leafKeys], base: head.baseGeneration,

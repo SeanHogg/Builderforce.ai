@@ -41,7 +41,7 @@ describe('StationCard', () => {
     });
 
     const withFacts = (over: Partial<NonNullable<CardModel['facts']>> = {}): Partial<CardModel> => ({ facts: { tests: 'reached', antiPattern: null, ...over } });
-    const finding = { kind: 'god-module', name: 'God module', findingId: 'f1' };
+    const finding = { kind: 'god-module', name: 'God module', findingId: 'f1', restructurable: true };
 
     it('offers Simulate, and Restructure INSTEAD of it when the station carries an anti-pattern', () => {
         const onSimulate = vi.fn(), onRestructure = vi.fn();
@@ -63,6 +63,31 @@ describe('StationCard', () => {
         card(withFacts({ antiPattern: finding }));
         expect(screen.queryByRole('button', { name: t.restructure })).toBeNull();
         expect(screen.queryByRole('button', { name: t.simulate })).toBeNull();
+    });
+
+    const props = { labels: L, compact: false, at: { left: 0, top: 0 }, onClose: vi.fn(), onEnter: vi.fn(), onUnfold: vi.fn(), onCallers: vi.fn(), onApi: vi.fn(), onPatterns: vi.fn() };
+
+    it('falls back to Simulate when the anti-pattern has no handler or is not restructurable', () => {
+        render(<StationCard card={{ ...base, ...withFacts({ antiPattern: finding }) }} {...props} onSimulate={vi.fn()} />);
+        expect(screen.getByRole('button', { name: t.simulate })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: t.restructure })).toBeNull();
+        document.body.innerHTML = '';
+        render(<StationCard card={{ ...base, ...withFacts({ antiPattern: { ...finding, kind: 'cycle', restructurable: false } }) }} {...props} onSimulate={vi.fn()} onRestructure={vi.fn()} />);
+        expect(screen.getByRole('button', { name: t.simulate })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: t.restructure })).toBeNull();
+        expect(document.querySelector('[data-fact="anti"]')).not.toBeNull();
+    });
+
+    it('shows Restructure disabled, with the loading tooltip, while its file is being read', () => {
+        render(<StationCard card={{ ...base, ...withFacts({ antiPattern: finding }), restructureReady: false }} {...props} onRestructure={vi.fn()} />);
+        const b = screen.getByRole('button', { name: t.restructure }) as HTMLButtonElement;
+        expect(b.disabled).toBe(true);
+        expect(b.title).toBe(t.loading);
+    });
+
+    it('says nothing about test reach when no coverage was collected', () => {
+        card(withFacts({ tests: null }));
+        expect(document.querySelector('[data-fact="tests"]')).toBeNull();
     });
 
     it('states risk, test reach and the anti-pattern name in the facts row', () => {

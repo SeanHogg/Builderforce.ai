@@ -11,7 +11,7 @@ describe('glyphs', () => {
         const { container } = render(<>{actionGlyph(name)}</>);
         const svg = container.querySelector('svg')!;
         expect(svg.getAttribute('aria-hidden')).toBe('true');
-        expect(svg.style.stroke).toBe('currentColor');
+        expect(svg.style.stroke.toLowerCase()).toBe('currentcolor'); // jsdom lowercases CSS keywords
         expect(svg.querySelectorAll('path, rect, circle').length).toBeGreaterThan(0);
     });
 

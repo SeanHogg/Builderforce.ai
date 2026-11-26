@@ -3,7 +3,7 @@
  * location in a narrow one (360 px), and a hide control whose Show tab brings it back.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../../labels';
 import { LENSES } from '../../lenses';
 import { surfaceFixture } from '../../testing';
@@ -56,12 +56,21 @@ describe('the code pane in the host', () => {
         // The picture first: the pane is not drawn.
         expect(container.querySelector('[data-code-narrow]')).toBeNull();
         expect(sw.querySelector('[aria-checked="true"]')?.textContent).toBe(sc.panePicture);
-        fireEvent.click(screen.getByRole('radio', { name: sc.paneCode }));
+        fireEvent.click(within(sw).getByRole('radio', { name: sc.paneCode }));
         expect(container.querySelector('[data-code-narrow] [data-level-outline]')).not.toBeNull();
         expect((container.querySelector('[data-map-pane]') as HTMLElement).style.visibility).toBe('hidden');
-        fireEvent.click(screen.getByRole('radio', { name: sc.panePicture }));
+        fireEvent.click(within(sw).getByRole('radio', { name: sc.panePicture }));
         expect(container.querySelector('[data-code-narrow]')).toBeNull();
         expect((container.querySelector('[data-map-pane]') as HTMLElement).style.visibility).toBe('');
+    });
+
+    it('in a 360 px box the picture half carries the same Hide button, which goes through onToggleCode', async () => {
+        const onToggleCode = vi.fn();
+        const { container } = mount(360, { onToggleCode });
+        const hide = await screen.findByRole('button', { name: sc.dockHide });
+        expect(container.querySelector('[data-pane-switch]')!.contains(hide)).toBe(true);
+        fireEvent.click(hide);
+        expect(onToggleCode).toHaveBeenCalledTimes(1);
     });
 
     it('hidden, it leaves a Show tab and no pane or switch; the tab and the pane\'s own Hide both go through onToggleCode', async () => {

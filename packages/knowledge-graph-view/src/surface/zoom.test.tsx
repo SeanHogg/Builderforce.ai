@@ -17,14 +17,14 @@ import { clampScale, MAX_SCALE, MIN_SCALE, ScaleZoom, useZoomHost, ZoomProvider 
 
 describe('the zoom contract', () => {
     it('the stage (the Map here) registers its rig: in and out move the view about the centre, Fit restores it', () => {
-        const stage = buildStageModel(graph, []);
+        const stage = buildStageModel(graph);
         const t = PLACEMENTS.map(graph, stage, { graph: 1, generation: stage.marks.generation, camera: 'map', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0 });
         while (!t.step());
         const map = t.result();
         const { seen, host } = probe();
         const { container, unmount } = render(
             <ZoomProvider host={host}>
-                <Stage renderer={createNoopStage()} marks={stage.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={vi.fn()} depthLabel="Depth" />
+                <Stage renderer={createNoopStage()} marks={stage.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={vi.fn()} />
             </ZoomProvider>,
         );
         // The caption layer moves with the camera by ONE transform: its scale is the zoom.

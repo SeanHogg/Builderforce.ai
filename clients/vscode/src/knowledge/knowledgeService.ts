@@ -42,6 +42,7 @@ import { createDirectorySource } from "./vscodeDirectorySource";
 import type { KnowledgeFiles } from "./knowledgeStores";
 import { openRootKnowledge, rootMigration } from "./folderKnowledge";
 import { configureReplicaLog, duringReview, replicatedStoreOf, type PumpSource } from "./knowledgeReplica";
+import { recordReviewCommit } from "./reviewCommit";
 import { legacyRootIdOf, rememberRoot, rootById, type KnowledgeRoot, type RootsMemento, type WorkspaceFolderRef } from "./knowledgeRoots";
 import type { TrackedJudgement } from "./knowledgeJudgement";
 import { reviewPortsFor } from "./reviewPortsFor";
@@ -227,6 +228,8 @@ export function reviewRoot(
           // Extraction runs in the worker pool and judging N wide (PRD 41 A8); the caller's options win.
           const report = await runKnowledgeReview(p, { ...reviewParallelism(p.symbolLookup, root.rootPath), judgeFiles: judgeBudgetFiles(), ...opts });
           recorder.finish();
+          // The commit this review ran at, while its tree is still the one it read — recorded before `duringReview` starts the pump.
+          await recordReviewCommit(open.files, root.rootPath, root.rootId);
           for (const cb of changedListeners) cb(root.rootId);
           return report;
         });
@@ -251,6 +254,8 @@ export function reviewRoot(
         signal.throwIfAborted();
         // Map only (`judgeFiles: 0`, no judge port): no model call; the files it does not reach stay owed.
         const report = await runKnowledgeReview(p, { ...reviewParallelism(p.symbolLookup, root.rootPath), plan, judgeFiles: 0, signal });
+        // The map pass records a digest too: its commit is the one its tree was read at.
+        await recordReviewCommit(open.files, root.rootPath, root.rootId);
         for (const cb of changedListeners) cb(root.rootId);
         return report;
       });

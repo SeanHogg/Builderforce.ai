@@ -12,7 +12,6 @@
  */
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { withSymbolRecords } from '../../../surface/transit/symbols';
 import { BG_TONE, toneIndex } from '../../../stage/tones';
 import { DASH_DESCRIBES, DASH_SOLID, type Caption, type LabelRun, type Placement, type Vec3 } from '../../../stage/types';
 import type { StageModel } from '../stageModel';
@@ -44,9 +43,10 @@ export function placeFlow(g: KnowledgeGraph, model: StageModel, req: PlacementRe
     const frame = drillFrameOf(req.drill);
     const drilled = frame ? drillLevel(g, model, frame, records) : null;
     const level = drilled?.level ?? model;
-    const full = drilled?.full ?? withSymbolRecords(g, records);
+    // The loaded definitions matter only at class / function depth (the drilled level); the system level reads the resident graph.
+    const full = drilled?.full ?? g;
     const { marks } = level;
-    const walk = sequenceFlow({ band: 'system', entry: req.pathId, full, records, stations: level.stations, lines: level.lines.lines });
+    const walk = sequenceFlow({ band: 'system', entry: req.pathId, full, records: drilled ? records : [], stations: level.stations, lines: level.lines.lines });
 
     const stops = [...new Set(walk.participants)].filter((id) => level.stationSlot.has(id) && level.stations.byId.has(id));
     const onPath = new Set(stops);
@@ -78,7 +78,7 @@ export function placeFlow(g: KnowledgeGraph, model: StageModel, req: PlacementRe
     beside.forEach((s, i) => stand(s.id, [MARGIN + (i % perRow) * step, 0, FLOOR_Z + Math.floor(i / perRow) * FLOOR_ROW]));
     const rows = Math.ceil(beside.length / perRow);
     const bottom = beside.length ? FLOOR_Z + Math.max(0, rows - 1) * FLOOR_ROW : PATH_Z;
-    const right = MARGIN + Math.max(0, stops.length - 1, Math.min(perRow, beside.length) - 1) * col + MARGIN;
+    const right = MARGIN + Math.max(0, (stops.length - 1) * col, (Math.min(perRow, beside.length) - 1) * step) + MARGIN;
     const top = Math.max(0, (stops.length - 1) * DECK_RISE) + SHAPE_HEIGHT;
     anchorHidden(marks, d, 'station', [right / 2, 0, bottom / 2]);
 

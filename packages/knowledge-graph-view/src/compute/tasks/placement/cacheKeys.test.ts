@@ -12,7 +12,7 @@ import { PLACEMENTS } from './index';
 import { placementCacheKey, type PlacementReq } from './request';
 
 const graph = withSymbols(surfaceFixture());
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const req = (camera: PlacementCamera): PlacementReq => ({ graph: 1, generation: model.marks.generation, camera, drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0 });
 
 describe('every camera stamps the ONE cache key (B1a rule 6)', () => {
@@ -35,9 +35,9 @@ describe('a worker fail-over keeps the stage showing (requests carry the model i
         const client = new ComputeClient(() => { const w = new FakeWorker(); workers.push(w); return w; });
         const strings = Object.fromEntries(Object.entries(bandStrings(L)).map(([k, v]) => [k, `Domaine:${v}`]));
         // The MarkSet the worker built (the deterministic generation the main thread will rebuild too).
-        const built = buildStageModel(graph, [], strings).marks;
+        const built = buildStageModel(graph, strings).marks;
         const marksDone = vi.fn();
-        client.run('markSet', { graph, changed: [], strings }, { done: marksDone, fail: vi.fn() });
+        client.run('markSet', { graph, strings }, { done: marksDone, fail: vi.fn() });
         await flush();
         const worker = workers[0]!;
         worker.done(worker.runs()[0]!, built);
@@ -47,7 +47,7 @@ describe('a worker fail-over keeps the stage showing (requests carry the model i
         const placed = vi.fn();
         client.run('placement', { ...req('map'), graph, generation: built.generation }, { done: placed, fail: vi.fn() });
         await flush();
-        expect((worker.runs()[1]!.req as { model?: unknown }).model).toEqual({ changed: [], strings });   // the codec carried the inputs
+        expect((worker.runs()[1]!.req as { model?: unknown }).model).toEqual({ strings });   // the codec carried the inputs
         worker.onerror?.({} as never);                                   // the worker dies with the placement owed
         await vi.waitFor(() => expect(placed).toHaveBeenCalled(), { timeout: 5000 });
         const p = placed.mock.calls[0]![0] as { generation: number; captions: { text: string }[] };

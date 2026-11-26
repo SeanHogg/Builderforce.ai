@@ -14,7 +14,7 @@ import { PLACEMENTS, type PlacementReq } from './index';
 import { channelBindings } from './request';
 
 const graph = codeFixture();
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const { marks } = model;
 const req: PlacementReq = { graph: 1, generation: marks.generation, camera: '3d', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0, depth: 1 };
 const p3: Placement = (() => { const t = PLACEMENTS['3d'](graph, model, req); while (!t.step()); return t.result(); })();

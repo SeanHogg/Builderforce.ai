@@ -45,6 +45,8 @@ function toScopeRecord(row: typeof knowledgeScopes.$inferSelect): KnowledgeScope
     packs: [...row.packs],
     ...(row.lastDigest ? { lastDigest: row.lastDigest } : {}),
     ...(row.previousDigest ? { previousDigest: row.previousDigest } : {}),
+    ...(row.commitSha ? { commitSha: row.commitSha } : {}),
+    ...(row.previousCommitSha ? { previousCommitSha: row.previousCommitSha } : {}),
     ...(row.lastReviewedAt ? { lastReviewedAt: row.lastReviewedAt.toISOString() } : {}),
     ...(row.provenance ? { provenance: row.provenance } : {}),
     ...measuredOf(row.extractorVersion, row.toolVersions, 'measured'),
@@ -190,6 +192,8 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
         // What the review was measured with describes the review at `lastDigest`: stored only with a digest.
         extractorVersion: scope.lastDigest ? scope.measured?.extractorVersion ?? null : null,
         toolVersions: scope.lastDigest ? scope.measured?.toolVersions ?? null : null,
+        // The commit the review at `lastDigest` ran at: stored only with a digest, like `measured`.
+        commitSha: scope.lastDigest ? scope.commitSha ?? null : null,
       };
       // A digest write states what ITS review was measured with (memory's local-store rule, PRD 41 §C9): unstated is
       // unknown, even for the same digest — a pack re-sent by a current client carries it again. A NEW digest moves the
@@ -211,6 +215,16 @@ export function drizzleKnowledgeStore(db: Db, tenantId: number, projectId: numbe
             previousToolVersions: sql`CASE WHEN ${isNewDigest} THEN ${knowledgeScopes.toolVersions} ELSE ${knowledgeScopes.previousToolVersions} END`,
             extractorVersion: values.extractorVersion,
             toolVersions: values.toolVersions,
+            // A NEW digest moves the stored commit to `previous_commit_sha` and takes the one this review states (none = unknown).
+            // The SAME digest again keeps the commit already stored and only FILLS one that is missing (COALESCE) — unlike `measured`
+            // above, which a same-digest write REPLACES (unstated = unknown). Why the difference: `measured` is carried INSIDE every
+            // pack's scope, so each pack restates it truthfully; the commit rides beside the pack and a later pack of the same review
+            // (a live-edit delta, a retried or multi-part send) may carry none, or one from a different moment. Replacing would let
+            // such a pack erase a known commit or overwrite it with a commit the digest was not reviewed at.
+            // (A client now sends the commit RECORDED at review completion, so a later pack repeats it; this keeps the rule safe
+            // against an older client too.)
+            previousCommitSha: sql`CASE WHEN ${isNewDigest} THEN ${knowledgeScopes.commitSha} ELSE ${knowledgeScopes.previousCommitSha} END`,
+            commitSha: sql`CASE WHEN ${isNewDigest} THEN excluded.commit_sha ELSE COALESCE(${knowledgeScopes.commitSha}, excluded.commit_sha) END`,
           } : {}),
           ...(scope.lastReviewedAt ? { lastReviewedAt: values.lastReviewedAt } : {}),
         },

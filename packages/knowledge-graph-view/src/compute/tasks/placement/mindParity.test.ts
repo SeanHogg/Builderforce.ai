@@ -24,7 +24,7 @@ const graphOf = (nodes: KNode[]): KnowledgeGraph => ({ ...codeFixture('r'), node
 const STRINGS = { mapMore: L.mapMore, 'mind.moreFoldersOne': L.surface.mind.moreFoldersOne, 'mind.moreFoldersOther': L.surface.mind.moreFoldersOther };
 
 function place(g: KnowledgeGraph, unfolded: string | null = null): { p: Placement; model: StageModel } {
-    const model = buildStageModel(g, [], STRINGS);
+    const model = buildStageModel(g, STRINGS);
     const req: PlacementReq = { graph: 1, generation: model.marks.generation, camera: 'mind', drill: null, unfolded, pins: [], pathId: null, viewportBand: 2, lod: 0 };
     const t = PLACEMENTS.mind(g, model, req);
     while (!t.step());

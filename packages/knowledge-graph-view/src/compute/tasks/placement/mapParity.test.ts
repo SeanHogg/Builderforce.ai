@@ -43,7 +43,7 @@ function firstSegments(b: LinkBatch): number[] {
 }
 
 const graph = withDocs();
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const map = run(graph, model, req(model));
 
 describe('Map hops (was HopPath)', () => {
@@ -105,7 +105,7 @@ describe('Map walls and documents (was TransitBands and DescribeLinks)', () => {
             const { routes: _served, ...badges } = n.badges;
             return { ...n, badges };
         }) };
-        const m = buildStageModel(noRoutes, []);
+        const m = buildStageModel(noRoutes);
         const p = run(noRoutes, m, req(m));
         expect(family(p, 'describes')).toBeUndefined();
         expect(family(p, 'wall')).toBeUndefined();

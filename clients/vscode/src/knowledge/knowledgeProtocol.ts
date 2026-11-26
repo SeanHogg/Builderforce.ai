@@ -212,7 +212,7 @@ export interface KnowledgeTryResponse { status: number; headers: Record<string, 
 export type KnowledgePinpointResult = PinpointMatchResult;
 
 export interface KnowledgeHistoryResult {
-  commits: { sha: string; title: string; at: string; refs: string[]; author?: string }[];
+  commits: { sha: string; parent?: string; title: string; at: string; refs: string[]; author?: string }[];
 }
 
 /**

@@ -13197,6 +13197,10 @@
         "title": "A board now earns its budget — and your teammates finally have a page",
         "description": "Delivery never showed up in what a board earns or what investors see. Now every ticket that reaches Done earns its board budget, milestones roll up to the investor seam, and each teammate has a profile you can reach from a mention."
       },
+      "see-your-code-as-a-3d-picture": {
+        "title": "See your code as a 3D picture, with the code beside it",
+        "description": "The knowledge view now puts the code and a 3D picture of the system side by side at one shared location. Click a shape to read its code, click a method to fly into it, and preview a restructure before anyone changes a line."
+      },
       "run-your-app-on-the-canvas": {
         "title": "Run the app your board just built — without leaving the board",
         "description": "A canvas that writes a backend, a page and a setup note used to have nowhere to run them. The app surface assembles every code card into one working application, at real device widths, on the same board you built it on."
@@ -38292,6 +38296,7 @@
     "viewSystem": "System",
     "viewHeat": "Heat",
     "viewSequence": "Sequence",
+    "viewFlow": "Flow",
     "panelRun": "Reviews",
     "panelCoverage": "Coverage",
     "panelPatterns": "Patterns",
@@ -38880,7 +38885,15 @@
           "leaf": "Outside this level",
           "loading": "Reading symbols…",
           "callSite": "Call site",
-          "openAtLine": "Open at line {line}"
+          "openAtLine": "Open at line {line}",
+          "callers": "Callers",
+          "simulate": "Simulate",
+          "simulateTip": "Run the path through this and see what it reaches",
+          "restructure": "Restructure",
+          "restructureTip": "See {name} restructured",
+          "risk": "Risk",
+          "testReached": "A test reaches it",
+          "testNone": "No test reaches it"
         },
         "stats": { "issues": "Anti-patterns", "complexity": "Complexity", "coverage": "Coverage", "reached": "Reached", "usage": "Importance" },
         "statWords": {
@@ -39151,7 +39164,9 @@
         "errorTitle": "This view hit an error",
         "errorRetry": "Try again",
         "errorBack": "Back",
-        "depth": "Depth"
+        "view3d": "3D",
+        "viewFlat": "Flat",
+        "flatToggle": "Flat view"
       },
       "nav": {
         "group": "Move the view",
@@ -39225,12 +39240,6 @@
         "outline": "Outline",
         "outlineAria": "Symbols in this file",
         "tabsAria": "Open files",
-        "layoutAria": "Code band layout",
-        "flow": "Flow",
-        "sequence": "Sequence",
-        "viewAria": "Map view",
-        "view3d": "3D",
-        "view2d": "2D",
         "followsEditor": "Follows the editor",
         "stateSelected": "selected",
         "stateReading": "reading",
@@ -39245,7 +39254,46 @@
         "status": "Visualization · {level} level · {state}",
         "following": "following {file}",
         "pinnedStatus": "pinned",
-        "statusLine": "Ln {line}"
+        "statusLine": "Ln {line}",
+        "dockAria": "Code and outline",
+        "dockHide": "Hide code",
+        "dockShow": "Show code",
+        "levelAria": "Members of this level",
+        "levelEmpty": "Nothing at this level yet.",
+        "levelNoSource": "The source is not available here: showing the outline.",
+        "rowNoTest": "No test",
+        "rowAntiPattern": "Anti-pattern: {name}",
+        "rowGoInside": "Go inside {name}",
+        "rowRestructure": "Restructure {name}",
+        "paneSwitchAria": "Show the code or the picture",
+        "paneCode": "Code",
+        "panePicture": "Picture",
+        "lensOut": "Out",
+        "lensSimulate": "No test · Simulate",
+        "lensRestructure": "{name}",
+        "gutterWarn": "Anti-pattern: {name}"
+      },
+      "compare": {
+        "aria": "Comparison",
+        "sourceBaseline": "Compared with the last review",
+        "sourceSnapshot": "Compared with the earlier snapshot",
+        "sourceRestructure": "Restructure: {kind} in {target}",
+        "sourceCommit": "Commit {sha}: {title}",
+        "sideGroup": "Before or after",
+        "playRestructure": "Play the restructure",
+        "playHistory": "Replay the history",
+        "playBaseline": "Play the change",
+        "apply": "Apply on a branch",
+        "applyTip": "Open the fix flow for this finding. Nothing changes until you apply it.",
+        "close": "Stop comparing",
+        "notComparable": "These two sides cannot be compared: {reasons}",
+        "noBefore": "There is no earlier version to show.",
+        "oldNotAvailable": "The earlier version is not available here.",
+        "seeRestructured": "See it restructured",
+        "restructureLoading": "Reading the file to propose a restructure…",
+        "restructureNone": "No restructure can be proposed for this one.",
+        "codeMarks": "{added} lines added, {removed} lines removed",
+        "movedOut": "The marked definitions move out to {modules}"
       },
       "api": {
         "notSetUpTitle": "No endpoints found",

@@ -69,7 +69,7 @@ describe('useCompare: the ONE compare state', () => {
 
     it('a restructure opens on Before, then plays to After; play again goes back and forth', () => {
         const { result } = mount();
-        const proposal = { after: { ...now, nodes: now.nodes.slice(0, -1) }, bornFrom: new Map<string, string>() };
+        const proposal = { after: { ...now, nodes: now.nodes.slice(0, -1) }, bornFrom: new Map<string, string>(), moved: new Map<string, string>(), spans: [] };
         act(() => result.current.open({ source: 'restructure', side: 'before', findingId: 'f1' }, proposal));
         expect(result.current.state).toMatchObject({ source: 'restructure', side: 'before', findingId: 'f1' });
         expect(result.current.playing).toBe(true);
@@ -90,10 +90,18 @@ describe('useCompare: the ONE compare state', () => {
         expect(result.current.picked).toBe(commits[0]);
         expect(result.current.view!.graph).toBeNull();
         expect(result.current.view!.diff.get(commits[0]!.refs[0]!)).toBe('changed');
-        expect(result.current.view!.revs.before).toBe(commits[0]!.sha);
+        // No parent known: Before has no revision (the pane says the earlier version is not available); After reads at the commit itself.
+        expect(result.current.view!.revs).toEqual({ before: null, after: commits[0]!.sha });
 
         act(() => result.current.pickCommit(null));
         expect(result.current.state).toBeNull();
+    });
+
+    it('a commit\'s Before reads at its first parent and its After at the commit', () => {
+        const parent = 'e'.repeat(40);
+        const { result } = mount({ commits: [{ ...commits[0]!, parent }] });
+        act(() => result.current.pickCommit(commits[0]!.sha));
+        expect(result.current.view!.revs).toEqual({ before: parent, after: commits[0]!.sha });
     });
 
     it('play steps the commits oldest to newest', () => {
@@ -108,7 +116,7 @@ describe('useCompare: the ONE compare state', () => {
 
     it('close ends a play, and another root closes the comparison', () => {
         const { result, rerender } = mount();
-        act(() => result.current.open({ source: 'restructure', side: 'before', findingId: 'f1' }, { after: now, bornFrom: new Map() }));
+        act(() => result.current.open({ source: 'restructure', side: 'before', findingId: 'f1' }, { after: now, bornFrom: new Map(), moved: new Map(), spans: [] }));
         act(() => result.current.close());
         expect(result.current.state).toBeNull();
         act(() => { vi.advanceTimersByTime(PLAY_START_MS * 2); });

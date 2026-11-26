@@ -28,6 +28,7 @@ import { GENERATION_CHECK_INTERVAL_MS, emptyReplicaState, pumpReplica, type Repl
 import { createReplicaQueue, type ReplicaQueue } from './replicaQueue.js';
 import { replicatedKnowledgeStore } from './replicatedStore.js';
 import { sourcePathIn } from './rootId.js';
+import { readReviewCommit } from './reviewCommit.js';
 
 /** A live edit's mark waits this long for more (never during a review). */
 const KICK_DEBOUNCE_MS = 1500;
@@ -269,6 +270,9 @@ export function createReplicaHost(opts: ReplicaHostOptions = {}): ReplicaHost {
                         queue: held.queue, local: source.local, client: source.client, signal: abort.signal, initial: held.state,
                         projectId: source.projectId, rootId: source.rootId, maxTransientStreak: BACKGROUND_TRANSIENT_STREAK,
                         ...(held2.isFresh ? { lockHeld: () => held2.isFresh!() } : {}),
+                        // The commit the root's last COMPLETED review ran at, as the host recorded it then (`reviewCommit.ts`) — never a live read.
+                        commitSha: () => readReviewCommit(source.files, source.rootId),
+                        report: (what, error) => report(what, error),
                         sources: async () => (await currentSourcesOf(source.manifest, source.rootId)).map((s) => {
                             const bytes = source.sizeOf?.(sourcePathIn(s.ref, source.rootId));
                             return bytes === undefined ? s : { ...s, bytes };

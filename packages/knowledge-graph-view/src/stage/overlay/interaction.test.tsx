@@ -17,7 +17,7 @@ import { SlotIncident, INCIDENT_SHOWN } from './incident';
 import { overlayLinks } from './OverlayLayer';
 
 const graph = surfaceFixture();
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const t = PLACEMENTS.map(graph, model, { graph: 1, generation: model.marks.generation, camera: 'map', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0 });
 while (!t.step());
 const map = t.result();
@@ -56,7 +56,7 @@ describe('a11y proxies (PRD 43 B5)', () => {
 
     it('roving focus: one tab stop, arrows walk the reading order, Escape and Backspace go Out', async () => {
         const onOut = vi.fn();
-        render(<Stage renderer={createNoopStage()} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={() => {}} depthLabel="Depth" description="The map" onOut={onOut} />);
+        render(<Stage renderer={createNoopStage()} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={() => {}} description="The map" onOut={onOut} />);
         await screen.findAllByRole('button', { name: map.a11y[0]!.label });
         const proxies = [...document.querySelectorAll<HTMLButtonElement>('[data-stage-proxies] button')];
         expect(proxies.length).toBe(map.a11y.length);
@@ -127,7 +127,7 @@ describe('picking on the stage bus (PRD 43 B5)', () => {
     it('a click on the stage selects the mark under it; during a tween it does nothing', async () => {
         const onSelect = vi.fn();
         const renderer = createNoopStage();
-        const props = { renderer, marks: model.marks, paint: null, colors: null, width: 800, height: 500, reducedMotion: false, selected: null, onSelect, depthLabel: 'Depth' };
+        const props = { renderer, marks: model.marks, paint: null, colors: null, width: 800, height: 500, reducedMotion: false, selected: null, onSelect };
         const view = render(<Stage {...props} placement={map} />);
         await screen.findAllByRole('button', { name: map.a11y[0]!.label });
         const box = document.querySelector<HTMLElement>('[data-stage]')!;
@@ -152,7 +152,7 @@ describe('picking on the stage bus (PRD 43 B5)', () => {
 describe('an empty click', () => {
     it('clears the selection; a click on a mark, or a drag, does not', async () => {
         const onClear = vi.fn(), onSelect = vi.fn();
-        render(<Stage renderer={createNoopStage()} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={onSelect} onClear={onClear} depthLabel="Depth" />);
+        render(<Stage renderer={createNoopStage()} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={onSelect} onClear={onClear} />);
         await screen.findAllByRole('button', { name: map.a11y[0]!.label });
         const box = document.querySelector<HTMLElement>('[data-stage]')!;
         const proxy = document.querySelector<HTMLElement>(`[data-slot="${map.a11y[0]!.slot}"]`)!;
@@ -177,11 +177,11 @@ describe('the overlay (B7 Selection: overlay + incident slice on the main thread
         const renderer = createNoopStage();
         const incident = new SlotIncident(buildSlotIncident(graph, model));
         const station = map.a11y[0]!.slot;
-        const { rerender } = render(<Stage renderer={renderer} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={() => {}} depthLabel="Depth" />);
+        const { rerender } = render(<Stage renderer={renderer} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={() => {}} />);
         const bus = stageBus(renderer);
         const path = map.a11y.slice(0, 3).map((a) => keys[a.slot]!);
         act(() => bus.setOptions({ incident, path }));
-        rerender(<Stage renderer={renderer} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={keys[station]!} onSelect={() => {}} depthLabel="Depth" />);
+        rerender(<Stage renderer={renderer} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={keys[station]!} onSelect={() => {}} />);
         expect(renderer.overlay.selected).toBe(station);
         expect(Array.from(renderer.overlay.incident)).toEqual([...incident.of(station, INCIDENT_SHOWN)]);
         expect(Array.from(renderer.overlay.path)).toEqual(map.a11y.slice(0, 3).map((a) => a.slot));

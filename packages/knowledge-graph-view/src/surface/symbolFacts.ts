@@ -9,10 +9,25 @@ import { isRestructurable } from '../compute/compare/restructure';
 import { QUESTIONS, type QuestionContext } from './questions';
 import { fileRefOf, stationOfRef, type StationModel } from './stations';
 
+/** An anti-pattern finding on a file. Every kind shows (the warning, the name); only a `restructurable` one can be restructured. */
+export interface AntiPatternFact {
+    kind: string;
+    findingId: string;
+    restructurable: boolean;
+}
+
+/** Whether a test reaches a file's station: `unknown` = no coverage reading was collected (never an invented zero). */
+export type TestReach = 'reached' | 'none' | 'unknown';
+
 export interface SymbolFacts {
-    /** The restructurable anti-pattern on the ref's file (a file ref or `<file ref>#<name>`), else null. */
-    antiPatternOf(ref: string): { kind: string; findingId: string } | null;
-    /** Its file's station has no test reaching it: the SAME predicate as the "What has no test?" question. */
+    /**
+     * The anti-pattern on the ref's file (a file ref or `<file ref>#<name>`), else null. A restructurable finding wins
+     * over one that is not; among equals, the first in graph order.
+     */
+    antiPatternOf(ref: string): AntiPatternFact | null;
+    /** Test reach of the ref's file's station: `none` is the SAME predicate as the "What has no test?" question. */
+    testReach(ref: string): TestReach;
+    /** `testReach(ref) === 'none'`: no reading is not "untested". */
     untested(ref: string): boolean;
 }
 
@@ -32,26 +47,30 @@ export function symbolFacts(graph: Pick<KnowledgeGraph, 'findings'>, stations: S
 }
 
 function factsOf(graph: Pick<KnowledgeGraph, 'findings'>, stations: StationModel): SymbolFacts {
-    // The offender (the finding's first node) carries the anti-pattern; the first finding in graph order wins a file.
-    const onFile = new Map<string, { kind: string; findingId: string }>();
+    // The offender (the finding's first node) carries the anti-pattern; a restructurable finding outranks the rest of its file.
+    const onFile = new Map<string, AntiPatternFact>();
     for (const f of graph.findings) {
         const at = f.nodes[0];
-        if (!at || !isRestructurable(f.kind)) continue;
+        if (!at) continue;
         const file = fileRefOf(at);
-        if (!onFile.has(file)) onFile.set(file, { kind: f.kind, findingId: f.id });
+        const held = onFile.get(file);
+        if (held && (held.restructurable || !isRestructurable(f.kind))) continue;
+        onFile.set(file, { kind: f.kind, findingId: f.id, restructurable: isRestructurable(f.kind) });
     }
-    const untested = new Map<string, boolean>();
+    const reach = new Map<string, TestReach>();
+    const testReach = (ref: string): TestReach => {
+        const file = fileRefOf(ref);
+        let known = reach.get(file);
+        if (known === undefined) {
+            const station = stations.byId.get(stationOfRef(stations, file) ?? '');
+            known = !station || station.cov === undefined ? 'unknown' : UNTESTED.matches(station, NO_CONTEXT) ? 'none' : 'reached';
+            reach.set(file, known);
+        }
+        return known;
+    };
     return {
         antiPatternOf: (ref) => onFile.get(fileRefOf(ref)) ?? null,
-        untested(ref) {
-            const file = fileRefOf(ref);
-            let known = untested.get(file);
-            if (known === undefined) {
-                const station = stations.byId.get(stationOfRef(stations, file) ?? '');
-                known = !!station && UNTESTED.matches(station, NO_CONTEXT);
-                untested.set(file, known);
-            }
-            return known;
-        },
+        testReach,
+        untested: (ref) => testReach(ref) === 'none',
     };
 }

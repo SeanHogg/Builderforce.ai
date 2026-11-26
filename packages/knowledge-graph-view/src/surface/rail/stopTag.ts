@@ -33,7 +33,7 @@ export function stopTag(st: Station, first: { n: number; finding: Finding } | un
         return { kind: 'finding', tone: SEVERITY_TONE[first.finding.severity], text: fillTemplate(labels.surface.rail.pinTag, { n: first.n, title: findingTitle(first.finding, labels) }) };
     }
     if (st.cov === undefined) return null;
-    const percent = Math.round(st.cov * 100), tone: ThemeTone = isUntested(st.cov) ?'cycle' : 'muted';
+    const percent = Math.round(st.cov * 100), tone: ThemeTone = isUntested(st.cov) ? 'cycle' : 'muted';
     return st.covProvenance === 'heuristic'
         ? { kind: 'reached', tone, text: fillTemplate(labels.surface.rail.reachedTag, { percent }) }
         : { kind: 'coverage', tone, text: `${percent}%` };

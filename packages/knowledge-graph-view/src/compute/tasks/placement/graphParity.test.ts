@@ -40,10 +40,10 @@ const place = (g: KnowledgeGraph, model: StageModel, camera: PlacementReq['camer
 };
 
 const small = withSymbols(surfaceFixture());
-const smallModel = buildStageModel(small, []);
+const smallModel = buildStageModel(small);
 // A graph past the 2,000 cap with far more edges than the singles budget: bundles, hidden nodes.
 const big = buildPerfGraph({ scale: 0.75 }).graph;
-const bigModel = buildStageModel(big, []);
+const bigModel = buildStageModel(big);
 
 /** The 2D graph's own pipeline for `g`'s focus cut. */
 function reference(g: KnowledgeGraph, cap = 2000) {

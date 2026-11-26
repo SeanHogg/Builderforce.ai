@@ -13212,6 +13212,10 @@
         "title": "看板现在能赚取预算了,队友终于有了自己的页面",
         "description": "交付从未体现在看板赚了多少、投资人看到什么上。现在每张完成的工单都会为看板赚取预算,里程碑汇入投资人通道,每位队友都有一个可以从提及中直达的资料页。"
       },
+      "see-your-code-as-a-3d-picture": {
+        "title": "把代码看成 3D 图像，代码就在旁边",
+        "description": "知识视图现在把代码和系统的 3D 图像并排显示，共用同一个位置。点击一个形状就能读它的代码，点击一个方法就能深入进去，还能在任何人改动一行之前预览一次重构。"
+      },
       "run-your-app-on-the-canvas": {
         "title": "运行你的看板刚构建的应用——无需离开看板",
         "description": "一个写出后端、页面和设置说明的画布，过去没有地方运行它们。应用界面把每张代码卡片组装成一个可运行的完整应用，以真实设备宽度显示，就在你构建它的同一个看板上。"
@@ -39034,6 +39038,7 @@
     "viewSystem": "系统",
     "viewHeat": "热力",
     "viewSequence": "时序",
+    "viewFlow": "流程",
     "panelRun": "审阅",
     "panelCoverage": "覆盖率",
     "panelPatterns": "模式",
@@ -39747,7 +39752,15 @@
           "leaf": "不在此层级内",
           "loading": "正在读取符号…",
           "callSite": "调用位置",
-          "openAtLine": "在第 {line} 行打开"
+          "openAtLine": "在第 {line} 行打开",
+          "callers": "调用方",
+          "simulate": "模拟",
+          "simulateTip": "让路径经过这里，看它能到达哪里",
+          "restructure": "重构",
+          "restructureTip": "查看重构后的 {name}",
+          "risk": "风险",
+          "testReached": "有测试覆盖到它",
+          "testNone": "没有测试覆盖到它"
         },
         "stats": {
           "issues": "反模式",
@@ -40064,7 +40077,9 @@
         "errorTitle": "此视图出错了",
         "errorRetry": "重试",
         "errorBack": "返回",
-        "depth": "深度"
+        "view3d": "3D",
+        "viewFlat": "平面",
+        "flatToggle": "平面视图"
       },
       "nav": {
         "group": "移动视图",
@@ -40138,12 +40153,6 @@
         "outline": "大纲",
         "outlineAria": "此文件中的符号",
         "tabsAria": "已打开的文件",
-        "layoutAria": "代码层布局",
-        "flow": "流程",
-        "sequence": "时序",
-        "viewAria": "地图视图",
-        "view3d": "3D",
-        "view2d": "2D",
         "followsEditor": "跟随编辑器",
         "stateSelected": "已选择",
         "stateReading": "正在阅读",
@@ -40158,7 +40167,46 @@
         "status": "可视化 · {level}层级 · {state}",
         "following": "正在跟随 {file}",
         "pinnedStatus": "已固定",
-        "statusLine": "行 {line}"
+        "statusLine": "行 {line}",
+        "dockAria": "代码与大纲",
+        "dockHide": "隐藏代码",
+        "dockShow": "显示代码",
+        "levelAria": "此层级的成员",
+        "levelEmpty": "此层级暂无内容。",
+        "levelNoSource": "此处无法获取源码：正在显示大纲。",
+        "rowNoTest": "无测试",
+        "rowAntiPattern": "反模式：{name}",
+        "rowGoInside": "进入 {name}",
+        "rowRestructure": "重构 {name}",
+        "paneSwitchAria": "显示代码或图示",
+        "paneCode": "代码",
+        "panePicture": "图示",
+        "lensOut": "输出",
+        "lensSimulate": "无测试 · 模拟",
+        "lensRestructure": "{name}",
+        "gutterWarn": "反模式：{name}"
+      },
+      "compare": {
+        "aria": "对比",
+        "sourceBaseline": "与上次审阅对比",
+        "sourceSnapshot": "与较早的快照对比",
+        "sourceRestructure": "重构：{target} 中的 {kind}",
+        "sourceCommit": "提交 {sha}：{title}",
+        "sideGroup": "之前或之后",
+        "playRestructure": "播放重构过程",
+        "playHistory": "重放历史",
+        "playBaseline": "播放变更",
+        "apply": "在分支上应用",
+        "applyTip": "打开此发现的修复流程。在你应用之前不会有任何改动。",
+        "close": "停止对比",
+        "notComparable": "这两侧无法对比：{reasons}",
+        "noBefore": "没有可显示的更早版本。",
+        "oldNotAvailable": "此处无法获取更早的版本。",
+        "seeRestructured": "查看重构后的样子",
+        "restructureLoading": "正在读取文件以提出重构建议…",
+        "restructureNone": "无法为此项提出重构建议。",
+        "codeMarks": "新增 {added} 行，删除 {removed} 行",
+        "movedOut": "标记的定义将移至 {modules}"
       },
       "api": {
         "notSetUpTitle": "未找到端点",

@@ -35,6 +35,8 @@ export interface CompareLabels {
         restructureNone: string;
         /** The code pane marks (screen-reader text for the line counts). `{added}`, `{removed}`. */
         codeMarks: string;
+        /** A restructure: the marked definitions leave this file for the new modules. `{modules}`. */
+        movedOut: string;
     };
 }
 
@@ -59,5 +61,6 @@ export const COMPARE_DEFAULTS: CompareLabels = {
         restructureLoading: 'Reading the file to propose a restructure…',
         restructureNone: 'No restructure can be proposed for this one.',
         codeMarks: '{added} lines added, {removed} lines removed',
+        movedOut: 'The marked definitions move out to {modules}',
     },
 };

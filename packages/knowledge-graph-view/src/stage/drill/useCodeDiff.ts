@@ -11,14 +11,28 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { NodeRef } from '@seanhogg/builderforce-memory/knowledge';
+import { movedMarks, movedModules, type MovedSpan } from '../../compute/compare';
+import { pathOf } from '../../graphModel';
 import type { CompareRevs } from '../../surface/compareModel';
 import type { SourceReader, SourceReaderAt, SourceText } from '../../types';
 import { markLines, type CodeMarks } from './codeDiff';
 
+const NO_SPANS: readonly MovedSpan[] = [];
+
 /** What the pane needs of an open comparison of files: the side on show, and the revision each side reads (null After = today's file). */
-export interface CodeCompare { side: 'before' | 'after'; revs: CompareRevs }
+export interface CodeCompare {
+    side: 'before' | 'after';
+    revs: CompareRevs;
+    /** A restructure (no revisions): the definitions that leave the file, by ref, to the module ref each lands in. */
+    moved?: ReadonlyMap<string, string> | undefined;
+    /** The lines of those definitions, derived when the proposal was made (the pane loads no symbols of its own). */
+    spans?: readonly MovedSpan[] | undefined;
+}
 
 export interface CodeDiff {
+    /** A restructure: the file names of the new modules this file's definitions move to (the pane says it on both sides). */
+    movedTo: readonly string[];
     /** The reader for the shown side (today's `readSource`, or `readSourceAt` bound to the side's revision). */
     reader: SourceReader | undefined;
     /** The pane's text, once read: hand it to `CodeLayer.onText` alongside the reading's (it is one read, shared). */
@@ -38,8 +52,12 @@ const bound = (readAt: SourceReaderAt, rev: string): SourceReader => (path, rang
 /** Before is always an earlier version; After is one only when it has a revision of its own (a snapshot's). */
 const isOld = (side: 'before' | 'after', rev: string | null): boolean => rev !== null || side === 'before';
 
+const NO_MODULES: readonly string[] = [];
+const fileName = (ref: string): string => { const p = pathOf(ref as NodeRef) ?? ref; return p.slice(p.lastIndexOf('/') + 1); };
+
 export function useCodeDiff(compare: CodeCompare | undefined, reader: SourceReader | undefined, readAt: SourceReaderAt | undefined, path: string | undefined): CodeDiff {
-    const comparing = !!compare;
+    const moved = compare?.moved, spans = compare?.spans ?? NO_SPANS;
+    const comparing = !!compare && !moved;
     const side = compare?.side ?? 'after', other = side === 'after' ? 'before' : 'after';
     const shownRev = compare?.revs[side] ?? null, otherRev = compare?.revs[other] ?? null;
     const shownOld = isOld(side, shownRev), otherOld = isOld(other, otherRev);
@@ -64,11 +82,18 @@ export function useCodeDiff(compare: CodeCompare | undefined, reader: SourceRead
         against(path, { startLine: text.startLine, endLine: text.startLine + text.lines.length + SLACK - 1 }).then(
             // A file the other side does not have reads as empty: every line of this side is then its own.
             (theirs) => { if (live) setRead({ marks: markLines(side, text, theirs ?? EMPTY), failed: false }); },
-            () => { if (live) setRead({ marks: null, failed: true }); },
+            // A read that FAILED is not a file that was absent: it is reported, marks nothing, and the pane says the earlier version is unavailable.
+            (error: unknown) => { console.error('knowledge-graph-view: the other side of a code comparison could not be read', error); if (live) setRead({ marks: null, failed: true }); },
         );
         return () => { live = false; };
     }, [ready, text, path, against, side]);
 
-    if (!comparing) return { reader, onText: NO_TEXT, marks: null, unavailable: false };
-    return { reader: shown, onText, marks: read.marks, unavailable: !shownReadable || !otherReadable || read.failed };
+    // A restructure reads today's file on both sides; the lines of the definitions that leave it are its `removed` marks (the same CodeMarks every comparison draws).
+    const restructure = useMemo(
+        () => (moved && text && path ? { marks: movedMarks(path, spans, text), modules: movedModules(path, spans).map(fileName) } : null),
+        [moved, text, path, spans],
+    );
+    if (moved) return { reader, onText, marks: restructure?.marks ?? null, unavailable: false, movedTo: restructure?.modules ?? NO_MODULES };
+    if (!comparing) return { reader, onText: NO_TEXT, marks: null, unavailable: false, movedTo: NO_MODULES };
+    return { reader: shown, onText, marks: read.marks, unavailable: !shownReadable || !otherReadable || read.failed, movedTo: NO_MODULES };
 }

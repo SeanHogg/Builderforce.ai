@@ -12,10 +12,10 @@ import { placeDrill } from './placement/drill';
 import { buildSlotIncident } from './stageIncident';
 import { copyMarkSet, stageModelOf } from './stageModel';
 
-export const markSet: Handler<'markSet'> = (store, { graph, changed, strings }) => once(() => copyMarkSet(stageModelOf(store, graph, changed, strings).marks));
+export const markSet: Handler<'markSet'> = (store, { graph, strings }) => once(() => copyMarkSet(stageModelOf(store, graph, strings).marks));
 
 /** The model a request names: its own inputs when it carries them (any realm builds the same model), else the held one. */
-const modelOf = (store: Parameters<Handler<'placement'>>[0], graph: number, model?: ModelInputs) => stageModelOf(store, graph, model?.changed, model?.strings);
+const modelOf = (store: Parameters<Handler<'placement'>>[0], graph: number, model?: ModelInputs) => stageModelOf(store, graph, model?.strings);
 
 export const markPaint: Handler<'markPaint'> = (store, { graph, lensId, questionId, overlay, lit, roles, family, diff, model }) => once(() =>
     paintMarks(store.graph(graph), modelOf(store, graph, model), { lensId, questionId, overlay, lit, roles, family, ...(diff ? { diff: new Map(diff) } : {}) }));

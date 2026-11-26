@@ -34,12 +34,20 @@ export interface ScopeProvenance {
  * with, recorded when that review ran and carried by the pack; stored only with a digest, absent = unknown — plus an
  * uploaded pack's provenance (kept for pack roots only).
  */
-export type KnowledgeScopeWrite = ScopeRecord & { provenance?: ScopeProvenance };
+export type KnowledgeScopeWrite = ScopeRecord & {
+  provenance?: ScopeProvenance;
+  /** The git commit the review at `lastDigest` ran at (hex, validated at the door); stored only with a digest, absent = unknown. */
+  commitSha?: string;
+};
 
 export interface KnowledgeScope extends ScopeRecord {
   /** An uploaded pack's provenance (PRD 40, OD-3); absent on a reviewed root. */
   provenance?: ScopeProvenance;
+  /** The git commit the review at `lastDigest` ran at; absent = unknown. */
+  commitSha?: string;
   previousDigest?: string;
+  /** The git commit the review at `previousDigest` ran at (it moves with the digest); absent = unknown. */
+  previousCommitSha?: string;
   /** What the review at `previousDigest` was measured with (it moves with the digest); absent = unknown. */
   previousMeasured?: MeasuredWith;
 }

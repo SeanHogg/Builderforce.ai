@@ -19,7 +19,7 @@ import { MARK_TYPE_ORDER } from '../../shapes';
 import { makeOverlay, type Bindings } from '../../surface/overlays';
 import { litStations, QUESTIONS, type QuestionId } from '../../surface/questions';
 import { BG_TONE, toneIndex } from '../../stage/tones';
-import { FLAG, SLOT_NODE, type MarkPaint, type MarkSet } from '../../stage/types';
+import { FLAG, SLOT_FOLDER, SLOT_NODE, type MarkPaint, type MarkSet } from '../../stage/types';
 import type { LensId } from '../../types';
 import type { DiffKind } from '../compare/diffGraphs';
 import { lightFolders, paintFolders } from './folderPaint';
@@ -89,6 +89,7 @@ export function paintMarks(g: KnowledgeGraph, model: StageModel, input: PaintInp
     }
     if (input.diff?.size) {
         for (let i = 0; i < n; i++) {
+            if (marks.slotKind[i] === SLOT_FOLDER) continue; // a folder is not a thing that differs
             // The key (`node:<ref>`) or the bare ref `diffKindOf` returns, the way `dimExcept` reads `lit`.
             const key = marks.keys[i]!;
             const kind = input.diff.get(key) ?? input.diff.get(key.slice(key.indexOf(':') + 1));

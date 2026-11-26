@@ -11,7 +11,7 @@ import { useStageWiring } from './useStageWiring';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS } from '../../labels';
 
 const graph = surfaceFixture();
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const t = PLACEMENTS.map(graph, model, { graph: 1, generation: model.marks.generation, camera: 'map', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0 });
 while (!t.step());
 const map = t.result();
@@ -28,7 +28,7 @@ describe('route → line (a route pick selects its line, as the SVG map\'s hop d
 
     it('a click on a route (away from any station) hands bus.options.onLink that polyline\'s line id', async () => {
         const renderer = createNoopStage();
-        render(<Stage renderer={renderer} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={() => {}} depthLabel="Depth" />);
+        render(<Stage renderer={renderer} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={() => {}} />);
         await screen.findAllByRole('button', { name: map.a11y[0]!.label });
         const bus = stageBus(renderer);
         const onLink = vi.fn();

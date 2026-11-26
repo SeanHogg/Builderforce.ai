@@ -9,7 +9,7 @@ import { createNoopStage } from './renderer';
 import { Stage } from './Stage';
 
 const graph = surfaceFixture();
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const t = PLACEMENTS.map(graph, model, { graph: 1, generation: model.marks.generation, camera: 'map', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0 });
 while (!t.step());
 const map = t.result();
@@ -17,7 +17,7 @@ const map = t.result();
 describe('the stage with the no-op renderer (jsdom)', () => {
     it('mounts the a11y proxies over every Tab-stop mark once the view settles, and a proxy selects its slot\'s key', async () => {
         const onSelect = vi.fn();
-        render(<Stage renderer={createNoopStage()} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={onSelect} depthLabel="Depth" />);
+        render(<Stage renderer={createNoopStage()} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={onSelect} />);
         const first = map.a11y[0]!;
         const proxies = await screen.findAllByRole('button', { name: first.label });
         expect(screen.getAllByRole('button')).toHaveLength(map.a11y.length);
@@ -27,7 +27,7 @@ describe('the stage with the no-op renderer (jsdom)', () => {
     });
 
     it('docks the shape legend when on-screen types are passed', () => {
-        render(<Stage renderer={createNoopStage()} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={vi.fn()} depthLabel="Depth" legend={{ types: ['class', 'function'], labels: L }} />);
+        render(<Stage renderer={createNoopStage()} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={vi.fn()} legend={{ types: ['class', 'function'], labels: L }} />);
         const legend = screen.getByTestId('kg-shape-legend');
         expect(legend.querySelectorAll('[data-type]')).toHaveLength(2);
     });

@@ -13,8 +13,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { nodeIndex, pathOf } from '../../graphModel';
-import { fillTemplate } from '../../labels';
 import type { SceneProps } from '../../surface/registry';
 import { fileRefOf } from '../../surface/stations';
 import { symbolFacts, type SymbolFacts } from '../../surface/symbolFacts';
@@ -34,8 +34,6 @@ import { INCIDENT_SHOWN } from './incident';
 const NO_RECORDS: readonly SymbolRecord[] = [];
 const NO_TYPES: ReadonlyMap<string, MarkType> = new Map();
 
-export type CodeLayout = 'flow' | 'sequence';
-
 export interface CodeDockInput {
     p: SceneProps;
     bus: StageBus;
@@ -53,6 +51,10 @@ export interface CodeDockInput {
     shown: boolean;
     /** Flip `shown`. */
     onToggle?: (() => void) | undefined;
+    /** The Sequence camera is on show: it draws the open method's calls itself, so the numbered call arcs stay off. */
+    sequence?: boolean | undefined;
+    /** The graph the facts read when it is not `p.graph` (a comparison's shown side; `p.graph` is then the union). */
+    factsGraph?: KnowledgeGraph | null | undefined;
 }
 
 export interface CodeDockModel {
@@ -89,14 +91,10 @@ export interface CodeDockModel {
     toggleFollow(): void;
     /** Out, innermost first: back from a callee opened across, out of the code level, out of a drilled level. */
     out: (() => void) | undefined;
-    codeLayout: CodeLayout;
-    setCodeLayout(layout: CodeLayout): void;
-    /** The code level draws the Sequence of the open method. */
-    sequence: boolean;
 }
 
 export function useCodeDock(a: CodeDockInput): CodeDockModel {
-    const { p, bus, map, zoom, selected, setSelected, cardKey, toast, width, slotOf, shown, onToggle } = a;
+    const { p, bus, map, zoom, selected, setSelected, cardKey, toast, width, slotOf, shown, onToggle, sequence = false } = a;
     const { surface, graph } = p;
     const drill = surface.drill;
     const index = useMemo(() => nodeIndex(graph), [graph]);
@@ -108,7 +106,9 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     const split = visible && codePaneWidth(width) > 0;
     const mapWidth = split ? width - codePaneWidth(width) : width;
     // Computed once per graph: the lens rows, the gutter and the outline's marks all read it.
-    const facts = useMemo(() => symbolFacts(graph, surface.stations), [graph, surface.stations]);
+    // While comparing, the graph is the union (both sides' findings): the facts read the shown side's own graph.
+    const factsGraph = a.factsGraph ?? graph;
+    const facts = useMemo(() => symbolFacts(factsGraph, surface.stations), [factsGraph, surface.stations]);
     const top = drill.stack[drill.stack.length - 1];
     const inside = zoom.code?.target.ref ?? top?.ref ?? null;
     // The outline's glyphs: only while it is what the pane shows.
@@ -160,8 +160,9 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
         if (slot >= 0) bus.reveal(slot);
     }, [bus]);
     const reader = useCodeReading({ path: codeTarget?.path, records, method: methodRef, scrollLine, pick: zoom.code ? markRef : null, onFocusSymbol: followCode });
-    // The host's editor, while Follow is on: the pane opens on the editor's file (not at the code level, whose method holds
-    // the pane) and scrolls with it, so the stage follows the real editor through the pane's own reading line.
+    // The host's editor, while Follow is on: the LOCATION follows it (the editor's file is selected, never at the code level,
+    // whose method holds the pane) and a pane already reading that file scrolls with it, so the stage follows the real editor
+    // through the pane's own reading line. Following never starts reading (the records walk, fade and ring): the person opens a file.
     const editor = surface.editorView ?? null;
     const editorPath = editor?.path ?? null;
     const editorFileRef = useMemo(
@@ -174,15 +175,17 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     useEffect(() => {
         if (!editor || !following) return;
         if (panePath === editor.path) { jumpTo(editor.firstLine); return; }
-        if (!atCodeLevel && editorFileRef) { setSelected(`node:${editorFileRef}`); setCodeOpen(true); }
+        if (!atCodeLevel && editorFileRef) setSelected(`node:${editorFileRef}`);
     }, [editor, following, panePath, atCodeLevel, editorFileRef, jumpTo, setSelected]);
     // The open method's calls on the stage, resolved again on every placement (a band crossed, a drill) so the arcs stay on their marks.
+    // The Sequence camera draws those calls itself (raised bars), so the Flow arcs are off there.
     const { steps, current } = reader;
+    const arcs = reading && !sequence;
     useEffect(() => {
-        const push = () => bus.setCalls(callTrackOf(reading ? methodRef : null, steps, current, (k) => bus.slotOf(k)));
+        const push = () => bus.setCalls(callTrackOf(arcs ? methodRef : null, steps, current, (k) => bus.slotOf(k)));
         push();
         return bus.onPlacement(push);
-    }, [bus, reading, methodRef, steps, current]);
+    }, [bus, arcs, methodRef, steps, current]);
     // What the code on screen lights, the rest fade: the symbols in view, their enclosing symbols and files, and the reading
     // symbol's link neighbours. Only while the pane follows the map's own bands (not the system band or the code level).
     const inView = reader.inView, byRef = reader.byRef;
@@ -208,13 +211,6 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     useEffect(() => { if (!reading) bus.setReading(-1); }, [bus, reading]);
     const out = across ? clearAcross : zoom.code ? zoom.closeCode : drill.canOut ? drill.out : undefined;
 
-    // Flow (the stage's call arcs) or Sequence (the calls as a diagram); a method with no calls stays on Flow.
-    const [codeLayout, setLayout] = useState<CodeLayout>('flow');
-    useEffect(() => { if (!atCodeLevel) setLayout('flow'); }, [atCodeLevel]);
-    const setCodeLayout = useCallback((layout: CodeLayout) => {
-        if (layout === 'sequence' && steps.length === 0) { toast(fillTemplate(t.toastNoCalls, { name: methodTarget?.name ?? '' })); return; }
-        setLayout(layout);
-    }, [steps, toast, t, methodTarget]);
     const toggleFollow = useCallback(() => { toast(reader.follow ? t.toastFollowOff : t.toastFollowOn); reader.toggleFollow(); }, [reader, toast, t]);
     // Closing the pane leaves the code level too.
     const leaveCode = zoom.leaveCode;
@@ -234,7 +230,6 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
 
     return {
         reading, visible, split, mapWidth, facts, inside, types, records, reader, codeTarget, markTarget, acrossTarget, methodTarget, codeName, scrollLine, hoverRef,
-        followCode, clearAcross, nodeSelected, openCode, closeCode, hide, drillTo, toggleFollow, out, codeLayout, setCodeLayout,
-        sequence: atCodeLevel && codeLayout === 'sequence' && !!methodTarget,
+        followCode, clearAcross, nodeSelected, openCode, closeCode, hide, drillTo, toggleFollow, out,
     };
 }

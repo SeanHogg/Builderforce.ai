@@ -37,7 +37,7 @@ const textPort = (): TextPort => ({
 });
 
 function setup() {
-    const model = buildStageModel(graph, []);
+    const model = buildStageModel(graph);
     const base = model.marks.keys.length;
     const req = (over: Partial<PlacementReq>): PlacementReq => ({ graph: 1, generation: model.marks.generation, camera: 'map', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0, ...over });
     const run = (camera: PlacementReq['camera'], over: Partial<PlacementReq>): Placement => { const t = PLACEMENTS[camera](graph, model, req({ camera, ...over })); while (!t.step()); return t.result(); };

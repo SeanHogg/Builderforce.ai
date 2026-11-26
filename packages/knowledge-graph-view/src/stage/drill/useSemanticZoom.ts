@@ -49,8 +49,10 @@ export interface SemanticZoom {
     /** The Map's ladder: go to band `target` (0 system … CODE). Out is `outToBand`; in steps band by band from `prefer`,
      *  and `onBlocked` runs when a step has nothing to enter. */
     toBand(target: number, prefer: string | null, onBlocked: () => void): void;
-    /** The Sequence's band control: fly to band `band`'s threshold (0 = Fit). */
+    /** The Sequence's band control: set the band (the zoom's own `sequenceLod`), then fly to its threshold (0 = Fit). */
     zoomToBand(band: number): void;
+    /** The Sequence draws a method's calls (the code band's method, or one opened across): it has no bands, so the zoom steps nothing. */
+    setMethodOpen(open: boolean): void;
     /** The code band's method, when it is open. */
     code: { key: string; target: CodeTarget } | null;
     /** Leave the code band: back one method on the trail, else fly back out to the method band. */
@@ -89,6 +91,9 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
     const [seqBand, setSeqBand] = useState(0);
     // An enter / out asked for and not yet in the stack: no second step until it lands.
     const pending = useRef(false);
+    // A method's calls are drawn (the host's `PlacementReq.method`, which an across-opened method also sets): the ONE condition the Sequence's zoom gates on.
+    const methodOpen = useRef(false);
+    const setMethodOpen = useCallback((open: boolean) => { methodOpen.current = open; }, []);
     useEffect(() => { pending.current = false; }, [drill.stack]);
     // The code layer belongs to the level it opened on.
     useEffect(() => { setTrail([]); }, [map.drill]);
@@ -120,7 +125,10 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         const s = state.current;
         const at = rigOf(bus)?.focusPoint ?? [proj.width / 2, proj.height / 2];
         const camera = cameraOf(p);
+        // Sequence: the band follows the size of its participants at every level. At code depth (a method is open) it draws
+        // that method's calls, which have no bands, so the zoom there steps nothing. Flow's level is the drill's, not a zoom's.
         if (camera === 'sequence') {
+            if (s.codeKey || methodOpen.current) return;
             const f = focusOf(p, proj, p.a11y.map((a) => a.slot), at, Number.POSITIVE_INFINITY);
             const next = f ? stepBand(s.seqBand, f.px, f.px, SEQUENCE_LAST) : s.seqBand;
             if (next !== s.seqBand) { s.seqBand = next; setSeqBand(next); }
@@ -178,12 +186,16 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         rig.flyTo(p.position[slot * 3]!, p.position[slot * 3 + 2]!, zoomForBand(s.band + 1, scale), now(), ms);
     }, [bus, ms]);
 
+    // An explicit band click SETS the band (the one state), then the camera follows it: band 0 is a fit, the others fly to the threshold.
     const zoomToBand = useCallback((target: number) => {
+        const band = Math.max(0, Math.min(SEQUENCE_LAST, target));
+        state.current.seqBand = band;
+        setSeqBand(band);
         const p = bus.placement, rig = rigOf(bus);
-        if (!p || !rig) { setSeqBand(Math.max(0, Math.min(SEQUENCE_LAST, target))); return; }
-        if (target <= 0) { rig.fit(now(), ms); return; }
+        if (!p || !rig) return;
+        if (band <= 0) { rig.fit(now(), ms); return; }
         const slot = p.a11y[0]?.slot ?? -1, v = rig.current;
-        if (slot >= 0) rig.flyTo(v.cx, v.cz, zoomForBand(Math.min(SEQUENCE_LAST, target), p.scale[slot] ?? 0), now(), ms);
+        if (slot >= 0) rig.flyTo(v.cx, v.cz, zoomForBand(band, p.scale[slot] ?? 0), now(), ms);
     }, [bus, ms]);
 
     // Fly to method `key`'s code-band threshold (when the stage has a rig and the method a slot).
@@ -281,7 +293,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
     }), [trail, drill.symbols]);
 
     return {
-        band: bandOf(band), sequenceLod: sequenceLodOf(seqBand), nest, setBasis, awaitsBasis, nests, zoomInto, zoomToBand, outToBand, stepIn, toBand, code, closeCode, leaveCode, enterCode,
+        band: bandOf(band), sequenceLod: sequenceLodOf(seqBand), nest, setBasis, awaitsBasis, nests, zoomInto, zoomToBand, setMethodOpen, outToBand, stepIn, toBand, code, closeCode, leaveCode, enterCode,
         trail: crumbs, codeBack,
     };
 }

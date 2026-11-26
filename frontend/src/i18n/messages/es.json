@@ -13226,6 +13226,10 @@
         "title": "Un tablero ahora gana su presupuesto, y tus compañeros por fin tienen una página",
         "description": "La entrega nunca aparecía en lo que gana un tablero ni en lo que ven los inversores. Ahora cada ticket que llega a Hecho gana presupuesto para su tablero, los hitos llegan al canal de inversores y cada compañero tiene un perfil al que se llega desde una mención."
       },
+      "see-your-code-as-a-3d-picture": {
+        "title": "Ve tu código como una imagen 3D, con el código al lado",
+        "description": "La vista de conocimiento ahora muestra el código y una imagen 3D del sistema lado a lado, en una ubicación compartida. Haz clic en una forma para leer su código, en un método para entrar en él, y previsualiza una reestructuración antes de que nadie cambie una línea."
+      },
       "run-your-app-on-the-canvas": {
         "title": "Ejecuta la aplicación que tu tablero acaba de construir, sin salir del tablero",
         "description": "Un lienzo que escribe un backend, una página y una nota de configuración no tenía dónde ejecutarlos. La superficie de aplicación ensambla todas las tarjetas de código en una aplicación funcional, con anchos de dispositivo reales, en el mismo tablero donde la construiste."
@@ -39034,6 +39038,7 @@
     "viewSystem": "Sistema",
     "viewHeat": "Calor",
     "viewSequence": "Secuencia",
+    "viewFlow": "Flujo",
     "panelRun": "Revisiones",
     "panelCoverage": "Cobertura",
     "panelPatterns": "Patrones",
@@ -39747,7 +39752,15 @@
           "leaf": "Fuera de este nivel",
           "loading": "Leyendo símbolos…",
           "callSite": "Punto de llamada",
-          "openAtLine": "Abrir en la línea {line}"
+          "openAtLine": "Abrir en la línea {line}",
+          "callers": "Llamadores",
+          "simulate": "Simular",
+          "simulateTip": "Hacer pasar la ruta por aquí y ver qué alcanza",
+          "restructure": "Reestructurar",
+          "restructureTip": "Ver {name} reestructurado",
+          "risk": "Riesgo",
+          "testReached": "Una prueba lo alcanza",
+          "testNone": "Ninguna prueba lo alcanza"
         },
         "stats": {
           "issues": "Antipatrones",
@@ -40064,7 +40077,9 @@
         "errorTitle": "Esta vista ha tenido un error",
         "errorRetry": "Reintentar",
         "errorBack": "Volver",
-        "depth": "Profundidad"
+        "view3d": "3D",
+        "viewFlat": "Plano",
+        "flatToggle": "Vista plana"
       },
       "nav": {
         "group": "Mover la vista",
@@ -40138,12 +40153,6 @@
         "outline": "Esquema",
         "outlineAria": "Símbolos de este archivo",
         "tabsAria": "Archivos abiertos",
-        "layoutAria": "Disposición del nivel de código",
-        "flow": "Flujo",
-        "sequence": "Secuencia",
-        "viewAria": "Vista del mapa",
-        "view3d": "3D",
-        "view2d": "2D",
         "followsEditor": "Sigue al editor",
         "stateSelected": "seleccionado",
         "stateReading": "leyendo",
@@ -40158,7 +40167,46 @@
         "status": "Visualización · nivel {level} · {state}",
         "following": "siguiendo {file}",
         "pinnedStatus": "fijado",
-        "statusLine": "Lín. {line}"
+        "statusLine": "Lín. {line}",
+        "dockAria": "Código y esquema",
+        "dockHide": "Ocultar código",
+        "dockShow": "Mostrar código",
+        "levelAria": "Miembros de este nivel",
+        "levelEmpty": "Todavía no hay nada en este nivel.",
+        "levelNoSource": "El código fuente no está disponible aquí: se muestra el esquema.",
+        "rowNoTest": "Sin prueba",
+        "rowAntiPattern": "Antipatrón: {name}",
+        "rowGoInside": "Entrar en {name}",
+        "rowRestructure": "Reestructurar {name}",
+        "paneSwitchAria": "Mostrar el código o la imagen",
+        "paneCode": "Código",
+        "panePicture": "Imagen",
+        "lensOut": "Salida",
+        "lensSimulate": "Sin prueba · Simular",
+        "lensRestructure": "{name}",
+        "gutterWarn": "Antipatrón: {name}"
+      },
+      "compare": {
+        "aria": "Comparación",
+        "sourceBaseline": "Comparado con la última revisión",
+        "sourceSnapshot": "Comparado con la instantánea anterior",
+        "sourceRestructure": "Reestructuración: {kind} en {target}",
+        "sourceCommit": "Commit {sha}: {title}",
+        "sideGroup": "Antes o después",
+        "playRestructure": "Reproducir la reestructuración",
+        "playHistory": "Reproducir el historial",
+        "playBaseline": "Reproducir el cambio",
+        "apply": "Aplicar en una rama",
+        "applyTip": "Abre el flujo de corrección para este hallazgo. No cambia nada hasta que lo apliques.",
+        "close": "Dejar de comparar",
+        "notComparable": "Estos dos lados no se pueden comparar: {reasons}",
+        "noBefore": "No hay una versión anterior que mostrar.",
+        "oldNotAvailable": "La versión anterior no está disponible aquí.",
+        "seeRestructured": "Verlo reestructurado",
+        "restructureLoading": "Leyendo el archivo para proponer una reestructuración…",
+        "restructureNone": "No se puede proponer ninguna reestructuración para este caso.",
+        "codeMarks": "{added} líneas añadidas, {removed} líneas eliminadas",
+        "movedOut": "Las definiciones marcadas pasan a {modules}"
       },
       "api": {
         "notSetUpTitle": "No se encontraron endpoints",

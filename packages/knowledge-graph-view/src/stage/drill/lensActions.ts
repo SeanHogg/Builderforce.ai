@@ -8,6 +8,7 @@
 
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import type { SymbolFacts } from '../../surface/symbolFacts';
+import type { ActionGlyphName } from '../../surface/ui/glyphs';
 import type { Lens } from './codeText';
 
 export type LensActionId = 'references' | 'show' | 'callers' | 'drill' | 'out' | 'simulate' | 'restructure';
@@ -29,8 +30,8 @@ export interface LensActionRow {
     id: LensActionId;
     /** Drawn on the accent: the action that goes somewhere. */
     go?: boolean;
-    /** A short mark before the label, decorative (the label carries the meaning). */
-    glyph?: string;
+    /** A short mark before the label, decorative (the label carries the meaning): a name from the ONE glyph module. */
+    glyph?: ActionGlyphName;
     when(lens: Lens, ctx: LensCtx | null): boolean;
     label(t: CodeLabels, lens: Lens, ctx: LensCtx | null): string;
 }
@@ -44,10 +45,10 @@ export const LENS_ACTIONS: readonly LensActionRow[] = [
     { id: 'show', go: true, when: isClass, label: (t) => t.showInMap },
     { id: 'callers', when: isMethod, label: (t, l) => fillTemplate(l.count === 1 ? t.lensCaller : t.lensCallers, { count: l.count }) },
     { id: 'drill', go: true, when: isMethod, label: (t) => t.drillIn },
-    { id: 'out', glyph: '⤒', when: (l, c) => !!c && c.inside === l.ref && c.has('out'), label: (t) => t.lensOut },
-    { id: 'simulate', glyph: '▷', when: (l, c) => !!c && c.has('simulate') && c.facts.untested(l.ref), label: (t) => t.lensSimulate },
+    { id: 'out', glyph: 'out', when: (l, c) => !!c && c.inside === l.ref && c.has('out'), label: (t) => t.lensOut },
+    { id: 'simulate', glyph: 'simulate', when: (l, c) => !!c && c.has('simulate') && c.facts.untested(l.ref), label: (t) => t.lensSimulate },
     {
-        id: 'restructure', glyph: '⚒', when: (l, c) => !!c && c.has('restructure') && c.facts.antiPatternOf(l.ref) !== null,
+        id: 'restructure', glyph: 'restructure', when: (l, c) => !!c && c.has('restructure') && c.facts.antiPatternOf(l.ref)?.restructurable === true,
         label: (t, l, c) => { const kind = c?.facts.antiPatternOf(l.ref)?.kind ?? ''; return fillTemplate(t.lensRestructure, { name: c?.kindName?.(kind) ?? kind }); },
     },
 ];

@@ -14,7 +14,7 @@ import { PLACEMENTS, type PlacementReq } from './index';
 import { channelBindings, placementCacheKey, type PlacementChannels } from './request';
 
 const graph = withSymbols(surfaceFixture());
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const req = (camera: PlacementReq['camera'], over: Partial<PlacementReq> = {}): PlacementReq =>
     ({ graph: 1, generation: model.marks.generation, camera, drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0, ...over });
 const run = (g: KnowledgeGraph, m: StageModel, r: PlacementReq): Placement => { const t = PLACEMENTS[r.camera](g, m, r); while (!t.step()); return t.result(); };
@@ -91,7 +91,7 @@ describe('Graph captions: a band\'s placement key read through placementLabel', 
     it('names a community band by its label (else the localized fallback) and the empty key by partitionNone — never the raw key', () => {
         const g = communityGraph();
         const strings = Object.fromEntries(PLACEMENT_WORD_KEYS.map((key) => [key, L[key]]));
-        const m = buildStageModel(g, [], strings);
+        const m = buildStageModel(g, strings);
         const p = run(g, m, req('graph', { generation: m.marks.generation }));
         const texts = p.captions.map((c) => c.text);
         expect(texts).toContain(L.partitionNone);
@@ -105,7 +105,7 @@ describe('Graph captions: a band\'s placement key read through placementLabel', 
 
     it('with no words carried, a missing word reads empty rather than the raw key', () => {
         const g = communityGraph();
-        const m = buildStageModel(g, []);
+        const m = buildStageModel(g);
         const p = run(g, m, req('graph', { generation: m.marks.generation }));
         for (const c of p.captions) expect(c.text.startsWith('community:'), c.text).toBe(false);
     });

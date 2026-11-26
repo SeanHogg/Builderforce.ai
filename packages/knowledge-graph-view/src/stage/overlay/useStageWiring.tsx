@@ -12,7 +12,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { CallSite } from '@seanhogg/builderforce-memory/knowledge';
+import type { CallSite, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { restructureOf } from './restructureTarget';
 import { useComputed } from '../../compute/useComputed';
 import { fillTemplate } from '../../labels';
 import { COMPACT_WIDTH, nodeIndex } from '../../graphModel';
@@ -25,12 +26,11 @@ import { TYPE } from '../../surface/ui/type';
 import { MARK_TYPE_ORDER, type MarkType } from '../../shapes';
 import { railKindOf, type RailKind } from '../drill/codeText';
 import { CallBadges } from './CallBadges';
-import { CodeSequence } from './CodeSequence';
 import { CodeDock } from './CodeDock';
 import { CodeOutline } from './CodeOutline';
 import { CodeTrail } from './CodeTrail';
 import { StepCard } from './StepCard';
-import { useCodeDock, type CodeLayout } from './useCodeDock';
+import { useCodeDock } from './useCodeDock';
 import type { CodeCompare } from '../drill/useCodeDiff';
 import { useSemanticZoom, type SemanticZoom } from '../drill/useSemanticZoom';
 import { useStageMap, type StageMap } from '../drill/useStageMap';
@@ -42,8 +42,6 @@ import { StatusStrip } from './StatusStrip';
 import { CallSiteCard } from './CallSiteCard';
 import { StageCard } from './StageCard';
 import { SymbolCard, type SymbolCardState } from './SymbolCard';
-
-export type { CodeLayout };
 
 /** The Map's bands, in ladder order (system, class, method, code). */
 const BAND_ORDER = ZOOM_BANDS.map((b) => b.band);
@@ -57,8 +55,14 @@ export interface StageDockOptions {
     onToggleCode?: (() => void) | undefined;
     onSimulate?: ((ref: string) => void) | undefined;
     onRestructure?: ((ref: string) => void) | undefined;
+    /** The restructure's file read is in flight (`useRestructure().status === 'loading'`): the card's Restructure is disabled meanwhile. */
+    restructureLoading?: boolean | undefined;
     /** An open comparison of files (`codeCompareOf`): the code pane shows the chosen side and marks the lines the other lacks. */
     compare?: CodeCompare | undefined;
+    /** The Sequence camera is on show: it draws the open method's calls as raised bars, so the call arcs and badges stay off. */
+    sequence?: boolean | undefined;
+    /** The graph the facts read while comparing (the shown side's own; `p.graph` is the union, which keeps both sides' findings). */
+    factsGraph?: KnowledgeGraph | null | undefined;
 }
 
 export interface StageWiring {
@@ -80,9 +84,8 @@ export interface StageWiring {
     wheelStep(dir: 1 | -1): void;
     /** The ladder: go to band `target` (0 system … 3 code). */
     toBand(target: number): void;
-    /** The Flow / Sequence layout of the code level. */
-    codeLayout: CodeLayout;
-    setCodeLayout(layout: CodeLayout): void;
+    /** The method whose code is open (the code band's, or one opened across): the Sequence placement's `method`. */
+    method: string | null;
     /** The status strip along the bottom while the code is read. */
     status: ReactNode;
     /** The Map placement with the unfold patch applied (memoized: the same placement in, the same out). */
@@ -90,9 +93,10 @@ export interface StageWiring {
     card: ReactNode;
     /**
      * The code pane. `visible`: shown at all (docked or read); `split`: beside the map (else one half of the Code | Picture
-     * switch); `reading`: a file is open, so the bar over the map and the status strip show. `show` brings a hidden pane back.
+     * switch); `reading`: a file is open, so the bar over the map and the status strip show. `show` brings a hidden pane back;
+     * `hide` hides it (and leaves the reading).
      */
-    code: { pane: ReactNode; bar: ReactNode; visible: boolean; split: boolean; reading: boolean; show: (() => void) | undefined };
+    code: { pane: ReactNode; bar: ReactNode; visible: boolean; split: boolean; reading: boolean; show: (() => void) | undefined; hide: () => void };
 }
 
 export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: MarkSet | null, width: number, dock: StageDockOptions = {}): StageWiring {
@@ -200,7 +204,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const toBand = useCallback((target: number) => goToBand(target, selected, () => toast.show(t.toastNoMethod)), [goToBand, selected, toast.show, t]);
 
     // The code dock: docked or read, what it reads and what that drives on the map (`useCodeDock`).
-    const d = useCodeDock({ p, bus, map, zoom, selected, setSelected, cardKey, toast: toast.show, width, slotOf, shown: dock.shown ?? true, onToggle: dock.onToggleCode });
+    const d = useCodeDock({ p, bus, map, zoom, selected, setSelected, cardKey, toast: toast.show, width, slotOf, shown: dock.shown ?? true, onToggle: dock.onToggleCode, sequence: dock.sequence, factsGraph: dock.factsGraph });
     const { reader, records, methodTarget, out } = d;
     // Escape: clear the pick first (never at the code level, which goes out), else go out.
     const onEscape = useCallback(() => {
@@ -218,27 +222,31 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const cardType = cardSlot ? MARK_TYPE_ORDER[marks?.type[bus.slotOf(cardSlot)] ?? -1] ?? SYMBOL_MARK_TYPE[railKindOf(cardRecord?.kind ?? '')] : 'external';
     // The card's actions: the host's handler bound to the ref it acts on (a symbol's own; a station's first file, or the one carrying the anti-pattern).
     const actOn = (act: ((ref: string) => void) | undefined, ref: string | undefined) => (act && ref ? () => act(ref) : undefined);
+    // Restructure is offered only for a restructurable anti-pattern; a click loads the file's symbols when the drill lacks them,
+    // so it is disabled only while that read is in flight (the same target and rule as the outline row and the lens).
+    const restructureLoading = dock.restructureLoading === true;
+    const symbolRestructure = restructureOf(d.facts, [cardSubject?.ref ?? ''], restructureLoading);
     const symbolCard = cardSubject && (
         <SymbolCard
             slotKey={cardSlot} symbolRef={cardSubject.ref} name={cardRecord?.name ?? index.get(cardSubject.ref)?.label ?? cardSubject.ref} state={cardSubject.state}
             records={records} markType={cardType} labels={p.labels} onDrill={() => onDrill(`node:${cardSubject.ref}`)} onCode={d.openCode}
             onZoomIn={() => wheelStep(1)} onZoomOut={() => wheelStep(-1)} onOpenSource={p.onOpenSource}
-            facts={d.facts} onCallers={() => surface.setQuestion('callers')} onSimulate={actOn(dock.onSimulate, cardSubject.ref)} onRestructure={actOn(dock.onRestructure, cardSubject.ref)}
+            facts={d.facts} onCallers={() => surface.setQuestion('callers')} onSimulate={actOn(dock.onSimulate, cardSubject.ref)} onRestructure={actOn(dock.onRestructure, symbolRestructure.ref)} restructureReady={symbolRestructure.ready}
         />
     );
     const cardRefs = map.stationOfKey(cardKey)?.refs ?? [];
+    const stationRestructure = restructureOf(d.facts, cardRefs, restructureLoading);
     const card = (
         <StageBusContext.Provider value={bus}>
             <StageCard
                 cardKey={cardKey} map={map} drill={drill} graph={graph} labels={p.labels} compact={d.mapWidth > 0 && d.mapWidth < COMPACT_WIDTH}
                 onClose={closeCard} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel} onEnter={zoom.zoomInto}
                 onCode={d.openCode} facts={d.facts} onSimulate={actOn(dock.onSimulate, cardRefs[0])}
-                onRestructure={actOn(dock.onRestructure, cardRefs.find((r) => d.facts.antiPatternOf(r)) ?? cardRefs[0])}
+                onRestructure={actOn(dock.onRestructure, stationRestructure.ref)} restructureReady={stationRestructure.ready}
             />
             {symbolCard}
             {site && <CallSiteCard site={site.site} at={site.at} boxWidth={d.mapWidth} labels={p.labels} onOpenSource={p.onOpenSource} onClose={closeSite} />}
-            {d.reading && !d.sequence && <CallBadges labels={p.labels} onStep={reader.goStep} />}
-            {d.sequence && methodTarget && <CodeSequence method={methodTarget.name} steps={reader.steps} current={reader.current} byRef={reader.byRef} labels={p.labels} onStep={reader.goStep} />}
+            {d.reading && !dock.sequence && <CallBadges labels={p.labels} onStep={reader.goStep} />}
             {d.reading && methodTarget && (
                 <StepCard method={methodTarget} reading={reader} records={records} labels={p.labels} onDrill={d.drillTo} onOut={out} side={d.split ? 'right' : 'left'} />
             )}
@@ -262,7 +270,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
         />
     );
     const code = {
-        pane, visible: d.visible, split: d.split, reading: d.reading, show: d.visible ? undefined : dock.onToggleCode,
+        pane, visible: d.visible, split: d.split, reading: d.reading, show: d.visible ? undefined : dock.onToggleCode, hide: d.hide,
         bar: d.reading ? (
             <CodeTrail
                 stack={drill.stack} onClimb={drill.climb} methods={zoom.trail} onMethod={zoom.codeBack} onLeaveCode={zoom.leaveCode} across={d.acrossTarget?.ref ?? null}
@@ -272,7 +280,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     };
     const status = d.reading ? <StatusStrip labels={p.labels} band={zoom.band} follow={reader.follow} path={d.codeTarget?.path ?? null} line={reader.line} /> : null;
     return {
-        map, zoom, selected, onSelect, onDrill, onOut: out, onEscape, clearSelection, dismissed, wheelStep, toBand, codeLayout: d.codeLayout, setCodeLayout: d.setCodeLayout, patchMap, card, code, status,
+        map, zoom, selected, onSelect, onDrill, onOut: out, onEscape, clearSelection, dismissed, wheelStep, toBand, method: methodTarget?.ref ?? null, patchMap, card, code, status,
     };
 }
 

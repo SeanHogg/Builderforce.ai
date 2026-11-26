@@ -33,18 +33,16 @@ export interface StageModel {
 
 interface Held { changed: string; model: StageModel }
 
-const changedKey = (changed: readonly string[]): string => [...changed].sort().join('\n');
-
 /**
- * The stage model of a resident graph. A markSet request (`changed` and `strings`) rebuilds it when either differs from
- * the one held; paint and placement pass nothing and read whatever the last markSet built (or build it with no changes).
+ * The stage model of a resident graph. A markSet request (`strings`) rebuilds it when they differ from the held ones;
+ * paint and placement pass nothing and read whatever the last markSet built (or build it with no strings).
  */
-export function stageModelOf(store: ComputeStore, graph: GraphId, changed?: readonly string[], strings: Readonly<Record<string, string>> = {}): StageModel {
+export function stageModelOf(store: ComputeStore, graph: GraphId, strings?: Readonly<Record<string, string>>): StageModel {
     const held = store.pinned<{ value: Held | null }>(graph, 'stage', () => ({ value: null }));
-    const key = changed ? `${changedKey(changed)}\n#${stringsDigest(strings)}` : held.value?.changed ?? '';
+    const key = strings ? `#${stringsDigest(strings)}` : held.value?.changed ?? '';
     if (held.value && held.value.changed === key) return held.value.model;
     const g = store.graph(graph);
-    held.value = { changed: key, model: buildStageModel(g, changed ?? [], strings) };
+    held.value = { changed: key, model: buildStageModel(g, strings) };
     return held.value.model;
 }
 
@@ -55,13 +53,13 @@ function generationOf(text: string): number {
     return (h >>> 0) || 1;
 }
 
-export function buildStageModel(g: KnowledgeGraph, changed: readonly string[], strings: Readonly<Record<string, string>> = {}): StageModel {
-    const stations = buildStations(g, { changed: new Set(changed) });
+export function buildStageModel(g: KnowledgeGraph, strings: Readonly<Record<string, string>> = {}): StageModel {
+    const stations = buildStations(g);
     const lines = buildLines(g, stations);
     const marks = buildMarkSet(g, stations, 0, strings);
-    // Deterministic: the same graph, changes and strings make the same generation in any realm (the worker, or the main
+    // Deterministic: the same graph and strings make the same generation in any realm (the worker, or the main
     // thread after a fail-over), so answers built there still match the marks on show.
-    marks.generation = generationOf(`${marks.digest}\n${changedKey(changed)}`);
+    marks.generation = generationOf(`${marks.digest}\n`);
     const nodeSlot = new Map<string, number>();
     g.nodes.forEach((n, i) => nodeSlot.set(n.ref, i));
     const stationSlot = new Map<string, number>();

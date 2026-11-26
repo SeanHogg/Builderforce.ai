@@ -79,17 +79,24 @@ describe('SymbolCard', () => {
         expect(screen.queryByRole('button', { name: t.whoCalls })).toBeNull();
         expect(screen.queryByRole('button', { name: t.simulate })).toBeNull();
         document.body.innerHTML = '';
-        const props = mount({ onCallers: vi.fn(), onSimulate: vi.fn(), onRestructure: vi.fn(), facts: { antiPatternOf: () => null, untested: () => true } });
+        const props = mount({ onCallers: vi.fn(), onSimulate: vi.fn(), onRestructure: vi.fn(), facts: { antiPatternOf: () => null, testReach: () => 'none', untested: () => true } });
         fireEvent.click(screen.getByRole('button', { name: t.whoCalls }));
         fireEvent.click(screen.getByRole('button', { name: t.simulate }));
         expect(props.onCallers).toHaveBeenCalledTimes(1);
         expect(props.onSimulate).toHaveBeenCalledTimes(1);
         expect(document.querySelector('[data-fact="tests"]')?.textContent).toBe(t.testNone);
         document.body.innerHTML = '';
-        mount({ onSimulate: vi.fn(), onRestructure: vi.fn(), facts: { antiPatternOf: () => ({ kind: 'god-module', findingId: 'f' }), untested: () => false } });
+        mount({ onSimulate: vi.fn(), onRestructure: vi.fn(), facts: { antiPatternOf: () => ({ kind: 'god-module', findingId: 'f', restructurable: true }), testReach: () => 'reached', untested: () => false } });
         expect(screen.queryByRole('button', { name: t.simulate })).toBeNull();
         expect(screen.getByRole('button', { name: t.restructure })).toBeTruthy();
         expect(document.querySelector('[data-fact="anti"]')?.textContent).toBe(L.findingKinds.godModule);
+        document.body.innerHTML = '';
+        // No coverage reading: the facts row says nothing about tests. A kind with no proposer keeps Simulate.
+        mount({ onSimulate: vi.fn(), onRestructure: vi.fn(), facts: { antiPatternOf: () => ({ kind: 'cycle', findingId: 'f', restructurable: false }), testReach: () => 'unknown', untested: () => false } });
+        expect(document.querySelector('[data-fact="tests"]')).toBeNull();
+        expect(screen.queryByRole('button', { name: t.restructure })).toBeNull();
+        expect(screen.getByRole('button', { name: t.simulate })).toBeTruthy();
+        expect(document.querySelector('[data-fact="anti"]')).not.toBeNull();
     });
 
     it('shows nothing with no mark', () => {

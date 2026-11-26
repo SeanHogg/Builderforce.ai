@@ -10,7 +10,7 @@ import { paintMarks, questionLit, type PaintInput } from './markPaint';
 import { buildStageModel } from './stageModel';
 
 const graph = withSymbols(surfaceFixture());
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const { marks, stations, lines } = model;
 const base: PaintInput = { lensId: 'structure', overlay: PRESETS.risk, lit: null, roles: null };
 const paint = (over: Partial<PaintInput>): MarkPaint => paintMarks(graph, model, { ...base, ...over });
@@ -93,6 +93,11 @@ describe('markPaint: the question and the family as data (PRD 43 B1a rule 1)', (
         }
         expect([...p.flags]).toEqual([...plain.flags]);
         expect([...paint({ diff: new Map() }).tone]).toEqual([...plain.tone]);
+        // A folder slot never takes a diff tone, even when its key is named.
+        const folder = marks.slotKind.findIndex((k) => k === SLOT_FOLDER);
+        expect(folder).toBeGreaterThanOrEqual(0);
+        const named = paint({ diff: new Map<string, 'added'>([[marks.keys[folder]!, 'added']]) });
+        expect(named.tone[folder]).toBe(plain.tone[folder]);
     });
 
     it('never moves anything: tone, tone2 and fill do not depend on the question', () => {

@@ -47,12 +47,14 @@ export interface StageCardProps {
     onSimulate?: (() => void) | undefined;
     /** Opens the restructure compare for this station's anti-pattern (replaces Simulate). Absent ⇒ no Restructure button. */
     onRestructure?: (() => void) | undefined;
+    /** False while the restructure's file is being read: Restructure shows disabled. Default true. */
+    restructureReady?: boolean | undefined;
 }
 
 const NO_ENTER = { can: false, reason: 'deepest' } as const;
 const SATELLITE_BOX = 14;
 
-export function StageCard({ cardKey, map, drill, graph, labels, compact, onClose, onQuestion, onOpenPanel, onEnter, onCode, facts, onSimulate, onRestructure }: StageCardProps) {
+export function StageCard({ cardKey, map, drill, graph, labels, compact, onClose, onQuestion, onOpenPanel, onEnter, onCode, facts, onSimulate, onRestructure, restructureReady }: StageCardProps) {
     const bus = useStageBus();
     const ref = useRef<HTMLDivElement | null>(null);
     const index = useMemo(() => nodeIndex(graph), [graph]);
@@ -88,7 +90,7 @@ export function StageCard({ cardKey, map, drill, graph, labels, compact, onClose
     const act = (run: () => void) => { run(); close(); };
     const card = buildCard({
         station, stations: map.stations.stations, labels, layerName: bandTitle(station.layer ?? OTHER_LAYER, labels), findings, index,
-        enter: drill.canEnter?.(station.id) ?? NO_ENTER, satellites: map.satellites(station), unfolded, leaf: drill.view?.leaves.has(station.id) ?? false, facts,
+        enter: drill.canEnter?.(station.id) ?? NO_ENTER, satellites: map.satellites(station), unfolded, leaf: drill.view?.leaves.has(station.id) ?? false, facts, restructureReady,
     });
     return (
         <StationCard

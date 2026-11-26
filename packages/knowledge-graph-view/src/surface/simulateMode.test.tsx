@@ -27,6 +27,14 @@ describe('SimulatePanel as a mode', () => {
         expect(onStep).toHaveBeenLastCalledWith(1);
     });
 
+    it('opens on the stop it is asked to start from; a stop not on the path starts at the first', () => {
+        const onStep = vi.fn();
+        const { rerender } = render(<SimulatePanel graph={graph} from={null} path={path} startAt="b" labels={L} onStep={onStep} onClose={vi.fn()} />);
+        expect(onStep).toHaveBeenLastCalledWith(1);
+        rerender(<SimulatePanel graph={graph} from={null} path={path} startAt="zzz" labels={L} onStep={onStep} onClose={vi.fn()} />);
+        expect(onStep).toHaveBeenLastCalledWith(0);
+    });
+
     it('never steps with no journey and nothing selected', () => {
         const onStep = vi.fn();
         render(<SimulatePanel graph={graph} from={null} path={{ stops: [], hops: [] }} labels={L} onStep={onStep} onClose={vi.fn()} />);

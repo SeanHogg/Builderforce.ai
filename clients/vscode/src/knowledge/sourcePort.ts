@@ -14,8 +14,10 @@
 import { realpath, stat } from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { runGit } from "@builderforce/agent-tools/node-git-history";
+import { runGit, type GitRun } from "@builderforce/agent-tools/node-git-history";
+import { reportExtensionError } from "../diagnostics/errorReporter";
 import { isMissingPath } from "../composerCommands/writeContainment";
+import { COMMIT_SHA } from "./commitSha";
 import { MAX_SOURCE_LINES, type KnowledgeSourceText } from "./knowledgeProtocol";
 import { inside, slash, type KnowledgeRoot } from "./knowledgeRoots";
 import { isSafeRelative } from "./safePath";
@@ -60,13 +62,6 @@ function sliceLines(text: string, range: { startLine: number; endLine: number; t
   return { startLine: range.startLine, lines: text.split(/\r?\n/).slice(range.startLine - 1, range.endLine), truncated: range.truncated };
 }
 
-/**
- * A commit sha the host will hand to git: 7-40 hex digits and nothing else. Anything git would also accept as a revision
- * (`HEAD~1`, `main`, `a..b`, `@{u}`) is refused, and so is anything starting with `-` — a value like `--output=x` must never
- * reach git's argument list as an option.
- */
-export const COMMIT_SHA = /^[0-9a-f]{7,40}$/i;
-
 /** Room for git to answer `cat-file` for one blob; a hung or huge repository does not hold the view's call. */
 const GIT_AT_TIMEOUT_MS = 10_000;
 
@@ -83,18 +78,48 @@ const GIT_AT_TIMEOUT_MS = 10_000;
  *     (not `show`) refuses a tree or a commit named by the path, and runs no textconv filter or external program;
  *   - argv is an array (no shell), so no value is ever parsed as shell text.
  *
- * Null when any of that refuses, git fails (not a repository, unknown commit, no such file at that commit), or the blob is too big.
+ * Null when a check above refuses, the blob is too big, or the path does not exist at that commit (the commit itself exists).
+ * Every other git failure (timeout, output too large, git missing, not a repository, unknown commit) is reported through
+ * `reportExtensionError` and thrown, so the view never mistakes "could not read" for "the file was absent then".
  */
 export async function readSourceAt(root: KnowledgeRoot, rel: unknown, rev: unknown, startLine: unknown, endLine: unknown): Promise<KnowledgeSourceText | null> {
   if (typeof rev !== "string" || !COMMIT_SHA.test(rev)) return null;
   if (typeof rel !== "string" || !isSafeRelative(rel)) return null;
   const spec = `${rev}:./${rel.replace(/\\/g, "/").replace(/^(\.\/)+/, "")}`;
   const size = await runGit(root.rootPath, ["cat-file", "-s", spec], { timeoutMs: GIT_AT_TIMEOUT_MS });
-  const bytes = size.stdout === undefined ? Number.NaN : Number(size.stdout.trim());
-  if (!Number.isInteger(bytes) || bytes > MAX_SOURCE_FILE_BYTES) return null;
+  if (size.stdout === undefined) {
+    if (await pathAbsentAt(root, rev, size)) return null;
+    throw await gitFailure(rev, rel, size);
+  }
+  const bytes = Number(size.stdout.trim());
+  if (!Number.isInteger(bytes)) throw await gitFailure(rev, rel, { ...size, stderr: `unreadable size: ${size.stdout.trim().slice(0, 40)}` });
+  if (bytes > MAX_SOURCE_FILE_BYTES) return null;
   const blob = await runGit(root.rootPath, ["cat-file", "blob", spec], { timeoutMs: GIT_AT_TIMEOUT_MS });
-  if (blob.stdout === undefined) return null;
+  if (blob.stdout === undefined) throw await gitFailure(rev, rel, blob);
   return sliceLines(blob.stdout, clampLines(startLine, endLine));
+}
+
+/**
+ * git's "no such path" answers (`cat-file -s <rev>:./<path>` exits 128 with `fatal: Not a valid object name <spec>`, and
+ * `rev-parse`/`show` word it `fatal: path '<p>' does not exist in '<rev>'` or `exists on disk, but not in '<rev>'`). The
+ * "Not a valid object name" wording is shared with an unknown commit, so it only means "path absent" once the commit is
+ * confirmed to exist.
+ */
+const PATH_ABSENT = /does not exist in|exists on disk, but not in|Not a valid object name/i;
+
+/** True only when git failed with a "no such path" message AND `rev` is a commit this repository has. */
+async function pathAbsentAt(root: KnowledgeRoot, rev: string, run: GitRun): Promise<boolean> {
+  if (run.failure !== "error" || !PATH_ABSENT.test(run.stderr ?? "")) return false;
+  const commit = await runGit(root.rootPath, ["cat-file", "-e", `${rev}^{commit}`], { timeoutMs: GIT_AT_TIMEOUT_MS });
+  return commit.stdout !== undefined;
+}
+
+/** A git failure that is not "the file was absent": reported to the extension's error sink, and returned for the caller to throw. */
+async function gitFailure(rev: string, rel: string, run: GitRun): Promise<Error> {
+  const why = run.failure === "timeout" ? "timed out" : run.failure === "buffer" ? "output too large" : (run.stderr ?? "").trim().split(/\r?\n/)[0] || "git failed";
+  const error = new Error(`git could not read ${rel} at ${rev.slice(0, 12)}: ${why}`);
+  await reportExtensionError(error, { operation: "knowledge.readSourceAt", context: { rev: rev.slice(0, 12), failure: run.failure ?? "error" } });
+  return error;
 }
 
 /** Opens `rel` in the editor with lines `startLine..endLine` selected (a preview tab). Null either way: a refused path opens nothing. */

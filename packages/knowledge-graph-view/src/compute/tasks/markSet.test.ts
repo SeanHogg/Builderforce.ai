@@ -10,7 +10,7 @@ import { HANDLERS } from './index';
 import { buildStageModel } from './stageModel';
 
 const graph = withSymbols(surfaceFixture());
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const m = model.marks;
 
 describe('markSet (PRD 43 B1a rules 1–3)', () => {
@@ -68,7 +68,7 @@ describe('markSet (PRD 43 B1a rules 1–3)', () => {
     it('the task builds the model once per graph and replies with copies (a transfer never detaches the pinned arrays)', () => {
         const store = new ComputeStore();
         store.adopt(1, graph);
-        const run = () => { const t = HANDLERS.markSet(store, { graph: 1, changed: [], strings: {} }); while (!t.step()); return t.result(); };
+        const run = () => { const t = HANDLERS.markSet(store, { graph: 1, strings: {} }); while (!t.step()); return t.result(); };
         const a = run(), b = run();
         expect(a.generation).toBe(b.generation);
         expect(a.type).not.toBe(b.type);

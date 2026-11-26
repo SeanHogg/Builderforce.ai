@@ -68,7 +68,7 @@ function CardBody({ card, labels, loading, onEnter, onUnfold, onCallers, onApi, 
             )}
             <div style={cardActionRow}>
                 <CardAction id="enter" primary glyph="inside" label={t.goInside} disabled={!card.enter.can} buttonRef={first} onClick={onEnter} />
-                <SelectionActions labels={labels} facts={card.facts ?? null} onCallers={onCallers} onSimulate={onSimulate} onRestructure={onRestructure} />
+                <SelectionActions labels={labels} facts={card.facts ?? null} onCallers={onCallers} onSimulate={onSimulate} onRestructure={onRestructure} restructureReady={card.restructureReady ?? true} />
                 {card.unfold > 0 && <CardAction id="unfold" pressed={card.unfolded} label={card.unfolded ? t.fold : fillTemplate(t.unfold, { count: card.unfold })} onClick={onUnfold} />}
                 {card.hasApi && <CardAction id="api" label={t.apiContract} onClick={onApi} />}
                 {card.hasPatterns && <CardAction id="patterns" label={t.patterns} onClick={onPatterns} />}

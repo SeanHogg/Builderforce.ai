@@ -19,10 +19,10 @@ const withModel = <T extends { graph: KnowledgeGraph; model?: ModelInputs }>(inp
 };
 
 export const markSet: Codec<'markSet'> = {
-    // The wire always carries an array (the worker keys its model on it), however the caller spelled "no changed set".
-    encode: ({ graph, changed = [], strings }, residency) => {
-        MODEL_INPUTS.set(graph, { changed: [...changed], strings: { ...strings } });
-        return named({ graph, changed: [...changed], strings: { ...strings } }, residency);
+    // The model inputs travel with every later request.
+    encode: ({ graph, strings }, residency) => {
+        MODEL_INPUTS.set(graph, { strings: { ...strings } });
+        return named({ graph, strings: { ...strings } }, residency);
     },
     decode: (raw) => raw,
 };
@@ -32,7 +32,7 @@ export const markPaint: Codec<'markPaint'> = { encode: (input, residency) => nam
 /**
  * PRD 43 B1a rule 6: returning to a placement (Out, re-entering a level, a viewport band crossed back) is a buffer swap
  * with NO worker call. The answer is kept under the graph and its own `cacheKey` (`placementCacheKey`: the MarkSet
- * generation — a build of graph + changed + the localized strings' digest — then camera, drill, unfold, path, band,
+ * generation — a build of graph + the localized strings' digest — then camera, drill, unfold, path, band,
  * LOD, depth, channels); a request is looked up by the same function. 24 answers: the Map and Graph at each of a few
  * bands, a drill stack of three levels each way, with room for tilt; at ~11k slots one answer is ≈ 0.25 MB of arrays.
  */

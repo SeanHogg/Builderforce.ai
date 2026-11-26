@@ -11,7 +11,7 @@ import { PLACEMENTS, VIEWPORT_BANDS, type PlacementReq } from './index';
 import { frameOf, SCENE3D_EDGE_CAP, worldOf } from './scene3d';
 
 const graph = withSymbols(surfaceFixture());
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const { marks } = model;
 const req = (camera: PlacementReq['camera']): PlacementReq => ({ graph: 1, generation: marks.generation, camera, drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0 });
 const place = (camera: PlacementReq['camera']): Placement => { const t = PLACEMENTS[camera](graph, model, req(camera)); while (!t.step()); return t.result(); };

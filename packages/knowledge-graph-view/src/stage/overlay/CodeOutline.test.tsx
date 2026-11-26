@@ -11,7 +11,8 @@ const station = (id: string, name: string): Station => ({ id, name, refs: [`src:
 const stations = [station('api', 'API'), station('orders', 'Orders'), station('db', 'Db')];
 const facts: SymbolFacts = {
     untested: (ref) => ref === 'src:sys::orders.ts',
-    antiPatternOf: (ref) => (ref === 'src:sys::orders.ts' ? { kind: 'god-module', findingId: 'f1' } : null),
+    testReach: (ref) => (ref === 'src:sys::orders.ts' ? 'none' : 'reached'),
+    antiPatternOf: (ref) => (ref === 'src:sys::orders.ts' ? { kind: 'god-module', findingId: 'f1', restructurable: true } : null),
 };
 const types = new Map<string, MarkType>([['api', 'function'], ['orders', 'class'], ['db', 'data']]);
 
@@ -30,7 +31,22 @@ describe('the docked outline of the level', () => {
         expect(row(container, 'api').querySelector('[data-glyph-shape]')).not.toBeNull();
         expect(row(container, 'api').querySelector('[data-mark]')).toBeNull();
         expect(row(container, 'orders').querySelector('[data-mark="no-test"]')?.textContent).toBe(t.rowNoTest);
-        expect(row(container, 'orders').querySelector('[data-mark="anti-pattern"] svg')?.getAttribute('aria-label')).toBe(fillTemplate(t.rowAntiPattern, { name: 'God module' }));
+        expect(row(container, 'orders').querySelector('[data-mark="anti-pattern"]')?.getAttribute('aria-label')).toBe(fillTemplate(t.rowAntiPattern, { name: 'God module' }));
+    });
+
+    it('reads every file of a multi-file station: an offender in refs[1] still marks the row', () => {
+        const multi = { id: 'multi', name: 'Multi', refs: ['src:sys::clean.ts', 'src:sys::orders.ts'] } as unknown as Station;
+        const { container } = outline({ stations: [multi], keyOf: (s) => `st:${s.id}` });
+        const r = container.querySelector('[data-outline-member]')!;
+        expect(r.querySelector('[data-mark="anti-pattern"]')).not.toBeNull();
+        expect(r.querySelector('[data-mark="no-test"]')).not.toBeNull();
+    });
+
+    it('a non-restructurable anti-pattern is marked but offers no Restructure', () => {
+        const cycle: SymbolFacts = { ...facts, antiPatternOf: (ref) => (ref === 'src:sys::orders.ts' ? { kind: 'cycle', findingId: 'f2', restructurable: false } : null) };
+        const { container } = outline({ facts: cycle, onRestructure: vi.fn() });
+        expect(row(container, 'orders').querySelector('[data-mark="anti-pattern"]')).not.toBeNull();
+        expect(container.querySelector('[data-row-action="restructure"]')).toBeNull();
     });
 
     it('a click on a row selects through the stage path (the slot key), and marks it current', () => {

@@ -39,7 +39,7 @@ import { planReconcile, type ReconcileQueries } from './replicaReconcile.js';
 
 /** The knowledge client's sync calls the pump uses (a `KnowledgeClient` satisfies it structurally). */
 export interface ReplicaClient extends PackQueries, ReconcileQueries, Partial<Pick<GenerationReader, 'syncGeneration'>> {
-    sync(rootId: string, part: { bytes: Uint8Array; syncId?: string; part?: number; parts?: number }): Promise<
+    sync(rootId: string, part: { bytes: Uint8Array; syncId?: string; part?: number; parts?: number; commitSha?: string }): Promise<
         { applied: true; generation: number; digest: string; reconcile?: true } | { applied: false; received: number; parts: number }>;
     /** The existing single writer (≤ 500 rows): the path for rows a pack does not carry. */
     writeRows(rootId: string, rows: { facts: readonly StoredFact[]; relations: readonly StoredRelation[] }): Promise<void>;
@@ -97,6 +97,15 @@ export interface PumpArgs {
     rootId: string;
     /** The root's current sources (ref and content hash): the local truth the pack is built from. */
     sources(): Promise<ReplicaSource[]>;
+    /**
+     * The git commit the root's last COMPLETED review ran at, as the host RECORDED it when that review finished (never a live
+     * read of HEAD, which moves between a review and a send): read once per cycle and sent with every part of the pack so the
+     * server records it with the review's digest (Compare's "before" source). Undefined sends none. A lookup that throws is
+     * reported through `report` and counts as undefined — it never stops the pump.
+     */
+    commitSha?(): Promise<string | undefined>;
+    /** Where a handled, non-fatal fault is reported (the host's log sink). */
+    report?(what: string, error: unknown): void;
     /** The project the client talks to: the pump stops the moment the set belongs to another. */
     projectId?: number;
     onState?(state: ReplicaState): void;
@@ -306,13 +315,18 @@ export async function pumpReplica(args: PumpArgs): Promise<ReplicaState> {
                 // A pack past it is cut in half by files BEFORE it is sent, the same way the server's 413 would have made it.
                 if (built.bytes.length > (args.maxPackBytes ?? MAX_SYNC_PACK_BYTES) && lastFiles > 1) { maxFiles = Math.floor(lastFiles / 2); continue; }
                 const syncId = parts.length > 1 ? (args.newSyncId?.() ?? newId()) : undefined;
+                let commitSha: string | undefined;
+                try { commitSha = await args.commitSha?.(); } catch (error) {
+                    // No commit is sent (the review's baseline source is then unknown), but the fault is seen.
+                    try { args.report?.('replica review commit', error); } catch { /* a sink never stops the pump */ }
+                }
                 let ack: Awaited<ReturnType<ReplicaClient['sync']>> | undefined;
                 for (let i = 0; i < parts.length; i++) {
                     state.parts = { sent: i, total: parts.length };
                     await emit();
                     // A stalled host whose lock may already be another's sends nothing more: the other host pumps this queue now.
                     if (args.lockHeld && !args.lockHeld()) throw new Stop();
-                    ack = await guarded.sync(rootId, { bytes: parts[i]!, ...(syncId ? { syncId, part: i, parts: parts.length } : {}) });
+                    ack = await guarded.sync(rootId, { bytes: parts[i]!, ...(syncId ? { syncId, part: i, parts: parts.length } : {}), ...(commitSha ? { commitSha } : {}) });
                 }
                 state.parts = { sent: parts.length, total: parts.length };
                 if (!ack || !ack.applied) throw new Error('the server did not apply the pack');

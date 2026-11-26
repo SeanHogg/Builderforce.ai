@@ -64,6 +64,7 @@ import { hopRouteLabels } from './surface/sequenceText';
 import { SurfaceHeader } from './surface/SurfaceHeader';
 import { TimeSlider, useHistory } from './surface/TimeSlider';
 import { SceneTools } from './surface/SceneTools';
+import { FlatViewContext, useFlatView } from './surface/useFlatView';
 import { usePanelVisibility } from './surface/usePanelVisibility';
 import { Pill } from './surface/ui';
 import { questionForLens } from './surface/questions';
@@ -125,6 +126,8 @@ export function KnowledgeGraphView({
     const [chosen, setMode] = useState<ViewMode | null>(null);
     const [showAll, setShowAll] = useState(false), [tracing, setTracing] = useState(false), [linesOpen, setLinesOpen] = useState(false);
     const [simulateMode, setSimulateMode] = useState(false);
+    /** The stop (station id) Simulate was asked to start from by a card or lens; null for the toggle. */
+    const [simulateAt, setSimulateAt] = useState<string | null>(null);
     const targets = useReviewTargets(source); // read ONCE: the empty state's launcher uses it
     const sync = useSyncStatus(source, kg.rootId, kg.graph); // read ONCE: the pill, the banner and the Sync drawer share it
     const zoom = useZoomHost();
@@ -189,7 +192,9 @@ export function KnowledgeGraphView({
         } : {}),
     });
     const titleOf = (rootId: string) => kg.scopes.find((s) => s.rootId === rootId)?.title ?? rootId;
-    const { select, show, pickLens, pickQuestion, pinpointed, unpin, showInTower } = useSurfaceActions(kg, surface, () => setTracing(false), { ids: cameras.map((c) => c.id), set: setMode });
+    // The ONE 3D / Flat switch (PRD 43 C4); Show in tower goes to 3D through it.
+    const flatView = useFlatView();
+    const { select, show, pickLens, pickQuestion, pinpointed, unpin, showInTower } = useSurfaceActions(kg, surface, () => setTracing(false), { ids: cameras.map((c) => c.id), set: setMode, setFlat: flatView.setFlat });
     useClearHighlightOutsideTower(mode, surface.towers, surface.setHighlight);
     // The open drawer is the surface's, so the header, the Act rail and the path strip all open one the same way.
     const panel = surface.panel;
@@ -234,18 +239,27 @@ export function KnowledgeGraphView({
         />
     );
     const panels = usePanelVisibility();
+    // On the transit map "3D" means towers. The stage's tilt is driven by `flat` alone (useFlatTilt); `surface.towers` (the highlight, the legend)
+    // is set in the SAME handler that changes `flat` - one commit, never a commit behind - and re-derived when the camera changes.
+    const setTowers = surface.setTowers;
+    const onFlat = (next: boolean) => {
+        flatView.setFlat(next);
+        if (mode === 'transit' || mode === 'map') setTowers(!next);
+    };
+    useEffect(() => { if (mode === 'transit' || mode === 'map') setTowers(!flatView.flat); }, [mode, flatView.flat, setTowers]);
     /** The stage's code pane has its own hide control (PRD 43 Part C1); its slot is remembered with the docks'. */
     const toggleCode = () => panels.toggle('code');
     /** Simulate is a mode of the right rail: turning it on opens that rail if it was collapsed. */
     const toggleSimulate = () => {
         if (!simulateMode && !panels.visibility.right) panels.toggle('right');
         setSimulateMode(!simulateMode);
+        setSimulateAt(null);
     };
     const changedStations = new Set([...changed].flatMap((r) => stationOfRef(surface.stations, r) ?? [])).size;
-    const actions = useCompareActions({ compare, current: kg.graph, graph, index, surface, symbols, labels, select, openSimulate: () => { if (!simulateMode) toggleSimulate(); } });
+    const actions = useCompareActions({ compare, current: kg.graph, graph, index, surface, symbols, labels, select, openSimulate: (stopId) => { if (!simulateMode) toggleSimulate(); setSimulateAt(stopId ?? null); } });
     const overlay = (
         <SceneOverlay
-            {...chrome.overlayProps}
+            {...chrome.overlayProps} flat={flatView.flat} onFlat={onFlat}
             tools={real ? <SceneTools graph={graph} env={surfaceEnv} labels={labels} surface={surface} panel={panel} onPanel={setPanel} panelsMenu={layout.panelsMenu} narrow={layout.phone}
                 simulate={{
                     pressed: simulateMode,
@@ -259,7 +273,7 @@ export function KnowledgeGraphView({
     const stackLines = hasLines && layout.linesStacked && !layout.phone;
 
     return (
-        <RestructureContext.Provider value={actions.restructureFinding}><RetryUploadContext.Provider value={retryUpload}>
+        <FlatViewContext.Provider value={flatView.setFlat}><RestructureContext.Provider value={actions.restructureFinding}><RetryUploadContext.Provider value={retryUpload}>
         <SurfaceFrame ref={rootRef} label={labels.regionLabel}>
             <SurfaceHeader
                 kg={kg} source={source} labels={labels} graph={graph} hasGraph={!!real} surface={surface} env={surfaceEnv} narrow={layout.phone} sync={sync.status}
@@ -288,7 +302,7 @@ export function KnowledgeGraphView({
                                             mode={mode} graph={graph} drawn={drawn} lens={lens} labels={labels} rootTitle={titleOf(graph.scope.rootId)}
                                             selected={selected} focus={kg.focus} reducedMotion={env.reducedMotion} surface={surface} onSelect={select} onShow={show} onCamera={setMode}
                                             onCompose={onCompose} evidence={evidenceOf} onOpenSource={onOpenSource}
-                                            codeShown={panels.visibility.code} onToggleCode={toggleCode} onSimulate={actions.onSimulate} onRestructure={actions.onRestructure} compare={compare.view}
+                                            codeShown={panels.visibility.code} onToggleCode={toggleCode} onSimulate={actions.onSimulate} onRestructure={actions.onRestructure} restructureLoading={actions.restructureStatus === 'loading'} compare={compare.view} flat={flatView.flat}
                                         />
                                     </ZoomProvider>
                                 ) : (
@@ -322,7 +336,7 @@ export function KnowledgeGraphView({
                     {simulateMode ? (
                         <SimulatePanel
                             graph={graph} from={selected} fromName={selected ? index.get(selected)?.label : undefined}
-                            path={surface.path} labels={labels} onStep={surface.setStep} onClose={() => setSimulateMode(false)}
+                            path={surface.path} startAt={simulateAt} labels={labels} onStep={surface.setStep} onClose={() => setSimulateMode(false)}
                         />
                     ) : (
                     <ActPanel
@@ -354,6 +368,6 @@ export function KnowledgeGraphView({
                 onShowInTower={showInTower}
             />
         </SurfaceFrame>
-        </RetryUploadContext.Provider></RestructureContext.Provider>
+        </RetryUploadContext.Provider></RestructureContext.Provider></FlatViewContext.Provider>
     );
 }

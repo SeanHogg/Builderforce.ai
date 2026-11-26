@@ -10,7 +10,7 @@ import { CAPTION_MAX, CaptionLayer } from './CaptionLayer';
 import { applyCaptionTransform, cssMatrix, groundAffine, inverseLinear } from './transform';
 
 const graph = surfaceFixture();
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const t = PLACEMENTS.map(graph, model, { graph: 1, generation: model.marks.generation, camera: 'map', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0 });
 while (!t.step());
 const map = t.result();
@@ -37,7 +37,7 @@ describe('the caption layer\'s ONE transform', () => {
         const host = { register: (a: ZoomApi) => { api = a; }, unregister: () => {} };
         const { container } = render(
             <ZoomProvider host={host}>
-                <Stage renderer={createNoopStage()} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={() => {}} depthLabel="Depth" />
+                <Stage renderer={createNoopStage()} marks={model.marks} paint={null} placement={map} colors={null} width={800} height={500} reducedMotion selected={null} onSelect={() => {}} />
             </ZoomProvider>,
         );
         const layer = container.querySelector<HTMLElement>('[data-stage-captions]')!;

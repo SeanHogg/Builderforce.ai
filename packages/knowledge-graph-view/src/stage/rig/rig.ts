@@ -46,6 +46,8 @@ export const DEFAULT_FOV = 35;
 /** Degrees of orbit per CSS px of drag, and per arrow-key press. */
 export const ORBIT_DEG_PER_PX = 0.3;
 export const ORBIT_KEY_DEG = 5;
+/** An orbit pitched straight down (the Flat view of a 3D placement). */
+export const FLAT_PITCH = 90;
 /** Dolly limits relative to the home distance. */
 const DOLLY_MIN = 0.1, DOLLY_MAX = 6;
 
@@ -66,6 +68,9 @@ export class RigController {
     /** Ground views rest tilted on first paint (no tween from flat); the depth control still spans 0..1. */
     private depthNow = RESTING_DEPTH;
     private tiltRange: readonly [number, number] = [0, 0];
+    /** The orbit's flat state, and the pitch 3D returns to (the placement's, within its tilt range). */
+    private flatNow = false;
+    private restingPitch = 45;
     private moved = false;
     private listeners = new Set<() => void>();
     /** Which kind of view is current (or being tweened TO). */
@@ -120,7 +125,8 @@ export class RigController {
         this.home = home;
         if (rig.view) {
             const t = rig.home.target;
-            this.orbitHome = { tx: t[0], ty: t[1], tz: t[2], yaw: rig.view.yaw, pitch: clamp(rig.view.pitch, ...this.tiltRange), distance: rig.view.distance, fov: rig.view.fov };
+            this.restingPitch = clamp(rig.view.pitch, ...this.tiltRange);
+            this.orbitHome = { tx: t[0], ty: t[1], tz: t[2], yaw: rig.view.yaw, pitch: this.flatNow ? FLAT_PITCH : this.restingPitch, distance: rig.view.distance, fov: rig.view.fov };
             this.kind = 'orbit';
             this.goOrbit(fromOrbit, this.orbitHome, now, ms);
             return;
@@ -215,7 +221,9 @@ export class RigController {
         if (this.kind !== 'orbit') return;
         this.stop();
         const [lo, hi] = this.tiltRange;
-        this.orbit = { ...this.orbit, yaw: this.orbit.yaw - dx * ORBIT_DEG_PER_PX, pitch: clamp(this.orbit.pitch + dy * ORBIT_DEG_PER_PX, lo, hi) };
+        // Flat: pitched straight down, so a drag turns the view and never tilts it.
+        const pitch = this.flatNow ? FLAT_PITCH : clamp(this.orbit.pitch + dy * ORBIT_DEG_PER_PX, lo, hi);
+        this.orbit = { ...this.orbit, yaw: this.orbit.yaw - dx * ORBIT_DEG_PER_PX, pitch };
         this.moved = true;
         this.changed();
     }
@@ -227,6 +235,18 @@ export class RigController {
         else this.view = { ...this.view, cx: x, cz: z };
         this.moved = true;
         this.changed();
+    }
+
+    /** The 3D / Flat switch on an orbit view (PRD 43 C4): flat pitches straight down (tweened), 3D returns to the placement's pitch. */
+    get flat(): boolean { return this.flatNow; }
+    setFlat(flat: boolean, now: number, ms: number = TWEEN_MS): void {
+        if (flat === this.flatNow) return;
+        this.flatNow = flat;
+        if (this.kind !== 'orbit') return;
+        this.stop();
+        const from = this.liveOrbit();
+        this.orbitHome = { ...this.orbitHome, pitch: flat ? FLAT_PITCH : this.restingPitch };
+        this.goOrbit(from, { ...from, pitch: this.orbitHome.pitch }, now, ms);
     }
 
     setDepth(depth: number): void {

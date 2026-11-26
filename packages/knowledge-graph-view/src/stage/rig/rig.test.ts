@@ -209,4 +209,33 @@ describe('the orbit rig (3D, a placement carrying rig.view)', () => {
         expect(rig.currentOrbit.yaw).toBeGreaterThan(45);
         unbind();
     });
+
+    it('Flat (PRD 43 C4) pitches the orbit straight down, tweened; a drag then turns it only; 3D returns to the placement pitch', () => {
+        const rig = new RigController();
+        rig.setHome({ cx: 0, cz: 0, zoom: 1 }, ORBIT_RIG, 800, 600, 0, 0);
+        rig.setFlat(true, 1000);
+        expect(rig.flat).toBe(true);
+        expect(rig.tweening).toBe(true);
+        rig.tick(1000 + TWEEN_MS / 2);
+        expect(rig.currentOrbit.pitch).toBeGreaterThan(26);
+        expect(rig.currentOrbit.pitch).toBeLessThan(90);
+        rig.tick(1000 + TWEEN_MS);
+        expect(rig.currentOrbit.pitch).toBe(90);
+        rig.orbitBy(100, 100);
+        expect(rig.currentOrbit.pitch).toBe(90);
+        expect(rig.currentOrbit.yaw).toBeCloseTo(45 - 30);
+        rig.fit(0, 0); // Fit keeps it flat
+        expect(rig.currentOrbit.pitch).toBe(90);
+        rig.setFlat(false, 2000, 0);
+        expect(rig.currentOrbit.pitch).toBe(26);
+    });
+
+    it('a new orbit placement keeps the Flat choice; a ground view only records it', () => {
+        const rig = new RigController();
+        rig.setHome({ cx: 0, cz: 0, zoom: 1 }, RIG, 800, 600, 0, 0);
+        rig.setFlat(true, 0, 0);
+        expect(rig.orbiting).toBe(false);
+        rig.setHome({ cx: 0, cz: 0, zoom: 1 }, ORBIT_RIG, 800, 600, 10, 0);
+        expect(rig.currentOrbit.pitch).toBe(90);
+    });
 });

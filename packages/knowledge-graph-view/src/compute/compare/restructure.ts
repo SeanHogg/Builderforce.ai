@@ -16,11 +16,17 @@ import { nodeIndex, pathOf } from '../../graphModel';
 import { cmp } from '../../order';
 import { LAYER_ORDER, layerRank } from '../../surface/layers';
 import type { SymbolRecord } from '../../types';
+import { edgeKey } from './edgeKey';
+import { movedSpans, type MovedSpan } from './movedMarks';
 
-export type Proposal = { after: KnowledgeGraph; bornFrom: Map<string, string> };
+/**
+ * `bornFrom`: new module ref to the file it grows out of. `moved`: each definition ref (a class AND its methods) that
+ * leaves the file to the new module ref it lands in; empty when no definitions move (`movedMarks` reads it with the
+ * file's symbol lines to mark the code pane). `spans`: those lines, derived from the symbols the proposer held, so the code
+ * pane never has to load them (see `movedSpans`).
+ */
+export type Proposal = { after: KnowledgeGraph; bornFrom: Map<string, string>; moved: Map<string, string>; spans: MovedSpan[] };
 export type Proposer = (graph: KnowledgeGraph, finding: Finding, symbols: readonly SymbolRecord[]) => Proposal | null;
-
-const sameKey = (e: Pick<KEdge, 'from' | 'to' | 'kind'>): string => `${e.from}\u0000${e.to}\u0000${e.kind}`;
 
 /** The graph with these nodes, edges and findings, its counts kept true. */
 const rebuilt = (g: KnowledgeGraph, nodes: KNode[], edges: KEdge[], findings: Finding[]): KnowledgeGraph =>
@@ -30,7 +36,7 @@ const rebuilt = (g: KnowledgeGraph, nodes: KNode[], edges: KEdge[], findings: Fi
 function dedupe(edges: KEdge[]): KEdge[] {
     const seen = new Set<string>();
     return edges.filter((e) => {
-        const k = sameKey(e);
+        const k = edgeKey(e);
         if (e.from === e.to || seen.has(k)) return false;
         seen.add(k);
         return true;
@@ -60,10 +66,10 @@ const partitionViolation: Proposer = (graph, finding) => {
             .sort((x, y) => Number(y.area === area) - Number(x.area === area) || y.importance - x.importance || cmp(x.ref, y.ref))[0];
     }
     const hop = (s: NodeRef, t: NodeRef): KEdge => ({ from: s, to: t, kind, weight: original.weight, origin: original.origin, verdict: 'allowed' });
-    const kept = graph.edges.filter((e) => !climbs(e)), have = new Set(kept.map(sameKey));
-    const hops = via ? [hop(from, via.ref), hop(via.ref, to)].filter((e) => !have.has(sameKey(e))) : [];
+    const kept = graph.edges.filter((e) => !climbs(e)), have = new Set(kept.map(edgeKey));
+    const hops = via ? [hop(from, via.ref), hop(via.ref, to)].filter((e) => !have.has(edgeKey(e))) : [];
     const edges = [...kept, ...hops];
-    return { after: rebuilt(graph, graph.nodes, edges, graph.findings.filter((f) => f.id !== finding.id)), bornFrom: new Map() };
+    return { after: rebuilt(graph, graph.nodes, edges, graph.findings.filter((f) => f.id !== finding.id)), bornFrom: new Map(), moved: new Map(), spans: [] };
 };
 
 // ── god-module ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -152,12 +158,12 @@ const godModule: Proposer = (graph, finding, symbols) => {
     const total = [...units.values()].reduce((n, u) => n + u.members.size, 0);
 
     const taken = new Set<string>(graph.nodes.map((n) => n.ref));
-    const owner = new Map<string, string>(), size = new Map<string, number>();
+    const owner = new Map<string, string>(), size = new Map<string, number>(), moved = new Map<string, string>();
     const modules: KNode[] = groups.map((g) => {
         const lead = (g.find((u) => u.exported) ?? g[0]!).name;
         const ref = moduleRef(file, lead, taken);
         taken.add(ref);
-        for (const u of g) for (const m of u.members) owner.set(noAt(m), ref);
+        for (const u of g) for (const m of u.members) { owner.set(noAt(m), ref); moved.set(m, ref); }
         const members = g.reduce((n, u) => n + u.members.size, 0);
         size.set(ref, members);
         const badges = Object.fromEntries(Object.entries(fileNode.badges ?? {}).filter(([k]) => !SIZE_BADGES.has(k) && k !== 'patterns'));
@@ -184,14 +190,15 @@ const godModule: Proposer = (graph, finding, symbols) => {
         if (!a && !b) { outside.push(e); continue; }
         if (a && b) continue;
         const owners = a ? ownerOf(e.from) : ownerOf(e.to);
-        if (b) for (const m of owners ? [owners] : modules.map((x) => x.ref)) outside.push({ ...e, to: m as NodeRef });
+        // An importer naming the file itself (no owning symbol) lands on the largest group, never fanned out to every module.
+        if (b) outside.push({ ...e, to: (owners ?? primary) as NodeRef });
         else for (const m of owners ? [owners] : [...(reach.get(fileRefOf(e.to)) ?? [primary])]) outside.push({ ...e, from: m as NodeRef });
     }
     const at = graph.nodes.indexOf(fileNode);
     const nodes = [...graph.nodes.slice(0, at), ...modules, ...graph.nodes.slice(at + 1)];
     const findings = graph.findings.filter((f) => f.id !== finding.id)
         .map((f) => (f.nodes.includes(file) ? { ...f, nodes: f.nodes.map((n) => (n === file ? (primary as NodeRef) : n)) } : f));
-    return { after: rebuilt(graph, nodes, dedupe([...outside, ...inner]), findings), bornFrom: new Map(modules.map((m) => [m.ref, file])) };
+    return { after: rebuilt(graph, nodes, dedupe([...outside, ...inner]), findings), bornFrom: new Map(modules.map((m) => [m.ref, file])), moved, spans: movedSpans(symbols, moved) };
 };
 
 /** One row per restructurable kind (the Restructure action exists iff the kind is here). */

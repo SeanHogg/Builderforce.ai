@@ -1,7 +1,7 @@
 /**
  * The ONE stage (PRD 43 B3): one persistent R3F `<Canvas frameloop="demand">` holding the renderer's planes, links,
- * marks and labels, with the DOM layers over it — the caption layer (moved by ONE CSS transform), the interaction layer
- * (picking, the a11y proxies) and the depth control. Declarative over the B7 update rules: a new `marks` rebuilds the
+ * marks and labels, with the DOM layers over it — the caption layer (moved by ONE CSS transform) and the interaction layer
+ * (picking, the a11y proxies); the 3D / Flat switch is the host's (`flat`). Declarative over the B7 update rules: a new `marks` rebuilds the
  * meshes, a new `paint` uploads paint, a new `placement` tweens the SAME meshes to it while the rig tweens the camera
  * alongside (or both jump under reduced motion), new `colors` rewrite tone colours only. A lost WebGL context is restored
  * from the last inputs. With the no-op renderer (jsdom, no WebGL) there is no canvas; the rig, the captions, the proxies
@@ -26,10 +26,10 @@ import { StageInteraction } from './overlay/StageInteraction';
 import { stageHeight } from './projection';
 import type { StageRenderer, StageView } from './renderer';
 import { aimCamera } from './rig/aim';
-import { DepthControl } from './rig/DepthControl';
 import { NavControl, type NavLabels } from './rig/NavControl';
 import { StageCorner } from './rig/StageCorner';
 import { useStageLegend, type StageLegendValue } from './rig/stageLegend';
+import { useFlatTilt } from './rig/useFlatTilt';
 import { bindOrbitKeys, touchActionFor } from './rig/gestures';
 import type { RigController } from './rig/rig';
 import { bindRig } from './rig/rigOfBus';
@@ -51,13 +51,11 @@ export interface StageProps {
     reducedMotion: boolean;
     selected: string | null;
     onSelect(key: string): void;
-    /** The depth control's label (`surface.scene.depth`), localized by the host. */
-    depthLabel: string;
     /** The nav control's names (localized by the host); absent ⇒ no nav control. */
     nav?: NavLabels;
     /** The shape key above the nav. Absent ⇒ the `StageLegendProvider` above this stage, if any. */
     legend?: StageLegendValue;
-    /** What the view shows, read with the proxies' group. */
+    /** What the view shows, read with the proxies' group; also the canvas's accessible name on an orbit view (localized by the host). */
     description?: string;
     /** Escape / Backspace on a proxy: out of a drilled level. */
     onOut?: () => void;
@@ -74,8 +72,12 @@ export interface StageProps {
     onWheelStep?: (dir: 1 | -1) => void;
     /** A click on empty space (not a drag, not a mark or a link). */
     onClear?: () => void;
-    /** The depth control moved (the person's drag). */
-    onTilt?: (depth: number) => void;
+    /**
+     * The ONE 3D / Flat switch (PRD 43 C4), controlled by the host (`surface/useFlatView`). Flat = tilt 0 on a ground
+     * placement (drag stays pan), an orbit pitched straight down (drag turns it only); 3D = the placement's resting
+     * tilt. Switching animates. Absent ⇒ the switch does not drive the stage.
+     */
+    flat?: boolean;
     /** The WebGL context was lost and did not come back: the host falls back to the List. */
     onContextLost?: () => void;
 }
@@ -215,12 +217,13 @@ export function Stage(p: StageProps) {
     const panZoom = useMemo(() => panZoomOf(rig, p.reducedMotion, settle), [rig, p.reducedMotion, settle]);
     // The semantic zoom (outside this component) flies and reads the same rig through the bus.
     useEffect(() => bindRig(bus, rig), [bus, rig]);
-    const { depth, setDepth } = useDepth(renderer, rig, bus);
-    // A tilt asked for from outside lands only when the depth is on the other side of flat (never undoes a drag).
+    const { setDepth } = useDepth(renderer, rig, bus);
+    // A tilt asked for from outside lands only when the depth is on the other side of flat (never undoes a drag). With the
+    // 3D / Flat switch controlled (`flat` given) `useFlatTilt` is the ONE depth driver and takes `tilt` as its 3D target.
     const ready = placement !== null;
     useEffect(() => {
         const t = p.tilt;
-        if (t === undefined || !ready) return;
+        if (t === undefined || !ready || p.flat !== undefined) return;
         if (t > 0 ? rig.depth === 0 : rig.depth > 0) setDepth(t);
     }, [p.tilt, ready]); // eslint-disable-line react-hooks/exhaustive-deps
     // Reset view: the camera fitted, and the tilt put back up.
@@ -228,12 +231,13 @@ export function Stage(p: StageProps) {
     useEffect(() => {
         if (!ready || (p.resetTilt ?? 0) === resets.current) return;
         resets.current = p.resetTilt ?? 0;
-        setDepth(1);
+        setDepth(p.flat ? 0 : 1);
         rig.fit(now(), p.reducedMotion ? 0 : TWEEN_MS);
         settle();
     }, [p.resetTilt, ready]); // eslint-disable-line react-hooks/exhaustive-deps
-    const onTilt = p.onTilt;
-    const dragDepth = useCallback((d: number) => { setDepth(d); onTilt?.(d); }, [setDepth, onTilt]);
+    // The 3D / Flat switch (controlled by the host): eases the tilt (ground) or the pitch (orbit).
+    const invalidate = useCallback(() => bus.invalidate(), [bus]);
+    useFlatTilt({ rig, flat: p.flat, ready, reducedMotion: p.reducedMotion, tilt: p.tilt, setDepth, invalidate });
 
     useEffect(() => { if (placement) bus.setPlacement(placement, keys); }, [bus, placement, keys]);
     useEffect(() => { bus.setTweening(tweening); }, [bus, tweening]);
@@ -255,16 +259,14 @@ export function Stage(p: StageProps) {
 
     const scene: SceneProps = { renderer, rig, inputs: { marks: p.marks, paint: p.paint, placement, colors: p.colors, reducedMotion: p.reducedMotion }, captions, onContextLost: p.onContextLost };
     const frame = placement?.rig.frame ?? 'fill';
-    const [tiltMin, tiltMax] = placement?.rig.depth.tilt ?? [0, 0];
     return (
         <StageBusContext.Provider value={bus}>
-            {/* `overflow: clip` (not hidden): it clips without becoming a scroll container, so the sticky depth control
-                sticks to the page's viewport on a tall document frame. */}
+            {/* `overflow: clip` (not hidden): it clips without becoming a scroll container. */}
             <div ref={box} style={{ position: 'relative', display: 'flow-root', width, height, overflow: 'clip', touchAction: touchActionFor(frame) }} data-stage={renderer.kind} data-stage-frame={frame} data-stage-ready={placement ? 'true' : 'false'}>
                 {renderer.kind === 'webgl'
                     ? (
                         <Canvas orthographic frameloop="demand" dpr={[1, 2]} gl={{ antialias: false, alpha: true }} style={{ position: 'absolute', inset: 0 }}>
-                            <StageScene {...scene} canvasLabel={p.description ?? p.depthLabel} width={width} height={height} />
+                            <StageScene {...scene} canvasLabel={p.description ?? ''} width={width} height={height} />
                             <StageFrameTap bus={bus} />
                         </Canvas>
                     )
@@ -274,7 +276,6 @@ export function Stage(p: StageProps) {
                 {placement && (
                     <StageCorner boxHeight={height} legend={legend}>
                         {p.nav && <NavControl rig={rig} panZoom={panZoom} labels={p.nav} onSettle={settle} />}
-                        {!placement.rig.view && tiltMax > tiltMin && <DepthControl label={p.depthLabel} value={depth} onChange={dragDepth} />}
                     </StageCorner>
                 )}
             </div>

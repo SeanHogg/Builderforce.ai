@@ -21,7 +21,7 @@ import type { Placement } from '../types';
 
 // A files-only graph (the stored graph): a class level's symbols are APPENDED slots.
 const graph = surfaceFixture();
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const { marks } = model;
 const base = marks.keys.length;
 const CLS = `${USE_CASE}#UseCase`;
@@ -39,7 +39,7 @@ const classLevel = placeDrill(graph, model, req(drillKeyOf({ level: 'class', ref
 const packageLevel = placeDrill(graph, model, req(drillKeyOf({ level: 'package', ref: api.id })));
 
 const props = (renderer: ReturnType<typeof createNoopStage>, placement: Placement, over: Partial<Parameters<typeof Stage>[0]> = {}) => ({
-    renderer, marks, paint: null, placement, colors: null, width: 800, height: 500, reducedMotion: true, selected: null, onSelect: () => {}, depthLabel: 'Depth', ...over,
+    renderer, marks, paint: null, placement, colors: null, width: 800, height: 500, reducedMotion: true, selected: null, onSelect: () => {}, ...over,
 });
 
 describe('appended symbols are selectable (review 1: the stage indexes by the LIVE keys)', () => {

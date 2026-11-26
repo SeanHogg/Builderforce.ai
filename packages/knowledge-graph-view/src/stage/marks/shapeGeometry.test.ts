@@ -34,7 +34,7 @@ describe('a code graph\'s marks', () => {
         const g = codeFixture();
         const extra = ['app/page.test.tsx', 'docs/guide.md', 'db/schema.sql'].map((p) => ({ ...g.nodes[0]!, ref: `src:code::${p}` as never, label: p }));
         const graph = { ...g, nodes: [...g.nodes, ...extra] };
-        const { marks, nodeSlot } = buildStageModel(graph, []);
+        const { marks, nodeSlot } = buildStageModel(graph);
         const shapeOf = (ref: string) => TYPE_SHAPE[MARK_TYPE_ORDER[marks.type[nodeSlot.get(ref)!]!]!];
         const shapes = new Set(extra.map((n) => shapeOf(n.ref)));
         expect(shapes.size).toBe(3);

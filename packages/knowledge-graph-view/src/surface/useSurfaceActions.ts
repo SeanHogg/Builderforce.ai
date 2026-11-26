@@ -28,7 +28,7 @@ export interface SurfaceActions {
 }
 
 /** The cameras on offer and how to switch to one: what Show in Tower needs. */
-export interface TowerCameras { ids: readonly string[]; set(mode: ViewMode): void }
+export interface TowerCameras { ids: readonly string[]; set(mode: ViewMode): void; /** The view's 3D / Flat setter: the Map's towers are that switch. */ setFlat?: (flat: boolean) => void }
 
 export function useSurfaceActions(kg: KnowledgeGraphState, surface: SurfaceModel, onSelected: () => void, cameras?: TowerCameras): SurfaceActions {
     const camera = towerCameraOf(cameras?.ids);
@@ -52,7 +52,7 @@ export function useSurfaceActions(kg: KnowledgeGraphState, surface: SurfaceModel
         pinpointed: (refs) => { kg.setFocus(refs); surface.pinPath(refs); surface.setQuestion('wrong'); },
         unpin: () => { surface.pinPath(null); kg.setFocus([]); },
         showInTower: camera && cameras
-            ? (highlight, refs) => { surface.setHighlight(highlight); kg.focusRefs(refs); if (refs[0]) select(refs[0]); goToTowers(camera, surface.setTowers, cameras.set); }
+            ? (highlight, refs) => { surface.setHighlight(highlight); kg.focusRefs(refs); if (refs[0]) select(refs[0]); goToTowers(camera, surface.setTowers, cameras.set, cameras.setFlat); }
             : undefined,
     };
 }

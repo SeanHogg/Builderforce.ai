@@ -13226,6 +13226,10 @@
         "title": "Ein Board verdient jetzt sein Budget – und Ihre Teammitglieder haben endlich eine eigene Seite",
         "description": "Die Auslieferung tauchte nie in dem auf, was ein Board verdient oder was Investoren sehen. Jetzt verdient jedes Ticket, das Done erreicht, sein Board-Budget, Meilensteine laufen zur Investoren-Schnittstelle hoch, und jedes Teammitglied hat ein Profil, das Sie über eine Erwähnung erreichen."
       },
+      "see-your-code-as-a-3d-picture": {
+        "title": "Ihren Code als 3D-Bild sehen, mit dem Code daneben",
+        "description": "Die Wissensansicht zeigt jetzt den Code und ein 3D-Bild des Systems nebeneinander an einem gemeinsamen Ort. Klicken Sie auf eine Form, um ihren Code zu lesen, auf eine Methode, um hineinzuzoomen, und sehen Sie eine Umstrukturierung in der Vorschau, bevor jemand eine Zeile ändert."
+      },
       "run-your-app-on-the-canvas": {
         "title": "Führen Sie die App aus, die Ihr Board gerade gebaut hat – ohne das Board zu verlassen",
         "description": "Eine Canvas, die ein Backend, eine Seite und eine Einrichtungsnotiz schreibt, hatte keinen Ort, sie auszuführen. Die App-Oberfläche setzt jede Code-Karte zu einer lauffähigen Anwendung zusammen, in echten Gerätebreiten, auf demselben Board, auf dem Sie sie gebaut haben."
@@ -39034,6 +39038,7 @@
     "viewSystem": "System",
     "viewHeat": "Hitze",
     "viewSequence": "Sequenz",
+    "viewFlow": "Fluss",
     "panelRun": "Prüfungen",
     "panelCoverage": "Abdeckung",
     "panelPatterns": "Muster",
@@ -39747,7 +39752,15 @@
           "leaf": "Außerhalb dieser Ebene",
           "loading": "Symbole werden gelesen…",
           "callSite": "Aufrufstelle",
-          "openAtLine": "In Zeile {line} öffnen"
+          "openAtLine": "In Zeile {line} öffnen",
+          "callers": "Aufrufer",
+          "simulate": "Simulieren",
+          "simulateTip": "Den Pfad hier durchlaufen lassen und sehen, was er erreicht",
+          "restructure": "Umstrukturieren",
+          "restructureTip": "{name} umstrukturiert ansehen",
+          "risk": "Risiko",
+          "testReached": "Ein Test erreicht es",
+          "testNone": "Kein Test erreicht es"
         },
         "stats": {
           "issues": "Antimuster",
@@ -40064,7 +40077,9 @@
         "errorTitle": "In dieser Ansicht ist ein Fehler aufgetreten",
         "errorRetry": "Erneut versuchen",
         "errorBack": "Zurück",
-        "depth": "Tiefe"
+        "view3d": "3D",
+        "viewFlat": "Flach",
+        "flatToggle": "Flache Ansicht"
       },
       "nav": {
         "group": "Ansicht bewegen",
@@ -40138,12 +40153,6 @@
         "outline": "Gliederung",
         "outlineAria": "Symbole in dieser Datei",
         "tabsAria": "Geöffnete Dateien",
-        "layoutAria": "Layout der Code-Ebene",
-        "flow": "Fluss",
-        "sequence": "Sequenz",
-        "viewAria": "Kartenansicht",
-        "view3d": "3D",
-        "view2d": "2D",
         "followsEditor": "Folgt dem Editor",
         "stateSelected": "ausgewählt",
         "stateReading": "wird gelesen",
@@ -40158,7 +40167,46 @@
         "status": "Visualisierung · Ebene {level} · {state}",
         "following": "folgt {file}",
         "pinnedStatus": "angeheftet",
-        "statusLine": "Z. {line}"
+        "statusLine": "Z. {line}",
+        "dockAria": "Code und Gliederung",
+        "dockHide": "Code ausblenden",
+        "dockShow": "Code anzeigen",
+        "levelAria": "Mitglieder dieser Ebene",
+        "levelEmpty": "Auf dieser Ebene gibt es noch nichts.",
+        "levelNoSource": "Der Quelltext ist hier nicht verfügbar: Die Gliederung wird angezeigt.",
+        "rowNoTest": "Kein Test",
+        "rowAntiPattern": "Anti-Pattern: {name}",
+        "rowGoInside": "In {name} hineingehen",
+        "rowRestructure": "{name} umstrukturieren",
+        "paneSwitchAria": "Code oder Bild anzeigen",
+        "paneCode": "Code",
+        "panePicture": "Bild",
+        "lensOut": "Aus",
+        "lensSimulate": "Kein Test · Simulieren",
+        "lensRestructure": "{name}",
+        "gutterWarn": "Anti-Pattern: {name}"
+      },
+      "compare": {
+        "aria": "Vergleich",
+        "sourceBaseline": "Verglichen mit der letzten Prüfung",
+        "sourceSnapshot": "Verglichen mit dem früheren Snapshot",
+        "sourceRestructure": "Umstrukturierung: {kind} in {target}",
+        "sourceCommit": "Commit {sha}: {title}",
+        "sideGroup": "Vorher oder nachher",
+        "playRestructure": "Umstrukturierung abspielen",
+        "playHistory": "Verlauf erneut abspielen",
+        "playBaseline": "Änderung abspielen",
+        "apply": "Auf einem Branch anwenden",
+        "applyTip": "Den Korrektur-Ablauf für diesen Befund öffnen. Nichts ändert sich, bis Sie es anwenden.",
+        "close": "Vergleich beenden",
+        "notComparable": "Diese beiden Seiten lassen sich nicht vergleichen: {reasons}",
+        "noBefore": "Es gibt keine frühere Version, die gezeigt werden könnte.",
+        "oldNotAvailable": "Die frühere Version ist hier nicht verfügbar.",
+        "seeRestructured": "Umstrukturiert ansehen",
+        "restructureLoading": "Datei wird gelesen, um eine Umstrukturierung vorzuschlagen…",
+        "restructureNone": "Für diesen Fall lässt sich keine Umstrukturierung vorschlagen.",
+        "codeMarks": "{added} Zeilen hinzugefügt, {removed} Zeilen entfernt",
+        "movedOut": "Die markierten Definitionen wandern nach {modules}"
       },
       "api": {
         "notSetUpTitle": "Keine Endpunkte gefunden",

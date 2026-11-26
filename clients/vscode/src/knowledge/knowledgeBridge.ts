@@ -385,7 +385,7 @@ export class KnowledgeBridge implements vscode.Disposable {
    * Compare's "before": the root's previous review on the platform, `comparable` by memory's rules with the `reasons` it is
    * not (PRD 41 §C9; the view shows them localized); none for a local root.
    */
-  private async baseline(rootId: string): Promise<{ graph: unknown; comparable: boolean; reasons?: string[] } | null> {
+  private async baseline(rootId: string): Promise<{ graph: unknown; comparable: boolean; reasons?: string[]; rev?: string } | null> {
     const client = linkedKnowledgeClient(this.secrets);
     if (!client) return null;
     const scope = (await client.scopes()).find((s) => s.rootId === rootId);
@@ -398,7 +398,7 @@ export class KnowledgeBridge implements vscode.Disposable {
     const after = local
       ? { rootId, packs: local.packs, measured: local.measured, local: true }
       : { rootId, packs: scope.packs, measured: scope.measured, local: false };
-    return isGraph(graph) ? knowledgeBaseline(graph, scope.previousMeasured, after) : graph ? { graph, comparable: false } : null;
+    return isGraph(graph) ? knowledgeBaseline(graph, scope.previousMeasured, after, scope.previousCommitSha) : graph ? { graph, comparable: false } : null;
   }
 
   dispose(): void {

@@ -17,7 +17,7 @@ import { PLACEMENTS, type PlacementReq } from './index';
 import { STYLE_ROW_CAP } from './style';
 
 const graph = withSymbols(surfaceFixture());
-const model = buildStageModel(graph, [], { ...bandStrings(L), ...cameraStrings(L) });
+const model = buildStageModel(graph, { ...bandStrings(L), ...cameraStrings(L) });
 const { marks } = model;
 type RowCamera = 'system' | 'heat' | 'style' | 'features';
 const CAMERAS: readonly RowCamera[] = ['system', 'heat', 'style', 'features'];

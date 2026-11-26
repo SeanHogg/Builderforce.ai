@@ -16,7 +16,7 @@ import { createNoopStage, createWebGLStage, type StageRenderer } from './rendere
 import type { Placement } from './types';
 
 const graph = surfaceFixture();
-const model = buildStageModel(graph, []);
+const model = buildStageModel(graph);
 const { marks } = model;
 const CLS = `${USE_CASE}#UseCase`;
 const req = (camera: PlacementReq['camera'], drill: string | null = null, symbols?: readonly SymbolRecord[]): PlacementReq => ({

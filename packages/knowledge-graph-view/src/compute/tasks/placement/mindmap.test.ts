@@ -6,7 +6,7 @@ import { PLACEMENTS, type PlacementReq } from './index';
 import { CONE_STEP, mindFocusOf } from './mindmap';
 
 const graph = surfaceFixture();
-const model = buildStageModel(graph, [], { mapMore: '+{count} more', 'mind.moreFoldersOne': '+{count} folder', 'mind.moreFoldersOther': '+{count} folders' });
+const model = buildStageModel(graph, { mapMore: '+{count} more', 'mind.moreFoldersOne': '+{count} folder', 'mind.moreFoldersOther': '+{count} folders' });
 const { marks } = model;
 const req = (over: Partial<PlacementReq> = {}): PlacementReq =>
     ({ graph: 1, generation: marks.generation, camera: 'mind', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0, ...over });

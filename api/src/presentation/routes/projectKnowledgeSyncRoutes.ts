@@ -2,7 +2,8 @@
  * Pack sync routes (PRD 41 A11), mounted by `createProjectKnowledgeRoutes` on BOTH doors (tenant JWT under
  * `/api/projects`, host key under `/api/agent/projects`) next to the other knowledge routes:
  *
- *   POST /:projectId/knowledge/sync?syncId=&part=&parts=   one BFKP pack (or one part of one) → { generation, digest }
+ *   POST /:projectId/knowledge/sync?syncId=&part=&parts=&commitSha=   one BFKP pack (or one part of one) → { generation, digest }
+ *                                                          (`commitSha`: the git commit the pack's review ran at, optional, 7-64 hex)
  *   GET  /:projectId/knowledge/sync/manifest?root=         the root digest and the 4,096 bucket digests (BFKP)
  *   GET  /:projectId/knowledge/sync/manifest?root=&view=generation   `{ generation, digest }` only (JSON): the quiet-root probe
  *   POST /:projectId/knowledge/sync/manifest               the leaves of the buckets asked for (BFKP in, BFKP out)
@@ -16,10 +17,11 @@ import type { Context, Hono } from 'hono';
 import type { HonoEnv } from '../../env';
 import { KPACK_CONTENT_TYPE } from '@seanhogg/builderforce-memory/knowledge/pack';
 import type { KnowledgePorts } from '../../application/knowledge/knowledgeComposition';
+import { commitShaOf } from '../../application/knowledge/commitSha';
 import { applyKnowledgePack } from '../../application/knowledge/sync/applyKnowledgePack';
 import { bucketIdsOf, haveBitmap, manifestGeneration, manifestLeaves, manifestSummary } from '../../application/knowledge/sync/knowledgeSyncManifest';
 import { KnowledgeSyncError, MAX_SYNC_BODY_BYTES } from '../../application/knowledge/sync/knowledgeSyncPorts';
-import { reportedFallback } from '../../application/observability/caughtErrorReporter';
+import { reportCaughtError, reportedFallback } from '../../application/observability/caughtErrorReporter';
 import { KnowledgeWriteError } from '../../application/knowledge/knowledgeWriteError';
 
 const json = (body: unknown, status = 200): Response =>
@@ -104,9 +106,18 @@ export function registerKnowledgeSyncRoutes(router: Hono<HonoEnv>, h: SyncRouteH
     const syncId = c.req.query('syncId');
     const parts = intOf(c.req.query('parts'));
     const part = intOf(c.req.query('part'));
+    // The commit the review ran at rides beside the pack (the codec has no field for it). A malformed one is dropped, never an
+    // error (the pack is valid without it), but it is reported: a client sending one is a bug to see, not to lose.
+    const askedSha = c.req.query('commitSha');
+    const commitSha = commitShaOf(askedSha);
+    if (askedSha !== undefined && !commitSha) {
+      reportCaughtError(new Error('a knowledge sync stated a malformed commitSha; it was dropped'), {
+        source: 'presentation/routes/projectKnowledgeSyncRoutes.ts', operation: 'knowledgeSync.commitSha', level: 'warning', context: { length: askedSha.length },
+      });
+    }
     const result = await applyKnowledgePack(
       { ...p, userId: h.person(c), actorRole: (c.get('role') as string | undefined) ?? null, stageActor: stageActorOf(c) },
-      { body: await bodyOf(c), ...(syncId ? { syncId } : {}), ...(part !== undefined ? { part } : {}), ...(parts !== undefined ? { parts } : {}) },
+      { body: await bodyOf(c), ...(syncId ? { syncId } : {}), ...(part !== undefined ? { part } : {}), ...(parts !== undefined ? { parts } : {}), ...(commitSha ? { commitSha } : {}) },
     );
     return json({ ok: true, ...result });
   })));

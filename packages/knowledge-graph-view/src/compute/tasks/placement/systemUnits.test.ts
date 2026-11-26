@@ -28,7 +28,7 @@ const textPort = (): TextPort => ({
 });
 
 function placements(g: KnowledgeGraph) {
-    const model = buildStageModel(g, [], cameraStrings(L));
+    const model = buildStageModel(g, cameraStrings(L));
     const place = (camera: PlacementReq['camera']): Placement => {
         const t = PLACEMENTS[camera](g, model, { graph: 1, generation: model.marks.generation, camera, drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0 });
         while (!t.step());
