@@ -4,6 +4,9 @@ src/**
 webview/**
 esbuild.mjs
 vsce-platform.mjs
+# Build-time scripts only (esbuild.mjs imports manifest-editor-schema.mjs; prepublish/webview stamps):
+# nothing at runtime reads the extension's own scripts/.
+scripts/**
 .gitignore
 tsconfig.json
 **/tsconfig.json

@@ -16,20 +16,26 @@
  * Run by the extension's `vscode:prepublish`, so every release ships the prices of its
  * own day. A snapshot whose OWN timestamp (`PRICE_SNAPSHOT_AT`, not the file's mtime — a
  * fresh checkout touches every file) is under 24h old is kept without a fetch, so repeat
- * local packaging does not hit the network; `--strict` and `FORCE_PRICE_SNAPSHOT=1` always
- * fetch. The fetch gives up after {@link FETCH_TIMEOUT_MS} and keeps the existing snapshot,
+ * local packaging does not hit the network; `--strict`, `FORCE_PRICE_SNAPSHOT=1` and
+ * `BF_FORCE_BUILD=1` always fetch. A fetch that returns the SAME prices does not rewrite the
+ * file (so the build hashes that read it stay valid); a hash-stamped record in the OS temp dir
+ * remembers that check, so the 24h gate still holds. The fetch gives up after {@link FETCH_TIMEOUT_MS} and keeps the existing snapshot,
  * exactly like being offline. Long-context tiers are NOT written here: the snapshot's book
  * attaches them on read (`withPriceTiers`), from the one tier table in `priceTiers.ts`.
  */
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const outFile = join(repoRoot, 'packages', 'model-catalog', 'src', 'generated', 'priceSnapshot.ts');
+// Outside the tree (a tracked or ignored file in it would be noise); one per checkout.
+const checkFile = join(tmpdir(), `bf-price-snapshot-${createHash('sha256').update(repoRoot).digest('hex').slice(0, 12)}.json`);
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const strict = process.argv.includes('--strict');
-const force = strict || process.env.FORCE_PRICE_SNAPSHOT === '1';
+const force = strict || process.env.FORCE_PRICE_SNAPSHOT === '1' || process.env.BF_FORCE_BUILD === '1';
 const FRESH_FOR_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 5000;
 
@@ -80,18 +86,52 @@ ${lines.join('\n')}
 `;
 }
 
+/** SHA-256 of the snapshot file as it is on disk now, or null. The check record below is valid only for this content. */
+function snapshotHash() {
+  return existsSync(outFile) ? createHash('sha256').update(readFileSync(outFile)).digest('hex') : null;
+}
+
+/** When the catalog was last READ and found to match the file on disk (an unchanged catalog rewrites nothing, so the file's own timestamp cannot say). */
+function lastConfirmedAt() {
+  try {
+    const record = JSON.parse(readFileSync(checkFile, 'utf8'));
+    return record.snapshotHash && record.snapshotHash === snapshotHash() && Number.isFinite(record.checkedAt) ? record.checkedAt : null;
+  } catch {
+    return null;
+  }
+}
+
+function recordCheck() {
+  try {
+    writeFileSync(checkFile, JSON.stringify({ checkedAt: Date.now(), snapshotHash: snapshotHash() }));
+  } catch {
+    // only an optimisation: the next run fetches again
+  }
+}
+
 const takenAt = snapshotTakenAt();
-if (!force && takenAt !== null && Date.now() - takenAt < FRESH_FOR_MS) {
-  console.log(`price snapshot: taken ${new Date(takenAt).toISOString()} (under 24h) — keeping it; FORCE_PRICE_SNAPSHOT=1 refreshes`);
+const confirmedAt = lastConfirmedAt();
+const freshAt = Math.max(takenAt ?? 0, confirmedAt ?? 0);
+if (!force && freshAt > 0 && Date.now() - freshAt < FRESH_FOR_MS) {
+  console.log(`price snapshot: current as of ${new Date(freshAt).toISOString()} (under 24h) — keeping it; FORCE_PRICE_SNAPSHOT=1 or BF_FORCE_BUILD=1 refreshes`);
   process.exit(0);
 }
 
 try {
   const rows = await readCatalog();
   if (rows.length === 0) throw new Error('OpenRouter returned no models');
-  mkdirSync(dirname(outFile), { recursive: true });
-  writeFileSync(outFile, render(rows, new Date().toISOString()));
-  console.log(`price snapshot: ${rows.length} models → ${outFile}`);
+  const existing = existsSync(outFile) ? readFileSync(outFile, 'utf8') : null;
+  const previousAt = existing === null ? null : /PRICE_SNAPSHOT_AT = "([^"]+)"/.exec(existing)?.[1];
+  if (existing !== null && previousAt && render(rows, previousAt) === existing) {
+    // Same prices: leave the file (and so every build hash that reads it) untouched.
+    recordCheck();
+    console.log(`price snapshot: ${rows.length} models, unchanged since ${previousAt} — file not rewritten`);
+  } else {
+    mkdirSync(dirname(outFile), { recursive: true });
+    writeFileSync(outFile, render(rows, new Date().toISOString()));
+    recordCheck();
+    console.log(`price snapshot: ${rows.length} models → ${outFile}`);
+  }
 } catch (error) {
   const reason = error instanceof Error ? error.message : String(error);
   if (strict || !existsSync(outFile)) {

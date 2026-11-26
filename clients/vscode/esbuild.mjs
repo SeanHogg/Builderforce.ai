@@ -384,11 +384,9 @@ if (watch) {
   if (graphWorker) await (await esbuild.context(graphWorker)).watch();
   console.log("[esbuild] watching…");
 } else {
-  // The bundles are independent (each has its own entry and outfile, and none reads another's
-  // output), so they build concurrently. The out/ cleanup above has already finished, and
-  // `copyBfiWasm` (wasm, native addon, tree-sitter, analyzers, launcher assets, schema) only
-  // needs `out/` to exist, so it chains after the host worker as before. Any failure rejects
-  // the whole `Promise.all`, which fails the build exactly as the serial awaits did.
+  // The bundles are independent (own entry and outfile, none reads another's output), so they build
+  // concurrently; the out/ cleanup above has finished. `copyBfiWasm` only needs `out/` to exist, so
+  // it chains after the host worker as before. Any failure rejects the `Promise.all`, failing the build.
   await Promise.all([
     esbuild.build(options),
     hostWorker ? esbuild.build(hostWorker).then(() => copyBfiWasm()) : null,

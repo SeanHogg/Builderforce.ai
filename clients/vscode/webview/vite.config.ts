@@ -8,6 +8,9 @@ import { pinnedInstallVitePlugin, sourcePackageAliases } from '../../../scripts/
 // The SAME hash the extension host stamps (see esbuild.mjs), so the two ids are
 // comparable rather than merely both present.
 import { computeBuildId } from '../buildId.mjs';
+// Records what this build read, so an unchanged tree skips the next one (`buildInputs.mjs`).
+import { inlinedVersionFiles } from './buildInputs.mjs';
+import { buildInputsStamp, collectWorkerInputs } from './buildInputsStamp';
 
 /**
  * Builds THE webview into `../media/webview/`.
@@ -67,15 +70,11 @@ function firstPackageVersion(files: string[]): string {
 // The webview compiles the web frontend, so its uiVersion is that package — not
 // a dash. Brain and the in-browser runtime are the same stamps the web build
 // inlines, so a canvas paste from the editor names the same kernels.
-const webviewUiVersion = firstPackageVersion([path.join(REPO_ROOT, 'frontend/package.json')]);
-const webviewBrainVersion = firstPackageVersion([
-  path.join(REPO_ROOT, 'frontend/node_modules/@seanhogg/builderforce-brain-embedded/package.json'),
-  path.join(REPO_ROOT, 'brain-embedded/package.json'),
-]);
-const webviewRuntimeVersion = firstPackageVersion([
-  path.join(REPO_ROOT, 'frontend/node_modules/@seanhogg/builderforce-webcontainers/package.json'),
-  path.resolve(REPO_ROOT, '../builderforce-webcontainers/packages/browser/package.json'),
-]);
+// The files are listed once, in `buildInputs.mjs`, which also hashes them into the build stamp.
+const versionFiles = inlinedVersionFiles();
+const webviewUiVersion = firstPackageVersion(versionFiles.ui);
+const webviewBrainVersion = firstPackageVersion(versionFiles.brain);
+const webviewRuntimeVersion = firstPackageVersion(versionFiles.runtime);
 const FRONTEND_SRC = path.join(REPO_ROOT, 'frontend/src');
 /**
  * The extension package — the install whose `package.json` declares the memory range that
@@ -206,6 +205,9 @@ function entryKeepsShellNames(): Plugin {
   };
 }
 
+/** Computed once: the id `define`d into the bundle is the id the build-inputs stamp vouches for. */
+const WEBVIEW_BUILD_ID = computeBuildId(fileURLToPath(new URL('..', import.meta.url)));
+
 export default defineConfig({
   // BUILD IDENTITY for the WEBVIEW HALF, stamped independently of the extension
   // host's. Both halves ship inside one `.vsix`, so in a released install they are
@@ -214,7 +216,7 @@ export default defineConfig({
   // build. Stamping both turns "are these the same build?" into a comparison instead
   // of an assumption: equal ids mean one artifact, different ids name the stale half.
   define: {
-    __BF_WEBVIEW_BUILD_ID__: JSON.stringify(computeBuildId(fileURLToPath(new URL('..', import.meta.url)))),
+    __BF_WEBVIEW_BUILD_ID__: JSON.stringify(WEBVIEW_BUILD_ID),
     __BF_WEBVIEW_BUILT_AT__: JSON.stringify(new Date().toISOString()),
     // The frontend reads build-time config from `process.env`. Vite has no
     // `process`, so the values this closure touches are inlined here. The API base
@@ -228,7 +230,7 @@ export default defineConfig({
     'process.env.NEXT_PUBLIC_WORKER_URL': JSON.stringify(''),
     'process.env.NEXT_PUBLIC_APP_URL': JSON.stringify('https://builderforce.ai'),
   },
-  plugins: [react(), pinnedInstallVitePlugin(INSTALL_DIR), knowledgeViewPeers(), canvasMessages(), dropWasmAssets(), entryKeepsShellNames()],
+  plugins: [react(), pinnedInstallVitePlugin(INSTALL_DIR), knowledgeViewPeers(), canvasMessages(), dropWasmAssets(), entryKeepsShellNames(), buildInputsStamp(WEBVIEW_BUILD_ID)],
   root: HERE,
   base: './',
   resolve: {
@@ -275,7 +277,7 @@ export default defineConfig({
   // (the Mamba worker) code-split through dynamic imports, which Vite's default IIFE
   // worker output cannot hold.
   // Top-level `plugins` reach worker bundles only in dev, so the memory pin is listed again.
-  worker: { format: 'es', plugins: () => [pinnedInstallVitePlugin(INSTALL_DIR)] },
+  worker: { format: 'es', plugins: () => [pinnedInstallVitePlugin(INSTALL_DIR), collectWorkerInputs()] },
   build: {
     outDir: path.resolve(HERE, '../media/webview'),
     // The webview runs in VS Code's own (current) Chromium, so nothing needs lowering to

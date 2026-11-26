@@ -20,7 +20,7 @@
  * Linked packages are built before the packages that link them: stale packages are grouped
  * into dependency levels, each level builds concurrently (at most availableParallelism() - 1
  * at a time, output buffered and printed per package), and a level starts only when the one
- * below it has finished.
+ * below it has finished (none starts after a level had a failure).
  *
  * A failed build FAILS this script: shipping a stale dist is the bug this exists to stop.
  *
@@ -29,10 +29,11 @@
  */
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sha256File, walkFiles } from './lib/hashTree.mjs';
 import { linkedTargets, readManifest } from './linkedPackages.mjs';
 import { readSourcePackages } from './sourcePackages.mjs';
 
@@ -43,21 +44,11 @@ const REPO_INPUTS = ['scripts/ensure-linked-builds.mjs', 'scripts/linkedPackages
   'scripts/install-brain-workspace.mjs', 'scripts/sourcePackages.mjs', 'scripts/lib/tsconfigPaths.mjs', 'scripts/check-browser-dist.mjs'];
 const STAMP = '.build-inputs';
 
-function* sourceFiles(dir) {
-  if (!existsSync(dir)) return;
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (SKIP_DIRS.has(entry.name)) continue;
-    const file = join(dir, entry.name);
-    if (entry.isDirectory()) yield* sourceFiles(file);
-    else if (entry.isFile()) yield file;
-  }
-}
-
 function* packageInputs(dir, manifest, seen = new Set()) {
   const key = realpathSync(dir);
   if (seen.has(key)) return;
   seen.add(key);
-  yield* sourceFiles(join(dir, 'src'));
+  yield* walkFiles(join(dir, 'src'), { skipDirs: SKIP_DIRS });
   yield* PACKAGE_INPUTS.map((file) => join(dir, file)).filter(existsSync);
   for (const target of linkedTargets(dir, manifest)) {
     const child = readManifest(target);
@@ -80,7 +71,7 @@ function inputDigest(dir, manifest) {
     }
   }
   for (const file of [...inputs].sort()) {
-    if (!fileDigests.has(file)) fileDigests.set(file, createHash('sha256').update(readFileSync(file)).digest('hex'));
+    if (!fileDigests.has(file)) fileDigests.set(file, sha256File(file));
     hash.update(JSON.stringify([relative(repo, file).split(sep).join('/'), fileDigests.get(file)]));
   }
   return hash.digest('hex');
@@ -149,7 +140,10 @@ function build(job) {
     const child = spawn('npm', ['run', 'build'], { cwd: job.dir, shell: process.platform === 'win32' });
     child.stdout.on('data', (chunk) => chunks.push(chunk));
     child.stderr.on('data', (chunk) => chunks.push(chunk));
+    let finished = false;
     const finish = (status) => {
+      if (finished) return; // `error` and `close` can both fire for one child
+      finished = true;
       const text = Buffer.concat(chunks).toString('utf8').replace(/\s+$/, '');
       if (text) console.log(text.split('\n').map((line) => `[${job.name}] ${line}`).join('\n'));
       done(status === 0);
@@ -175,7 +169,12 @@ async function runLevel(jobs, limit) {
 
 async function buildPending() {
   const limit = Math.max(1, availableParallelism() - 1);
-  for (const jobs of pending) if (jobs?.length) await runLevel(jobs, limit);
+  for (const jobs of pending) {
+    if (!jobs?.length) continue;
+    // A level that failed leaves its dependants without a good dist to build against: stop here.
+    if (failed.length) break;
+    await runLevel(jobs, limit);
+  }
 }
 
 // Several consumers in one run share visited packages and input hashes, so a package linked by

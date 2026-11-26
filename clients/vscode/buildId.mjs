@@ -1,6 +1,7 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { walkFiles } from "../../scripts/lib/hashTree.mjs";
 
 /**
  * BUILD IDENTITY — a source hash + a build timestamp stamped into the artifact.
@@ -22,21 +23,12 @@ export const BUILD_HASH_ROOTS = ["src", "webview/src", "l10n"];
 const BUILD_HASH_FILES = ["package.json", "esbuild.mjs", "buildId.mjs"];
 const BUILD_HASH_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs", ".json", ".css"]);
 
+/** Tests never reach the artifact, so they must not change its identity — otherwise
+ *  "same id ⇒ same shipped code" stops being true in the useful direction. A missing root
+ *  (e.g. l10n) that this checkout does not have yields nothing. */
 function collectHashInputs(dir, out) {
-  let entries;
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return out; // an optional root (e.g. l10n) that this checkout does not have
-  }
-  for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) collectHashInputs(full, out);
-    // Tests never reach the artifact, so they must not change its identity — otherwise
-    // "same id ⇒ same shipped code" stops being true in the useful direction.
-    else if (/\.(test|spec)\.[cm]?tsx?$/.test(entry.name)) continue;
-    else if (BUILD_HASH_EXTENSIONS.has(path.extname(entry.name))) out.push(full);
-  }
+  const accept = (name) => !/\.(test|spec)\.[cm]?tsx?$/.test(name) && BUILD_HASH_EXTENSIONS.has(path.extname(name));
+  for (const file of walkFiles(dir, { accept, includeSymlinks: true })) out.push(file);
   return out;
 }
 
