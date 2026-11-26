@@ -1,0 +1,210 @@
+diff --git a/dist/index.js b/dist/index.js
+index 5ee7d946e53665c918fe27abc3d6d86417ae9d9b..3f4308fd7ceb63ca344e4c2353c44c456913d2be 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -12494,10 +12494,105 @@ var builtInModulesPlugin = {
+ // src/buildApplication/processVercelFunctions/dedupeEdgeFunctions.ts
+ async function dedupeEdgeFunctions({ edgeFunctions }, opts) {
+   const identifiers = await getFunctionIdentifiers({ edgeFunctions }, opts);
++  for (const key of Object.keys(nopPatchStats)) nopPatchStats[key] = 0;
++  const nopStartedAt = Date.now();
+   await processFunctionIdentifiers({ edgeFunctions }, identifiers, opts);
++  console.log(`[nop-patch] processFunctionIdentifiers ${((Date.now() - nopStartedAt) / 1e3).toFixed(1)}s`);
++  console.log(`[nop-patch] buffer mode ${nopPatchStats.buffer}/${nopPatchStats.total} functions, verified ${nopPatchStats.verified} identical`);
++  console.log(`[nop-patch] fallback reasons: overlap=${nopPatchStats.overlap} non-utf8=${nopPatchStats.nonUtf8} string-switch=${nopPatchStats.stringSwitch}`);
+   await processBundledAssets({ edgeFunctions }, opts);
+   return identifiers;
+ }
++// [nop-patch] Performance patch. Upstream calls replaceLastSubstringInstance(fileContents, ...)
++// once per identifier: lastIndexOf on a cons-string (flatten = full copy + GC) and a full
++// slice/concat rebuild each time. Same operation (replace the LAST occurrence in the CURRENT
++// contents, same order), but on a Node Buffer edited in place. Output is identical.
++var nopPatchStats = { total: 0, buffer: 0, verified: 0, overlap: 0, nonUtf8: 0, stringSwitch: 0 };
++// What an identifier is replaced with, or null when its block is left in place.
++function nopPatchReplacement({ type, identifier: identifier2, importPath }, info) {
++  if (importPath) return "";
++  if (info.consumers.length > 1) {
++    if (type === "webpack") return `__chunk_${identifier2}`;
++    if (type === "manifest") return `self.${identifier2}=${identifier2};`;
++    return identifier2;
++  }
++  return null;
++}
++// Pure pre-pass: non-empty, disjoint, descending ranges make contents.slice(start,end) of the
++// ORIGINAL string equal upstream's slice of the current string (text before the last replaced
++// start is never modified), so codeBlocks and every side effect are identical to upstream.
++function nopPatchCanUseOriginalSlices(contents, identifiers, identifierMaps) {
++  let cursor = contents.length;
++  for (const ident of identifiers) {
++    const { start, end } = ident;
++    if (end > cursor || end <= start) return false;
++    if (nopPatchReplacement(ident, identifierMaps[ident.type].get(ident.identifier)) !== null) cursor = start;
++  }
++  return true;
++}
++// Edit state for one function: a UTF-8 Buffer, or the plain string when that cannot be exact.
++function nopBufState(contents) {
++  const buf = Buffer.from(contents, "utf8");
++  const exact = buf.toString("utf8") === contents;
++  if (!exact) nopPatchStats.nonUtf8++;
++  return {
++    mode: exact ? "buf" : "str",
++    buf: exact ? buf : null,
++    len: buf.length,
++    contents: exact ? null : contents,
++    pairs: []
++  };
++}
++// Upstream semantics: replace the LAST occurrence of block in the current contents, if any.
++function nopReplaceLast(state, block, replacement) {
++  state.pairs.push(block, replacement);
++  if (state.mode === "buf") {
++    const needle = Buffer.from(block, "utf8");
++    const r = Buffer.from(replacement, "utf8");
++    if (needle.toString("utf8") === block && r.toString("utf8") === replacement) {
++      const idx = state.buf.subarray(0, state.len).lastIndexOf(needle);
++      if (idx === -1) return;
++      const newLen = state.len - needle.length + r.length;
++      if (newLen > state.buf.length) {
++        const grown = Buffer.allocUnsafe(Math.max(state.buf.length * 2, newLen));
++        state.buf.copy(grown, 0, 0, state.len);
++        state.buf = grown;
++      }
++      state.buf.copyWithin(idx + r.length, idx + needle.length, state.len);
++      r.copy(state.buf, idx);
++      state.len = newLen;
++      return;
++    }
++    state.contents = state.buf.toString("utf8", 0, state.len);
++    state.buf = null;
++    state.mode = "str";
++    nopPatchStats.stringSwitch++;
++  }
++  state.contents = replaceLastSubstringInstance(state.contents, block, replacement);
++}
++function nopFinish(state) {
++  return state.mode === "buf" ? state.buf.toString("utf8", 0, state.len) : state.contents;
++}
++// Equivalence proof run in CI (first 5 buffer-mode functions, all with NOP_PATCH_VERIFY=1):
++// replay the recorded pairs through upstream's function and require the identical string.
++function nopPatchFinishVerified(path2, original, state) {
++  const result = nopFinish(state);
++  if (state.mode !== "buf") return result;
++  nopPatchStats.buffer++;
++  if (nopPatchStats.verified < 5 || process.env.NOP_PATCH_VERIFY === "1") {
++    let slow = original;
++    for (let i = 0; i < state.pairs.length; i += 2) {
++      slow = replaceLastSubstringInstance(slow, state.pairs[i], state.pairs[i + 1]);
++    }
++    if (slow !== result) {
++      let at = 0;
++      while (at < slow.length && at < result.length && slow[at] === result[at]) at++;
++      throw new Error(`[nop-patch] buffer output differs from original algorithm for ${path2} at offset ${at}`);
++    }
++    nopPatchStats.verified++;
++  }
++  return result;
++}
+ async function processFunctionIdentifiers({ edgeFunctions }, { entrypointsMap, identifierMaps }, opts) {
+   const functionBuildPromises = [];
+   const wasmIdentifierKeys = [...identifierMaps.wasm.keys()];
+@@ -12510,10 +12605,21 @@ async function processFunctionIdentifiers({ edgeFunctions }, { entrypointsMap, i
+     const wasmImportsToPrepend = /* @__PURE__ */ new Map();
+     const newFnLocation = (0, import_node_path8.join)("functions", `${fnInfo.relativePath}.js`);
+     const newFnPath = (0, import_node_path8.join)(opts.nopDistDir, newFnLocation);
++    // [nop-patch] with a state, fileContents stays the ORIGINAL (see nopPatchCanUseOriginalSlices);
++    // otherwise (overlap) the loop is upstream's, mutating fileContents.
++    nopPatchStats.total++;
++    const nopOriginal = fileContents;
++    const nopUseState = nopPatchCanUseOriginalSlices(fileContents, identifiers, identifierMaps);
++    if (!nopUseState) nopPatchStats.overlap++;
++    const nopState = nopUseState ? nopBufState(fileContents) : null;
++    const nopReplace = (codeBlock, replacement) => {
++      if (nopState) nopReplaceLast(nopState, codeBlock, replacement);
++      else fileContents = replaceLastSubstringInstance(fileContents, codeBlock, replacement);
++    };
+     for (const { type, identifier: identifier2, start, end, importPath } of identifiers) {
+       const identifierInfo = identifierMaps[type].get(identifier2);
+       if (importPath) {
+-        const { updatedContents, newImportToPrepend } = await processImportIdentifier(
++        const { codeBlock, replacement, newImportToPrepend } = await processImportIdentifier(
+           { type, identifier: identifier2, start, end, importPath, info: identifierInfo },
+           {
+             fileContents,
+@@ -12523,15 +12629,15 @@ async function processFunctionIdentifiers({ edgeFunctions }, { entrypointsMap, i
+           },
+           opts
+         );
+-        fileContents = updatedContents;
++        nopReplace(codeBlock, replacement);
+         importsToPrepend.push(newImportToPrepend);
+       } else if (identifierInfo.consumers.length > 1) {
+-        const { updatedContents, newFilePath, newImport, wasmImports } = await processCodeBlockIdentifier(
++        const { codeBlock, replacement, newFilePath, newImport, wasmImports } = await processCodeBlockIdentifier(
+           { type, identifier: identifier2, start, end, info: identifierInfo },
+           { fileContents, wasmIdentifierKeys },
+           opts
+         );
+-        fileContents = updatedContents;
++        nopReplace(codeBlock, replacement);
+         if (newFilePath)
+           identifierPathsToBuild.add(newFilePath);
+         if (newImport)
+@@ -12552,6 +12658,7 @@ async function processFunctionIdentifiers({ edgeFunctions }, { entrypointsMap, i
+         }
+       }
+     }
++    if (nopState) fileContents = nopPatchFinishVerified(path2, nopOriginal, nopState);
+     await Promise.all(
+       [...identifierPathsToBuild].map(async (path3) => {
+         const fileContents2 = await functionifyFileContent(path3);
+@@ -12689,8 +12796,7 @@ async function processImportIdentifier(ident, {
+   fnConfig
+ }, { nopDistDir, workerJsDir }) {
+   const { type, identifier: identifier2, start, end, importPath, info } = ident;
+-  let updatedContents = fileContents;
+-  const codeBlock = updatedContents.slice(start, end);
++  const codeBlock = fileContents.slice(start, end);
+   if (!info.newDest) {
+     const importPathWithoutLeadingDots = importPath.replace(/^(\.\.\/)+/, "");
+     const importPathWithoutType = importPathWithoutLeadingDots.replace(new RegExp(`^/${type}/`), "/");
+@@ -12709,13 +12815,9 @@ async function processImportIdentifier(ident, {
+     relativeTo: nopDistDir
+   });
+   const newImportPath = normalizePath((0, import_node_path8.join)(relativeImportPath, info.newDest));
+-  updatedContents = replaceLastSubstringInstance(
+-    updatedContents,
+-    codeBlock,
+-    ""
+-  );
+   return {
+-    updatedContents,
++    codeBlock,
++    replacement: "",
+     newImportToPrepend: {
+       key: identifier2,
+       path: newImportPath
+@@ -12724,8 +12826,7 @@ async function processImportIdentifier(ident, {
+ }
+ async function processCodeBlockIdentifier(ident, { fileContents, wasmIdentifierKeys }, { nopDistDir, workerJsDir }) {
+   const { type, identifier: identifier2, start, end, info } = ident;
+-  let updatedContents = fileContents;
+-  const codeBlock = updatedContents.slice(start, end);
++  const codeBlock = fileContents.slice(start, end);
+   let identifierKey = identifier2;
+   let newCodeBlock = identifier2;
+   if (type === "webpack") {
+@@ -12751,12 +12852,7 @@ async function processCodeBlockIdentifier(ident, { fileContents, wasmIdentifierK
+     await (0, import_promises9.appendFile)(newFilePath, buffer);
+   }
+   const newImport = { key: identifierKey, path: info.newDest };
+-  updatedContents = replaceLastSubstringInstance(
+-    updatedContents,
+-    codeBlock,
+-    newCodeBlock
+-  );
+-  return { updatedContents, newFilePath, newImport, wasmImports };
++  return { codeBlock, replacement: newCodeBlock, newFilePath, newImport, wasmImports };
+ }
+ async function getFunctionIdentifiers({ edgeFunctions }, { disableChunksDedup }) {
+   const entrypointsMap = /* @__PURE__ */ new Map();

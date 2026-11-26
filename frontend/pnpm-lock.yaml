@@ -24,13 +24,18 @@ overrides:
   glob: ^14.0.2
   minimatch: ^11.0.1
 
+patchedDependencies:
+  '@cloudflare/next-on-pages@1.13.16':
+    hash: d3c629de11483f1518faeb215472cf738e5a71f96d1339f96b179596fe84bdc8
+    path: patches/@cloudflare__next-on-pages@1.13.16.patch
+
 importers:
 
   .:
     dependencies:
       '@cloudflare/next-on-pages':
-        specifier: ^1.13.16
-        version: 1.13.16(next@15.5.28(@babel/core@7.29.13)(@types/node@20.19.43)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(vercel@47.1.4(@swc/core@1.16.22))(wrangler@4.87.0(@types/node@20.19.43))
+        specifier: 1.13.16
+        version: 1.13.16(patch_hash=d3c629de11483f1518faeb215472cf738e5a71f96d1339f96b179596fe84bdc8)(next@15.5.28(@babel/core@7.29.13)(@types/node@20.19.43)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(vercel@47.1.4(@swc/core@1.16.22))(wrangler@4.87.0(@types/node@20.19.43))
       '@fontsource/inter':
         specifier: ^5.3.0
         version: 5.3.0
@@ -5843,7 +5848,7 @@ snapshots:
 
   '@cloudflare/kv-asset-handler@0.5.0': {}
 
-  '@cloudflare/next-on-pages@1.13.16(next@15.5.28(@babel/core@7.29.13)(@types/node@20.19.43)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(vercel@47.1.4(@swc/core@1.16.22))(wrangler@4.87.0(@types/node@20.19.43))':
+  '@cloudflare/next-on-pages@1.13.16(patch_hash=d3c629de11483f1518faeb215472cf738e5a71f96d1339f96b179596fe84bdc8)(next@15.5.28(@babel/core@7.29.13)(@types/node@20.19.43)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(vercel@47.1.4(@swc/core@1.16.22))(wrangler@4.87.0(@types/node@20.19.43))':
     dependencies:
       acorn: 8.19.0
       ast-types: 0.14.2
