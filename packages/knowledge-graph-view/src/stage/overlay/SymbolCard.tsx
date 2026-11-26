@@ -70,7 +70,7 @@ export function SymbolCard({ slotKey, symbolRef, name, state, records, markType,
                     {facts.length > 0 && <span style={chips}>{facts.map(([id, text]) => <span key={id} data-chip={id} style={chip}>{text}</span>)}</span>}
                 </span>
             )}
-            facts={<CardFacts labels={labels} facts={selection} risk={riskFactOf(selection?.antiPattern ? { word: 'high', tone: 'sev4' } : null, labels)} />}
+            facts={<CardFacts labels={labels} facts={selection} risk={riskFactOf(selection?.antiPattern ? { word: labels.surface.map.statWords.anti.high, tone: 'sev4' } : null, labels)} />}
             acts={(
                 <>
                     <CardAction id="drill-in" primary glyph="inside" label={t.drillInAction} disabled={counts.calls === 0} onClick={onDrill} />

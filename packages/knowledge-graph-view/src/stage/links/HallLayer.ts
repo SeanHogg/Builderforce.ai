@@ -85,11 +85,13 @@ void main() {
     fragColor = vec4(vColor, 1.0);
 }`;
 
+// The ball's colour is read from the live palette by tone (never a held Vector3), so a theme flip reaches it.
 const BALL_FRAGMENT = /* glsl */ `
 precision highp float;
-uniform vec3 uBall;
+uniform vec3 uPalette[${PALETTE_SIZE}];
+uniform float uBallTone;
 out vec4 fragColor;
-void main() { fragColor = vec4(uBall, 1.0); }`;
+void main() { fragColor = vec4(uPalette[int(uBallTone + 0.5)], 1.0); }`;
 
 interface Hall { bars: InstancedMesh; balls: InstancedMesh; a: InstancedBufferAttribute; b: InstancedBufferAttribute; style: InstancedBufferAttribute; capacity: number }
 
@@ -147,7 +149,7 @@ export class HallLayer {
         }), capacity);
         const balls = new InstancedMesh(instanced(new SphereGeometry(0.5, 10, 8), false), new ShaderMaterial({
             glslVersion: GLSL3, vertexShader: PULSE_VERTEX, fragmentShader: BALL_FRAGMENT,
-            uniforms: { uPalette, uTime, uMotion, uPulseWidth: { value: 0.6 }, uBall: { value: this.uniforms.uPalette.value[toneIndex('sel')]! } },
+            uniforms: { uPalette, uTime, uMotion, uPulseWidth: { value: 0.6 }, uBallTone: { value: toneIndex('sel') } },
         }), capacity);
         for (const [mesh, name, order] of [[bars, 'halls', 1], [balls, 'halls:pulse', 2]] as const) {
             mesh.count = 0; mesh.frustumCulled = false; mesh.renderOrder = order; mesh.name = name;

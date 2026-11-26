@@ -1,13 +1,11 @@
 /**
- * The symbol card: it shows for a mark on the stage (not for no mark, nor one that left the stage), names the symbol's
- * kind, state, lines and counts, and its buttons drill in, zoom, open the code and the file.
+ * The symbol card: the ONE note-card shell for a selected, read or pinned mark (not for no mark). It names the symbol's
+ * kind, its lines and counts, and its buttons drill in, open the code and the file.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../../labels';
 import type { SymbolRecord } from '../../types';
-import { StageBus, StageBusContext } from '../anchor/stageBus';
-import type { Placement } from '../types';
 import { SymbolCard, type SymbolCardProps } from './SymbolCard';
 
 const records: SymbolRecord[] = [
@@ -16,54 +14,45 @@ const records: SymbolRecord[] = [
     { ref: 'src:sys::a.ts#id', name: 'id', kind: 'const', parent: 'src:sys::a.ts#Order', line: 5, exported: false },
 ];
 
-function busWith(keys: string[]): StageBus {
-    const bus = new StageBus();
-    const placement = { position: new Float32Array(keys.length * 3), scale: new Float32Array(keys.map(() => 1)), links: [] } as unknown as Placement;
-    bus.setPlacement(placement, keys);
-    return bus;
-}
-
 function mount(over: Partial<SymbolCardProps> = {}) {
     const props: SymbolCardProps = {
         slotKey: 'node:src:sys::a.ts#Order', symbolRef: 'src:sys::a.ts#Order', name: 'Order', state: 'selected', records, markType: 'class', labels: L,
-        onDrill: vi.fn(), onCode: vi.fn(), onZoomIn: vi.fn(), onZoomOut: vi.fn(), ...over,
+        onDrill: vi.fn(), onCode: vi.fn(), ...over,
     };
-    render(
-        <StageBusContext.Provider value={busWith(['node:src:sys::a.ts#Order', 'node:src:sys::a.ts#place'])}>
-            <SymbolCard {...props} />
-        </StageBusContext.Provider>,
-    );
+    render(<SymbolCard {...props} />);
     return props;
 }
 
+const cardEl = () => document.querySelector('[data-note-card="symbol"]');
+
 describe('SymbolCard', () => {
-    it('names the kind and state, the lines and the counts of a class', () => {
+    it('names the kind, the lines and the counts of a class, and says why it shows', () => {
         mount();
-        const card = document.querySelector('[data-symbol-card]')!;
+        const card = cardEl()!;
+        expect(card.querySelector('[data-note-name]')?.textContent).toBe('Order');
         expect(card.textContent).toContain(L.legend.typeClass);
-        expect(card.textContent).toContain(L.surface.code.stateSelected);
+        expect(card.querySelector('[data-state]')?.getAttribute('data-state')).toBe('selected');
         expect(card.textContent).toContain('a.ts:1–');
         expect(card.querySelector('[data-chip="methods"]')?.textContent).toBe(fillTemplate(L.surface.code.methodsCount, { count: 1 }));
         expect(card.querySelector('[data-chip="fields"]')?.textContent).toBe(fillTemplate(L.surface.code.fieldsCount, { count: 1 }));
         expect(card.querySelector('[data-chip="calls"]')).toBeNull();
     });
 
-    it('offers Drill in only for a symbol with calls, and wires its buttons', () => {
+    it('wires Drill in and Show code for a symbol with calls', () => {
         const props = mount({ symbolRef: 'src:sys::a.ts#place', slotKey: 'node:src:sys::a.ts#place', markType: 'function' });
         fireEvent.click(screen.getByRole('button', { name: L.surface.code.drillInAction }));
         fireEvent.click(screen.getByRole('button', { name: L.surface.code.showCode }));
-        fireEvent.click(screen.getByRole('button', { name: L.zoomIn }));
-        fireEvent.click(screen.getByRole('button', { name: L.zoomOut }));
         expect(props.onDrill).toHaveBeenCalledTimes(1);
         expect(props.onCode).toHaveBeenCalledTimes(1);
-        expect(props.onZoomIn).toHaveBeenCalledTimes(1);
-        expect(props.onZoomOut).toHaveBeenCalledTimes(1);
     });
 
-    it('has no Drill in for a symbol with no calls, and opens the file only with a host editor', () => {
+    it('disables Drill in for a symbol with no calls (never hides it), and opens the file only with a host editor', () => {
         const onOpenSource = vi.fn();
+        mount();
+        expect(screen.queryByRole('button', { name: L.surface.code.openFile })).toBeNull();
+        document.body.innerHTML = '';
         mount({ onOpenSource });
-        expect(screen.queryByRole('button', { name: L.surface.code.drillInAction })).toBeNull();
+        expect((screen.getByRole('button', { name: L.surface.code.drillInAction }) as HTMLButtonElement).disabled).toBe(true);
         fireEvent.click(screen.getByRole('button', { name: L.surface.code.openFile }));
         expect(onOpenSource).toHaveBeenCalledWith(expect.objectContaining({ path: 'a.ts', startLine: 1 }));
     });
@@ -85,11 +74,13 @@ describe('SymbolCard', () => {
         expect(props.onCallers).toHaveBeenCalledTimes(1);
         expect(props.onSimulate).toHaveBeenCalledTimes(1);
         expect(document.querySelector('[data-fact="tests"]')?.textContent).toBe(t.testNone);
+        expect(document.querySelector('[data-fact="risk"]')?.textContent).toBe(t.noRisk);
         document.body.innerHTML = '';
         mount({ onSimulate: vi.fn(), onRestructure: vi.fn(), facts: { antiPatternOf: () => ({ kind: 'god-module', findingId: 'f', restructurable: true }), testReach: () => 'reached', untested: () => false } });
         expect(screen.queryByRole('button', { name: t.simulate })).toBeNull();
         expect(screen.getByRole('button', { name: t.restructure })).toBeTruthy();
         expect(document.querySelector('[data-fact="anti"]')?.textContent).toBe(L.findingKinds.godModule);
+        expect(document.querySelector('[data-fact="risk"]')?.textContent).toBe(fillTemplate(t.riskWord, { level: L.surface.map.statWords.anti.high }));
         document.body.innerHTML = '';
         // No coverage reading: the facts row says nothing about tests. A kind with no proposer keeps Simulate.
         mount({ onSimulate: vi.fn(), onRestructure: vi.fn(), facts: { antiPatternOf: () => ({ kind: 'cycle', findingId: 'f', restructurable: false }), testReach: () => 'unknown', untested: () => false } });
@@ -99,13 +90,13 @@ describe('SymbolCard', () => {
         expect(document.querySelector('[data-fact="anti"]')).not.toBeNull();
     });
 
-    it('shows nothing with no mark', () => {
-        mount({ slotKey: null });
-        expect(document.querySelector('[data-symbol-card]')).toBeNull();
+    it('draws the answer row when one is handed in', () => {
+        mount({ answer: { icon: null, lead: 'Who calls it?', text: '' } });
+        expect(document.querySelector('[data-note-answer]')?.textContent).toBe('Who calls it?');
     });
 
-    it('is hidden for a mark that is not on the stage', () => {
-        mount({ slotKey: 'node:gone' });
-        expect(document.querySelector('[data-symbol-card]')?.hasAttribute('hidden')).toBe(true);
+    it('shows nothing with no mark', () => {
+        mount({ slotKey: null });
+        expect(cardEl()).toBeNull();
     });
 });

@@ -167,21 +167,31 @@ function baseGroups(files: KNode[], index: ReadonlyMap<string, KNode>, repoConfi
     return groups;
 }
 
-/** Entry files of a mixed group stand as their own station. */
+/** The most important node first, then by ref: the file an entry station is named after. */
+const byImportance = (a: KNode, b: KNode): number => b.importance - a.importance || cmp(a.ref, b.ref);
+
+/**
+ * Entry files of a mixed group stand as their own station, named after its most important entry FILE — never after the
+ * group it was split from. (It used to take the group's name when it held several entry files, so a line read
+ * "data-manager.ts → data-manager.ts": the entry station and the rest of its community under one name.)
+ */
 function splitEntry(groups: Map<string, Group>): Group[] {
     const out: Group[] = [];
     for (const g of groups.values()) {
         const entry = g.nodes.filter((n) => n.partition === 'entry');
         if (entry.length === 0 || entry.length === g.nodes.length) { out.push(g); continue; }
         const rest = g.nodes.filter((n) => n.partition !== 'entry');
-        const only = entry.length === 1 ? entry[0] : undefined;
+        const lead = [...entry].sort(byImportance)[0]!;
         out.push({ ...g, nodes: rest });
-        out.push({ id: `${g.id}#entry`, name: only ? tail(only.ref) : g.name, kind: g.kind, nodes: entry });
+        out.push({ id: `${g.id}#entry`, name: tail(lead.ref), kind: g.kind, nodes: entry });
     }
     return distinctEntryNames(out);
 }
 
-/** Two entry stations that would read the same (two `index.ts` in different areas) are named group › file. */
+/**
+ * An entry station that would read the same as another station (two `index.ts` in different areas, or a file named like
+ * its own group) is named group › file; when even that is its own name, the entry file's path. A stop reads once on a line.
+ */
 function distinctEntryNames(groups: Group[]): Group[] {
     const taken = new Map<string, number>();
     for (const g of groups) taken.set(g.name, (taken.get(g.name) ?? 0) + 1);
@@ -189,7 +199,9 @@ function distinctEntryNames(groups: Group[]): Group[] {
     return groups.map((g) => {
         if (!g.id.endsWith('#entry') || (taken.get(g.name) ?? 0) < 2) return g;
         const group = parent.get(g.id.slice(0, -'#entry'.length));
-        return group && group !== g.name ? { ...g, name: `${group} › ${g.name}` } : g;
+        if (group && group !== g.name) return { ...g, name: `${group} › ${g.name}` };
+        const lead = [...g.nodes].sort(byImportance)[0];
+        return lead ? { ...g, name: pathOf(lead.ref) ?? lead.label } : g;
     });
 }
 

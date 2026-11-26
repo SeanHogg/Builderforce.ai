@@ -55,7 +55,7 @@ describe('the docked pane is not the reading pane', () => {
         expect(result.current.status).toBeNull();
     });
 
-    it('below SPLIT_MIN_PX the pane is not split (the host shows the Code | Picture switch); hidden, it has no pane and offers Show', () => {
+    it('below CODE_SPLIT_WIDTH the pane is not split (the header's Code | Picture switch picks one); hidden, it has no pane and offers Show', () => {
         const { p } = scene();
         const onToggleCode = vi.fn();
         const narrow = renderHook(() => useStageWiring(p, createNoopStage(), null, 360));

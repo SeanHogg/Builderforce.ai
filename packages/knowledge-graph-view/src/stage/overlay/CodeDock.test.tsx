@@ -5,7 +5,8 @@ import type { SourceReader, SymbolRecord } from '../../types';
 import { ROW_PX } from '../drill/CodeLayer';
 import { codeTargetOf, fileTargetOf } from '../drill/codeText';
 import { useCodeReading, type CodeReading } from '../drill/useCodeReading';
-import { CodeDock, codePaneWidth, SPLIT_MIN_PX, type CodeDockProps } from './CodeDock';
+import { CODE_SPLIT_WIDTH } from '../../layout';
+import { CodeDock, codePaneWidth, type CodeDockProps } from './CodeDock';
 import { CodeTrail } from './CodeTrail';
 import { StepCard } from './StepCard';
 
@@ -196,10 +197,11 @@ describe('the step card steps the calls of the open method', () => {
 });
 
 describe('the split layout', () => {
-    it('gives the code 42% of a box wide enough for both sides, and floats it over a narrower one', () => {
-        expect(codePaneWidth(1000)).toBe(420);
-        expect(codePaneWidth(SPLIT_MIN_PX)).toBe(Math.round(SPLIT_MIN_PX * 0.42));
-        expect(codePaneWidth(SPLIT_MIN_PX - 1)).toBe(0);
+    it('gives the code the design\'s column, minmax(300px, min(36%, 520px)), from the split width; none below it', () => {
+        expect(codePaneWidth(1000)).toBe(360);
+        expect(codePaneWidth(CODE_SPLIT_WIDTH)).toBe(Math.round(Math.max(300, CODE_SPLIT_WIDTH * 0.36)));
+        expect(codePaneWidth(2000)).toBe(520);
+        expect(codePaneWidth(CODE_SPLIT_WIDTH - 1)).toBe(0);
     });
 });
 

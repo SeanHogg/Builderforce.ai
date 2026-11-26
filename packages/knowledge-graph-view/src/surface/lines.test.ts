@@ -85,4 +85,18 @@ describe('buildLines', () => {
     it('is deterministic', () => {
         expect(build(surfaceFixture()).lines).toEqual(build(surfaceFixture()).lines);
     });
+
+    it('regression: a group with several entry files does not lend its name to the entry station, so no stop reads twice', () => {
+        // hired.video: the line read "data-manager.ts → data-manager.ts → …" — the split entry station (two entry files)
+        // took its community's name, then hopped into the rest of that community.
+        const g = surfaceFixture();
+        const main = g.nodes.find((n) => n.ref === 'src:sys::web/main.tsx')!;
+        const boot = { ...main, ref: 'src:sys::web/boot.ts', label: 'web/boot.ts', importance: 0.2 } as KNode;
+        const { model, lines } = build({ ...g, nodes: [...g.nodes, boot] });
+        const web = lines.lines.find((l) => l.stops.includes(model.stations.find((s) => s.name === 'Web app')!.id))!;
+        const stopNames = names(web.stops, model);
+        expect(stopNames[0]).toBe('main.tsx');
+        expect(new Set(stopNames).size).toBe(stopNames.length);
+        expect(new Set(web.stops).size).toBe(web.stops.length);
+    });
 });

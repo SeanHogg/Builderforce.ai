@@ -23,7 +23,6 @@ import { Graph2D } from '../graph2d/Graph2D';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../labels';
 import { LENSES } from '../lenses';
 import { MindMap } from '../map/MindMap';
-import { TransitMap } from '../surface/TransitMap';
 import { LAST_RUN_JSON, LOCK_MS, Recorder, writeReport } from './harness';
 import { runModelSteps, type Shared } from './modelSteps';
 import { runSceneSteps } from './sceneSteps';
@@ -106,8 +105,8 @@ describe.skipIf(!process.env.KG_PERF)('view pipelines (KG_PERF=1)', () => {
             renders.push(row);
         }
 
-        it('renders the four views', async () => {
-            const { stations, lines, overlay, drawn } = shared;
+        it('renders the DOM views', async () => {
+            const { drawn } = shared;
             const g = perf.graph;
             const files = g.nodes.filter((n) => n.kind === 'file');
             const none = () => undefined;
@@ -120,14 +119,6 @@ describe.skipIf(!process.env.KG_PERF)('view pipelines (KG_PERF=1)', () => {
             await measure('Mind map', () => h(MindMap, {
                 nodes: files, findings: g.findings, rootTitle: 'perf', selected: null, focus: [], onSelect: none, onShow: none, labels: L, label: L.regionLabel,
             }), 'g[data-id]');
-            if (stations && lines && overlay) {
-                for (const variant of ['map', 'tower'] as const) {
-                    await measure(variant === 'map' ? 'Transit map' : 'Tower map', () => h(TransitMap, {
-                        stations, lines, overlay, labels: L, lit: null, lineId: lines.lines[0]?.id ?? null, selectedStation: null, pins: [], reducedMotion: true,
-                        onSelectStation: none, onSelectLine: none, label: 'map', graph: g, variant,
-                    }), '[data-station]');
-                }
-            }
             expect(renders.length).toBeGreaterThan(0);
         }, HOUR);
     });

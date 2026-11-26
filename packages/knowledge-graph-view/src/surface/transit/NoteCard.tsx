@@ -12,8 +12,6 @@ import { FONT_MONO, TYPE } from '../ui/type';
 
 /** The card's widest column; inside the stage it leaves the level rail its room (`calc(100% - 120px)` narrow, `- 130px` wide). */
 export const NOTE_WIDTH = 360;
-/** A stage box this wide or narrower is narrow (the design's `max-width: 900px`). */
-export const NARROW_STAGE_PX = 900;
 
 export interface NoteAnswer {
     icon: ReactNode;
@@ -47,7 +45,7 @@ export interface NoteCardProps {
 const shell = (narrow: boolean): CSSProperties => ({
     position: 'absolute', zIndex: 3, left: 10, top: 10, width: `min(${NOTE_WIDTH}px, calc(100% - ${narrow ? 120 : 130}px))`, boxSizing: 'border-box',
     display: 'flex', flexDirection: 'column', borderRadius: 6, background: cssVar('panel'), color: cssVar('muted'), border: `1px solid ${cssVar('border')}`,
-    boxShadow: '0 4px 14px color-mix(in srgb, currentColor 18%, transparent)', pointerEvents: 'auto', ...TYPE.body,
+    boxShadow: `0 4px 14px color-mix(in srgb, ${cssVar('text')} 18%, transparent)`, pointerEvents: 'auto', ...TYPE.body,
 });
 const closeButton: CSSProperties = { border: 0, background: 'transparent', color: cssVar('muted'), cursor: 'pointer', minHeight: 24, minWidth: 24, padding: 0, font: 'inherit' };
 

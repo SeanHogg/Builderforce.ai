@@ -38903,7 +38903,7 @@
           "risk": "Risk",
           "testReached": "A test reaches it",
           "testNone": "No test reaches it",
-          "riskWord": "{level} risk",
+          "riskWord": "Risk: {level}",
           "noRisk": "No risk flags",
           "ownerIs": "{name} team"
         },

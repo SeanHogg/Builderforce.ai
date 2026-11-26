@@ -1,9 +1,9 @@
 /**
  * The station card on the stage, end to end through the stage host (PRD 43 B8: migrated from the SVG map's
  * `TransitMap.card.test.tsx` and `TransitCamera.drill.test.tsx`). The host draws the Map camera with the no-op renderer
- * (the test setup's renderer port); a station's a11y proxy opens its card, the card's actions run on the surface and the
- * drill, focus returns to the station's proxy after every action, and inside a drilled level the card and the question
- * work on THAT level's stations.
+ * (the test setup's renderer port); a station's a11y proxy opens its docked note card, the card's actions run on the
+ * surface and the drill while the card stays with the pick, and inside a drilled level the card and the question work on
+ * THAT level's stations.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -48,27 +48,25 @@ const proxy = (key: string) => waitFor(() => {
 const openCard = async (key: string) => { fireEvent.click(await proxy(key)); };
 
 describe('the station card on the stage (migrated from the SVG map)', () => {
-    it('opens from the station\'s proxy with its actions; Who calls, API and Go inside run, Escape closes', async () => {
+    it('opens docked from the station\'s proxy with its actions; Who calls and API run and the card stays with the pick; Escape closes', async () => {
         mount();
         const api = `st:${await waitFor(() => stationId('API'))}`;
         await openCard(api);
         expect(seen.surface!.station?.name).toBe('API');
-        expect(screen.getByRole('dialog', { name: 'API' })).toBeTruthy();
+        const card = () => document.querySelector('[data-note-card="station"]');
+        expect(screen.getByRole('region', { name: 'API' })).toBe(card());
 
         fireEvent.click(screen.getByRole('button', { name: L.surface.map.card.whoCalls }));
         expect(seen.surface!.question).toBe('callers');
-        expect(screen.queryByRole('dialog')).toBeNull();
-        // Focus goes back to the station's proxy after an action, not only after a close.
-        expect(document.activeElement?.getAttribute('data-id')).toBe(api);
+        // The note card belongs to the pick, not to one action: it stays open and now answers the question.
+        expect(card()).not.toBeNull();
+        expect(card()!.querySelector('[data-note-answer]')?.textContent).toContain(L.surface.questions.callers);
 
-        await openCard(api);
         fireEvent.click(screen.getByRole('button', { name: L.surface.map.card.apiContract }));
         expect(seen.surface!.panel).toBe('api');
-        expect(document.activeElement?.getAttribute('data-id')).toBe(api);
 
-        await openCard(api);
         fireEvent.keyDown(document, { key: 'Escape' });
-        expect(screen.queryByRole('dialog')).toBeNull();
+        await waitFor(() => expect(card()).toBeNull());
     });
 
     it('unfolds a station and folds it again from its card', async () => {
@@ -88,7 +86,7 @@ describe('the station card on the stage (migrated from the SVG map)', () => {
 
         const file = seen.surface!.drill.view!.stations.stations.find((s) => s.name === 'useCase.ts')!;
         await openCard(`node:${file.refs[0]}`);
-        expect(screen.getByRole('dialog', { name: 'useCase.ts' })).toBeTruthy();
+        expect(screen.getByRole('region', { name: 'useCase.ts' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: L.surface.map.card.whoCalls }));
         expect(seen.surface!.question).toBe('callers');
         expect(seen.surface!.drill.selected).toBe(file.id);

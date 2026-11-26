@@ -159,4 +159,62 @@ describe('manifest entry points', () => {
     };
     expect([...await readEntryPaths(source, ['package.json', 'src/a.ts'])]).toEqual(['lib/start.js']);
   });
+
+  // hired.video: the frontend's entry is the module script of frontend/index.html; the API's is wrangler's main; the root
+  // package.json says `"main": "eslint.config.js"`. Before, only package.json was read, so the frontend had no entry at all.
+  const files = (texts: Record<string, string>) => ({
+    read: async (path: string) => { const t = texts[path]; if (t === undefined) throw new Error(`unread ${path}`); return textDocument('r', path, t); },
+  });
+
+  it('regression: a Vite index.html module script is the entry', async () => {
+    const html = '<html><head><script>var x = 1;</script><script src="/config.js"></script>\n<script async src="https://cdn.example/x.js"></script></head>'
+      + '<body><script type="module" src="./App.tsx"></script></body></html>';
+    expect([...await readEntryPaths(files({ 'frontend/index.html': html }), ['frontend/index.html', 'frontend/App.tsx'])]).toEqual(['frontend/App.tsx']);
+    const root = '<script type="module" src="/src/main.tsx"></script>';
+    expect([...manifestEntryPaths(new Map([['web/index.html', root]]))]).toEqual(['web/src/main.tsx']);
+  });
+
+  it('regression: a wrangler main is the entry (toml top level, and json/jsonc)', () => {
+    const toml = 'name = "hired-api"\n# main = "old.ts"\nmain = "src/worker.ts"\ncompatibility_date = "2025-04-01"\n[env.production]\nmain = "src/other.ts"\n';
+    expect([...manifestEntryPaths(new Map([['api/wrangler.toml', toml]]))]).toEqual(['api/src/worker.ts']);
+    const jsonc = '{\n  // "main": "nope.ts",\n  "name": "w",\n  "main": "./src/index.ts"\n}';
+    expect([...manifestEntryPaths(new Map([['edge/wrangler.jsonc', jsonc]]))]).toEqual(['edge/src/index.ts']);
+  });
+
+  it('regression: a literal Vite rollupOptions.input names the entry, and its html input is read for module scripts', async () => {
+    const vite = 'export default defineConfig({ build: { rollupOptions: { input: { main: "index.html", admin: \'admin/admin.html\', worker: "src/sw.ts" } } } });';
+    const source = files({
+      'app/vite.config.ts': vite,
+      'app/index.html': '<script type="module" src="./src/main.ts"></script>',
+      'app/admin/admin.html': '<script type="module" src="./admin.ts"></script>',
+    });
+    const ids = ['app/vite.config.ts', 'app/index.html', 'app/admin/admin.html', 'app/src/main.ts', 'app/admin/admin.ts', 'app/src/sw.ts'];
+    expect([...await readEntryPaths(source, ids)].sort()).toEqual(['app/admin/admin.ts', 'app/src/main.ts', 'app/src/sw.ts']);
+    const computed = 'export default { build: { rollupOptions: { input: resolve(__dirname, "index.html") } } }';
+    expect([...manifestEntryPaths(new Map([['x/vite.config.ts', computed]]))]).toEqual([]);
+  });
+
+  it('regression: a package.json main that is a config file is not an entry', () => {
+    const manifests = new Map([
+      ['package.json', JSON.stringify({ name: 'hired.video', main: 'eslint.config.js', workspaces: ['frontend', 'api'] })],
+      ['tools/package.json', JSON.stringify({ main: '.prettierrc.cjs', module: 'vite.config.mts', bin: { t: './bin/t.js' } })],
+    ]);
+    expect([...manifestEntryPaths(manifests)]).toEqual(['tools/bin/t.js']);
+  });
+});
+
+describe('main-name entry rule', () => {
+  it('regression: extension.ts / server.ts inside a layer folder under src are not entries; mains are', () => {
+    const placed = placeLayers({
+      paths: ['api/src/routes/extension.ts', 'api/src/db/schema/extension.ts', 'api/src/worker.ts', 'clients/vscode/src/extension.ts', 'Builderforce.ai/clients/vscode/src/extension.ts', 'tools/server.ts'],
+      imports: [],
+    });
+    expect(placed.get('api/src/routes/extension.ts')).toEqual({ layer: 'presentation', rule: 'folder' });
+    expect(placed.get('api/src/db/schema/extension.ts')).toEqual({ layer: 'infrastructure', rule: 'folder' });
+    for (const main of ['api/src/worker.ts', 'clients/vscode/src/extension.ts', 'Builderforce.ai/clients/vscode/src/extension.ts', 'tools/server.ts']) {
+      expect(placed.get(main)).toEqual({ layer: 'entry', rule: 'name' });
+    }
+    // A manifest naming it still makes it an entry.
+    expect(placeLayers({ paths: ['api/src/routes/extension.ts'], imports: [], entryPaths: new Set(['api/src/routes/extension.ts']) }).get('api/src/routes/extension.ts')?.layer).toBe('entry');
+  });
 });

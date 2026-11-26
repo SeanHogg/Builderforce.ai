@@ -43,7 +43,7 @@ export interface CodeDockInput {
     /** A station's card is open (a station keeps its card; the symbol card is for nodes). */
     cardKey: string | null;
     toast(message: string): void;
-    /** The stage box's width: the dock splits beside the map from `SPLIT_MIN_PX`. */
+    /** The stage box's width: the dock splits beside the map from `CODE_SPLIT_WIDTH` (`layout.ts`). */
     width: number;
     slotOf(key: string): number;
     /** The pane is shown (the per-viewer `code` slot of `usePanelVisibility`); reading shows it regardless. */

@@ -16,6 +16,7 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { findingTitle } from '../../findingText';
 import { pathOf } from '../../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
+import { CODE_SPLIT_WIDTH } from '../../layout';
 import { cssVar } from '../../scene/themeColors';
 import { list } from '../../styles';
 import { ShapeGlyph } from '../../surface/LegendGlyph';
@@ -43,11 +44,10 @@ const filling: CSSProperties = { flex: '1 1 0', minHeight: 0, display: 'flex', f
 
 /** The design's pane column, `minmax(300px, min(36%, 520px))`; boxes up to 900px wide show ONE of the code and the picture. */
 const CODE_SHARE = 0.36;
-export const SPLIT_MIN_PX = 901;
 
 /** The code pane's width beside the map in a box `width` wide; 0 when the box is too narrow to split (one half at a time). */
 export function codePaneWidth(width: number): number {
-    return width >= SPLIT_MIN_PX ? Math.round(Math.max(300, Math.min(width * CODE_SHARE, 520))) : 0;
+    return width >= CODE_SPLIT_WIDTH ? Math.round(Math.max(300, Math.min(width * CODE_SHARE, 520))) : 0;
 }
 
 const bar: CSSProperties = {

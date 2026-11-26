@@ -236,7 +236,7 @@ export const MAP_DEFAULTS: MapLabels = {
             callers: 'Callers', simulate: 'Simulate', simulateTip: 'Run the path through this and see what it reaches',
             restructure: 'Restructure', restructureTip: 'See {name} restructured', risk: 'Risk',
             testReached: 'A test reaches it', testNone: 'No test reaches it',
-            riskWord: '{level} risk', noRisk: 'No risk flags', ownerIs: '{name} team',
+            riskWord: 'Risk: {level}', noRisk: 'No risk flags', ownerIs: '{name} team',
         },
         stats: { issues: 'Anti-patterns', complexity: 'Complexity', coverage: 'Coverage', reached: 'Reached', usage: 'Importance' },
         statWords: {

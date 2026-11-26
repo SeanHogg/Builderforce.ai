@@ -24,10 +24,14 @@ export const TYPE_FORM: Readonly<Record<MarkType, MarkForm>> = {
     test: 'prism', doc: 'prism', config: 'prism', style: 'prism', section: 'prism', entity: 'prism', claim: 'prism', external: 'prism',
 };
 
-/** The outline a form is extruded from: round forms stand on the circle, the rest keep their type's silhouette. */
+/**
+ * The outline a form is extruded from: round forms stand on the circle, an interface on the SQUARE (the design's translucent
+ * box with dashed edges: the dashed `iface` form, not its silhouette, tells it from a class), the rest keep their type's
+ * silhouette. The flat 2D marks and the legend keep `TYPE_SHAPE` (an interface's slant there), where no form can separate it.
+ */
 export function outlineShape(type: MarkType): NodeShape {
     const form = TYPE_FORM[type];
-    return form === 'drum' || form === 'puck' ? 'circle' : TYPE_SHAPE[type];
+    return form === 'drum' || form === 'puck' ? 'circle' : form === 'iface' ? 'square' : TYPE_SHAPE[type];
 }
 
 /**

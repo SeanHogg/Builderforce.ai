@@ -217,7 +217,8 @@ export function Stage(p: StageProps) {
     }, [renderer, bus, dpr]);
     const rig = useRig(placement, width, height, p.reducedMotion, box, settle, p.onWheelStep);
     rigRef.current = rig;
-    rig.motionMs = p.reducedMotion ? 0 : TWEEN_MS;
+    // A layout effect: it runs before `useRig`'s passive effects (a resize re-fit) of the same commit read `motionMs`.
+    useLayoutEffect(() => { rig.motionMs = p.reducedMotion ? 0 : TWEEN_MS; }, [rig, p.reducedMotion]);
     const panZoom = useMemo(() => panZoomOf(rig, p.reducedMotion, settle), [rig, p.reducedMotion, settle]);
     // The semantic zoom (outside this component) flies and reads the same rig through the bus.
     useEffect(() => bindRig(bus, rig), [bus, rig]);

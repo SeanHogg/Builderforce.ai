@@ -25,11 +25,20 @@ export interface SlotAnchorOptions {
 const MIN_BOX = 12;
 const scratch = new Float64Array(2);
 
+/**
+ * The world y of a slot's top, as the shader draws it: its foot (lowered with the depth when the placement lifts with it,
+ * `liftWithDepth`: the Map's roof minis) plus its extrude, both under the same depth scale. Pins and anchors sit there.
+ */
+export function slotTopY(bus: StageBus, p: NonNullable<StageBus['placement']>, slot: number): number {
+    const depth = bus.extrudeScale();
+    return p.position[slot * 3 + 1]! * (p.liftWithDepth ? depth : 1) + (p.extrude[slot] ?? 0) * depth;
+}
+
 /** Where the element goes beside slot `slot` under `projector`, or null when the slot is not drawn there. */
 export function anchorOf(bus: StageBus, slot: number, projector: Projector, size: { width: number; height: number }, avoid: readonly Rect[] = []): { left: number; top: number } | null {
     const p = bus.placement;
     if (!p || slot < 0 || !(p.scale[slot]! > 0)) return null;
-    const x = p.position[slot * 3]!, y = p.position[slot * 3 + 1]! + (p.extrude[slot] ?? 0) * bus.extrudeScale(), z = p.position[slot * 3 + 2]!;
+    const x = p.position[slot * 3]!, y = slotTopY(bus, p, slot), z = p.position[slot * 3 + 2]!;
     if (!projector.project(x, y, z, scratch)) return null;
     const half = Math.max(MIN_BOX, slotHalfPx(p, slot, projector.pxPerWorld));
     const box: Rect = { left: scratch[0]! - half, top: scratch[1]! - half, width: half * 2, height: half * 2 };

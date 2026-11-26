@@ -30,7 +30,8 @@ import type { SceneProps } from '../../surface/registry';
 import { codeCompareOf, paintDiffEntries, type CompareView } from '../../surface/compareModel';
 import { showsTowers } from '../../surface/useShowInTower';
 import { TYPE } from '../../surface/ui/type';
-import { codePaneWidth, SPLIT_MIN_PX } from '../overlay/CodeDock';
+import { onePaneStage } from '../../layout';
+import { codePaneWidth } from '../overlay/CodeDock';
 import { ColourLegend } from './ColourLegend';
 import { LevelRail, useLevelRail } from './LevelRail';
 import { depthCrumbs } from '../../surface/DepthTrail';
@@ -129,7 +130,7 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
     const slotOn = codeShown ?? true;
     const showCodeHalf = narrow && slotOn;
     // Opening a file in a narrow box shows it: the switch flips to Code (once per opening, so Picture can still be picked).
-    const opensCode = code.reading && !code.split && boxWidth < SPLIT_MIN_PX;
+    const opensCode = code.reading && !code.split && onePaneStage(boxWidth);
     useEffect(() => { if (opensCode && !slotOn) onToggleCode?.(); }, [opensCode]); // eslint-disable-line react-hooks/exhaustive-deps
     const barPx = code.reading ? CODE_BAR_PX : 0, statusPx = code.reading ? STATUS_PX : 0;
     const width = boxWidth - codeWidth, height = boxHeight - barPx - statusPx;
@@ -206,7 +207,7 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
     const sc = labels.surface.code;
     const caption = ready ? placement.caption : null;
     // The level rail: the Sequence has its three bands, every other camera the Map's five levels; a click goes to that level.
-    const narrowStage = boxWidth < SPLIT_MIN_PX;
+    const narrowStage = onePaneStage(boxWidth);
     const sequenceRail = camera === 'sequence';
     const picked = wiring.map.stationOfKey(selected);
     const crumbs = depthCrumbs(drill.stack, null, labels.surface.depth);

@@ -26,6 +26,12 @@ export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t
 export const lerpAngle = (a: number, b: number, t: number): number => a + ((((b - a) % 360) + 540) % 360 - 180) * t;
 export const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
+/** An orbit's extrude at `pitch`: full at the resting pitch, collapsing toward `flatDepth` at Flat; undefined = always full. */
+export function orbitDepthAt(pitch: number, resting: number, flatDepth: number | undefined): number {
+    if (flatDepth === undefined) return 1;
+    return lerp(1, flatDepth, clamp((pitch - resting) / Math.max(1, FLAT_PITCH - resting), 0, 1));
+}
+
 /** A snapshot of an orbit pose as a {@link Projector} (its own copy: later rig moves do not change it). */
 export function orbitProjector(pose: Readonly<OrbitPose>): Projector {
     const o: OrbitPose = { ...pose };

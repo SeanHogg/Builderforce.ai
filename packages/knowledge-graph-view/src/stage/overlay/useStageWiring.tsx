@@ -26,7 +26,7 @@ import { TYPE } from '../../surface/ui/type';
 import { questionGlyph } from '../../surface/ui/glyphs';
 import { depthCrumbs } from '../../surface/DepthTrail';
 import { answerOf } from '../../surface/transit/noteFacts';
-import { NARROW_STAGE_PX } from '../../surface/transit/NoteCard';
+import { onePaneStage } from '../../layout';
 import { MARK_TYPE_ORDER, type MarkType } from '../../shapes';
 import { railKindOf, type RailKind } from '../drill/codeText';
 import { CallBadges } from './CallBadges';
@@ -230,7 +230,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     // so it is disabled only while that read is in flight (the same target and rule as the outline row and the lens).
     const restructureLoading = dock.restructureLoading === true;
     // The card's answer row: the question being asked, bold, and what it answers (the text the header used to carry).
-    const narrow = width <= NARROW_STAGE_PX;
+    const narrow = onePaneStage(width);
     const answer = useMemo(() => ({ icon: questionGlyph(surface.question), ...answerOf(surface.question, surface, p.labels) }), [surface, p.labels]);
     const findings = useMemo(() => new Map(graph.findings.map((f) => [f.id, f] as const)), [graph]);
     const symbolRestructure = restructureOf(d.facts, [cardSubject?.ref ?? ''], restructureLoading);

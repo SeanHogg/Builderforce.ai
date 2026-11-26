@@ -14,6 +14,7 @@ import type { Station } from '../../surface/stations';
 import type { Pin } from '../../surface/useSurface';
 import { TYPE } from '../../surface/ui/type';
 import { useStageBus } from '../anchor/stageBus';
+import { slotTopY } from '../anchor/useSlotAnchor';
 import { slotHalfPx } from '../markSize';
 import type { Projector } from '../pick';
 
@@ -50,7 +51,7 @@ function StagePin({ pin, station, labels, onActivate }: { pin: Pin; station: Sta
             const p = bus.placement, slot = bus.slotOf(key);
             const shown = !!projector && !!p && !bus.tweening && slot >= 0 && p.scale[slot]! > 0;
             if (!shown || !projector || !p) { el.style.visibility = 'hidden'; return; }
-            const x = p.position[slot * 3]!, y = p.position[slot * 3 + 1]! + (p.extrude[slot] ?? 0) * bus.extrudeScale(), z = p.position[slot * 3 + 2]!;
+            const x = p.position[slot * 3]!, y = slotTopY(bus, p, slot), z = p.position[slot * 3 + 2]!;
             if (!projector.project(x, y, z, scratch)) { el.style.visibility = 'hidden'; return; }
             const r = slotHalfPx(p, slot, projector.pxPerWorld);
             const transform = `translate3d(${Math.round(scratch[0]! + r + 2)}px, ${Math.round(scratch[1]! - r - PIN)}px, 0)`;

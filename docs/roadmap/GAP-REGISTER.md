@@ -413,7 +413,13 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
   - (10) **Stage.** It is an orthographic, top-down, flat-shaded instanced map of every station. The mockup is perspective, lit, with a room floor plate per level, solid capped boxes, store drums, method pucks, dashed interfaces, roof miniatures, raised lit halls with pulses, a selection ring and chip labels.
   - (11) **Responsive.** The view must match the mockup at every width (user, 2026-11-26). At ≤900px container width it is a single column, with a Code | Picture switch in the header. The spine gets its own row, the drawer becomes a bottom sheet at 55% height, and the toolbar wraps. The 3D fit follows the stage's aspect, and touch can rotate, pinch and pan. Nothing overflows at 360px.
   - Done-check: harness screenshots next to the mockup at 1366, 900, 600 and 360px wide, in dark and light.
-  - Fixing this unblocks the PRD 43 Part C harness visual check. [make.md › PRD 43](../../docs/specs/make.md)
+  - Fixing this unblocks the PRD 43 Part C harness visual check.
+- `AE-G058` **The knowledge view misidentifies application entry points, so lines and journeys start in the wrong place** (user, 2026-11-26, on hired.video).
+  - `codeLayers.ts` `ENTRY_GLOBS` and the manifest `entry` badge miss Vite HTML module entries (`index.html` → `./App.tsx`) and `wrangler.toml` `main`.
+  - They count a workspace-root `package.json` `"main": "eslint.config.js"` as an entry.
+  - The journey then starts at `frontend/lib/data-manager.ts` and lists it twice.
+  - Fix: extend the one manifest seam (HTML module script, wrangler main, literal Vite input), ignore config-file targets, de-duplicate path stops, and add a regression test per case.
+  - Fixing this makes every line start where the app really starts. [make.md › PRD 43](../../docs/specs/make.md)
 
 ### Evermind / SSM `[agents]`
 

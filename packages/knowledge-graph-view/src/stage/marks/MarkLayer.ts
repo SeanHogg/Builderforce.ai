@@ -24,10 +24,16 @@ interface Batch {
     mesh: InstancedMesh;
     /** placeA, placeB: xyz + scale per instance. */
     place: [InstancedBufferAttribute, InstancedBufferAttribute];
-    /** extrude A in x, B in y. */
+    /**
+     * extrude A in x, B in y, and in z the instance's place in the placement's entry order (the 45 ms stagger counts across
+     * every batch) — packed so a placement swap stays at the same uploads and the program under the 16-attribute cap.
+     */
     extrude: InstancedBufferAttribute;
     paint: InstancedBufferAttribute;
 }
+
+/** Floats per instance in `extrudeAB`: extrude A, extrude B, entry order. */
+const EX = 3;
 
 const dynamic = (capacity: number, itemSize: number): InstancedBufferAttribute =>
     new InstancedBufferAttribute(new Float32Array(capacity * itemSize), itemSize).setUsage(DynamicDrawUsage);
@@ -56,7 +62,7 @@ export class MarkLayer {
             const type = MARK_TYPE_ORDER[b.type] ?? 'external';
             const shape = outlineShape(type);
             const geometry = markGeometry(shape);
-            const batch = { place: [dynamic(capacity, 4), dynamic(capacity, 4)] as [InstancedBufferAttribute, InstancedBufferAttribute], extrude: dynamic(capacity, 2), paint: dynamic(capacity, 4) };
+            const batch = { place: [dynamic(capacity, 4), dynamic(capacity, 4)] as [InstancedBufferAttribute, InstancedBufferAttribute], extrude: dynamic(capacity, EX), paint: dynamic(capacity, 4) };
             geometry.setAttribute('placeA', batch.place[0]);
             geometry.setAttribute('placeB', batch.place[1]);
             geometry.setAttribute('extrudeAB', batch.extrude);
@@ -137,6 +143,7 @@ export class MarkLayer {
         if (this.placed && midTween !== undefined && midTween < 1) return this.retarget(p, midTween, table, stagger);
         const into: 0 | 1 = this.placed ? (this.target === 1 ? 0 : 1) : 1;
         const writeSets: Array<0 | 1> = this.placed ? [into] : [0, 1];
+        const order = entryOrder(p, table);
         this.batches.forEach((b, bi) => {
             const slots = table.batchSlots[bi]!, count = table.batchCount[bi]!;
             const extrude = b.extrude.array as Float32Array;
@@ -146,10 +153,11 @@ export class MarkLayer {
                     const s = slots[i]!;
                     place[i * 4] = p.position[s * 3]!; place[i * 4 + 1] = p.position[s * 3 + 1]!; place[i * 4 + 2] = p.position[s * 3 + 2]!;
                     place[i * 4 + 3] = p.scale[s]!;
-                    extrude[i * 2 + w] = p.extrude[s]!;
+                    extrude[i * EX + w] = p.extrude[s]!;
                 }
                 uploadRange(this.stats, b.place[w], 0, count, bi);
             }
+            for (let i = 0; i < count; i++) extrude[i * EX + 2] = order[bi]![i]!;
             uploadRange(this.stats, b.extrude, 0, count, bi);
         });
         for (const w of writeSets) { this.setFloor(w, p.minMarkPx ?? 0); this.setLift(w, p); }
@@ -165,17 +173,20 @@ export class MarkLayer {
      */
     private retarget(p: Placement, tAll: number, table: SlotTable, stagger?: StaggerClock): number {
         const to = this.target, from: 0 | 1 = to === 1 ? 0 : 1;
+        const order = entryOrder(p, table);
         this.batches.forEach((b, bi) => {
             const slots = table.batchSlots[bi]!, count = table.batchCount[bi]!;
             const a = b.place[from].array as Float32Array, z = b.place[to].array as Float32Array, ex = b.extrude.array as Float32Array;
             for (let i = 0; i < count; i++) {
-                const t = stagger ? staggerAt(stagger, i) : tAll;
+                // The bake reads the RUNNING tween's order (z), then the slot takes `p`'s.
+                const t = stagger ? staggerAt(stagger, ex[i * EX + 2]!) : tAll;
                 for (let c = 0; c < 4; c++) a[i * 4 + c] = a[i * 4 + c]! + (z[i * 4 + c]! - a[i * 4 + c]!) * t;
-                ex[i * 2 + from] = ex[i * 2 + from]! + (ex[i * 2 + to]! - ex[i * 2 + from]!) * t;
+                ex[i * EX + from] = ex[i * EX + from]! + (ex[i * EX + to]! - ex[i * EX + from]!) * t;
                 const s = slots[i]!;
                 z[i * 4] = p.position[s * 3]!; z[i * 4 + 1] = p.position[s * 3 + 1]!; z[i * 4 + 2] = p.position[s * 3 + 2]!;
                 z[i * 4 + 3] = p.scale[s]!;
-                ex[i * 2 + to] = p.extrude[s]!;
+                ex[i * EX + to] = p.extrude[s]!;
+                ex[i * EX + 2] = order[bi]![i]!;
             }
             uploadRange(this.stats, b.place[from], 0, count, bi);
             uploadRange(this.stats, b.place[to], 0, count, bi);
@@ -191,6 +202,19 @@ export class MarkLayer {
         lifts.setComponent(from, lifts.getComponent(to));
         this.setLift(to, p);
         return to === 1 ? 0 : 1;
+    }
+
+    /**
+     * Each instance's entry order for `p`'s tween: the marks `p` shows, counted across EVERY batch, so the 45 ms stagger runs
+     * mark after mark through the whole placement (a hidden mark takes the next shown one's place: it is not drawn).
+     */
+    private writeOrder(p: Placement, table: SlotTable): void {
+        let k = 0;
+        this.batches.forEach((b, bi) => {
+            const slots = table.batchSlots[bi]!, count = table.batchCount[bi]!, order = b.order.array as Float32Array;
+            for (let i = 0; i < count; i++) { order[i] = k; if ((p.scale[slots[i]!] ?? 0) > 0) k++; }
+            uploadRange(this.stats, b.order, 0, count, bi);
+        });
     }
 
     /** Set `w`'s drawn floor (CSS px across): the shader's `uMinMarkPx`, A in x, B in y. */

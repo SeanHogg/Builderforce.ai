@@ -12,12 +12,13 @@ import type { Station } from '../stations';
 import type { RiskFact } from './CardActions';
 import type { NoteAnswer } from './NoteCard';
 
-const capital = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
-
-/** The risk row: the level's word when something is flagged (in its severity tone), else "No risk flags". */
+/**
+ * The risk row: the level's localized word (`statWords.anti`) when something is flagged (in its severity tone), else
+ * "No risk flags". The word goes in as it is; `riskWord` carries any capitalisation its language needs.
+ */
 export function riskFactOf(flag: { word: string; tone: ThemeTone } | null, labels: KnowledgeGraphLabels): RiskFact {
     const t = labels.surface.map.card;
-    return flag ? { text: fillTemplate(t.riskWord, { level: capital(flag.word) }), tone: flag.tone } : { text: t.noRisk, tone: null };
+    return flag ? { text: fillTemplate(t.riskWord, { level: flag.word }), tone: flag.tone } : { text: t.noRisk, tone: null };
 }
 
 /** The answer row's words. `icon` is the caller's (the question's glyph). */

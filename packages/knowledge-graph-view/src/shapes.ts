@@ -60,8 +60,9 @@ export type NodeShape =
  *   external — a dashed cross (outside the folder / not here);
  *   unit     — a wide, low capsule (a deployable unit: a container, a worker, a function — what ships);
  *   system   — a flat-topped hexagon at the full extent (the aggregate);
- *   interface — a slanted parallelogram (a contract: it leans toward whatever implements it), drawn in 3D as a translucent,
- *               dashed-edge box.
+ *   interface — a slanted parallelogram in 2D (a contract: it leans toward whatever implements it); in 3D the stage builds it
+ *               on the SQUARE as a translucent, dashed-edge box (`stage/marks/forms.ts` `outlineShape`), told from a class
+ *               by that form.
  */
 export const TYPE_SHAPE: Readonly<Record<MarkType, NodeShape>> = Object.freeze({
     class: 'square', function: 'circle', source: 'window', test: 'diamond', doc: 'tile', config: 'triangle',

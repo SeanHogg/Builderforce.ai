@@ -49,6 +49,7 @@ in vec4 placeA;      // posA.xyz, scaleA
 in vec4 placeB;      // posB.xyz, scaleB
 in vec2 extrudeAB;   // extrudeA, extrudeB
 in vec4 paint;       // tone, tone2, fill, flags
+in float aOrder;     // the mark's place in the whole placement's entry order (shown marks counted across every batch)
 uniform float uForm; uniform float uHoverInst;
 uniform float uT; uniform float uLin; uniform float uSpan; uniform float uDur; uniform float uFlip; uniform float uPxPerWorld; uniform float uDpr; uniform float uDepth; uniform vec2 uMinMarkPx; uniform vec2 uLiftDepth;
 uniform vec3 uPalette[${PALETTE_SIZE}];
@@ -58,9 +59,10 @@ ${FLAG_GLSL}
 ${LIGHT_GLSL}
 void main() {
     vec4 from = mix(placeA, placeB, uFlip), to = mix(placeB, placeA, uFlip);
-    // Each mark runs its own cubic in-out, started STAGGER_MS after the one before it (by index); a mark leaving shrinks and
-    // fades. \`staggerAt\` (tween.ts) is the same clock on the CPU (a mid-tween bake).
-    float lt = clamp((uLin * uSpan - min(float(gl_InstanceID), ${STAGGER_STEPS.toFixed(1)}) * ${STAGGER_MS.toFixed(1)}) / max(uDur, 1.0), 0.0, 1.0);
+    // Each mark runs its own cubic in-out, started STAGGER_MS after the one before it in the WHOLE placement (\`aOrder\`: shown
+    // marks counted across every type batch, so the shapes enter one after another, never batch by batch); a mark leaving
+    // shrinks and fades. \`staggerAt\` (tween.ts) is the same clock on the CPU (a mid-tween bake).
+    float lt = clamp((uLin * uSpan - min(aOrder, ${STAGGER_STEPS.toFixed(1)}) * ${STAGGER_MS.toFixed(1)}) / max(uDur, 1.0), 0.0, 1.0);
     float tt = uLin >= 1.0 ? 1.0 : (lt < 0.5 ? 4.0 * lt * lt * lt : 1.0 - pow(-2.0 * lt + 2.0, 3.0) / 2.0);
     vFade = (from.w > 0.0 && to.w <= 0.0) ? 1.0 - tt : 1.0;
     float s = mix(from.w, to.w, tt);

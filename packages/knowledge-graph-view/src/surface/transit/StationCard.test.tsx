@@ -93,7 +93,7 @@ describe('StationCard (the note-card shell)', () => {
     it('states risk in words, test reach, the owner and the anti-pattern name in the facts row', () => {
         card({ ...withFacts({ tests: 'none', antiPattern: finding }), owner: 'Payments' });
         const row = document.querySelector('[data-note-facts]')!;
-        expect(row.querySelector('[data-fact="risk"]')?.textContent).toBe(fillTemplate(t.riskWord, { level: 'High' }));
+        expect(row.querySelector('[data-fact="risk"]')?.textContent).toBe(fillTemplate(t.riskWord, { level: 'high' }));
         expect(row.querySelector('[data-fact="tests"]')?.textContent).toBe(t.testNone);
         expect(row.querySelector('[data-fact="owner"]')?.textContent).toBe(fillTemplate(t.ownerIs, { name: 'Payments' }));
         expect(row.querySelector('[data-fact="anti"]')?.textContent).toBe('God module');

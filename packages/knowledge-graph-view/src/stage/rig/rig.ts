@@ -7,7 +7,7 @@
  *   canvas) rotates, pitch clamped to `rig.depth.tilt`; wheel / pinch / +, − dolly; Fit returns to the home pose. The
  *   marks' extrude is held at full (`depthUniform` 1).
  *
- * A placement change re-homes TWEENED with the same clock and easing as the marks (`Tween`, ≤ 400 ms), so the camera
+ * A placement change re-homes TWEENED with the same clock and easing as the marks (`Tween`, `TWEEN_MS`), so the camera
  * never jumps while the marks glide; a tween between the kinds (Map ↔ 3D) runs in orbit space under a perspective
  * camera — the ground view's twin is the orbit at pitch 90° − tilt with the distance that shows the target at the same
  * zoom — and lands in the destination's projection. Reduced motion (0 ms) jumps.
@@ -23,7 +23,7 @@ import { orbitBasis, orbitDistanceFor, orbitFitDistance, orbitPxPerWorld, projec
 import type { CameraRig } from '../types';
 import {
     CAMERA_DISTANCE, clamp, DEFAULT_FOV, DOLLY_MAX, DOLLY_MIN, FLAT_PITCH, groundProjector, lerp, lerpAngle, MAX_ZOOM_FACTOR, MIN_ZOOM_FACTOR,
-    ORBIT_DEG_PER_PX, orbitProjector,
+    ORBIT_DEG_PER_PX, orbitDepthAt, orbitProjector,
 } from './rigMath';
 
 export { CAMERA_DISTANCE, DEFAULT_FOV, FLAT_PITCH, MAX_ZOOM_FACTOR, MIN_ZOOM_FACTOR, ORBIT_DEG_PER_PX, ORBIT_KEY_DEG } from './rigMath';
@@ -56,6 +56,8 @@ export class RigController {
     private flatNow = false;
     private restingPitch = 45;
     private moved = false;
+    /** The person zoomed or panned (a dolly, slide, ground pan or centring; a turn does not): a resize keeps their framing. */
+    private reframed = false;
     private listeners = new Set<() => void>();
     /** Which kind of view is current (or being tweened TO). */
     private kind: 'ground' | 'orbit' = 'ground';
@@ -92,11 +94,7 @@ export class RigController {
         return this.tween.active && this.depthT < 1 ? lerp(this.depthFrom, target, this.depthT) : target;
     }
     /** An orbit's extrude: full, or — when the placement names a `flatDepth` — collapsing toward it as the pitch comes down to Flat. */
-    private orbitDepth(): number {
-        if (this.flatDepth === undefined) return 1;
-        const rest = this.restingPitch, k = clamp((this.orbit.pitch - rest) / Math.max(1, FLAT_PITCH - rest), 0, 1);
-        return lerp(1, this.flatDepth, k);
-    }
+    private orbitDepth(): number { return orbitDepthAt(this.orbit.pitch, this.restingPitch, this.flatDepth); }
     /** The extrude multiplier a re-home tween starts from, and the tween's eased progress. */
     private depthFrom = 0;
     private depthT = 1;
@@ -111,7 +109,7 @@ export class RigController {
      */
     setHome(home: RigView, rig: Pick<CameraRig, 'depth' | 'home' | 'view'>, width: number, height: number, now: number, ms: number = TWEEN_MS): void {
         this.width = width; this.height = height;
-        this.moved = false;
+        this.moved = false; this.reframed = false;
         this.depthFrom = this.depthUniform;
         const wasOrbit = this.kind === 'orbit';
         // The FIRST ground home is already at the resting depth: no extrude tween from flat on first paint.
@@ -146,8 +144,9 @@ export class RigController {
         this.width = width; this.height = height;
         this.home = home;
         if (!this.moved && this.kind === 'ground') { this.tween.finish(); this.blend = null; this.view = home; this.target = home; }
-        // A fitted orbit re-fits to the box's NEW aspect and eases there (the person's yaw and pitch stay): a narrow, tall stage still frames the room.
-        if (this.kind === 'orbit' && this.fitRadius !== undefined) {
+        // A fitted orbit re-fits to the box's NEW aspect and eases there (yaw and pitch stay), unless the person zoomed or
+        // panned: opening the drawer or the code pane never undoes their own framing.
+        if (!this.reframed && this.kind === 'orbit' && this.fitRadius !== undefined) {
             const distance = orbitFitDistance(this.fitRadius, this.orbitHome.fov, width, height);
             if (Math.abs(distance - this.orbitHome.distance) > 1e-6) {
                 this.orbitHome = { ...this.orbitHome, distance };
@@ -160,7 +159,7 @@ export class RigController {
     }
 
     fit(now: number, ms: number = TWEEN_MS): void {
-        this.moved = false;
+        this.moved = false; this.reframed = false;
         if (this.kind === 'orbit') { this.goOrbit(this.orbit, this.orbitHome, now, ms); return; }
         this.go(this.home, now, ms);
     }
@@ -171,7 +170,7 @@ export class RigController {
         if (this.kind === 'orbit') {
             const h = this.orbitHome.distance;
             this.orbit = { ...this.orbit, distance: clamp(this.orbit.distance / factor, h * DOLLY_MIN, h * DOLLY_MAX) };
-            this.moved = true;
+            this.moved = true; this.reframed = true;
             this.changed();
             return;
         }
@@ -221,7 +220,7 @@ export class RigController {
         const k = 1 / Math.max(1e-6, this.pxPerWorld), yaw = (this.orbit.yaw * Math.PI) / 180;
         const o = this.orbit;
         this.orbit = { ...o, tx: o.tx - dx * k * Math.cos(yaw), tz: o.tz + dx * k * Math.sin(yaw), ty: o.ty + dy * k };
-        this.moved = true;
+        this.moved = true; this.reframed = true;
         this.changed();
     }
 
@@ -248,7 +247,7 @@ export class RigController {
         const c = Math.cos(yaw), s = Math.sin(yaw);
         const limit = (this.fitRadius ?? Infinity) * 1.1, h = this.orbitHome;
         this.orbit = { ...o, tx: clamp(o.tx - (dx * c + dy * s) * k, h.tx - limit, h.tx + limit), tz: clamp(o.tz + (dx * s - dy * c) * k, h.tz - limit, h.tz + limit) };
-        this.moved = true;
+        this.moved = true; this.reframed = true;
         this.changed();
     }
 
@@ -266,7 +265,7 @@ export class RigController {
         this.stop();
         if (this.kind === 'orbit') this.orbit = { ...this.orbit, tx: x, tz: z };
         else this.view = { ...this.view, cx: x, cz: z };
-        this.moved = true;
+        this.moved = true; this.reframed = true;
         this.changed();
     }
 
@@ -335,22 +334,7 @@ export class RigController {
     };
 
     /** The rig's projection as the stage bus's {@link Projector} (the no-canvas path; the canvas taps the real camera). */
-    projector(): Projector {
-        if (this.projection === 'perspective') {
-            const o: OrbitPose = { ...this.orbitPose() };
-            return {
-                width: o.width, height: o.height, pxPerWorld: orbitPxPerWorld(o),
-                key: `orbit|${o.tx}|${o.ty}|${o.tz}|${o.yaw}|${o.pitch}|${o.distance}|${o.fov}|${o.width}|${o.height}`,
-                project(x, y, z, out) { return projectOrbit(o, x, y, z, out as unknown as { 0: number; 1: number }); },
-            };
-        }
-        const g: GroundView = { ...this.groundView() };
-        return {
-            width: g.width, height: g.height, pxPerWorld: g.zoom, key: `rig|${g.zoom}|${g.cx}|${g.cz}|${g.tilt}|${g.width}|${g.height}`,
-            screen: groundScreenMatrix(g),
-            project(x, y, z, out) { projectGround(g, x, y, z, out as unknown as { 0: number; 1: number }); return true; },
-        };
-    }
+    projector(): Projector { return this.projection === 'perspective' ? orbitProjector(this.orbitPose()) : groundProjector(this.groundView()); }
 
     /**
      * The camera pose for the current view: projection, position, look-at target, up, zoom and fov. ONE scratch object,

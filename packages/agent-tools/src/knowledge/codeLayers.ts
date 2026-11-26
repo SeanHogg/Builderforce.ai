@@ -3,9 +3,10 @@
  * Contract 2). Five layers, `entry` above the four of {@link CODE_LAYERS}; rules tried in
  * this order, the first that places a file wins:
  *
- *   0. entry   — package entry points (`extension.ts`, `app/**\/page.tsx`, `src/index.ts`, the
- *                targets a manifest's `main` / `bin` / `exports` name — read from the `entry`
- *                badge, never from the filesystem), by name;
+ *   0. entry   — package entry points (`extension.ts` outside a layer folder, `app/**\/page.tsx`,
+ *                `src/index.ts`, and what a manifest names — `package.json` main / bin / exports,
+ *                an `index.html` module script, a `wrangler` main, a literal Vite input; see
+ *                `codeEntryPoints.ts` — read from the `entry` badge, never from the filesystem), by name;
  *   1. folder  — the NEAREST enclosing folder with a layer meaning (`domain/`, `db/`, `routes/` …);
  *                component files (`*.tsx` …) are views whatever folder holds them, so they
  *                are placed by name before the folder is asked;
@@ -63,12 +64,25 @@ export const NAME_RULES: readonly NameRule[] = [
     { layer: 'presentation', globs: ['*Route.*', '*Routes.*', '*Handler.*', '*Controller.*', '*Page.*', '*View.*', '*.route.*'] },
 ];
 
-/** Entry-point files by path (package roots' `index`, extension / server / worker / CLI mains, Next.js app files). */
+/** Entry-point files by path (package roots' `index`, Next.js app files, `bin/`). */
 export const ENTRY_GLOBS: readonly string[] = [
-    '**/extension.{ts,js}', '**/main.{ts,js}', '**/server.{ts,js}', '**/worker.{ts,js}', '**/cli.{ts,js}', '**/bin/**',
+    '**/bin/**',
     '**/app/**/page.{ts,tsx,js,jsx}', '**/app/**/layout.{ts,tsx,js,jsx}', '**/app/**/route.{ts,js}',
     '**/src/index.{ts,tsx,js}', 'index.{ts,js}', '**/routes/index.{ts,js}',
 ];
+
+/**
+ * Extension / main / server / worker / CLI mains by name — but only where a main sits: NOT inside a layer folder below the
+ * nearest `src/` (`api/src/routes/extension.ts` is the route for a browser extension, `src/db/schema/server.ts` a table;
+ * `clients/vscode/src/extension.ts` and `api/src/worker.ts` are mains). A manifest naming the file still makes it one.
+ */
+export const MAIN_NAME_GLOBS: readonly string[] = ['**/extension.{ts,js}', '**/main.{ts,js}', '**/server.{ts,js}', '**/worker.{ts,js}', '**/cli.{ts,js}'];
+
+function inLayerFolderUnderSrc(path: string): boolean {
+    const dirs = path.split('/').slice(0, -1);
+    const src = dirs.lastIndexOf('src');
+    return src >= 0 && dirs.slice(src + 1).some((d) => TABLE_LAYERS.some((l) => FOLDER_LAYERS[l].includes(d)));
+}
 
 /** The default registry carries this so a host can tell it from a project's own `.builderforce/partitions.json`. */
 export interface DefaultLayerRegistry extends PartitionRegistry {
@@ -137,7 +151,8 @@ function nameRule(file: string, early: boolean): TableLayer | undefined {
 }
 
 const isEntry = (path: string, entryPaths: ReadonlySet<string> | undefined): boolean =>
-    !!entryPaths?.has(path) || ENTRY_GLOBS.some((g) => matchGlob(path, g));
+    !!entryPaths?.has(path) || ENTRY_GLOBS.some((g) => matchGlob(path, g))
+    || (MAIN_NAME_GLOBS.some((g) => matchGlob(path, g)) && !inLayerFolderUnderSrc(path));
 
 export interface LayerInput {
     /** Root-relative paths of the code files to place. */

@@ -266,6 +266,19 @@ describe('the orbit rig (3D, a placement carrying rig.view)', () => {
             expect(rig.currentOrbit.yaw).toBe(yaw);
         });
 
+        it('regression: a resize after the person zoomed or panned keeps their framing (opening a pane never undoes it)', () => {
+            const rig = new RigController();
+            rig.setHome(HOME, FITTED, 1200, 600, 0, 0);
+            rig.motionMs = 0;
+            rig.zoomBy(2);
+            const zoomed = rig.currentOrbit.distance;
+            rig.resize(HOME, 360, 800);
+            expect(rig.currentOrbit.distance).toBe(zoomed);
+            rig.fit(0, 0);
+            rig.resize(HOME, 1200, 600);
+            expect(rig.currentOrbit.distance).not.toBe(zoomed);
+        });
+
         it('collapses the extrude toward flatDepth as the pitch comes down to Flat, and back', () => {
             const rig = new RigController();
             rig.setHome(HOME, FITTED, 800, 600, 0, 0);

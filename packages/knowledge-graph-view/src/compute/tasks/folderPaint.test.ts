@@ -23,7 +23,7 @@ const finding = (severity: Finding['severity']): Finding => ({ severity, nodes: 
 
 describe('folder paint', () => {
     it('regression: a folder is never the area background tone; it takes the worst finding beneath it, else a legible quiet tone', () => {
-        const tone = new Uint8Array(5), flags = new Uint8Array(5);
+        const tone = new Uint8Array(5), flags = new Uint16Array(5);
         paintFolders({ nodes: [node], findings: [finding('warn'), finding('error')] }, marks, tone, flags);
         expect(tone[2]).toBe(toneIndex('violation')); // a's file has an error
         expect(tone[1]).toBe(toneIndex('violation')); // and the root holds a
@@ -33,7 +33,7 @@ describe('folder paint', () => {
     });
 
     it('counts FILE findings only, as the SVG mind map\'s folder tree does (a symbol\'s finding does not tone its folder)', () => {
-        const tone = new Uint8Array(5), flags = new Uint8Array(5);
+        const tone = new Uint8Array(5), flags = new Uint16Array(5);
         const symbol = { ...node, ref: `${REF}#f`, kind: 'symbol' } as unknown as KNode;
         const onSymbol = { severity: 'error', nodes: [`${REF}#f`] } as unknown as Finding;
         paintFolders({ nodes: [node, symbol], findings: [onSymbol] }, marks, tone, flags);
