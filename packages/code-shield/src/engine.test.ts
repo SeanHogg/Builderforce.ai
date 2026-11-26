@@ -43,7 +43,12 @@ const CASES: readonly (readonly [string, string, string])[] = [
   ['obfuscation.hex-identifiers', hexIdentifiers(20), hexIdentifiers(3)],
   ['signature.eicar', EICAR, 'X5O!P%@AP'],
   // Secret rules DERIVED from `SECRET_SHAPES` (one rule per shape, id `secret.<shape id>`).
-  ['secret.github-pat', `github_pat_${'a'.repeat(30)}`, 'github_pat_short'],
+  // A fine-grained token keeps the id the hand-written GitHub rule stored for it (PR-gate fingerprints hash the rule id).
+  ['secret.github-token', `github_pat_${'a'.repeat(30)}`, 'github_pat_short'],
+  // regression: the derived private-key rule missed PGP armor, which the hand-written rule caught.
+  ['secret.private-key', '-----BEGIN PGP PRIVATE KEY BLOCK-----', '-----BEGIN PGP PUBLIC KEY BLOCK-----'],
+  // regression: an all-letter reason code with a platform-key prefix (`bfi_unavailable`) is not a key.
+  ['secret.builderforce-key', 'bfr_00112233445566778899aabbccddeeff', "reason: 'bfi_unavailable'"],
   ['secret.slack-rotating-token', 'xoxe.xoxp-1234567890', 'xoxe.1'],
   ['secret.slack-app-token', 'xapp-1-ABCDEFGHIJ', 'xapp-1'],
   ['secret.groq-key', `gsk_${'a'.repeat(20)}`, 'gsk_abc'],
@@ -104,6 +109,14 @@ describe('rules', () => {
     expect(scanText({ path: 'src/a.test.ts', content: 'eval(x)' }, 'pr-diff')).toEqual([]);
     const [f] = scanText({ path: 'tests/a.ts', content: 'password = "abcdefghijkl1"' }, 'pr-diff');
     expect(f?.severity).toBe('MEDIUM');
+  });
+
+  it('reports a derived-only shape at MEDIUM in a test path, a pre-derivation shape at full severity', () => {
+    const sev = (path: string, content: string): string | undefined => scanText({ path, content }, 'pr-diff', ['secret'])[0]?.severity;
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4eHh4.c2lnbmF0dXJlMTIz';
+    expect(sev('src/a.test.ts', jwt)).toBe('MEDIUM');
+    expect(sev('src/a.ts', jwt)).toBe('HIGH');
+    expect(sev('src/a.test.ts', `ghp_${'a'.repeat(36)}`)).toBe('CRITICAL');
   });
 
   it('limits a call to the requested categories', () => {

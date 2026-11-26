@@ -14,7 +14,7 @@ vi.mock('../auth', async (importOriginal) => {
 });
 
 /** The mock instance the module under test imported (the registry is reset between tests). */
-const signOutSpy = async () => (await import('../auth')).handleApiUnauthorized as ReturnType<typeof vi.fn>;
+const signOutSpy = async () => (await import('../auth')).handleApiUnauthorized as unknown as ReturnType<typeof vi.fn>;
 
 const b64 = (value: object) => btoa(JSON.stringify(value)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const jwt = (claims: Record<string, unknown>) => `${b64({ alg: 'HS256' })}.${b64(claims)}.sig`;

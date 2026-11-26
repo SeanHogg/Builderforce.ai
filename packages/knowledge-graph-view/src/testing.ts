@@ -168,7 +168,6 @@ export function fixtureSource(graphs: KnowledgeGraph[], opts: { review?: boolean
 /** What `openList` needs from testing-library, injected so this module imports none (it ships in the source-only package). */
 export interface ListOpener {
     screen: {
-        findByRole(role: 'radio', options: { name: string }, waitFor?: { timeout?: number }): Promise<Element>;
         findByTestId(id: string, options?: undefined, waitFor?: { timeout?: number }): Promise<HTMLElement>;
     };
     fireEvent: { click(element: Element): unknown };
@@ -182,7 +181,17 @@ const CAMERA_WAIT = { timeout: 20_000 };
  * alternative) switch to it with this. It waits for the camera bar to exist, so it does not depend on load timing.
  */
 export async function openList({ screen, fireEvent }: ListOpener, name = 'List'): Promise<HTMLElement> {
-    fireEvent.click(await screen.findByRole('radio', { name }, CAMERA_WAIT)); // the View group is a segmented radio group
+    // The View group is a `Seg`: icon buttons (`data-seg`, aria-pressed, aria-label = the camera's name) in a group named "View". Without a stage factory the
+    // scene falls back to the List and the camera bar never mounts, so the List may already be on screen: take whichever appears first.
+    const deadline = Date.now() + CAMERA_WAIT.timeout;
+    const list = () => document.querySelector<HTMLElement>('[data-testid="kg-list"]');
+    const camera = () => document.querySelector<HTMLElement>(`[role="group"][aria-label="View"] button[data-seg][aria-label="${name}"]`);
+    while (!list()) {
+        const button = camera();
+        if (button) { if (button.getAttribute('aria-pressed') !== 'true') fireEvent.click(button); break; }
+        if (Date.now() > deadline) break;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    }
     return screen.findByTestId('kg-list', undefined, CAMERA_WAIT);
 }
 

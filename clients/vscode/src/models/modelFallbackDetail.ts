@@ -4,7 +4,7 @@ import { DEFAULT_SECRET_PATTERNS, redactText } from "@builderforce/secret-redact
 
 const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** A secret-bearing key name (`api_key`, `accessToken`, `refresh-token`, `secret`, …). */
+/** A secret-bearing key name (`api_key`, `accessToken`, `refresh-token`, `secret`, …). Used ONLY by the display backstop below. */
 const SECRET_KEY = "(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password)";
 
 /**
@@ -23,8 +23,10 @@ export function redactFallbackText(text: string, home: string = os.homedir()): s
   // The shared redactor (`@builderforce/secret-redaction`) owns every credential shape: provider tokens, JWTs,
   // `Authorization` / Bearer values, `key=value` and JSON secret fields.
   return redactText(out.replace(/(\bhttps?:\/\/[^\s?#"'<>)]*)\?[^\s"'<>)]*/gi, "$1"), DEFAULT_SECRET_PATTERNS, "strict", () => "[redacted]")
-    // Short-value backstop: the shared set ignores a value too short to be a real secret (it is prose or source
-    // there); in an error notice persisted to a chat, a secret-NAMED pair or a `sk-` / `bfk_` word is hidden whatever its length.
+    // DISPLAY-ONLY BACKSTOP, not a second detector: it decides nothing and reports nothing, it only over-masks this one
+    // notice. The shared set deliberately ignores a value too short to be a real secret (elsewhere that is prose or
+    // source); in an error line persisted to a chat, a secret-NAMED pair or an `sk-` / `bfk_` word is hidden whatever
+    // its length. A new credential SHAPE belongs in `@builderforce/secret-redaction`, never here.
     .replace(new RegExp(`(["']?\\b${SECRET_KEY}["']?\\s*[=:]\\s*)(?:"[^"]*"|'[^']*'|[^\\s,;&"'}]+)`, "gi"), "$1[redacted]")
     .replace(/\b(?:sk|bfk)[-_]\S+/gi, "[redacted]");
 }

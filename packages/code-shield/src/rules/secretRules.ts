@@ -55,6 +55,7 @@ export function secretRuleFor(shape: SecretShape): Rule {
     remediation: shape.id === 'private-key'
       ? 'Remove the key from the repository, rotate it, and load it from the secret store.'
       : 'Revoke and rotate the credential with its provider; never commit it, load it from the secret store.',
+    ...(FULL_SEVERITY_IN_TESTS.has(shape.id) ? {} : { testPathSeverity: 'MEDIUM' as const }),
   };
 }
 
