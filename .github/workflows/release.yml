@@ -1351,12 +1351,15 @@ jobs:
           NEXT_BUILDERFORCE_ERROR_API_KEY: ${{ github.event_name != 'pull_request' && secrets.BUILDERFORCE_ERROR_API_KEY || '' }}
           # verify-frontend lints and type-checks; see next.config.js.
           NEXT_SKIP_BUILD_CHECKS: '1'
+          # TEMPORARY (first runs of the buffer patch): verify every function against upstream's algorithm.
+          NOP_PATCH_VERIFY: '1'
         run: |
           pnpm install --frozen-lockfile
-          # ~250s of this step is next-on-pages' chunk dedup (processFunctionIdentifiers rebuilds each edge-function
-          # file once per shared chunk). An offset-splice patch was tried and reverted: 172/175 functions hold a
-          # second identical copy of a shared chunk, where upstream's lastIndexOf replaces the LATER copy, so a
-          # faster splice is not byte-identical. The real fix is fewer/smaller edge functions or OpenNext.
+          # next-on-pages' chunk dedup is patched (frontend/patches/@cloudflare__next-on-pages@1.13.16.patch).
+          # Upstream rebuilt each edge-function file as a new string once per shared chunk (~250s). The patch runs
+          # the SAME replace-last-occurrence steps on a Buffer edited in place, and logs `[nop-patch]` lines. It
+          # replays the first 5 functions (all with NOP_PATCH_VERIFY=1) through upstream's code and fails on a
+          # difference. An earlier offset-splice patch was reverted: it could not be byte-identical.
           pnpm run cf-build
 
       # Exactly what wrangler.toml deploys: the worker (`_worker.js/`) and the static

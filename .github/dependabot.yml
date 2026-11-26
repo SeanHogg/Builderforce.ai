@@ -156,6 +156,9 @@ updates:
       # ERESOLVE breaks `npm ci`). Move Starlight only together with Astro, by hand.
       - dependency-name: '@astrojs/starlight'
         update-types: [version-update:semver-minor, version-update:semver-major]
+      # frontend pins next-on-pages exactly and carries a version-keyed pnpm patch
+      # (frontend/patches/): a bump fails install on the unused patch. Move it by hand.
+      - dependency-name: '@cloudflare/next-on-pages'
     commit-message:
       prefix: 'chore(deps)'
       prefix-development: 'chore(dev-deps)'
