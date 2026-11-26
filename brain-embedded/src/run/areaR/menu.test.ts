@@ -59,7 +59,10 @@ describe('the Brain ranks a large catalog its own way', () => {
   });
 
   it('the agent shows the menu the loop shows, ranked by the Brain ranker', async () => {
-    const s: Scenario = { key: 9106, script: () => [say('Hello.')], request: () => ({ tools: RANKED, userTurn: 'list my open tickets in the backlog' }) };
+    const s: Scenario = { key: 9106, script: () => [say('Hello.')],
+      // Runs are routed by default now (210986709) and a question starts in the code stage; "full pipeline" is the person's own
+      // override (`@builderforce/pipeline-route`), so the menu under test is still the plan stage's.
+      request: () => ({ tools: RANKED, userTurn: 'list my open tickets in the backlog — run the full pipeline' }) };
     const run = await runOn(s);
     const firstSixtyFour = RANKED.slice(0, 64).map((t) => t.function.name);
     // The request decides the menu: it is not the head of the catalog.
@@ -107,7 +110,8 @@ describe('R9: the router and the selection step', () => {
     const s: Scenario = {
       key: 9105,
       script: () => [calls({ name: 'edit_file', args: { path: 'a.ts', old: 'a', new: 'b' } }), say('Done.')],
-      request: () => ({ tools: catalog, model: 'pin-1', modelStrict: true }),
+      // The person's own "full pipeline" override: the default routing now starts a question in the code stage, which has no `hand_off` to close (210986709).
+      request: () => ({ tools: catalog, model: 'pin-1', modelStrict: true, userTurn: 'find the request handler — run the full pipeline' }),
     };
     const run = await runOn(s);
     expect(run.wire[0]!.tools).toContain('hand_off');

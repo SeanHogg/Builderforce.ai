@@ -114,9 +114,9 @@ export const APPROVED_PERMANENT = [
   },
   {
     file: 'brain-embedded/src/run/areaR/menu.test.ts',
-    blob: '0825f151e67525a8da55e31fc744e9338c6fa38e',
-    changed: "'once planning closes…' expects the code-turn menu (edit_file, ask_user and the three router tools) instead of the 64-tool menu minus hand_off; 'a catalog the limit holds whole…' builds a 20+2 tool fixture (was 62+2). Its assertions are unchanged. Re-approved 2026-11-21: R7 'a tool an EARLIER run called pins nothing in the next one' becomes 'stays pinned in the next one' (not.toContain → toContain).",
-    reason: "Stale premise since cda0c33e9: the turn after planning closes is a CODE turn, capped by roleCap.ts (22 tools, no catalog-order backfill), so a 64-tool menu can no longer appear there. The fixture shrinks so that 'a catalog the limit holds whole is never trimmed' still holds under the code cap. Re-approved 2026-11-21 (operator, agent-execution-efficiency review): a tool the conversation already called stays advertised in the next run (runStore/conversationPins.ts, capped at 8 and by the role cap); the old rule dropped it and a run called a tool missing from its menu.",
+    blob: '3dd0f07718fbcb060105f838985aabe87f044e9c',
+    changed: "'once planning closes…' expects the code-turn menu (edit_file, ask_user and the three router tools) instead of the 64-tool menu minus hand_off; 'a catalog the limit holds whole…' builds a 20+2 tool fixture (was 62+2). Its assertions are unchanged. Re-approved 2026-11-21: R7 'a tool an EARLIER run called pins nothing in the next one' becomes 'stays pinned in the next one' (not.toContain → toContain). Re-approved 2026-11-25: the ranked-catalog case and 'a catalog the limit holds whole shows no router once hand_off closes' take a userTurn ending '— run the full pipeline'; every expectation is unchanged.",
+    reason: "Stale premise since cda0c33e9: the turn after planning closes is a CODE turn, capped by roleCap.ts (22 tools, no catalog-order backfill), so a 64-tool menu can no longer appear there. The fixture shrinks so that 'a catalog the limit holds whole is never trimmed' still holds under the code cap. Re-approved 2026-11-21 (operator, agent-execution-efficiency review): a tool the conversation already called stays advertised in the next run (runStore/conversationPins.ts, capped at 8 and by the role cap); the old rule dropped it and a run called a tool missing from its menu. Re-approved 2026-11-25 (operator, via the session; 210986709): runs are routed by default and a question starts in the code stage, whose role cap has no hand_off, so the two plan-stage cases name the person's own full-pipeline override to stay on the plan stage they test.",
     approvedBy: APPROVED_BY,
   },
 ];
@@ -371,6 +371,25 @@ export const APPROVED_THIS_PUSH = [
     file: 'packages/agent-loop/src/subagent.test.ts',
     changed: "The sub-agent prompt expectation is /carry out your slice end to end/ (was /every tool your owner holds/) in two places; unverified-claim cases are added.",
     reason: "Intended change (fbaa577bc, subagent.ts): the child prompt wording changed to 'Use the tools available in this run to carry out your slice end to end'; the test still pins that the prompt tells the child to do its slice.",
+    approvedBy: APPROVED_BY,
+  },
+  // Operator-approved parity re-record, 2026-11-25 (REGENERATE.md placed, snapshots written with PARITY_SNAPSHOT=write, marker deleted).
+  ...["ask-user-malformed","ask-user-terminal","big-read-paged","budget-warn-stop","chat-mode-tools","child-own-transcript","child-report-exhausted-stall","child-report-ship-gate","child-report-turn-end","confirm-approved","confirm-declined","effort-balanced-thinking","effort-quick","effort-thorough-thinking","flash-pinned","focus-files-once","fold-in-tool-loop","fold-summary-fails","hand-off-execution","handed-off-commands","image-attachment","image-with-context","ledger-in-tail","long-chat-folds","malformed-call-args","mcp-tool","memory-savings","model-breaks-mid-answer","pinned-model-breaks","plain-chat","planner-ignores-forced-turn","preflight-once","quick-on-flash","quick-route","read-dedupe","reask-discarded","reask-fails","reask-transport-failure","reasoning-next-action","reasoning-replay","refusal-401","refusal-402-plan","refusal-402","refusal-429","reload-after-fold","restated-reply","retry-forced-turn","routed-tool-pin","ship-gate","six-failures-one-turn","small-window-tools","stall-exhaustion","stall-failover","steer-a-child","steer-before-command","steer-during-tool","steer-final-answer","steer-stop-word","step-numbering","stop-before-text","stop-during-fold","stop-during-hand-off","stop-during-stream","stop-hook","sub-agent-spawn","thorough-route","tool-failure-breaker","tools-without-runner","two-runs-one-fold","two-steers-turn-end","undelegated-request","unknown-tool","wait-interrupted","work-mode-tools"].map((id) => ({
+    file: `brain-embedded/src/run/parity/snapshots/${id}.json`,
+    changed: 'Re-recorded from the agent: runs without req.pipeline are routed (run.pipeline_route trace row, pipelineRoute/routeScore call metadata; a question starts in the code stage, whose role cap drops hand_off and the unmatched spawn_agent from the menu); the persisted run.preflight step; the failure-streak forced-synthesis and "Progress check (first warning)" wording; close-out inside the run (builtin_tickets_from_delta rows precede the final assistant message, bounded by settleMs).',
+    reason: 'Operator approval 2026-11-25 ("keep the new behaviour"): intended changes 210986709 (default pipeline routing), a0c2321c6, 6c48fd797, c56ce694e, 24d65d520, 2a9de14d9 and the run.preflight step. Real regressions were fixed in 329b38376 and are not re-recorded. Regenerated behind the gated REGENERATE.md protocol (snapshots.ts), not hand-edited.',
+    approvedBy: APPROVED_BY,
+  })),
+  {
+    file: 'brain-embedded/src/run/areaR/steer.test.ts',
+    changed: '"both tickets are filed and traced before the run settles": the request carries a userTurn ending "— run the full pipeline". The expectation is unchanged.',
+    reason: 'Operator approval 2026-11-25 (210986709): hand_off is a plan-stage tool and the default routing starts a question in the code stage; the override keeps the case on the plan stage whose hand-off it tests.',
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'brain-embedded/src/runStore/startRun.lateBackstop.test.ts',
+    changed: '"no second run starts until the unwinding run releases" becomes "...the closing-out run releases": it waits 60 ms instead of for !isRunning, asserts isRunning stays true while close-out hangs (and after the second request joins), and asserts the joined words were applied to the transcript of the run (steer.applied) instead of left in the inbox. (Also the earlier codeRun fixture change: it passes tools with builtin_chats_list_tickets.)',
+    reason: 'Operator approval 2026-11-25: close-out now runs inside the run, so isRunning stays true until the close-out settles (bounded by settleMs) and the joined request is applied by that run on release. The invariant (no second run starts; the words are not dropped) is unchanged. Earlier: intended change (chat #276, 2026-11-19), the ticket backstops read the tickets of the chat only where the catalog carries the listing tool.',
     approvedBy: APPROVED_BY,
   },
 ];

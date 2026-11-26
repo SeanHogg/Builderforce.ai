@@ -18,7 +18,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "Now wire the chip row.",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.33
    },
    "tools": [
     {
@@ -161,7 +163,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "Now wire the chip row.",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.33
    },
    "tools": [
     {
@@ -304,7 +308,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "Now wire the chip row.",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.33
    },
    "tools": [
     {
@@ -438,6 +444,25 @@
    "metadata": {
     "kind": "step",
     "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.33
+    },
+    "result": "Full pipeline: routing is set to always; score 0.33 (follow-up)",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
     "label": "llm.handoff",
     "args": {
      "step": 0,
@@ -453,7 +478,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:3>"
   },
   {
    "chatId": 7001,
@@ -473,7 +498,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:4>"
   },
   {
    "chatId": 7001,
@@ -506,7 +531,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:5>"
   },
   {
    "chatId": 7001,
@@ -531,7 +556,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:5>"
+   "eventKey": "step:<id:6>"
   },
   {
    "chatId": 7001,
@@ -556,7 +581,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:6>"
+   "eventKey": "step:<id:7>"
   },
   {
    "chatId": 7001,
@@ -576,7 +601,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:7>"
+   "eventKey": "step:<id:8>"
   },
   {
    "chatId": 7001,
@@ -609,7 +634,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:8>"
+   "eventKey": "step:<id:9>"
   },
   {
    "chatId": 7001,
@@ -634,7 +659,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:9>"
+   "eventKey": "step:<id:10>"
   },
   {
    "chatId": 7001,
@@ -659,7 +684,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:10>"
+   "eventKey": "step:<id:11>"
   },
   {
    "chatId": 7001,
@@ -679,7 +704,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:11>"
+   "eventKey": "step:<id:12>"
   },
   {
    "chatId": 7001,
@@ -712,7 +737,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:12>"
+   "eventKey": "step:<id:13>"
   },
   {
    "chatId": 7001,
@@ -730,7 +755,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:13>"
+   "eventKey": "step:<id:14>"
   },
   {
    "chatId": 7001,
@@ -747,6 +772,16 @@
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.33
+    },
+    "result": "Full pipeline: routing is set to always; score 0.33 (follow-up)"
+   },
    {
     "ts": "<iso>",
     "category": "message",
@@ -1266,7 +1301,7 @@
  "agentOnly": {
   "recorded": [
    {
-    "entryPoint": "web",
+    "entryPoint": "vscode",
     "toolCalls": 2,
     "toolErrors": 0,
     "tokens": 42,
@@ -1285,7 +1320,7 @@
     "progressTrips": {},
     "clientRunId": "ide:7001:<epoch>",
     "model": "fake-model",
-    "source": "external",
+    "source": "ide",
     "terminalStatus": "completed",
     "steps": 3,
     "routingSignal": false

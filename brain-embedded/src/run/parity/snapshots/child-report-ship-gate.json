@@ -19,7 +19,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -263,7 +265,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -458,7 +462,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -660,7 +666,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -883,7 +891,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -1125,7 +1135,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -1281,6 +1293,25 @@
    "metadata": {
     "kind": "step",
     "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "Full pipeline: routing is set to always; score 0.4",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
     "label": "run.ship_policy",
     "args": {
      "mode": "commit_push",
@@ -1293,7 +1324,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:3>"
   },
   {
    "chatId": 7001,
@@ -1313,7 +1344,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:4>"
   },
   {
    "chatId": 7001,
@@ -1346,7 +1377,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:5>"
   },
   {
    "chatId": 7001,
@@ -1378,7 +1409,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:5>"
+   "eventKey": "step:<id:6>"
   },
   {
    "chatId": 7001,
@@ -1402,7 +1433,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:6>"
+   "eventKey": "step:<id:7>"
   },
   {
    "chatId": 7001,
@@ -1422,7 +1453,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:7>"
+   "eventKey": "step:<id:8>"
   },
   {
    "chatId": 7001,
@@ -1455,7 +1486,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:8>"
+   "eventKey": "step:<id:9>"
   },
   {
    "chatId": 7001,
@@ -1473,7 +1504,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:9>"
+   "eventKey": "step:<id:10>"
   },
   {
    "chatId": 7001,
@@ -1492,7 +1523,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:10>"
+   "eventKey": "step:<id:11>"
   },
   {
    "chatId": 7001,
@@ -1525,7 +1556,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:11>"
+   "eventKey": "step:<id:12>"
   },
   {
    "chatId": 7001,
@@ -1558,7 +1589,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:12>"
+   "eventKey": "step:<id:13>"
   },
   {
    "chatId": 7001,
@@ -1576,7 +1607,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:13>"
+   "eventKey": "step:<id:14>"
   },
   {
    "chatId": 7001,
@@ -1610,7 +1641,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:14>"
+   "eventKey": "step:<id:15>"
   },
   {
    "chatId": 7001,
@@ -1643,7 +1674,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:15>"
+   "eventKey": "step:<id:16>"
   },
   {
    "chatId": 7001,
@@ -1669,7 +1700,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:16>"
+   "eventKey": "step:<id:17>"
   },
   {
    "chatId": 7001,
@@ -1702,7 +1733,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:17>"
+   "eventKey": "step:<id:18>"
   },
   {
    "chatId": 7001,
@@ -1726,7 +1757,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:18>"
+   "eventKey": "step:<id:19>"
   },
   {
    "chatId": 7001,
@@ -1759,7 +1790,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:19>"
+   "eventKey": "step:<id:20>"
   },
   {
    "chatId": 7001,
@@ -1777,18 +1808,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:20>"
-  },
-  {
-   "chatId": 7001,
-   "role": "assistant",
-   "content": "Shipped to main.",
-   "metadata": {
-    "provenance": {
-     "model": "fake-model"
-    }
-   },
-   "learned": false
+   "eventKey": "step:<id:21>"
   },
   {
    "chatId": 7001,
@@ -1820,7 +1840,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:21>"
+   "eventKey": "step:<id:22>"
   },
   {
    "chatId": 7001,
@@ -1839,11 +1859,32 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:22>"
+   "eventKey": "step:<id:23>"
+  },
+  {
+   "chatId": 7001,
+   "role": "assistant",
+   "content": "Shipped to main.",
+   "metadata": {
+    "provenance": {
+     "model": "fake-model"
+    }
+   },
+   "learned": false
   }
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "Full pipeline: routing is set to always; score 0.4"
+   },
    {
     "ts": "<iso>",
     "category": "message",
@@ -2332,7 +2373,7 @@
      "activity": "writing#5"
     },
     {
-     "running": false,
+     "running": true,
      "error": "",
      "errorAction": null,
      "confirm": null,
@@ -2472,6 +2513,12 @@
      ],
      "kind": "improvement",
      "modality": "ide",
+     "chatId": 7001
+    }
+   },
+   {
+    "name": "builtin_chats_list_tickets",
+    "args": {
      "chatId": 7001
     }
    },

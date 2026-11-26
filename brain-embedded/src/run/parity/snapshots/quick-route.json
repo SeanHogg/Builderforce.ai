@@ -679,7 +679,7 @@
  "agentOnly": {
   "recorded": [
    {
-    "entryPoint": "web",
+    "entryPoint": "vscode",
     "toolCalls": 1,
     "toolErrors": 0,
     "tokens": 28,
@@ -698,7 +698,7 @@
     "progressTrips": {},
     "clientRunId": "ide:7001:<epoch>",
     "model": "fake-model",
-    "source": "external",
+    "source": "ide",
     "terminalStatus": "completed",
     "steps": 2,
     "routingSignal": false

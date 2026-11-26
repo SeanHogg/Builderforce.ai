@@ -381,6 +381,18 @@ describe("routedPolicy", () => {
     expect(out.skipVerifyStage).toBe(true);
   });
 
+  it("regression: a sub-agent on the full route starts in `code` (with or without a prior modelStart); a non-child still starts in `plan`", () => {
+    const full = { request: "Implement the billing export end to end", routing: { mode: "always" as const } };
+    const decision = routeRun(full);
+    const child = { source: "subagent" as const, parentRunId: "parent-1" };
+    const root = { source: "chat" as const };
+    expect(decision.pipeline?.route).toBe("full");
+    expect(routedPolicy({ ...TEST_POLICY, modelStart: { plain: true } }, full, decision, child).modelStart?.startPhase).toBe("code");
+    expect(routedPolicy({ ...TEST_POLICY }, full, decision, child).modelOptions?.startPhase).toBe("code");
+    expect(routedPolicy({ ...TEST_POLICY, modelStart: { plain: true } }, full, decision, root).modelStart?.startPhase).toBe("plan");
+    expect(routedPolicy({ ...TEST_POLICY }, full, decision, root).modelOptions?.startPhase).toBe("plan");
+  });
+
   it("a full route leaves the verify stage on", () => {
     const full = { request: "Rename the helper", routing: { mode: "always" as const } };
     expect(routedPolicy({ ...TEST_POLICY, modelStart: { plain: true } }, full, routeRun(full)).skipVerifyStage).toBeUndefined();

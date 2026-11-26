@@ -18,7 +18,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "delete old.ts",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.49
    },
    "tools": [
     {
@@ -180,7 +182,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "delete old.ts",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.49
    },
    "tools": [
     {
@@ -257,6 +261,25 @@
    "metadata": {
     "kind": "step",
     "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.49
+    },
+    "result": "Full pipeline: routing is set to always; score 0.49 (files named)",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
     "label": "llm.model_downgrade",
     "args": {
      "requestedModel": "pinned/model",
@@ -268,7 +291,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:3>"
   },
   {
    "chatId": 7001,
@@ -301,7 +324,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:4>"
   },
   {
    "chatId": 7001,
@@ -323,7 +346,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:5>"
   },
   {
    "chatId": 7001,
@@ -343,7 +366,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:5>"
+   "eventKey": "step:<id:6>"
   },
   {
    "chatId": 7001,
@@ -376,7 +399,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:6>"
+   "eventKey": "step:<id:7>"
   },
   {
    "chatId": 7001,
@@ -394,7 +417,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:7>"
+   "eventKey": "step:<id:8>"
   },
   {
    "chatId": 7001,
@@ -411,6 +434,16 @@
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.49
+    },
+    "result": "Full pipeline: routing is set to always; score 0.49 (files named)"
+   },
    {
     "ts": "<iso>",
     "category": "message",

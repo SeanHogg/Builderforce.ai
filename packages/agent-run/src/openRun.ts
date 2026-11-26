@@ -10,7 +10,7 @@
  *   4. calls `runAgent`.
  */
 import { ALL_ENTRY_POINTS } from "@builderforce/learned-routing";
-import { RUN_CANCELLED_REASON, type RunOutcome, type RunPolicy } from "./contract.js";
+import { RUN_CANCELLED_REASON, type RunOutcome, type RunPolicy, type RunTask } from "./contract.js";
 import { createCompactionHook, type CompactionHookOptions } from "./policy/compaction/index.js";
 import { createFinishHook, type FinishPorts } from "./policy/finish/index.js";
 import { createGuardsHook, type GuardPorts } from "./policy/guards/index.js";
@@ -109,17 +109,21 @@ function composeModules(surface: SurfacePorts, ran: { value: boolean }): Partial
 /**
  * Fold the route into the host's existing model policy. Hosts without a modelStart seed keep
  * their model options, with the phase and pins supplied by the route. Unscored runs keep
- * their selection and take any supplied stage models.
+ * their selection and take any supplied stage models. Delegated work is scored like any other, but a
+ * child (its task's dispatch is a sub-agent) always starts in `code`: its owner planned the slice, and a
+ * child has no way out of `plan`.
  */
-export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: RouteDecision): RunPolicy {
+export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: RouteDecision, dispatch?: RunTask["dispatch"]): RunPolicy {
   const { pipeline, start, skipsVerify } = decision;
+  const child = dispatch !== undefined && (dispatch.source === "subagent" || dispatch.parentRunId !== undefined);
+  const startPhase = child ? "code" : start.startPhase;
   const prior = policy.modelStart;  const folded: RunPolicy = skipsVerify ? { ...policy, skipVerifyStage: true } : policy;
   if (!prior) {
     if (!pipeline) return folded;
     return {
       ...folded,
       ...(start.pinnedModel ? { pinnedModel: start.pinnedModel } : {}),
-      modelOptions: { ...policy.modelOptions, startPhase: start.startPhase, ...(start.phaseModels ? { phaseModels: start.phaseModels } : {}) },
+      modelOptions: { ...policy.modelOptions, startPhase, ...(start.phaseModels ? { phaseModels: start.phaseModels } : {}) },
     };
   }
   if (!pipeline) {
@@ -132,7 +136,7 @@ export function routedPolicy(policy: RunPolicy, route: RouteInput, decision: Rou
       ...prior,
       ...(model ? { model } : {}),
       ...(route.modelStrict !== undefined ? { strict: route.modelStrict } : {}),
-      ...(start.startPhase && !prior.delegatedRole ? { startPhase: start.startPhase } : {}),
+      ...(startPhase && !prior.delegatedRole ? { startPhase } : {}),
       ...(start.phaseModels ? { phaseModels: start.phaseModels } : {}),
     },
   };
@@ -162,7 +166,7 @@ export async function openRun(input: OpenRunInput): Promise<RunOutcome> {
     const input: RouteInput = "decided" in route ? route.input : route;
     // A supplied decision was measured where it was made; intake is not a second route decision.
     const decision: RouteDecision = "decided" in route ? route.decided : measureWorkflowSync(run.ports.events, workflowScope(run), 'route', () => routeRun(route), (r) => ({ quick: Number(r.pipeline?.route === 'quick'), full: Number(r.pipeline?.route === 'full') }));
-    run = { ...run, policy: routedPolicy(run.policy, input, decision) };
+    run = { ...run, policy: routedPolicy(run.policy, input, decision, run.task.dispatch) };
     // The route is traced once per run, right after `run.started`; a resumed tick is not a start.
     const { pipeline } = decision;
     run.pipeline = pipeline ? { route: pipeline.route, score: pipeline.score } : null;

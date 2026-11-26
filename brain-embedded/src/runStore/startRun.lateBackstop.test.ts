@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { StreamChatResult } from '../streamChatCompletion';
-import { drainRunSteering } from '../runSteering';
 import { resetRunSteering } from '@builderforce/agent-run';
 import { continuationLimits } from './deadline';
 import { isLive, isRunning, resetBrainRunStore, stopRun } from './runControl';
@@ -60,22 +59,29 @@ describe('backstops that outlive their deadline write nothing into the next run 
 });
 
 describe('a Stop during the settle does not take the chat from the settling run (MF2)', () => {
-  it('no second run starts until the unwinding run releases; the new request\'s words wait for it', async () => {
+  it('no second run starts until the closing-out run releases; the new request\'s words wait for it', async () => {
     const saved = { ...continuationLimits };
     continuationLimits.settleMs = 200;
     try {
       const first = codeRun(9361, 'never');
-      await until(() => !isRunning(9361) && isLive(9361)); // settling: the ticket call hangs
+      // Close-out runs INSIDE the run (the ticket rows precede the final message), so the run stays running while the ticket call
+      // hangs, bounded by settleMs: it is live AND running until the bound ends the wait. Wait for it to reach that close-out.
+      await delay(60);
+      expect(isRunning(9361)).toBe(true);
+      expect(isLive(9361)).toBe(true); // closing out: the ticket call hangs
 
       stopRun(9361);
       expect(isLive(9361)).toBe(true); // the Stop did not free it
       const outcome = await startRun(9361, { entryPoint: 'vscode', resolvedSystemPrompt: 'sys', stream: async () => answer('no'), persistence, userTurn: 'second', userTurnMessageId: 5 });
       expect(outcome).toBe('joined');
-      expect(isRunning(9361)).toBe(false);
+      expect(isRunning(9361)).toBe(true); // the second request joined the unwinding run; it did not start its own
 
       await first; // the bound (200 ms) ends the wait; the finally releases
       expect(isLive(9361)).toBe(false);
-      expect(drainRunSteering(9361)).toMatchObject([{ text: 'second', fromPerson: true, saved: true }]);
+      // The words were never dropped: the closing-out run applied them to its own transcript as the person's steer once it released.
+      const c = getCell(9361);
+      expect(c.transcript.at(-1)).toMatchObject({ role: 'user', content: 'second' });
+      expect(c.trace.some((e) => e.label === 'steer.applied')).toBe(true);
     } finally {
       Object.assign(continuationLimits, saved);
     }

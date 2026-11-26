@@ -18,7 +18,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -216,7 +218,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -433,7 +437,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -669,7 +675,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -924,7 +932,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -1198,7 +1208,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -1483,7 +1495,7 @@
     },
     {
      "role": "user",
-     "content": "<run-state>\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- f6.ts · lines 1 · unchanged\n- f5.ts · lines 1 · unchanged\n- f4.ts · lines 1 · unchanged\n- f3.ts · lines 1 · unchanged\n- f2.ts · lines 1 · unchanged\n- f1.ts · lines 1 · unchanged\n\nProgress check (first warning): you have made 6 read-only calls in a row without changing anything. Everything you read is still in your context. If the task is a change, make the first concrete edit NOW with what you already have — do not read another file first. If it is analysis only, write the answer now.\n</run-state>"
+     "content": "<run-state>\n## brief\nProgress check (first warning): you have made 6 read-only calls in a row without changing anything. Everything you read is still in your context. If the task is a change, make the first concrete edit NOW with what you already have — do not read another file first. If it is analysis only, write the answer now.\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- f6.ts · lines 1 · unchanged\n- f5.ts · lines 1 · unchanged\n- f4.ts · lines 1 · unchanged\n- f3.ts · lines 1 · unchanged\n- f2.ts · lines 1 · unchanged\n- f1.ts · lines 1 · unchanged\n</run-state>"
     }
    ],
    "metadata": {
@@ -1491,7 +1503,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -1803,7 +1817,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -2134,7 +2150,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -2484,7 +2502,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -2853,7 +2873,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -3241,7 +3263,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -3648,7 +3672,9 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "remove the title from the top of the VSIX",
     "mode": "work",
-    "projectId": 11
+    "projectId": 11,
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -3721,6 +3747,25 @@
    "content": "",
    "metadata": {
     "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "Full pipeline: routing is set to always; score 0.4",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
     "category": "llm",
     "label": "llm.complete",
     "args": {
@@ -3746,7 +3791,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:3>"
   },
   {
    "chatId": 7001,
@@ -3771,7 +3816,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:4>"
   },
   {
    "chatId": 7001,
@@ -3804,7 +3849,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:5>"
   },
   {
    "chatId": 7001,
@@ -3829,7 +3874,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:5>"
+   "eventKey": "step:<id:6>"
   },
   {
    "chatId": 7001,
@@ -3862,7 +3907,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:6>"
+   "eventKey": "step:<id:7>"
   },
   {
    "chatId": 7001,
@@ -3887,7 +3932,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:7>"
+   "eventKey": "step:<id:8>"
   },
   {
    "chatId": 7001,
@@ -3920,7 +3965,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:8>"
+   "eventKey": "step:<id:9>"
   },
   {
    "chatId": 7001,
@@ -3945,7 +3990,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:9>"
+   "eventKey": "step:<id:10>"
   },
   {
    "chatId": 7001,
@@ -3978,7 +4023,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:10>"
+   "eventKey": "step:<id:11>"
   },
   {
    "chatId": 7001,
@@ -4003,7 +4048,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:11>"
+   "eventKey": "step:<id:12>"
   },
   {
    "chatId": 7001,
@@ -4036,7 +4081,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:12>"
+   "eventKey": "step:<id:13>"
   },
   {
    "chatId": 7001,
@@ -4061,7 +4106,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:13>"
+   "eventKey": "step:<id:14>"
   },
   {
    "chatId": 7001,
@@ -4082,7 +4127,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:14>"
+   "eventKey": "step:<id:15>"
   },
   {
    "chatId": 7001,
@@ -4115,7 +4160,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:15>"
+   "eventKey": "step:<id:16>"
   },
   {
    "chatId": 7001,
@@ -4140,7 +4185,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:16>"
+   "eventKey": "step:<id:17>"
   },
   {
    "chatId": 7001,
@@ -4173,7 +4218,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:17>"
+   "eventKey": "step:<id:18>"
   },
   {
    "chatId": 7001,
@@ -4198,7 +4243,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:18>"
+   "eventKey": "step:<id:19>"
   },
   {
    "chatId": 7001,
@@ -4231,7 +4276,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:19>"
+   "eventKey": "step:<id:20>"
   },
   {
    "chatId": 7001,
@@ -4256,7 +4301,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:20>"
+   "eventKey": "step:<id:21>"
   },
   {
    "chatId": 7001,
@@ -4289,7 +4334,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:21>"
+   "eventKey": "step:<id:22>"
   },
   {
    "chatId": 7001,
@@ -4314,7 +4359,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:22>"
+   "eventKey": "step:<id:23>"
   },
   {
    "chatId": 7001,
@@ -4347,7 +4392,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:23>"
+   "eventKey": "step:<id:24>"
   },
   {
    "chatId": 7001,
@@ -4372,7 +4417,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:24>"
+   "eventKey": "step:<id:25>"
   },
   {
    "chatId": 7001,
@@ -4405,7 +4450,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:25>"
+   "eventKey": "step:<id:26>"
   },
   {
    "chatId": 7001,
@@ -4430,7 +4475,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:26>"
+   "eventKey": "step:<id:27>"
   },
   {
    "chatId": 7001,
@@ -4451,7 +4496,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:27>"
+   "eventKey": "step:<id:28>"
   },
   {
    "chatId": 7001,
@@ -4472,7 +4517,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:28>"
+   "eventKey": "step:<id:29>"
   },
   {
    "chatId": 7001,
@@ -4505,7 +4550,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:29>"
+   "eventKey": "step:<id:30>"
   },
   {
    "chatId": 7001,
@@ -4525,7 +4570,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:30>"
+   "eventKey": "step:<id:31>"
   },
   {
    "chatId": 7001,
@@ -4541,7 +4586,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:31>"
+   "eventKey": "step:<id:32>"
   },
   {
    "chatId": 7001,
@@ -4568,7 +4613,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:32>"
+   "eventKey": "step:<id:33>"
   },
   {
    "chatId": 7001,
@@ -4601,11 +4646,21 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:33>"
+   "eventKey": "step:<id:34>"
   }
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "Full pipeline: routing is set to always; score 0.4"
+   },
    {
     "ts": "<iso>",
     "category": "llm",
@@ -6003,7 +6058,7 @@
  "agentOnly": {
   "recorded": [
    {
-    "entryPoint": "web",
+    "entryPoint": "vscode",
     "toolCalls": 13,
     "toolErrors": 0,
     "tokens": 182,
@@ -6019,10 +6074,12 @@
     "verify": "not-run",
     "firstSpawnTurn": null,
     "modelPreflight": "ok",
-    "progressTrips": {},
+    "progressTrips": {
+     "read_only_streak": 2
+    },
     "clientRunId": "ide:7001:<epoch>",
     "model": "fake-model",
-    "source": "external",
+    "source": "ide",
     "terminalStatus": "cancelled",
     "steps": 13,
     "projectId": 11,

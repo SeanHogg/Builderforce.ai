@@ -4,7 +4,8 @@
  * quick model and its finish does not enter the verify stage). The score is `@builderforce/pipeline-route`'s over the
  * person's own request; the action type is the shared lexical classifier's.
  *
- * Only a request that carries `routing` is routed. The same decision applies to delegated work.
+ * Only a request that carries `routing` is routed. Delegated work is scored the same way, but a child always
+ * starts in `code` (its owner planned the slice): `openRun`'s `routedPolicy` pins only the start phase.
  */
 import { pipelineFeaturesOf, scorePipeline, type PipelineScore, type PipelineRoutingMode } from "@builderforce/pipeline-route";
 import type { PhaseModels, RunPhase, RunPolicyOptions } from "@builderforce/run-policy";

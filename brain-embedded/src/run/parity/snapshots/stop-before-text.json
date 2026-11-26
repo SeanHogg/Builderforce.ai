@@ -17,13 +17,34 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "go",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "role": "chat",
    "maxTokens": 4096
   }
  ],
  "persisted": [
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "Full pipeline: routing is set to always; score 0.4",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
   {
    "chatId": 7001,
    "role": "tool",
@@ -41,11 +62,21 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:3>"
   }
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "Full pipeline: routing is set to always; score 0.4"
+   },
    {
     "ts": "<iso>",
     "category": "message",
@@ -153,7 +184,7 @@
  "agentOnly": {
   "recorded": [
    {
-    "entryPoint": "web",
+    "entryPoint": "vscode",
     "toolCalls": 0,
     "toolErrors": 0,
     "tokens": 0,
@@ -172,7 +203,7 @@
     "progressTrips": {},
     "clientRunId": "ide:7001:<epoch>",
     "model": "xai-oauth/grok-4.6",
-    "source": "external",
+    "source": "ide",
     "terminalStatus": "cancelled",
     "steps": 0,
     "routingSignal": false

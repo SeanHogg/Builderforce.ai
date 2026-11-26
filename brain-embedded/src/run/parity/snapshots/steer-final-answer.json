@@ -17,7 +17,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "do it",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -177,7 +179,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "do it",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -320,6 +324,25 @@
    "content": "",
    "metadata": {
     "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "Full pipeline: routing is set to always; score 0.4",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
     "category": "llm",
     "label": "llm.complete",
     "args": {
@@ -345,7 +368,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:3>"
   },
   {
    "chatId": 7001,
@@ -363,7 +386,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:4>"
   },
   {
    "chatId": 7001,
@@ -382,7 +405,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:5>"
   },
   {
    "chatId": 7001,
@@ -392,7 +415,7 @@
     "midTurn": true
    },
    "learned": false,
-   "eventKey": "steer:<id:5>"
+   "eventKey": "steer:<id:6>"
   },
   {
    "chatId": 7001,
@@ -437,7 +460,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:6>"
+   "eventKey": "step:<id:7>"
   },
   {
    "chatId": 7001,
@@ -455,7 +478,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:7>"
+   "eventKey": "step:<id:8>"
   },
   {
    "chatId": 7001,
@@ -471,6 +494,16 @@
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "Full pipeline: routing is set to always; score 0.4"
+   },
    {
     "ts": "<iso>",
     "category": "llm",
@@ -707,7 +740,7 @@
  "agentOnly": {
   "recorded": [
    {
-    "entryPoint": "web",
+    "entryPoint": "vscode",
     "toolCalls": 0,
     "toolErrors": 0,
     "tokens": 28,
@@ -726,7 +759,7 @@
     "progressTrips": {},
     "clientRunId": "ide:7001:<epoch>",
     "model": "fake-model",
-    "source": "external",
+    "source": "ide",
     "terminalStatus": "completed",
     "steps": 2,
     "routingSignal": false

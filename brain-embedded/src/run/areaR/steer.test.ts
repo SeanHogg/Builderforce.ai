@@ -109,7 +109,8 @@ describe('a Stop pressed during a hand-off waits for it', () => {
     const s: Scenario = {
       key: 9507,
       script: () => [calls({ name: 'hand_off', args: PLAN })],
-      request: () => ({ tools: [spec('read_file'), spec('builtin_tasks_create')], projectId: 11 }),
+      // `hand_off` is a plan-stage tool and the default routing now starts a question in the code stage (210986709); "full pipeline" is the person's override.
+      request: () => ({ tools: [spec('read_file'), spec('builtin_tasks_create')], projectId: 11, userTurn: 'find the request handler — run the full pipeline' }),
       tools: (key) => {
         let id = 900;
         return {

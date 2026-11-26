@@ -17,7 +17,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -181,7 +183,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -364,7 +368,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -566,7 +572,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -787,7 +795,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -1027,7 +1037,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -1279,14 +1291,16 @@
     },
     {
      "role": "user",
-     "content": "<run-state>\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- f6.ts · from line 1 (window trimmed) · unchanged\n- f5.ts · from line 1 (window trimmed) · unchanged\n- f4.ts · from line 1 (window trimmed) · unchanged\n- f3.ts · from line 1 (window trimmed) · unchanged\n- f2.ts · from line 1 (window trimmed) · unchanged\n- f1.ts · from line 1 (window trimmed) · unchanged\n\nProgress check (first warning): you have made 6 read-only calls in a row without changing anything. Everything you read is still in your context. If the task is a change, make the first concrete edit NOW with what you already have — do not read another file first. If it is analysis only, write the answer now.\n</run-state>"
+     "content": "<run-state>\n## brief\nProgress check (first warning): you have made 6 read-only calls in a row without changing anything. Everything you read is still in your context. If the task is a change, make the first concrete edit NOW with what you already have — do not read another file first. If it is analysis only, write the answer now.\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- f6.ts · from line 1 (window trimmed) · unchanged\n- f5.ts · from line 1 (window trimmed) · unchanged\n- f4.ts · from line 1 (window trimmed) · unchanged\n- f3.ts · from line 1 (window trimmed) · unchanged\n- f2.ts · from line 1 (window trimmed) · unchanged\n- f1.ts · from line 1 (window trimmed) · unchanged\n</run-state>"
     }
    ],
    "metadata": {
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -1564,7 +1578,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -1861,7 +1877,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -2177,7 +2195,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -2512,7 +2532,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -2866,7 +2888,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -3239,7 +3263,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -3572,7 +3598,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -3983,7 +4011,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -4413,7 +4443,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -4862,7 +4894,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -5216,6 +5250,8 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
     "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4,
     "memory": {
      "trimmedTokens": 22679,
      "recallTokens": 0
@@ -5570,7 +5606,7 @@
     },
     {
      "role": "user",
-     "content": "<run-state>\n## What this run has already established\nYour own record so far, kept by the runtime — not a new request. Build on it instead of re-deriving it: earlier results may have been compressed out of your context, but what you concluded from them still holds. Re-read a file only when it may have changed since (a command rewrote it) or you need a part you have not seen; re-running a search to verify an edit is fine. If you already know where the change goes, make it.\n\nRead:\n- f1.ts\n- f10.ts\n- f11.ts\n- f12.ts\n- f13.ts\n- f14.ts\n- f15.ts\n- f16.ts\n- f17.ts\n- f19.ts\n- f2.ts\n- f3.ts\n- f4.ts\n- f5.ts\n- f6.ts\n- f7.ts\n- f8.ts\n- f9.ts\n\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- f19.ts · from line 1 (window trimmed) · unchanged\n- f17.ts · from line 1 (window trimmed) · unchanged\n- f16.ts · from line 1 (window trimmed) · unchanged\n- f15.ts · from line 1 (window trimmed) · unchanged\n- f14.ts · from line 1 (window trimmed) · unchanged\n- f13.ts · from line 1 (window trimmed) · unchanged\n- f12.ts · from line 1 (window trimmed) · unchanged\n- f11.ts · from line 1 (window trimmed) · unchanged\n- f10.ts · from line 1 (window trimmed) · unchanged\n- f9.ts · from line 1 (window trimmed) · unchanged\n- f8.ts · from line 1 (window trimmed) · unchanged\n- f7.ts · from line 1 (window trimmed) · unchanged\n- f6.ts · from line 1 (window trimmed) · unchanged\n- f5.ts · from line 1 (window trimmed) · unchanged\n- f4.ts · from line 1 (window trimmed) · unchanged\n- f3.ts · from line 1 (window trimmed) · unchanged\n- f2.ts · from line 1 (window trimmed) · unchanged\n- f1.ts · from line 1 (window trimmed) · unchanged\n\nPROGRESS CHECK 3: you have made 6 read-only calls in a row without changing anything. Everything you read is still in your context. If the task is a change, make the first concrete edit NOW with what you already have — do not read another file first. If it is analysis only, write the answer now.\n</run-state>"
+     "content": "<run-state>\n## brief\nPROGRESS CHECK 3: you have made 6 read-only calls in a row without changing anything. Everything you read is still in your context. If the task is a change, make the first concrete edit NOW with what you already have — do not read another file first. If it is analysis only, write the answer now.\n## What this run has already established\nYour own record so far, kept by the runtime — not a new request. Build on it instead of re-deriving it: earlier results may have been compressed out of your context, but what you concluded from them still holds. Re-read a file only when it may have changed since (a command rewrote it) or you need a part you have not seen; re-running a search to verify an edit is fine. If you already know where the change goes, make it.\n\nRead:\n- f1.ts\n- f10.ts\n- f11.ts\n- f12.ts\n- f13.ts\n- f14.ts\n- f15.ts\n- f16.ts\n- f17.ts\n- f19.ts\n- f2.ts\n- f3.ts\n- f4.ts\n- f5.ts\n- f6.ts\n- f7.ts\n- f8.ts\n- f9.ts\n\nFiles already in your context this run — a file marked unchanged is still above you: do not read it again, act on it.\n- f19.ts · from line 1 (window trimmed) · unchanged\n- f17.ts · from line 1 (window trimmed) · unchanged\n- f16.ts · from line 1 (window trimmed) · unchanged\n- f15.ts · from line 1 (window trimmed) · unchanged\n- f14.ts · from line 1 (window trimmed) · unchanged\n- f13.ts · from line 1 (window trimmed) · unchanged\n- f12.ts · from line 1 (window trimmed) · unchanged\n- f11.ts · from line 1 (window trimmed) · unchanged\n- f10.ts · from line 1 (window trimmed) · unchanged\n- f9.ts · from line 1 (window trimmed) · unchanged\n- f8.ts · from line 1 (window trimmed) · unchanged\n- f7.ts · from line 1 (window trimmed) · unchanged\n- f6.ts · from line 1 (window trimmed) · unchanged\n- f5.ts · from line 1 (window trimmed) · unchanged\n- f4.ts · from line 1 (window trimmed) · unchanged\n- f3.ts · from line 1 (window trimmed) · unchanged\n- f2.ts · from line 1 (window trimmed) · unchanged\n- f1.ts · from line 1 (window trimmed) · unchanged\n</run-state>"
     }
    ],
    "metadata": {
@@ -5578,6 +5614,8 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
     "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4,
     "memory": {
      "trimmedTokens": 18720,
      "recallTokens": 0
@@ -5959,6 +5997,8 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
     "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4,
     "memory": {
      "trimmedTokens": 14761,
      "recallTokens": 0
@@ -6302,6 +6342,8 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
     "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4,
     "memory": {
      "trimmedTokens": 10802,
      "recallTokens": 0
@@ -6664,6 +6706,8 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
     "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4,
     "memory": {
      "trimmedTokens": 6843,
      "recallTokens": 0
@@ -7045,6 +7089,8 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
     "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4,
     "memory": {
      "trimmedTokens": 2884,
      "recallTokens": 0
@@ -7444,7 +7490,9 @@
     "chatId": 7001,
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
-    "mode": "work"
+    "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4
    },
    "tools": [
     {
@@ -7741,6 +7789,8 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "fix the deep link",
     "mode": "work",
+    "pipelineRoute": "full",
+    "routeScore": 0.4,
     "memory": {
      "trimmedTokens": 22617,
      "recallTokens": 0
@@ -7751,6 +7801,25 @@
   }
  ],
  "persisted": [
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "Full pipeline: routing is set to always; score 0.4",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
   {
    "chatId": 7001,
    "role": "tool",
@@ -7782,7 +7851,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:3>"
   },
   {
    "chatId": 7001,
@@ -7803,7 +7872,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:4>"
   },
   {
    "chatId": 7001,
@@ -7836,7 +7905,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:5>"
   },
   {
    "chatId": 7001,
@@ -7857,7 +7926,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:5>"
+   "eventKey": "step:<id:6>"
   },
   {
    "chatId": 7001,
@@ -7890,7 +7959,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:6>"
+   "eventKey": "step:<id:7>"
   },
   {
    "chatId": 7001,
@@ -7911,7 +7980,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:7>"
+   "eventKey": "step:<id:8>"
   },
   {
    "chatId": 7001,
@@ -7944,7 +8013,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:8>"
+   "eventKey": "step:<id:9>"
   },
   {
    "chatId": 7001,
@@ -7965,7 +8034,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:9>"
+   "eventKey": "step:<id:10>"
   },
   {
    "chatId": 7001,
@@ -7998,7 +8067,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:10>"
+   "eventKey": "step:<id:11>"
   },
   {
    "chatId": 7001,
@@ -8019,7 +8088,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:11>"
+   "eventKey": "step:<id:12>"
   },
   {
    "chatId": 7001,
@@ -8052,7 +8121,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:12>"
+   "eventKey": "step:<id:13>"
   },
   {
    "chatId": 7001,
@@ -8073,7 +8142,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:13>"
+   "eventKey": "step:<id:14>"
   },
   {
    "chatId": 7001,
@@ -8094,7 +8163,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:14>"
+   "eventKey": "step:<id:15>"
   },
   {
    "chatId": 7001,
@@ -8127,7 +8196,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:15>"
+   "eventKey": "step:<id:16>"
   },
   {
    "chatId": 7001,
@@ -8148,7 +8217,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:16>"
+   "eventKey": "step:<id:17>"
   },
   {
    "chatId": 7001,
@@ -8181,7 +8250,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:17>"
+   "eventKey": "step:<id:18>"
   },
   {
    "chatId": 7001,
@@ -8202,7 +8271,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:18>"
+   "eventKey": "step:<id:19>"
   },
   {
    "chatId": 7001,
@@ -8235,7 +8304,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:19>"
+   "eventKey": "step:<id:20>"
   },
   {
    "chatId": 7001,
@@ -8256,7 +8325,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:20>"
+   "eventKey": "step:<id:21>"
   },
   {
    "chatId": 7001,
@@ -8289,7 +8358,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:21>"
+   "eventKey": "step:<id:22>"
   },
   {
    "chatId": 7001,
@@ -8310,7 +8379,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:22>"
+   "eventKey": "step:<id:23>"
   },
   {
    "chatId": 7001,
@@ -8343,7 +8412,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:23>"
+   "eventKey": "step:<id:24>"
   },
   {
    "chatId": 7001,
@@ -8364,7 +8433,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:24>"
+   "eventKey": "step:<id:25>"
   },
   {
    "chatId": 7001,
@@ -8397,7 +8466,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:25>"
+   "eventKey": "step:<id:26>"
   },
   {
    "chatId": 7001,
@@ -8418,7 +8487,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:26>"
+   "eventKey": "step:<id:27>"
   },
   {
    "chatId": 7001,
@@ -8439,7 +8508,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:27>"
+   "eventKey": "step:<id:28>"
   },
   {
    "chatId": 7001,
@@ -8460,7 +8529,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:28>"
+   "eventKey": "step:<id:29>"
   },
   {
    "chatId": 7001,
@@ -8493,7 +8562,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:29>"
+   "eventKey": "step:<id:30>"
   },
   {
    "chatId": 7001,
@@ -8514,7 +8583,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:30>"
+   "eventKey": "step:<id:31>"
   },
   {
    "chatId": 7001,
@@ -8547,7 +8616,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:31>"
+   "eventKey": "step:<id:32>"
   },
   {
    "chatId": 7001,
@@ -8568,7 +8637,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:32>"
+   "eventKey": "step:<id:33>"
   },
   {
    "chatId": 7001,
@@ -8601,7 +8670,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:33>"
+   "eventKey": "step:<id:34>"
   },
   {
    "chatId": 7001,
@@ -8622,7 +8691,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:34>"
+   "eventKey": "step:<id:35>"
   },
   {
    "chatId": 7001,
@@ -8655,7 +8724,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:35>"
+   "eventKey": "step:<id:36>"
   },
   {
    "chatId": 7001,
@@ -8676,7 +8745,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:36>"
+   "eventKey": "step:<id:37>"
   },
   {
    "chatId": 7001,
@@ -8709,7 +8778,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:37>"
+   "eventKey": "step:<id:38>"
   },
   {
    "chatId": 7001,
@@ -8730,7 +8799,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:38>"
+   "eventKey": "step:<id:39>"
   },
   {
    "chatId": 7001,
@@ -8748,7 +8817,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:39>"
+   "eventKey": "step:<id:40>"
   },
   {
    "chatId": 7001,
@@ -8781,7 +8850,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:40>"
+   "eventKey": "step:<id:41>"
   },
   {
    "chatId": 7001,
@@ -8802,7 +8871,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:41>"
+   "eventKey": "step:<id:42>"
   },
   {
    "chatId": 7001,
@@ -8823,7 +8892,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:42>"
+   "eventKey": "step:<id:43>"
   },
   {
    "chatId": 7001,
@@ -8842,7 +8911,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:43>"
+   "eventKey": "step:<id:44>"
   },
   {
    "chatId": 7001,
@@ -8875,7 +8944,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:44>"
+   "eventKey": "step:<id:45>"
   },
   {
    "chatId": 7001,
@@ -8896,7 +8965,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:45>"
+   "eventKey": "step:<id:46>"
   },
   {
    "chatId": 7001,
@@ -8929,7 +8998,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:46>"
+   "eventKey": "step:<id:47>"
   },
   {
    "chatId": 7001,
@@ -8950,7 +9019,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:47>"
+   "eventKey": "step:<id:48>"
   },
   {
    "chatId": 7001,
@@ -8983,7 +9052,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:48>"
+   "eventKey": "step:<id:49>"
   },
   {
    "chatId": 7001,
@@ -9004,7 +9073,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:49>"
+   "eventKey": "step:<id:50>"
   },
   {
    "chatId": 7001,
@@ -9037,7 +9106,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:50>"
+   "eventKey": "step:<id:51>"
   },
   {
    "chatId": 7001,
@@ -9058,7 +9127,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:51>"
+   "eventKey": "step:<id:52>"
   },
   {
    "chatId": 7001,
@@ -9091,7 +9160,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:52>"
+   "eventKey": "step:<id:53>"
   },
   {
    "chatId": 7001,
@@ -9112,7 +9181,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:53>"
+   "eventKey": "step:<id:54>"
   },
   {
    "chatId": 7001,
@@ -9145,7 +9214,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:54>"
+   "eventKey": "step:<id:55>"
   },
   {
    "chatId": 7001,
@@ -9168,7 +9237,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:55>"
+   "eventKey": "step:<id:56>"
   },
   {
    "chatId": 7001,
@@ -9189,7 +9258,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:56>"
+   "eventKey": "step:<id:57>"
   },
   {
    "chatId": 7001,
@@ -9210,7 +9279,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:57>"
+   "eventKey": "step:<id:58>"
   },
   {
    "chatId": 7001,
@@ -9228,7 +9297,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:58>"
+   "eventKey": "step:<id:59>"
   },
   {
    "chatId": 7001,
@@ -9260,7 +9329,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:59>"
+   "eventKey": "step:<id:60>"
   },
   {
    "chatId": 7001,
@@ -9278,7 +9347,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:60>"
+   "eventKey": "step:<id:61>"
   },
   {
    "chatId": 7001,
@@ -9294,6 +9363,16 @@
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "full",
+     "score": 0.4
+    },
+    "result": "Full pipeline: routing is set to always; score 0.4"
+   },
    {
     "ts": "<iso>",
     "category": "llm",

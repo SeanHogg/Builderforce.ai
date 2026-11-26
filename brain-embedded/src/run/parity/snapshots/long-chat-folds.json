@@ -110,6 +110,8 @@
     "guestTurnId": "<id:1>",
     "guestTurnInput": "And what about the manifest?",
     "mode": "work",
+    "pipelineRoute": "quick",
+    "routeScore": 0.12,
     "memory": {
      "trimmedTokens": 24655,
      "recallTokens": 0
@@ -127,6 +129,25 @@
    "metadata": {
     "kind": "step",
     "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "quick",
+     "score": 0.12
+    },
+    "result": "Quick pass: the user asks a question; score 0.12 (question only, follow-up)",
+    "isError": false,
+    "ts": "<iso>"
+   },
+   "learned": false,
+   "eventKey": "step:<id:2>"
+  },
+  {
+   "chatId": 7001,
+   "role": "tool",
+   "content": "",
+   "metadata": {
+    "kind": "step",
+    "category": "message",
     "label": "context.compacted",
     "args": {
      "droppedMessages": 25
@@ -136,7 +157,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:2>"
+   "eventKey": "step:<id:3>"
   },
   {
    "chatId": 7001,
@@ -180,7 +201,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:3>"
+   "eventKey": "step:<id:4>"
   },
   {
    "chatId": 7001,
@@ -198,7 +219,7 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:4>"
+   "eventKey": "step:<id:5>"
   },
   {
    "chatId": 7001,
@@ -228,11 +249,21 @@
     "ts": "<iso>"
    },
    "learned": false,
-   "eventKey": "step:<id:5>"
+   "eventKey": "step:<id:6>"
   }
  ],
  "trace": {
   "7001": [
+   {
+    "ts": "<iso>",
+    "category": "message",
+    "label": "run.pipeline_route",
+    "args": {
+     "route": "quick",
+     "score": 0.12
+    },
+    "result": "Quick pass: the user asks a question; score 0.12 (question only, follow-up)"
+   },
    {
     "ts": "<iso>",
     "category": "message",
@@ -749,7 +780,7 @@
  "agentOnly": {
   "recorded": [
    {
-    "entryPoint": "web",
+    "entryPoint": "vscode",
     "toolCalls": 0,
     "toolErrors": 0,
     "tokens": 14,
@@ -768,7 +799,7 @@
     "progressTrips": {},
     "clientRunId": "ide:7001:<epoch>",
     "model": "fake-model",
-    "source": "external",
+    "source": "ide",
     "terminalStatus": "completed",
     "steps": 1,
     "routingSignal": false
