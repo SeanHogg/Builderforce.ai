@@ -147,6 +147,8 @@ Facts that shape the design:
 
 ### 1.6 Migration order
 
+**Implementation status (2026-11-26).** Platform and Workspace run on `@seanhogg/builderforce-mcp`. Synapse's Rust Workspace MCP and connector host have been removed. VS Code and the headless runtime share a persisted TypeScript index for `workspace__find`, and VS Code can import legacy Synapse connector settings through its native review flow. Platform's opt-in interactive profile sends catalog-change notifications and exposes a guide and a discovery prompt. Memory's shared runtime was verified with co-installed tarballs. Automatic adoption depends on publishing the shared package to npm. Cross-host connector deduplication requires verified remote server and credential identity. See the [MCP gap register](../../roadmap/GAP-REGISTER.md#mcp-consolidation-platform-agents).
+
 Each step is a separate PR, and existing tests run unchanged as the parity oracle.
 
 1. **Create `@seanhogg/builderforce-mcp`** with `protocol`, `tool`, `naming` and `policy`. Move `McpToolEntry` and `toolNaming.ts` in, and re-point the 3 mirrors and 4 shapers. (MCP-G001–G006)
@@ -158,7 +160,7 @@ Each step is a separate PR, and existing tests run unchanged as the parity oracl
 7. **Merge the four code-search tools** into Workspace MCP behind one interface; the engine choice comes from area 2. (MCP-G021)
 8. **Retire Synapse's Rust Workspace MCP and connector host.** The user approved removing both ahead of the rebuilt Synapse release on 2026-11-26. The VS Code extension provides Workspace MCP, and the loopback context service remains available for hybrid search and compression. Synapse's desktop features still use the private Evermind client in `bf-memory`. Workflow execution uses data-provider handlers and accepts saved `mcp` nodes. (MCP-G022–G024)
 
-See the [MCP gap register](../../roadmap/GAP-REGISTER.md#mcp-consolidation-platform-agents) for implementation status and remaining work. The benchmark in §2.5 gates retirement of the native index, which still backs optional Workspace capabilities.
+The benchmark in §2.5 gates retirement of the native index, which still backs optional Workspace capabilities.
 
 ### 1.7 Granular gaps
 

@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { hasErrnoCode } from "../infra/errors.js";
 import { isPathInside } from "@builderforce/agent-tools/node-path.js";
-import { scanText, type FindingSeverity } from "@builderforce/code-shield";
+import { legacyRuleId, scanText, type FindingSeverity } from "@builderforce/code-shield";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,7 +93,8 @@ export function scanSource(source: string, filePath: string): SkillScanFinding[]
     seen.add(key);
     const line = finding.line ?? 1;
     findings.push({
-      ruleId: finding.ruleId ?? "unknown",
+      // The installer's audit findings have always carried the pre-namespacing ids: the one alias map maps back.
+      ruleId: legacyRuleId(finding.ruleId ?? "unknown"),
       severity: SEVERITY_MAP[finding.severity],
       file: filePath,
       line,

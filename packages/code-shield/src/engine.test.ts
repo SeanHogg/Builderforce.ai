@@ -25,23 +25,40 @@ const CASES: readonly (readonly [string, string, string])[] = [
   ['sast.tls-verification-disabled', 'rejectUnauthorized: false', 'rejectUnauthorized: true'],
   ['sast.unsafe-html', 'el.innerHTML = x', 'el.textContent = x'],
   ['sast.weak-hash', "createHash('md5')", "createHash('sha256')"],
-  ['dangerous-exec', "const cp = require('child_process'); cp.exec('ls')", "cp.exec('ls')"],
-  ['dynamic-code-execution', 'new Function("return 1")', 'x.evaluate(1)'],
-  ['crypto-mining', 'pool = "stratum+tcp://pool.example:3333"', 'stratum pool'],
-  ['suspicious-network', 'new WebSocket("ws://h.example:9999/x")', 'new WebSocket("wss://h.example:443/x")'],
-  ['potential-exfiltration', 'fs.readFileSync(p); fetch(u)', 'fs.readFileSync(p)'],
-  ['env-harvesting', 'const k = process.env.K; fetch(u)', 'const k = process.env.K'],
+  ['behavior.dangerous-exec', "const cp = require('child_process'); cp.exec('ls')", "cp.exec('ls')"],
+  ['behavior.dynamic-code-execution', 'new Function("return 1")', 'x.evaluate(1)'],
+  ['behavior.crypto-mining', 'pool = "stratum+tcp://pool.example:3333"', 'stratum pool'],
+  ['behavior.suspicious-network', 'new WebSocket("ws://h.example:9999/x")', 'new WebSocket("wss://h.example:443/x")'],
+  ['behavior.potential-exfiltration', 'fs.readFileSync(p); fetch(u)', 'fs.readFileSync(p)'],
+  ['behavior.env-harvesting', 'const k = process.env.K; fetch(u)', 'const k = process.env.K'],
   ['behavior.reverse-shell', "bash -c 'exec 5<>/dev/tcp/10.0.0.1/80'", 'echo hello'],
   ['behavior.credential-file', "readFile('~/.aws/credentials')", "readFile('~/.config/app')"],
   ['behavior.persistence', "fs.appendFileSync(home + '/.bashrc', x)", 'fs.appendFileSync(logPath, x)'],
   ['behavior.keylogger', "addEventListener('keydown', (e) => fetch('/k', { body: e.key }))", "addEventListener('keydown', (e) => handle(e))"],
   ['behavior.exfil-endpoint', "fetch('https://discord.com/api/webhooks/1/x')", "fetch('https://example.com/api')"],
-  ['obfuscated-code', `"${'\\x41'.repeat(6)}"`, `"${'\\x41'.repeat(2)}"`],
-  ['obfuscated-code', `atob("${'A'.repeat(200)}")`, 'atob("AAAA")'],
+  ['obfuscation.hex-string-sequence', `"${'\\x41'.repeat(6)}"`, `"${'\\x41'.repeat(2)}"`],
+  ['obfuscation.base64-payload', `atob("${'A'.repeat(200)}")`, 'atob("AAAA")'],
   ['obfuscation.eval-decode', 'eval(atob(s))', 'eval(s)'],
   ['obfuscation.charcode-chain', `String.fromCharCode(${Array(12).fill(65).join(',')})`, 'String.fromCharCode(65,66,67)'],
   ['obfuscation.hex-identifiers', hexIdentifiers(20), hexIdentifiers(3)],
   ['signature.eicar', EICAR, 'X5O!P%@AP'],
+  // Secret rules DERIVED from `SECRET_SHAPES` (one rule per shape, id `secret.<shape id>`).
+  ['secret.github-pat', `github_pat_${'a'.repeat(30)}`, 'github_pat_short'],
+  ['secret.slack-rotating-token', 'xoxe.xoxp-1234567890', 'xoxe.1'],
+  ['secret.slack-app-token', 'xapp-1-ABCDEFGHIJ', 'xapp-1'],
+  ['secret.groq-key', `gsk_${'a'.repeat(20)}`, 'gsk_abc'],
+  ['secret.google-oauth-token', `ya29.${'a'.repeat(24)}`, 'ya29.abc'],
+  ['secret.google-client-secret', `GOCSPX-${'a'.repeat(24)}`, 'GOCSPX-abc'],
+  ['secret.perplexity-key', `pplx-${'a'.repeat(16)}`, 'pplx-abc'],
+  ['secret.npm-token', `npm_${'a'.repeat(16)}`, 'npm_abc'],
+  ['secret.stripe-webhook-secret', `whsec_${'a'.repeat(16)}`, 'whsec_abc'],
+  ['secret.gitlab-token', `glpat-${'a'.repeat(24)}`, 'glpat-abc'],
+  ['secret.huggingface-token', `hf_${'a'.repeat(24)}`, 'hf_abc'],
+  ['secret.sendgrid-key', `SG.${'a'.repeat(20)}.${'b'.repeat(20)}`, 'SG.abc.def'],
+  ['secret.builderforce-key', 'bfk_0123456789abcdef', 'bfk_abc'],
+  ['secret.jwt', 'eyJhbGciOi.eyJzdWIiOiJ4.c2lnbmF0dXJl', 'eyJ.a.b'],
+  ['secret.telegram-bot-url', `/bot123456789:${'A'.repeat(25)}/getMe`, 'bot12:abc'],
+  ['secret.telegram-bot-token', `123456789:${'A'.repeat(25)}`, '123:abc'],
 ];
 
 const fires = (id: string, text: string): boolean =>
@@ -143,7 +160,7 @@ describe('scanSubjects', () => {
   it('emits a SARIF log with a result per finding and the incomplete files listed', async () => {
     const report = await scanSubjects([{ path: 'a.js', content: 'eval(x); fetch(u); process.env.K' }, { path: 'x.bin', content: new Uint8Array([0]) }], { profile: 'runtime' });
     const run = toSarif(report).runs[0]!;
-    expect(run.results.map((r) => r.ruleId)).toContain('env-harvesting');
+    expect(run.results.map((r) => r.ruleId)).toContain('behavior.env-harvesting');
     expect((run.properties?.incompleteFiles as unknown[]).length).toBe(1);
   });
 });

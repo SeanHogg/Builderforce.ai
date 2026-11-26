@@ -8,6 +8,7 @@ export type {
 export type { Rule } from './rules/rule.js';
 export { TEST_OR_FIXTURE } from './rules/rule.js';
 export { SECRET_RULES } from './rules/secretRules.js';
+export { LEGACY_RULE_IDS, legacyRuleId } from './legacyRuleIds.js';
 export { SAST_RULES } from './rules/sastRules.js';
 export { BEHAVIOR_RULES } from './rules/behaviorRules.js';
 export { OBFUSCATION_RULES } from './rules/obfuscationRules.js';

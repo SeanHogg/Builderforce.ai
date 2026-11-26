@@ -345,7 +345,8 @@ describe('KnowledgeGraphView: no loading gate', () => {
         const p = pendingSource();
         render(<div style={{ height: 600 }}><KnowledgeGraphView source={p.source} /></div>);
         expect(screen.getByRole('region', { name: L.regionLabel })).toBeTruthy();
-        expect(screen.getByRole('search')).toBeTruthy();
+        // The search is the header's search button (it expands into the ask input; Toolbar.tsx `showAsk`).
+        expect(screen.getByRole('button', { name: L.searchLabel })).toBeTruthy();
         // The inline loading status, beside the review action's own sync pill (a status too, "Not synced" until a folder is open).
         expect(screen.getAllByRole('status').map((el) => el.textContent)).toContain(L.loading);
     });

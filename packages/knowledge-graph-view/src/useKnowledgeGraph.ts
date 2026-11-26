@@ -11,7 +11,7 @@ import { localSearch } from './graphModel';
 import { useReviewRun, type ReviewRun } from './useReviewRun';
 import { useLiveGraph } from './useLiveGraph';
 import { useGrowthReread } from './useGrowthReread';
-import { chooseRoot, errorText, LAST_SEEN_MISS } from './firstLoadGate';
+import { chooseRoot, errorText, LAST_SEEN_MISS, LAST_SEEN_WAIT_MS } from './firstLoadGate';
 import { isNotReviewedHere, type KnowledgeBaseline, type KnowledgeGraphSource, type KnowledgeScopeSummary, type KnowledgeSearchHit, type LensId, type NotReviewedHere } from './types';
 
 /**
@@ -211,6 +211,8 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
                 if (!live) return;
                 if (!seen) { source.decision?.({ kind: 'lastSeen', reason: LAST_SEEN_MISS }); return; }
                 if (graphRef.current) { source.decision?.({ kind: 'lastSeen', reason: 'ignored: a graph is already drawn', rootId: seen.rootId }); return; }
+                // A root picked (or opened) meanwhile wins over the remembered one: the last graph never takes the screen back.
+                if (rootIdRef.current && rootIdRef.current !== seen.rootId) { source.decision?.({ kind: 'lastSeen', reason: `ignored: root ${rootIdRef.current} was picked meanwhile`, rootId: seen.rootId }); return; }
                 // Gated and not running: nothing else draws until Run, so the last graph still paints after the fresh scopes
                 // (for the root they opened on), and it is not "updating".
                 const idle = gated && runRootRef.current !== seen.rootId && (!freshScopes || rootIdRef.current === seen.rootId);
@@ -226,7 +228,15 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
                 if (live) source.decision?.({ kind: 'lastSeen', reason: `error (degrades to no last graph): ${errorText(error)}` });
             });
         }
-        (gated ? source.scopes().then(async (found) => { await seenSettled; return found; }) : source.scopes())
+        // The wait is bounded: a lastSeen that never answers must not hold the first load (it is said, then the scopes go on).
+        let seenTimer: ReturnType<typeof setTimeout> | undefined;
+        const seenOrTimeout = Promise.race([seenSettled, new Promise<void>((resolve) => {
+            seenTimer = setTimeout(() => {
+                if (live) source.decision?.({ kind: 'lastSeen', reason: `no answer in ${LAST_SEEN_WAIT_MS}ms: the root is chosen without it` });
+                resolve();
+            }, LAST_SEEN_WAIT_MS);
+        })]).finally(() => clearTimeout(seenTimer));
+        (gated ? source.scopes().then(async (found) => { await seenOrTimeout; return found; }) : source.scopes())
             .then((found) => {
                 if (!live) return;
                 freshScopes = true;
@@ -254,7 +264,7 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
                 scopesFailed = true;
                 if (graphRef.current) { setStale(true); setRefreshFailed(true); } else setStatus('error');
             });
-        return () => { live = false; };
+        return () => { live = false; clearTimeout(seenTimer); };
     }, [source, held, gated, generation, loadGraphForRoot, paint]);
 
     // A root picked in the picker, opened by a finished review, or refocused by a search

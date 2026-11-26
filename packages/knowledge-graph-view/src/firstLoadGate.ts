@@ -24,4 +24,7 @@ export function chooseRoot(sorted: readonly KnowledgeScopeSummary[], candidates:
 /** Why a `lastSeen` that answered nothing did, in the view's words (the host's trace names the cause: absent, oversize, unreadable). */
 export const LAST_SEEN_MISS = 'nothing remembered (file absent, over the size cap, or unreadable: see the host log)';
 
+/** Most a run-gated first load waits on `lastSeen` before choosing a root from the scopes alone. */
+export const LAST_SEEN_WAIT_MS = 5_000;
+
 export const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
