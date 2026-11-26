@@ -8,8 +8,16 @@ export interface SceneLabels {
      * plural form repeats the one. Read through `isOne` (surface/plural.ts), like `counted()`.
      */
     mind: Record<`${'moreFolders' | 'moreFoldersAria'}${'One' | 'Other'}`, string>;
-    /** The semantic-zoom bands (PRD 43 B1a rules 9–10): the control's group name and one word per band. */
-    zoom: Record<'group' | 'system' | 'class' | 'method' | 'code' | 'hintIn' | 'hintInto' | 'hintDeepest', string>;
+    /**
+     * The semantic-zoom bands (PRD 43 B1a rules 9–10): the rail's group name, one word per band (the status line), the
+     * rail's five levels (where you are: System, Component, Class, Method, Line) and its hints (`{name}`).
+     */
+    zoom: Record<
+        | 'group' | 'system' | 'class' | 'method' | 'code'
+        | 'levelSystem' | 'levelComponent' | 'levelClass' | 'levelMethod' | 'levelLine'
+        | 'hintIn' | 'hintInto' | 'hintBack' | 'hintDeepest',
+        string
+    >;
     /**
      * The code band's panel (B1a rule 9): its accessible name (`{name}`, `{from}`, `{to}`), the read in progress, the
      * note when the host has no file contents (the panel then shows `path:line` and "Open at line"), and the note when

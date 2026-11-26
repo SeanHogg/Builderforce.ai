@@ -88,8 +88,8 @@ export function Drawer(p: DrawerProps) {
             style={{ ...placement, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0, boxSizing: 'border-box', background: cssVar('panel'), color: cssVar('text'), maxWidth: '100%' }}
         >
             <div role="tablist" aria-label={labels.surface.panelsLabel} style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px', borderBottom: `1px solid ${cssVar('border')}`, overflowX: 'auto', scrollbarWidth: 'none', flex: 'none' }}>
-                {tab(ACT_TAB, labels.surface.header.drawerTabAct, drawer.tab === ACT_TAB)}
-                {tabs.map((t) => tab(t.id, nameOf(t), t.id === drawer.tab))}
+                {tab(ACT_TAB, labels.surface.header.drawerTabAct, tabId === ACT_TAB)}
+                {tabs.map((t) => tab(t.id, nameOf(t), t.id === tabId))}
                 <button
                     type="button" aria-label={labels.close} title={labels.close} data-testid="kg-drawer-close" onClick={drawer.close}
                     style={{ marginInlineStart: 'auto', width: 28, height: 28, padding: 0, border: 0, background: 'transparent', color: cssVar('muted'), cursor: 'pointer', display: 'grid', placeItems: 'center', flex: 'none' }}
