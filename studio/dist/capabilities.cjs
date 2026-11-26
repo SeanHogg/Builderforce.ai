@@ -2,10 +2,10 @@
 
 
 
-var _chunk2CXFHQCHcjs = require('./chunk-2CXFHQCH.cjs');
+var _chunkVKVEFIZWcjs = require('./chunk-VKVEFIZW.cjs');
 
 
 
 
-exports.hasWebGPUSupport = _chunk2CXFHQCHcjs.hasWebGPUSupport; exports.probeDevice = _chunk2CXFHQCHcjs.probeDevice; exports.watchDeviceLoss = _chunk2CXFHQCHcjs.watchDeviceLoss;
+exports.hasWebGPUSupport = _chunkVKVEFIZWcjs.hasWebGPUSupport; exports.probeDevice = _chunkVKVEFIZWcjs.probeDevice; exports.watchDeviceLoss = _chunkVKVEFIZWcjs.watchDeviceLoss;
 //# sourceMappingURL=capabilities.cjs.map

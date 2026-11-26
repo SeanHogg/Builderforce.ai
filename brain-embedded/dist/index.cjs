@@ -3428,7 +3428,7 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
   "~deepseek/deepseek-flash-latest": [36e-9, 5e-7],
-  "~deepseek/deepseek-pro-latest": [999e-10, 5e-6],
+  "~deepseek/deepseek-pro-latest": [111e-9, 444e-8],
   "~deepseek/deepseek-v4-flash-latest": [47e-9, 3e-7],
   "~google/gemini-flash-latest": [15e-7, 75e-7],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
@@ -3438,7 +3438,7 @@ var PRICE_SNAPSHOT = {
   "~openai/gpt-mini-latest": [75e-8, 45e-7],
   "~openai/gpt-sol-latest": [2e-6, 1e-5],
   "~openai/gpt-terra-latest": [1e-6, 5e-6],
-  "~unbiased/pareto-latest": [8e-7, 32e-7],
+  "~unbiased/pareto-latest": [0, 0],
   "~x-ai/grok-latest": [2e-6, 6e-6],
   "~z-ai/glm-flash-latest": [356e-10, 815e-10],
   "~z-ai/glm-latest": [699e-10, 14e-7],
@@ -3506,10 +3506,10 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2": [26e-8, 38e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [9e-8, 18e-8],
-  "deepseek/deepseek-v4-flash-0731": [47e-9, 3e-7],
+  "deepseek/deepseek-v4-flash-0731": [6e-8, 18e-8],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
   "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
-  "deepseek/deepseek-v4-pro": [128e-8, 256e-8],
+  "deepseek/deepseek-v4-pro": [888188e-12, 15082e-10],
   "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
   "deepseek/deepseek-v4.1-flash": [14e-8, 42e-8],
   "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
@@ -3558,9 +3558,9 @@ var PRICE_SNAPSHOT = {
   "google/gemini-omni-1.2-flash": [15e-7, 9e-6],
   "google/gemma-2-27b-it": [65e-8, 65e-8],
   "google/gemma-3-12b-it": [5e-8, 15e-8],
-  "google/gemma-3-27b-it": [8e-8, 16e-8],
+  "google/gemma-3-27b-it": [8e-8, 45e-8],
   "google/gemma-3-4b-it": [4e-8, 5e-8],
-  "google/gemma-4-26b-a4b-it": [765e-10, 255e-9],
+  "google/gemma-4-26b-a4b-it": [9e-8, 3e-7],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
@@ -3604,13 +3604,16 @@ var PRICE_SNAPSHOT = {
   "minimax/minimax-m3:batch": [224e-9, 88e-8],
   "minimax/minimax-m3.1-flash": [15e-8, 6e-7],
   "mistralai/codestral-2508": [3e-7, 9e-7],
+  "mistralai/codestral-2508:batch": [15e-8, 45e-8],
   "mistralai/devstral-2512": [4e-7, 2e-6],
   "mistralai/ministral-14b-2512": [2e-7, 2e-7],
   "mistralai/ministral-3b-2512": [1e-7, 1e-7],
   "mistralai/ministral-8b-2512": [15e-8, 15e-8],
+  "mistralai/ministral-8b-2512:batch": [75e-9, 75e-9],
   "mistralai/mistral-large": [2e-6, 6e-6],
   "mistralai/mistral-large-2407": [2e-6, 6e-6],
   "mistralai/mistral-large-2512": [5e-7, 15e-7],
+  "mistralai/mistral-large-2512:batch": [25e-8, 75e-8],
   "mistralai/mistral-large-4-0": [7e-7, 21e-7],
   "mistralai/mistral-medium-3-5": [15e-7, 75e-7],
   "mistralai/mistral-medium-3-5:batch": [75e-8, 375e-8],
@@ -3618,6 +3621,7 @@ var PRICE_SNAPSHOT = {
   "mistralai/mistral-saba": [2e-7, 6e-7],
   "mistralai/mistral-small-24b-instruct-2501": [5e-8, 8e-8],
   "mistralai/mistral-small-2603": [15e-8, 6e-7],
+  "mistralai/mistral-small-2603:batch": [75e-9, 3e-7],
   "mistralai/mistral-small-3.1-24b-instruct": [351e-9, 555e-9],
   "mistralai/mistral-small-3.2-24b-instruct": [75e-9, 2e-7],
   "mistralai/mixtral-8x22b-instruct": [2e-6, 6e-6],
@@ -3647,7 +3651,7 @@ var PRICE_SNAPSHOT = {
   "nvidia/nemotron-3-ultra-550b-a55b": [5e-7, 22e-7],
   "nvidia/nemotron-3-ultra-550b-a55b:free": [0, 0],
   "nvidia/nemotron-3.5-content-safety": [2e-7, 2e-7],
-  "nvidia/nemotron-3.5-lightning": [5e-8, 2e-7],
+  "nvidia/nemotron-3.5-lightning": [7e-8, 2e-7],
   "nvidia/nemotron-3.5-lightning:free": [0, 0],
   "nvidia/nemotron-3.5-super-vl": [15e-8, 47e-8],
   "nvidia/nemotron-3.5-super-vl:free": [0, 0],
@@ -3797,8 +3801,8 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.5-122b-a10b": [26e-8, 208e-8],
   "qwen/qwen3.5-27b": [26e-8, 26e-7],
   "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
-  "qwen/qwen3.5-397b-a17b": [45e-8, 3e-6],
-  "qwen/qwen3.5-9b": [17e-8, 25e-8],
+  "qwen/qwen3.5-397b-a17b": [5e-7, 36e-7],
+  "qwen/qwen3.5-9b": [1e-7, 25e-8],
   "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
@@ -3811,7 +3815,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.7-plus": [32e-8, 128e-8],
   "qwen/qwen3.7-plus:batch": [23e-8, 92e-8],
   "qwen/qwen3.8-2.4t-a95b": [2e-6, 6e-6],
-  "qwen/qwen3.8-27b": [35e-9, 15e-7],
+  "qwen/qwen3.8-27b": [6e-8, 196e-8],
   "qwen/qwen3.8-27b:batch": [16e-8, 2e-6],
   "qwen/qwen3.8-flash": [15e-8, 47e-8],
   "qwen/qwen3.8-max-0902": [2e-6, 6e-6],
@@ -3821,7 +3825,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen4-max": [1425e-9, 4275e-9],
   "radixark/daisyrose-27b": [15e-8, 1875e-9],
   "recursive/flint-v1.0:free": [0, 0],
-  "reflection/beam-1.0-501b-a23b": [25e-8, 1e-6],
+  "reflection/beam-1.0-501b-a23b": [3e-7, 1e-6],
   "rekaai/reka-edge": [1e-7, 1e-7],
   "rekaai/reka-flash-3": [1e-7, 2e-7],
   "relace/relace-apply-3": [85e-8, 125e-8],
@@ -3852,10 +3856,8 @@ var PRICE_SNAPSHOT = {
   "thinkingmachines/inkling-2-small": [3e-7, 1e-6],
   "thinkingmachines/inkling-small": [45e-8, 12e-7],
   "thinkingmachines/inkling-small:batch": [36e-8, 96e-8],
+  "tngtech/deepseek-r1t2-chimera": [1e-6, 2625e-9],
   "typesafe/jev-router": [0, 0],
-  "unbiased/pareto-26.10": [8e-7, 32e-7],
-  "unbiased/pareto-26.10-preview": [8e-7, 32e-7],
-  "unbiased/pareto-26.9": [25e-7, 75e-7],
   "undi95/remm-slerp-l2-13b": [3e-7, 5e-7],
   "upstage/solar-mini-4-5": [1e-8, 4e-8],
   "upstage/solar-mini4": [5e-8, 2e-7],
@@ -3872,11 +3874,11 @@ var PRICE_SNAPSHOT = {
   "x-ai/grok-4.7": [2e-6, 6e-6],
   "x-ai/grok-4.7:batch": [16e-7, 48e-7],
   "xiaomi/mimo-v2.6-flash": [14e-8, 28e-8],
-  "xiaomi/mimo-v2.6-flash-mopd": [15e-8, 42e-8],
+  "xiaomi/mimo-v2.6-flash-mopd": [5e-7, 1e-6],
   "xiaomi/mimo-v2.6-pro": [435e-9, 87e-8],
   "xiaomi/mimo-v2.6-pro-ultraspeed": [435e-8, 87e-7],
   "z-ai/glm-4.5": [6e-7, 22e-7],
-  "z-ai/glm-4.5-air": [13e-8, 85e-8],
+  "z-ai/glm-4.5-air": [2e-7, 11e-7],
   "z-ai/glm-4.5v": [6e-7, 18e-7],
   "z-ai/glm-4.6": [5e-7, 2e-6],
   "z-ai/glm-4.6v": [3e-7, 9e-7],
@@ -3888,7 +3890,7 @@ var PRICE_SNAPSHOT = {
   "z-ai/glm-5.2": [62e-8, 242e-8],
   "z-ai/glm-5.2:batch": [322e-9, 989e-9],
   "z-ai/glm-5.3": [699e-10, 14e-7],
-  "z-ai/glm-5.3-flash": [12e-8, 38e-8],
+  "z-ai/glm-5.3-flash": [15e-8, 5e-7],
   "z-ai/glm-5.3-flash:batch": [23e-9, 68e-9],
   "z-ai/glm-5.3-flashx": [37e-8, 125e-8],
   "z-ai/glm-5.3-flashx-legal": [37e-8, 125e-8],
@@ -22209,7 +22211,7 @@ function extOf(path) {
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(dot).toLowerCase() : "";
 }
-function stemOf(path) {
+function stemOf2(path) {
   const base = basenameOf(path);
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(0, dot) : base;
@@ -22235,7 +22237,7 @@ function needsTest(file, policy) {
 }
 function covers(test, file, policy) {
   const coverage = policy.newSourceTestCoverage ?? ["stem"];
-  if (coverage.includes("stem") && basenameOf(test.absPath).startsWith(stemOf(file.absPath) + ".")) return true;
+  if (coverage.includes("stem") && basenameOf(test.absPath).startsWith(stemOf2(file.absPath) + ".")) return true;
   if (coverage.includes("directory")) {
     const dir = dirOf2(file.absPath);
     if (dirOf2(test.absPath) === dir) return true;
@@ -22298,7 +22300,7 @@ function outgoingGate(files, ledger, policy) {
       }
     }
     if (needsTest(file, policy)) {
-      const stem2 = stemOf(file.absPath);
+      const stem2 = stemOf2(file.absPath);
       const hasTest = files.some((t) => t !== file && !t.deleted && isTestPath(t.absPath) && covers(t, file, policy));
       if (!hasTest) {
         return refuse(
@@ -29779,8 +29781,10 @@ function composeModules(surface2, ran) {
   if (surface2.preflight) modules.model = createModelHook({ recordedPreflight: surface2.preflight });
   return modules;
 }
-function routedPolicy(policy, route, decision) {
+function routedPolicy(policy, route, decision, dispatch) {
   const { pipeline, start, skipsVerify } = decision;
+  const child = dispatch !== void 0 && (dispatch.source === "subagent" || dispatch.parentRunId !== void 0);
+  const startPhase = child ? "code" : start.startPhase;
   const prior = policy.modelStart;
   const folded = skipsVerify ? { ...policy, skipVerifyStage: true } : policy;
   if (!prior) {
@@ -29788,7 +29792,7 @@ function routedPolicy(policy, route, decision) {
     return {
       ...folded,
       ...start.pinnedModel ? { pinnedModel: start.pinnedModel } : {},
-      modelOptions: { ...policy.modelOptions, startPhase: start.startPhase, ...start.phaseModels ? { phaseModels: start.phaseModels } : {} }
+      modelOptions: { ...policy.modelOptions, startPhase, ...start.phaseModels ? { phaseModels: start.phaseModels } : {} }
     };
   }
   if (!pipeline) {
@@ -29801,7 +29805,7 @@ function routedPolicy(policy, route, decision) {
       ...prior,
       ...model ? { model } : {},
       ...route.modelStrict !== void 0 ? { strict: route.modelStrict } : {},
-      ...start.startPhase && !prior.delegatedRole ? { startPhase: start.startPhase } : {},
+      ...startPhase && !prior.delegatedRole ? { startPhase } : {},
       ...start.phaseModels ? { phaseModels: start.phaseModels } : {}
     }
   };
@@ -29828,7 +29832,7 @@ async function openRun(input) {
   } else {
     const input2 = "decided" in route ? route.input : route;
     const decision = "decided" in route ? route.decided : measureWorkflowSync(run.ports.events, workflowScope(run), "route", () => routeRun(route), (r) => ({ quick: Number(r.pipeline?.route === "quick"), full: Number(r.pipeline?.route === "full") }));
-    run = { ...run, policy: routedPolicy(run.policy, input2, decision) };
+    run = { ...run, policy: routedPolicy(run.policy, input2, decision, run.task.dispatch) };
     const { pipeline } = decision;
     run.pipeline = pipeline ? { route: pipeline.route, score: pipeline.score } : null;
     if (pipeline && !run.resume) {
