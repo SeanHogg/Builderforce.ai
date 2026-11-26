@@ -25,6 +25,7 @@ import type { MarkPaint, MarkSet, Placement } from '../stage/types';
 import type { Bindings } from '../surface/overlays';
 import type { TowerRole } from '../scene/highlightRoles';
 import type { PlacementReq } from './tasks/placement/request';
+import type { DiffKind } from './compare/diffGraphs';
 import type { SlotIncidentRaw } from './tasks/stageIncident';
 
 /** A graph's identity on the wire. Ids are never reused, so the id IS the generation: a reply for an id nobody holds any more is stale. */
@@ -108,12 +109,14 @@ export interface TaskTable {
     focus: { req: { graph: GraphId; max: number; keep: string[] }; raw: FocusRaw };
     antiPatterns: { req: { graph: GraphId; layer: string | null; stations?: StationLookup }; raw: AntiPatternGroupRaw[] };
     /** PRD 43 B1a: the stage's marks, once per graph. */
-    markSet: { req: { graph: GraphId; changed: string[]; strings: Record<string, string> }; raw: MarkSet };
+    markSet: { req: { graph: GraphId; changed?: string[]; strings: Record<string, string> }; raw: MarkSet };
     /** The marks' tone / flags from the lens, the question (+ its pattern `family`) and the overlay, as data. */
     markPaint: {
         req: {
             graph: GraphId; generation: number; lensId: string; questionId: string | null; overlay: Bindings;
             lit: string[] | null; roles: Array<[ref: string, role: TowerRole]> | null; family: string | null;
+            /** Compare (PRD 43 C5): mark key or ref → how it differs. Paint only; never a MarkSet input. */
+            diff?: Array<[ref: string, kind: DiffKind]> | null;
             model?: ModelInputs;
         };
         raw: MarkPaint;

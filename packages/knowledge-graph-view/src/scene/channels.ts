@@ -8,6 +8,7 @@
 
 import type { KEdge, KNode } from '@seanhogg/builderforce-memory/knowledge';
 import type { NodeShape } from '../lenses';
+import { isUntested } from '../surface/coverageThreshold';
 import { frac, level5 } from '../surface/overlays';
 import type { OverlayModel } from '../surface/overlays';
 import { stationOfRef, type StationModel } from '../surface/stations';
@@ -15,8 +16,6 @@ import { edgeBucket, type NodeInstances } from './buffers';
 import { towerHeight } from './layout3d';
 import type { ThemeTone } from './themeColors';
 
-/** Line coverage under this reads as untested (the transit map dashes a segment by the same line). */
-export const UNTESTED_BELOW = 0.5;
 export const MAX_PIPES = 1500;
 
 export interface NodeChannel {
@@ -24,7 +23,7 @@ export interface NodeChannel {
     /** The ring channel's 0 to 1, when it has data for this node. */
     fill?: number;
     fillTone?: ThemeTone;
-    /** Coverage was collected and is under {@link UNTESTED_BELOW}. */
+    /** Coverage was collected and is under the untested line (`surface/coverageThreshold`). */
     shell: boolean;
 }
 export type NodeChannels = ReadonlyMap<string, NodeChannel>;
@@ -46,7 +45,7 @@ export function nodeChannels(nodes: readonly KNode[], model: Pick<StationModel, 
         out.set(n.ref, {
             height: towerHeight(level),
             ...(style.ring ? { fill: style.ring.frac, fillTone: style.ring.tone } : {}),
-            shell: station.cov !== undefined && station.cov < UNTESTED_BELOW,
+            shell: isUntested(station.cov),
         });
     }
     return out;

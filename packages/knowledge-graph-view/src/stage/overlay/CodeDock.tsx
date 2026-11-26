@@ -13,6 +13,7 @@
 
 import { useCallback, useMemo, useState, type CSSProperties } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { findingTitle } from '../../findingText';
 import { pathOf } from '../../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
@@ -21,13 +22,14 @@ import { ShapeGlyph } from '../../surface/LegendGlyph';
 import { TYPE } from '../../surface/ui/type';
 import { fileRefOf } from '../../surface/stations';
 import type { SymbolFacts } from '../../surface/symbolFacts';
-import type { SourceLocation, SourceReader, SymbolRecord } from '../../types';
+import type { SourceLocation, SourceReader, SourceReaderAt, SourceText, SymbolRecord } from '../../types';
 import { CodeLayer, LINK_BUTTON, RAIL_TONE, type LensAction } from '../drill/CodeLayer';
 import {
     baseName, callerIndex, codeTargetOf, lensRows, MAX_SPAN, railKindOf, railKinds, railShape, spanInFile, stickyChain, symbolChain,
     type CodeTarget, type Lens,
 } from '../drill/codeText';
 import type { LensCtx } from '../drill/lensActions';
+import { useCodeDiff, type CodeCompare } from '../drill/useCodeDiff';
 import type { CodeReading } from '../drill/useCodeReading';
 import { toggleButton as toggle } from './cardStyles';
 
@@ -85,21 +87,35 @@ export interface CodeDockProps {
     files?: { home: string; across: string | null } | undefined;
     /** The home tab clicked while a callee's file is on show: back to the method (the wiring's `clearAcross`). */
     onHomeTab?: (() => void) | undefined;
+    /** The symbols' facts, computed once by the wiring (`symbolFacts`): the lens's Simulate / Restructure rows and the gutter's glyphs. */
+    facts?: SymbolFacts | undefined;
+    /** The symbol whose level you are inside: its lens shows Out. */
+    inside?: string | null | undefined;
+    /** Simulate / Restructure a symbol (by ref). A lens row whose handler is absent is hidden. */
+    onSimulate?: ((ref: string) => void) | undefined;
+    onRestructure?: ((ref: string) => void) | undefined;
+    /** Hide the pane (the dock's control; `usePanelVisibility`'s `code` slot). */
+    onHide?: (() => void) | undefined;
+    /** A comparison of files is open (PRD 43 C8): the side on show and the revision each side reads; absent ⇒ today's file, unmarked. */
+    compare?: CodeCompare | undefined;
+    /** `readSourceAt` bound to the root: the earlier side's reader; absent ⇒ the pane says the earlier version is not available. */
+    readerAt?: SourceReaderAt | undefined;
 }
 
-/** The outline's icon per symbol kind: the stage's silhouettes (a field is drawn as the data drum). */
-const KIND_SHAPE: Readonly<Record<RailKind, NodeShape>> = { class: typeShape('class'), method: typeShape('function'), field: typeShape('data') };
 const OUTLINE_INDENT_PX = 14;
 const ICON_PX = 10;
 
-
 export function CodeDock({
     target, name, reader, labels, records, scrollLine, reading, onDrill, onOpenSource, onClose, onOut, hover = null, pane = false,
-    toast, onSelect, followCode, files, onHomeTab,
+    toast, onSelect, followCode, files, onHomeTab, facts, inside = null, onSimulate, onRestructure, onHide, compare, readerAt,
 }: CodeDockProps) {
     const t = labels.surface.code;
     const path = target?.path;
     const { chain, fileSymbols, byRef, jumpTo } = reading;
+    // While comparing, the pane reads the chosen side and marks the lines the other side lacks; one `onText` feeds both readers of the text.
+    const diff = useCodeDiff(compare, reader, readerAt, path);
+    const { onText: diffText } = diff, readingText = reading.onText;
+    const onText = useCallback((text: SourceText) => { readingText(text); diffText(text); }, [readingText, diffText]);
     const marked = useMemo(() => path ? spanInFile(hover, records, path) : null, [hover, records, path]);
     // The editor chrome needs the text: with no reader the pane only says the code is not available here.
     const lens = useMemo(() => reader ? lensRows(fileSymbols, records, callerIndex(records)) : null, [reader, fileSymbols, records]);
@@ -108,15 +124,24 @@ export function CodeDock({
     const railSpan = useMemo(() => path ? spanInFile(readingRef, records, path) : null, [readingRef, records, path]);
     const sticky = useCallback((line: number) => stickyChain(fileSymbols, byRef, line), [fileSymbols, byRef]);
     const nameOf = useCallback((ref: string) => byRef.get(ref)?.name ?? ref, [byRef]);
+    // The new rows exist only with a handler (`has`); the four old links always show.
+    const lensCtx = useMemo<LensCtx | null>(() => {
+        if (!facts) return null;
+        const handled: Partial<Record<LensAction, boolean>> = { out: !!onOut, simulate: !!onSimulate, restructure: !!onRestructure };
+        return { facts, inside, has: (id) => handled[id] ?? true, kindName: (kind) => findingTitle({ kind }, labels) };
+    }, [facts, inside, onOut, onSimulate, onRestructure, labels]);
     const onLens = useCallback((action: LensAction, l: Lens) => {
-        if (action === 'drill') onDrill(l.ref);
+        if (action === 'out') onOut?.();
+        else if (action === 'simulate') onSimulate?.(l.ref);
+        else if (action === 'restructure') onRestructure?.(l.ref);
+        else if (action === 'drill') onDrill(l.ref);
         else if (action === 'show') { onSelect?.(`node:${l.ref}`); followCode?.(l.ref); }
         else if (action === 'references') toast?.(fillTemplate(t.referencesToast, { count: l.count, name: nameOf(l.ref) }));
         else {
             const callers = callerIndex(records).get(l.ref) ?? [];
             toast?.(callers.length ? fillTemplate(t.calledBy, { names: callers.map(nameOf).join(', ') }) : fillTemplate(t.lensCallers, { count: 0 }));
         }
-    }, [onDrill, onSelect, followCode, toast, t, nameOf, records]);
+    }, [onDrill, onSelect, followCode, toast, t, nameOf, records, onOut, onSimulate, onRestructure]);
     const [outline, setOutline] = useState(false);
     const dock = pane ? filling : floating;
     if (!target) {
@@ -169,6 +194,7 @@ export function CodeDock({
                 {fileSymbols.length > 0 && (
                     <button type="button" data-action="outline" aria-expanded={outline} onClick={() => setOutline((o) => !o)} style={{ ...toggle, borderColor: cssVar(outline ? 'accent' : 'border') }}>{t.outline}</button>
                 )}
+                {onHide && <button type="button" data-action="dock-hide" aria-label={t.dockHide} title={t.dockHide} onClick={onHide} style={toggle}><span aria-hidden="true">‹</span></button>}
             </div>
             {outline && fileSymbols.length > 0 && (
                 <ul aria-label={t.outlineAria} data-code-outline style={{ ...list, ...bar, display: 'grid', gap: 0, maxHeight: '40%', overflow: 'auto', flex: '0 1 auto' }}>
@@ -185,7 +211,7 @@ export function CodeDock({
                                         fontWeight: r.ref === currentRef ? 700 : undefined, background: r.ref === currentRef ? cssVar('accentSoft') : 'transparent',
                                     }}
                                 >
-                                    <ShapeGlyph shape={KIND_SHAPE[kind]} tone={RAIL_TONE[kind]} size={ICON_PX} />
+                                    <ShapeGlyph shape={railShape(kind)} tone={RAIL_TONE[kind]} size={ICON_PX} />
                                     <span>{r.name}</span>
                                 </button>
                             </li>
@@ -194,11 +220,11 @@ export function CodeDock({
                 </ul>
             )}
             <CodeLayer
-                target={target} reader={reader} labels={labels} records={records} scrollLine={reading.jump ?? scrollLine}
+                target={target} reader={diff.reader} labels={labels} records={records} scrollLine={reading.jump ?? scrollLine}
                 onDrill={onDrill} onOpenSource={onOpenSource} onClose={onClose} onOut={onOut}
                 onReadingLine={reading.onReadingLine} steps={reading.steps} currentStep={reading.current} span={reading.span} onStep={reading.goStep} marked={marked}
-                onViewport={reading.onViewport} onText={reading.onText} onPickLine={reading.pickLine} cursorLine={reading.cursor}
-                rails={rails} railSpan={railSpan} lens={lens} onLens={onLens} sticky={sticky} onJump={jumpTo}
+                onViewport={reading.onViewport} onText={onText} onPickLine={reading.pickLine} cursorLine={reading.cursor} marks={diff.marks} diffNote={diff.unavailable}
+                rails={rails} railSpan={railSpan} lens={lens} onLens={onLens} lensCtx={lensCtx} sticky={sticky} onJump={jumpTo}
             />
         </aside>
     );

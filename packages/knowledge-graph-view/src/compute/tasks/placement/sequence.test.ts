@@ -143,3 +143,28 @@ describe('the Sequence placement (PRD 43 B1a rule 10)', () => {
         expect(run(graph, req({ lod: 1, pathId: `node:${RUN_REF}` })).cacheKey).not.toBe(a.cacheKey);
     });
 });
+
+describe('the Sequence at code depth (`req.method`, PRD 43 C7)', () => {
+    // The method's own calls only (no nested ones), at the method band whatever `lod` says.
+    const code = () => run(graph, req({ lod: 0, method: HANDLE, symbols: records }));
+
+    it('participants are the method and the symbols it calls; its calls are bars in call-site order, numbered', () => {
+        const p = code();
+        expect(participants(p)).toEqual([`node:${HANDLE}`, PG, `node:${RUN_REF}`, `node:${LOG}`]);
+        expect(family(p, 'arrow')!.callSites!.map((s) => s!.order)).toEqual([0, 1, 2]);
+        expect(p.captions.map((c) => c.text)).toEqual([expect.stringMatching(/^1 · /), expect.stringMatching(/^2 · /), expect.stringMatching(/^3 · /)]);
+        expect(p.caption).toEqual({ shown: 3, total: 3, capped: false });
+    });
+
+    it('the bars are raised toward the viewer and carry no activation bars or returns', () => {
+        const p = code();
+        expect(p.bounds.max[1]).toBeGreaterThan(0);
+        expect(family(p, 'route')).toBeUndefined();
+        expect(family(p, 'arrow')!.callSites).toHaveLength(3);
+    });
+
+    it('keys the cache by the method', () => {
+        const other = run(graph, req({ lod: 0, method: LOG, symbols: records }));
+        expect(code().cacheKey).not.toBe(other.cacheKey);
+    });
+});

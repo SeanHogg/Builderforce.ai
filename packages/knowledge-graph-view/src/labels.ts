@@ -29,6 +29,7 @@ import { AGENT_RUNS_DEFAULTS, type AgentRunsLabels } from './labels/surface.agen
 import { PREDICT_DEFAULTS, type PredictLabels } from './labels/surface.predict';
 import { TRANSITION_DEFAULTS, type TransitionLabels } from './labels/surface.transition';
 import { COUPLING_DEFAULTS, type CouplingLabels } from './labels/surface.coupling';
+import { COMPARE_DEFAULTS, type CompareLabels } from './labels/surface.compare';
 import { CORE_DEFAULTS, type CoreLabels, type FindingKindLabels } from './labels/core';
 
 export { camelKind, fillTemplate } from './template';
@@ -39,7 +40,7 @@ export type StringLabelKey = { [K in keyof KnowledgeGraphLabels]: KnowledgeGraph
 
 /** The words of the transit-map surface: the per-area modules under `labels/`, composed. */
 export interface SurfaceLabels extends HeaderLabels, MapLabels, ActLabels, SyncLabels, RunLabels, CoverageLabels, PatternsLabels, ApiLabels, ResolveLabels, FixLabels, ExplainLabels, SystemsLabels, SceneLabels,
-    ArchitectureStyleLabels, KeyFeaturesLabels, AgentRunsLabels, PredictLabels, TransitionLabels, CouplingLabels {}
+    ArchitectureStyleLabels, KeyFeaturesLabels, AgentRunsLabels, PredictLabels, TransitionLabels, CouplingLabels, CompareLabels {}
 
 export interface KnowledgeGraphLabels extends CoreLabels {
     surface: SurfaceLabels;
@@ -65,6 +66,7 @@ const SURFACE_DEFAULTS: SurfaceLabels = {
     ...PREDICT_DEFAULTS,
     ...TRANSITION_DEFAULTS,
     ...COUPLING_DEFAULTS,
+    ...COMPARE_DEFAULTS,
 };
 
 export const DEFAULT_KNOWLEDGE_GRAPH_LABELS: KnowledgeGraphLabels = {

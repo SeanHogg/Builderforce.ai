@@ -18,11 +18,11 @@ function overlayProps(over: Partial<SceneOverlayProps> = {}): SceneOverlayProps 
 }
 
 describe('SceneOverlay', () => {
-    it('is a View group of the cameras WITHOUT Sequence, and picking one calls onMode', () => {
+    it('is a View group of the cameras (Flow and Sequence included), and picking one calls onMode', () => {
         const p = overlayProps();
         render(<SceneOverlay {...p} />);
         const view = within(screen.getByRole('radiogroup', { name: L.viewModesLabel }));
-        expect(view.getAllByRole('radio').map((r) => r.textContent)).toEqual([L.viewTransit, L.viewSystem, L.viewGraph, L.viewMap, L.view3d, L.viewHeat, L.viewStyle, L.viewFeatures, L.viewList]);
+        expect(view.getAllByRole('radio').map((r) => r.textContent)).toEqual([L.viewTransit, L.viewSystem, L.viewGraph, L.viewMap, L.view3d, L.viewHeat, L.viewStyle, L.viewFeatures, L.viewFlow, L.viewSequence, L.viewList]);
         fireEvent.click(view.getByRole('radio', { name: L.viewHeat }));
         expect(p.onMode).toHaveBeenCalledWith('heat');
     });

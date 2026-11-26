@@ -40,6 +40,9 @@ const ROW = 36;
 /** A self-message's loop width. */
 const SELF = 24;
 const MARK = 10;
+/** A code-depth call bar: its height above the lifelines' plane and its width. */
+const BAR_LIFT = 14;
+const BAR_WIDTH = 7;
 /** World units a participant sinks per layer at full depth. */
 export const LAYER_STEP = 40;
 /** `Draft.placed` for a slot parked hidden at a position (as `anchor.ts` marks one). */
@@ -49,10 +52,15 @@ const PARKED = 2;
 export const SEQUENCE_WORD_KEYS = ['sequence.hop', 'sequence.noReference'] as const;
 
 export function placeSequence(g: KnowledgeGraph, model: StageModel, req: PlacementReq): Placement {
-    const band = sequenceBandOf(req.lod);
+    // Code depth (`req.method`): that method and the symbols it calls, its own calls only, as raised bars.
+    const method = req.method !== undefined;
+    const band = method ? 'method' : sequenceBandOf(req.lod);
     const records = req.symbols ?? [];
     const full = withSymbolRecords(g, records);
-    const flow = sequenceFlow({ band, entry: req.pathId, full, records, stations: model.stations, lines: model.lines.lines });
+    const flow = sequenceFlow({
+        band, entry: method ? `node:${req.method}` : req.pathId, full, records, stations: model.stations, lines: model.lines.lines,
+        ...(method ? { maxDepth: 1 } : {}),
+    });
     const { marks, append, nodeSlot } = symbolSlots(model, full, g.nodes.length, flow.externals);
     const slotOf = (key: string): number | undefined => (band === 'system' ? model.stationSlot.get(key) : nodeSlot.get(key));
     const layerOf = (key: string): number => {
@@ -86,8 +94,9 @@ export function placeSequence(g: KnowledgeGraph, model: StageModel, req: Placeme
     if (band !== 'system') parkSplit(d, band, flow, full, nodeSlot, column);
     anchorHidden(marks, d, 'station', [width / 2, 0, bottom / 2]);
 
-    const calls: WorldPath[] = messages.map((m, i) => messagePath(m, i, column));
-    const decorated = band !== 'system';
+    const calls: WorldPath[] = messages.map((m, i) => messagePath(m, i, column, method));
+    // A bar is its own mark: no activation bars or returns under it.
+    const decorated = band !== 'system' && !method;
     const returning = decorated ? returnPaths(messages, rows) : [];
     const stubs = stubPaths(flow.stubs, rows);
     const right = MARGIN + Math.max(0, participants.length - 1) * col + MARGIN;
@@ -102,10 +111,10 @@ export function placeSequence(g: KnowledgeGraph, model: StageModel, req: Placeme
             ...(stubs.length ? [polylineBatch('describes', stubs, 'px')] : []),
         ],
         planes: [], labels,
-        captions: messages.map((m, i) => ({ text: messageText(m, band, model.strings), position: midOf(calls[i]!), anchor: 'middle' as const, tone: muted })),
+        captions: messages.map((m, i) => ({ text: messageText(m, band, model.strings, method ? i + 1 : 0), position: midOf(calls[i]!), anchor: 'middle' as const, tone: muted })),
         a11y,
         caption: { shown: messages.length, total: Math.max(messages.length, flow.total), capped: messages.length < flow.total },
-        bounds: { min: [0, -sink * 8, 0], max: [right, 0, bottom + ROW] },
+        bounds: { min: [0, -sink * 8, 0], max: [right, method ? BAR_LIFT : 0, bottom + ROW] },
         rig: {
             projection: 'orthographic', frame: 'document',
             home: { position: [right / 2, 1000, bottom / 2], target: [right / 2, 0, bottom / 2], up: [0, 0, -1] },
@@ -147,12 +156,14 @@ function parkSplit(d: Draft, band: SequenceBand, flow: Flow, full: KnowledgeGrap
 }
 
 /** Message `i` at row `i` down the time axis, from the caller's lifeline to the callee's (a self-call loops out and back). */
-function messagePath(m: FlowMessage, i: number, column: ReadonlyMap<string, Vec3>): WorldPath {
-    const a = column.get(m.from)!, b = column.get(m.to)!, z = HEAD + ROW * (i + 1);
+function messagePath(m: FlowMessage, i: number, column: ReadonlyMap<string, Vec3>, bar = false): WorldPath {
+    // A code-depth call is a bar raised toward the viewer (world +y) and thicker than an arrow.
+    const lift = bar ? BAR_LIFT : 0;
+    const a = column.get(m.from)!, b = column.get(m.to)!, z = HEAD + ROW * (i + 1), ay = a[1] + lift, by = b[1] + lift;
     const pts: Vec3[] = m.from === m.to
-        ? [[a[0], a[1], z], [a[0] + SELF, a[1], z], [a[0] + SELF, a[1], z + ROW / 3], [a[0], a[1], z + ROW / 3]]
-        : [[a[0], a[1], z], [b[0], b[1], z]];
-    return { pts, tone: toneIndex('edge'), width: 1.5, dash: DASH_SOLID, flags: FLAG.SELECTABLE };
+        ? [[a[0], ay, z], [a[0] + SELF, ay, z], [a[0] + SELF, ay, z + ROW / 3], [a[0], ay, z + ROW / 3]]
+        : [[a[0], ay, z], [b[0], by, z]];
+    return { pts, tone: toneIndex('edge'), width: bar ? BAR_WIDTH : 1.5, dash: DASH_SOLID, flags: FLAG.SELECTABLE };
 }
 
 const midOf = (p: WorldPath): Vec3 => {
@@ -160,8 +171,8 @@ const midOf = (p: WorldPath): Vec3 => {
     return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a[2] - 6];
 };
 
-/** A message's words: the callee (data) below the system band; a hop's reference count (catalog words) at it. */
-function messageText(m: FlowMessage, band: SequenceBand, strings: Readonly<Record<string, string>>): string {
-    if (band !== 'system') return m.label;
+/** A message's words: the callee (data) below the system band, numbered when `n` > 0; a hop's reference count (catalog words) at it. */
+function messageText(m: FlowMessage, band: SequenceBand, strings: Readonly<Record<string, string>>, n = 0): string {
+    if (band !== 'system') return n > 0 ? `${n} · ${m.label}` : m.label;
     return m.count === 0 ? strings['sequence.noReference'] ?? '' : fillTemplate(strings['sequence.hop'], { count: m.count });
 }

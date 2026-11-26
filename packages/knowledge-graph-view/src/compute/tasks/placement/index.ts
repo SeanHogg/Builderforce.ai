@@ -9,6 +9,7 @@ import type { Placement, PlacementCamera } from '../../../stage/types';
 import { once } from '../handler';
 import type { StageModel } from '../stageModel';
 import { placeGraph } from './graph';
+import { placeFlow } from './flow';
 import { placeMap } from './map';
 import { placeMind } from './mindmap';
 import { placeSequence } from './sequence';
@@ -27,6 +28,7 @@ export const PLACEMENTS: Readonly<Record<PlacementCamera, PlacementBuilder>> = {
     '3d': placeScene3d,
     mind: (g, model, req) => once(() => placeMind(g, model, req)),
     sequence: (g, model, req) => once(() => placeSequence(g, model, req)),
+    flow: (g, model, req) => once(() => placeFlow(g, model, req)),
     system: (g, model, req) => once(() => placeSystem(g, model, req)),
     heat: (_g, model, req) => once(() => placeHeat(model, req)),
     style: (g, model, req) => once(() => placeStyle(g, model, req)),

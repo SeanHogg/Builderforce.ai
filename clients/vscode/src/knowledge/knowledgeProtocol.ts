@@ -91,6 +91,8 @@ export type KnowledgeCall =
   // `sourcePort.ts` keeps the path inside the root's real path, caps the file size and clamps the lines to MAX_SOURCE_LINES.
   | { op: "readSource"; rootId: string; path: string; startLine: number; endLine: number }
   | { op: "openSource"; rootId: string; path: string; startLine: number; endLine?: number }
+  // The same file as it was at a commit (PRD 43 C8): `git cat-file` in the root's repository. `rev` is untrusted: `sourcePort.ts` accepts only a 7-40 hex sha, never a ref expression or an option.
+  | { op: "readSourceAt"; rootId: string; path: string; rev: string; startLine: number; endLine: number }
   // The review's run record (PRD 41 A8): a root's recent runs (light), one whole run, and Stop by run id.
   // A retry of failed files is not an op: it is a normal review request (`KnowledgeReviewRequest.retry`).
   | { op: "runs"; rootId: string }

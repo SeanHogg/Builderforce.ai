@@ -96,6 +96,8 @@ export interface FlowInput {
     records: readonly SymbolRecord[];
     stations: StationModel;
     lines: readonly Line[];
+    /** Nested call levels to follow (default {@link SEQUENCE_MAX_DEPTH}); 1 = only the entry's own calls (code depth: a method and what it calls). */
+    maxDepth?: number;
 }
 
 /** The line a system-band flow follows: the named line, the first line through the entry's station, or the first line. */
@@ -108,6 +110,7 @@ function lineOfEntry(entry: string | null, stations: StationModel, lines: readon
 
 export function sequenceFlow(input: FlowInput): Flow {
     const { band, entry, full, stations, lines } = input;
+    const maxDepth = Math.min(input.maxDepth ?? SEQUENCE_MAX_DEPTH, SEQUENCE_MAX_DEPTH);
     const line = lineOfEntry(entry, stations, lines);
     const symbols = full.nodes.filter(isSymbol);
     const classOf = classOfIndex(symbols);
@@ -136,7 +139,7 @@ export function sequenceFlow(input: FlowInput): Flow {
                     messages.push({ from, to, site: c.site, label: isExternal(c.to) ? externalName(c.to) : names.get(c.to) ?? c.to, count: 1, depth, end: at });
                 }
             }
-            if (depth + 1 < SEQUENCE_MAX_DEPTH && !stack.has(c.to)) { stack.add(c.to); walk(c.to, depth + 1, stack); stack.delete(c.to); }
+            if (depth + 1 < maxDepth && !stack.has(c.to)) { stack.add(c.to); walk(c.to, depth + 1, stack); stack.delete(c.to); }
             if (at >= 0) messages[at]!.end = messages.length - 1;
         }
     };

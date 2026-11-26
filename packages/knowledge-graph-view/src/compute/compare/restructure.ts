@@ -60,7 +60,9 @@ const partitionViolation: Proposer = (graph, finding) => {
             .sort((x, y) => Number(y.area === area) - Number(x.area === area) || y.importance - x.importance || cmp(x.ref, y.ref))[0];
     }
     const hop = (s: NodeRef, t: NodeRef): KEdge => ({ from: s, to: t, kind, weight: original.weight, origin: original.origin, verdict: 'allowed' });
-    const edges = dedupe([...graph.edges.filter((e) => !climbs(e)), ...(via ? [hop(from, via.ref), hop(via.ref, to)] : [])]);
+    const kept = graph.edges.filter((e) => !climbs(e)), have = new Set(kept.map(sameKey));
+    const hops = via ? [hop(from, via.ref), hop(via.ref, to)].filter((e) => !have.has(sameKey(e))) : [];
+    const edges = [...kept, ...hops];
     return { after: rebuilt(graph, graph.nodes, edges, graph.findings.filter((f) => f.id !== finding.id)), bornFrom: new Map() };
 };
 
@@ -129,7 +131,13 @@ function moduleRef(file: string, lead: string, taken: ReadonlySet<string>): stri
     return ref;
 }
 
-const tail = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
+const tail = (ref: string): string => { const p = pathOf(ref as NodeRef) ?? ref; return p.slice(p.lastIndexOf('/') + 1); };
+
+/** The file's label with its file name swapped for the module's (a label that is the whole path stays a path). */
+function relabel(label: string, file: string, ref: string): string {
+    const old = tail(file);
+    return label.endsWith(old) ? `${label.slice(0, label.length - old.length)}${tail(ref)}` : tail(ref);
+}
 /** The measures that made it a god module do not carry over to its parts. */
 const SIZE_BADGES = new Set(['lines', 'exports', 'complexity', 'maxComplexity']);
 
@@ -152,7 +160,6 @@ const godModule: Proposer = (graph, finding, symbols) => {
         for (const u of g) for (const m of u.members) owner.set(noAt(m), ref);
         const members = g.reduce((n, u) => n + u.members.size, 0);
         size.set(ref, members);
-        const path = pathOf(ref as NodeRef) ?? ref;
         const badges = Object.fromEntries(Object.entries(fileNode.badges ?? {}).filter(([k]) => !SIZE_BADGES.has(k) && k !== 'patterns'));
         const { sourceHash: _derived, ...rest } = fileNode; // a new file has no hash of its own yet
         return { ...rest, ref: ref as NodeRef, label: relabel(fileNode.label, file, ref), badges, importance: fileNode.importance * members / Math.max(1, total) };

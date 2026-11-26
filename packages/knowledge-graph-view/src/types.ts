@@ -51,7 +51,7 @@ export type LensId =
  * the old tower had, so a stored or deep-linked `3d` still opens the WebGL view), the folder mind
  * map, or the accessible list. A new camera is a value here plus a row in `surface/cameras.tsx`.
  */
-export type ViewMode = 'transit' | 'system' | 'graph' | '3d' | 'map' | 'heat' | 'style' | 'features' | 'sequence' | 'list';
+export type ViewMode = 'transit' | 'system' | 'graph' | '3d' | 'map' | 'heat' | 'style' | 'features' | 'sequence' | 'flow' | 'list';
 
 /** What a screenshot pinpointed: the AI read the image, the host matched the strings deterministically. */
 export type PinpointResult = {
@@ -274,6 +274,13 @@ export interface KnowledgeGraphSource {
      * "Open at line" only.
      */
     readSource?(rootId: string, path: string, range: SourceRange): Promise<SourceText | null>;
+    /**
+     * `readSource` as the file was at a commit (PRD 43 Part C, C8 "source at a revision"): `rev` is a commit sha. The HOST
+     * validates `path` exactly like `readSource` (inside the root, a code file, the size cap) and validates `rev` (a hex
+     * sha of 7-40 chars; never a ref expression, never anything starting with '-'). null when it refuses or the file did
+     * not exist at that commit. Absent ⇒ the code pane shows today's file and says the old one is not available.
+     */
+    readSourceAt?(rootId: string, path: string, rev: string, range: SourceRange): Promise<SourceText | null>;
     /** The host's timings of the calls the first paint waits on, and the phase a running load is in. Absent ⇒ the view's own timeline only. */
     loadTrace?(): Promise<LoadTrace>;
 }
@@ -286,6 +293,9 @@ export interface SourceText { startLine: number; lines: string[]; truncated: boo
 
 /** `KnowledgeGraphSource.readSource` bound to the root on show (the view's code band reads through it). */
 export type SourceReader = (path: string, range: SourceRange) => Promise<SourceText | null>;
+
+/** `KnowledgeGraphSource.readSourceAt` bound to the root on show: a file's lines as they were at the commit `rev`. */
+export type SourceReaderAt = (path: string, rev: string, range: SourceRange) => Promise<SourceText | null>;
 
 /** What the host's editor shows of a file of the root on show (root-relative `path`, 1-based lines): the code band follows it. */
 export interface EditorView { path: string; firstLine: number; lastLine: number; cursorLine: number | null }
@@ -347,12 +357,16 @@ export interface KnowledgeBaseline {
     comparable?: boolean;
     /** Why not (memory's `comparable()` reason codes, PRD 41 §C9): Compare shows each, localized. */
     reasons?: readonly string[];
+    /** The commit sha the baseline was taken at, when the host knows it: `readSourceAt` reads the "before" source at it. */
+    rev?: string;
 }
 
 export interface KnowledgeSnapshot {
     graph: KnowledgeGraph;
     title?: string;
     baseline?: KnowledgeBaseline | null;
+    /** The commit sha the snapshot was taken at, when the host knows it: `readSourceAt` reads that revision's source. */
+    rev?: string;
 }
 
 /** Which graph a finding came from: the current one, or Compare's "before". */

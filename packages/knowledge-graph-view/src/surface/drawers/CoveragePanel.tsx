@@ -11,7 +11,7 @@ import { counted } from '../plural';
 import { cssVar } from '../../scene/themeColors';
 import { button, card, muted } from '../../styles';
 import { TYPE } from '../ui/type';
-import { UNTESTED_BELOW } from '../../scene/channels';
+import { UNTESTED_BELOW } from '../coverageThreshold';
 import { coverageTone } from '../overlays';
 import { stationOfRef } from '../stations';
 import type { PanelProps } from '../registry';

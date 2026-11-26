@@ -3,7 +3,8 @@ import { surfaceFixture } from '../testing';
 import { makeOverlay, PRESETS } from '../surface/overlays';
 import { buildStations } from '../surface/stations';
 import { nodeInstances } from './buffers';
-import { MAX_PIPES, nodeChannels, pipeRadius, pipes, pipeWidthOf, towerBodies, UNTESTED_BELOW } from './channels';
+import { MAX_PIPES, nodeChannels, pipeRadius, pipes, pipeWidthOf, towerBodies } from './channels';
+import { UNTESTED_BELOW } from '../surface/coverageThreshold';
 import { layout3d, towerHeight } from './layout3d';
 import { LENSES } from '../lenses';
 

@@ -33,6 +33,10 @@ export function cameraGlyph(id: string): ReactNode {
         case 'style': return <Glyph><circle cx="8" cy="8" r="5.5" /><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none" /></Glyph>;
         // Features: a flag.
         case 'features': return <Glyph><path d="M4 13.5V2.5M4 3h8l-2 2.5 2 2.5H4" /></Glyph>;
+        // Flow: three steps rising left to right.
+        case 'flow': return <Glyph><path d="M2.5 13.5h3v-3h3v-3h3v-3h2" /></Glyph>;
+        // Sequence: two lifelines with a call and its return.
+        case 'sequence': return <Glyph><path d="M4 2.5v11M12 2.5v11M4 6h7M9.5 4.5 11 6 9.5 7.5M12 10H5M6.5 8.5 5 10l1.5 1.5" /></Glyph>;
         // List: three horizontal lines.
         case 'list': return <Glyph><path d="M3 4.5h10M3 8h10M3 11.5h10" /></Glyph>;
         default: return undefined;

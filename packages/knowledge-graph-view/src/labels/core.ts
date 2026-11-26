@@ -50,6 +50,7 @@ export interface CoreLabels extends LoadLabels, ReviewRunLabels {
     viewSystem: string;
     viewHeat: string;
     viewSequence: string;
+    viewFlow: string;
     panelRun: string;
     panelCoverage: string;
     panelPatterns: string;
@@ -310,6 +311,7 @@ viewList: 'List',
 viewSystem: 'System',
 viewHeat: 'Heat',
 viewSequence: 'Sequence',
+viewFlow: 'Flow',
 panelRun: 'Reviews',
 panelCoverage: 'Coverage',
 panelPatterns: 'Patterns',

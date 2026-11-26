@@ -10,6 +10,7 @@
 
 import type { ThemeTone } from '../scene/themeColors';
 import { cmp } from '../order';
+import { isUntested } from './coverageThreshold';
 import type { Station } from './stations';
 
 export type MetricId = 'anti' | 'cx' | 'cov' | 'use' | 'churn' | 'coupling' | 'changed' | 'owner' | 'none';
@@ -171,5 +172,5 @@ export function makeOverlay(bindings: Bindings, stations: readonly Station[]): O
 /** Whether a segment between two stations is untested: undefined when neither reports coverage. */
 export function segmentUntested(from: Station, to: Station): boolean | undefined {
     const known = [from.cov, to.cov].filter((v): v is number => v !== undefined);
-    return known.length === 0 ? undefined : Math.min(...known) < 0.5;
+    return known.length === 0 ? undefined : isUntested(Math.min(...known));
 }

@@ -5,18 +5,17 @@
  * thread), the selected line as the path highlight, and Escape / Backspace "Out" (of a callee opened across, the code
  * level, then a drilled level).
  *
- * The code (B1a rule 9): the code pane opens from a mark's Code button and with the code level, beside the map
- * (`code`: the split layout, `codePaneWidth`). What it reads (`useCodeReading`) drives the map side: the reading ring
- * and the open method's numbered call arcs on the stage (`bus.reading`, `bus.calls`), the call numbers (`CallBadges`),
- * the step card and the zoom-path bar (`CodeTrail`). A callee drilled into opens the code level on it, or, with no mark
- * of its own at this level, its file in the pane while the map reveals its file.
+ * The code (B1a rule 9, Part C1): the pane is docked beside the map (the outline of the level; a file once one is open),
+ * wired by `useCodeDock`, which also owns what reading drives on the map side (the reading ring and the open method's
+ * numbered call arcs). Here the pane, the bar over the map (`CodeTrail`), the call numbers (`CallBadges`) and the cards
+ * are composed from it.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CallSite } from '@seanhogg/builderforce-memory/knowledge';
 import { useComputed } from '../../compute/useComputed';
 import { fillTemplate } from '../../labels';
-import { COMPACT_WIDTH, nodeIndex, pathOf } from '../../graphModel';
+import { COMPACT_WIDTH, nodeIndex } from '../../graphModel';
 import { fileRefOf } from '../../surface/stations';
 import type { SceneProps } from '../../surface/registry';
 import { stageBus, StageBusContext } from '../anchor/stageBus';
@@ -24,34 +23,43 @@ import { ZOOM_BANDS } from '../labels/lod';
 import { cssVar } from '../../scene/themeColors';
 import { TYPE } from '../../surface/ui/type';
 import { MARK_TYPE_ORDER, type MarkType } from '../../shapes';
-import { codeTargetOf, fileTargetOf, railKindOf, symbolChain, type RailKind } from '../drill/codeText';
-import { useCodeReading } from '../drill/useCodeReading';
+import { railKindOf, type RailKind } from '../drill/codeText';
 import { CallBadges } from './CallBadges';
 import { CodeSequence } from './CodeSequence';
-import { callTrackOf, markOf } from './callArcs';
-import { CodeDock, codePaneWidth, codeRefForStop, codeSubject, focusLine, recordsForCode, targetForMark } from './CodeDock';
+import { CodeDock } from './CodeDock';
+import { CodeOutline } from './CodeOutline';
 import { CodeTrail } from './CodeTrail';
 import { StepCard } from './StepCard';
+import { useCodeDock, type CodeLayout } from './useCodeDock';
+import type { CodeCompare } from '../drill/useCodeDiff';
 import { useSemanticZoom, type SemanticZoom } from '../drill/useSemanticZoom';
 import { useStageMap, type StageMap } from '../drill/useStageMap';
 import type { StageRenderer } from '../renderer';
 import type { MarkSet, Placement } from '../types';
-import { INCIDENT_SHOWN, SlotIncident } from './incident';
+import { SlotIncident } from './incident';
 import { StageToast, useStageToast } from './StageToast';
 import { StatusStrip } from './StatusStrip';
 import { CallSiteCard } from './CallSiteCard';
 import { StageCard } from './StageCard';
 import { SymbolCard, type SymbolCardState } from './SymbolCard';
-import type { SymbolRecord } from '../../types';
 
-/** The code dock's records while it is closed: none, and the same array every render. */
-const NO_RECORDS: readonly SymbolRecord[] = [];
+export type { CodeLayout };
+
 /** The Map's bands, in ladder order (system, class, method, code). */
 const BAND_ORDER = ZOOM_BANDS.map((b) => b.band);
 /** A mark type for a symbol drawn after the MarkSet (a drilled level's), by what the record is. */
 const SYMBOL_MARK_TYPE: Readonly<Record<RailKind, MarkType>> = { class: 'class', method: 'function', field: 'data' };
 
-export type CodeLayout = 'flow' | 'sequence';
+/** What the host hands the dock: its visibility (the viewer's `code` slot) and the actions another slice wires (Simulate, Restructure). */
+export interface StageDockOptions {
+    /** The pane is shown (default true); reading shows it regardless. */
+    shown?: boolean | undefined;
+    onToggleCode?: (() => void) | undefined;
+    onSimulate?: ((ref: string) => void) | undefined;
+    onRestructure?: ((ref: string) => void) | undefined;
+    /** An open comparison of files (`codeCompareOf`): the code pane shows the chosen side and marks the lines the other lacks. */
+    compare?: CodeCompare | undefined;
+}
 
 export interface StageWiring {
     map: StageMap;
@@ -75,16 +83,19 @@ export interface StageWiring {
     /** The Flow / Sequence layout of the code level. */
     codeLayout: CodeLayout;
     setCodeLayout(layout: CodeLayout): void;
-    /** The status strip along the bottom while the code is open. */
+    /** The status strip along the bottom while the code is read. */
     status: ReactNode;
     /** The Map placement with the unfold patch applied (memoized: the same placement in, the same out). */
     patchMap(p: Placement | null): Placement | null;
     card: ReactNode;
-    /** While the code is open: the pane, the bar over the map, and whether the pane sits beside the map (else it floats over it). */
-    code: { pane: ReactNode; bar: ReactNode; split: boolean } | null;
+    /**
+     * The code pane. `visible`: shown at all (docked or read); `split`: beside the map (else one half of the Code | Picture
+     * switch); `reading`: a file is open, so the bar over the map and the status strip show. `show` brings a hidden pane back.
+     */
+    code: { pane: ReactNode; bar: ReactNode; visible: boolean; split: boolean; reading: boolean; show: (() => void) | undefined };
 }
 
-export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: MarkSet | null, width: number): StageWiring {
+export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: MarkSet | null, width: number, dock: StageDockOptions = {}): StageWiring {
     const { surface, graph } = p;
     const bus = useMemo(() => stageBus(renderer), [renderer]);
     const index = useMemo(() => nodeIndex(graph), [graph]);
@@ -99,7 +110,6 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const zoom = useSemanticZoom(bus, drill, map, p.reducedMotion);
     const [selected, setSelected] = useState<string | null>(null);
     const [cardKey, setCardKey] = useState<string | null>(null);
-    const [codeOpen, setCodeOpen] = useState(false);
     const [dismissed, setDismissed] = useState<string | null>(null);
     const toast = useStageToast();
     const t = p.labels.surface.code;
@@ -179,110 +189,8 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     }, [patched, map, zoom]);
 
     const closeCard = useCallback(() => setCardKey(null), []);
-    const openCode = useCallback(() => setCodeOpen(true), []);
-    // The code level opens the pane too: there the code is the primary view, beside the map.
-    const showCode = codeOpen || !!zoom.code;
-    const split = codePaneWidth(width) > 0;
-    // The map's own width (a split box gives the pane the rest).
-    const mapWidth = showCode ? width - codePaneWidth(width) : width;
-    // A pointer hovering a mark while the pane is open tints that symbol's lines.
-    const [hoverRef, setHoverRef] = useState<string | null>(null);
-    useEffect(() => showCode ? bus.onHover((slot) => {
-        const k = slot >= 0 ? bus.keys[slot] : undefined;
-        setHoverRef(k?.startsWith('node:') ? k.slice('node:'.length) : null);
-    }) : undefined, [bus, showCode]);
-    // A callee in another file the zoom cannot open (no mark of its own at this level): the pane reads its file, from it.
-    const [across, setAcross] = useState<string | null>(null);
-    const clearAcross = useCallback(() => setAcross(null), []);
-    // A new method at the code level drops the callee opened across and the old pick (it must not jump inside the new one).
-    useEffect(() => { setAcross(null); setSelected(null); }, [zoom.code?.key]);
-    // Only while the code is open: the fallback walks every graph node on the main thread, and `drill` is a fresh
-    // object each render, so keying on it re-walked the graph on every render of every stage view (the perf gate's mount reads).
-    const drillSymbols = drill.symbols;
-    // The symbol card needs them too, for a selected node with the pane closed.
-    const nodeSelected = !!selected?.startsWith('node:') && !cardKey;
-    const needRecords = showCode || nodeSelected;
-    const records = useMemo(() => needRecords ? recordsForCode(graph, { symbols: drillSymbols }) : NO_RECORDS, [needRecords, graph, drillSymbols]);
-    const acrossTarget = across ? codeTargetOf(across, records) : null;
-    // The method whose calls are numbered: the one opened across, else the code level's.
-    const methodTarget = acrossTarget ?? zoom.code?.target ?? null;
-    const methodRef = methodTarget?.ref ?? null;
-    // A station key is not a symbol. Resolve it to the station's first file so the pane has a source line and the station's name.
-    const stationPick = selected?.startsWith('st:') ? map.stationOfKey(selected) : null;
-    const subject = codeSubject(selected, stationPick);
-    const markRef = subject.ref;
-    // A journey stop id is a station id. Resolve it the same way; selection still wins when both name a line.
-    const stop = surface.path?.stops[surface.step];
-    const stopStation = stop ? surface.stations.byId.get(stop.id) ?? map.stations.byId.get(stop.id) ?? null : null;
-    const stopRef = codeRefForStop(stop?.id ?? null, stopStation);
-    // At the code level the pane reads the open method; else the selected mark, else the journey stop.
-    const dockRef = methodRef ?? markRef ?? stopRef;
-    const codeName = subject.name || (dockRef === stopRef && stopStation ? stopStation.name : '') || (dockRef ? index.get(dockRef)?.label ?? dockRef : '');
-    // The pane reads the whole file; the mark's own line is `scrollLine`, so another method in the same file only scrolls it.
-    const markTarget = showCode ? (methodTarget ?? targetForMark(dockRef, codeName, records)) : null;
-    const codeTarget = markTarget ? fileTargetOf(markTarget) : null;
-    const scrollLine = showCode ? (methodTarget?.startLine ?? focusLine(records, markRef, stopRef)) : undefined;
-    // Code scrolled onto another symbol: the stage rings and centres its mark (else its file's), without selecting it;
-    // selection would scroll the code back (`scrollLine`).
-    const followCode = useCallback((ref: string) => {
-        const slot = markOf(ref, (k) => bus.slotOf(k));
-        bus.setReading(slot);
-        if (slot >= 0) bus.reveal(slot);
-    }, [bus]);
-    const reading = useCodeReading({ path: codeTarget?.path, records, method: methodRef, scrollLine, pick: zoom.code ? markRef : null, onFocusSymbol: followCode });
-    // The host's editor, while Follow is on: the pane opens on the editor's file (not at the code level, whose method holds
-    // the pane) and scrolls with it, so the stage follows the real editor through the pane's own reading line.
-    const editor = surface.editorView ?? null;
-    const editorPath = editor?.path ?? null;
-    const editorFileRef = useMemo(
-        () => editorPath ? graph.nodes.find((n) => fileRefOf(n.ref) === n.ref && pathOf(n.ref) === editorPath)?.ref ?? null : null,
-        [graph, editorPath],
-    );
-    const { follow: following, jumpTo } = reading;
-    const atCodeLevel = !!zoom.code;
-    const panePath = codeTarget?.path ?? null;
-    useEffect(() => {
-        if (!editor || !following) return;
-        if (panePath === editor.path) { jumpTo(editor.firstLine); return; }
-        if (!atCodeLevel && editorFileRef) { setSelected(`node:${editorFileRef}`); setCodeOpen(true); }
-    }, [editor, following, panePath, atCodeLevel, editorFileRef, jumpTo]);
-    // The open method's calls on the stage, resolved again on every placement (a band crossed, a drill) so the arcs stay on their marks.
-    const { steps, current } = reading;
-    useEffect(() => {
-        const push = () => bus.setCalls(callTrackOf(showCode ? methodRef : null, steps, current, (k) => bus.slotOf(k)));
-        push();
-        return bus.onPlacement(push);
-    }, [bus, showCode, methodRef, steps, current]);
-    // What the code on screen lights, the rest fade: the symbols in view, their enclosing symbols and files, and the reading
-    // symbol's link neighbours. Only while the pane follows the map's own bands (not the system band or the code level).
-    const inView = reading.inView, byRef = reading.byRef;
-    const fadeOn = showCode && reading.follow && !atCodeLevel && zoom.band !== 'system' && !!inView && inView.length > 0;
-    useEffect(() => {
-        if (!fadeOn || !inView) { bus.setFade(null); return undefined; }
-        const push = () => {
-            const lit = new Set<number>();
-            const add = (slot: number) => { if (slot >= 0) lit.add(slot); };
-            for (const ref of inView) {
-                add(markOf(ref, slotOf));
-                for (const parent of symbolChain(ref, byRef)) add(markOf(parent.ref, slotOf));
-                add(slotOf(`node:${fileRefOf(ref)}`));
-            }
-            if (bus.reading >= 0) for (const slot of bus.options.incident?.of(bus.reading, INCIDENT_SHOWN) ?? []) add(slot);
-            bus.setFade(lit);
-        };
-        push();
-        return bus.onPlacement(push);
-    }, [bus, fadeOn, inView, byRef, slotOf]);
-    useEffect(() => () => bus.setFade(null), [bus]);
-    // Nothing read: no reading ring.
-    useEffect(() => { if (!showCode) bus.setReading(-1); }, [bus, showCode]);
-    // Out, innermost first: back from a callee opened across, out of the code level, out of a drilled level.
-    const out = across ? clearAcross : zoom.code ? zoom.closeCode : drill.canOut ? drill.out : undefined;
-    // Escape: clear the pick first (never at the code level, which goes out), else go out.
-    const onEscape = useCallback(() => {
-        if ((selected || (surfaceSelected && surfaceSelected !== dismissed)) && !zoom.code) clearSelection(); else out?.();
-    }, [selected, surfaceSelected, dismissed, zoom.code, clearSelection, out]);
     // The Map's wheel and ladder go one band at a time; a step with nothing to enter says so at the method band.
+    const atCodeLevel = !!zoom.code;
     const bandIndex = BAND_ORDER.indexOf(zoom.band);
     const { stepIn, outToBand, closeCode: popCode, toBand: goToBand } = zoom;
     const wheelStep = useCallback((dir: 1 | -1) => {
@@ -290,82 +198,81 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
         if (atCodeLevel) popCode(); else if (bandIndex > 0) outToBand(bandIndex - 1);
     }, [stepIn, outToBand, popCode, atCodeLevel, bandIndex, selected, toast.show, t]);
     const toBand = useCallback((target: number) => goToBand(target, selected, () => toast.show(t.toastNoMethod)), [goToBand, selected, toast.show, t]);
-    // Flow (the stage's call arcs) or Sequence (the calls as a diagram); a method with no calls stays on Flow.
-    const [codeLayout, setLayout] = useState<CodeLayout>('flow');
-    useEffect(() => { if (!atCodeLevel) setLayout('flow'); }, [atCodeLevel]);
-    const setCodeLayout = useCallback((layout: CodeLayout) => {
-        if (layout === 'sequence' && steps.length === 0) { toast.show(fillTemplate(t.toastNoCalls, { name: methodTarget?.name ?? '' })); return; }
-        setLayout(layout);
-    }, [steps, toast.show, t, methodTarget]);
-    const sequence = atCodeLevel && codeLayout === 'sequence' && !!methodTarget;
-    const toggleFollow = useCallback(() => { toast.show(reading.follow ? t.toastFollowOff : t.toastFollowOn); reading.toggleFollow(); }, [reading, toast.show, t]);
-    // Closing the pane leaves the code level too.
-    const leaveCode = zoom.leaveCode;
-    const atCode = !!zoom.code;
-    const closeCode = useCallback(() => { setCodeOpen(false); setHoverRef(null); setAcross(null); if (atCode) leaveCode(); }, [atCode, leaveCode]);
-    // A method name in the code (or "Into") opens the code level on it when the zoom can; a loaded callee with no mark
-    // here opens its file in the pane (the stage follows its reading line there); anything else selects the mark, as before.
-    const enterCode = zoom.enterCode;
-    const drillTo = useCallback((ref: string) => {
-        if (enterCode(ref)) { setAcross(null); return; }
-        if (atCode && codeTargetOf(ref, records)) { setAcross(ref); return; }
-        setSelected(`node:${ref}`);
-        p.onSelect(ref);
-    }, [p, enterCode, atCode, records]);
-    // The symbol card: a selected file or symbol mark, else (the pane open) the symbol being read, pinned when Follow is off.
+
+    // The code dock: docked or read, what it reads and what that drives on the map (`useCodeDock`).
+    const d = useCodeDock({ p, bus, map, zoom, selected, setSelected, cardKey, toast: toast.show, width, slotOf, shown: dock.shown ?? true, onToggle: dock.onToggleCode });
+    const { reader, records, methodTarget, out } = d;
+    // Escape: clear the pick first (never at the code level, which goes out), else go out.
+    const onEscape = useCallback(() => {
+        if ((selected || (surfaceSelected && surfaceSelected !== dismissed)) && !zoom.code) clearSelection(); else out?.();
+    }, [selected, surfaceSelected, dismissed, zoom.code, clearSelection, out]);
+
+    // The symbol card: a selected file or symbol mark, else (reading) the symbol being read, pinned when Follow is off.
     // Stations keep their card (`cardKey` wins) and the code level has the step card.
-    const reader = reading.chain.at(-1)?.ref ?? null;
+    const readRef = reader.chain.at(-1)?.ref ?? null;
     const cardSubject: { ref: string; state: SymbolCardState } | null = atCodeLevel || cardKey ? null
-        : nodeSelected ? { ref: selected!.slice('node:'.length), state: 'selected' }
-        : showCode && reader ? { ref: reader, state: reading.follow ? 'reading' : 'pinned' } : null;
+        : d.nodeSelected ? { ref: selected!.slice('node:'.length), state: 'selected' }
+        : d.reading && readRef ? { ref: readRef, state: reader.follow ? 'reading' : 'pinned' } : null;
     const cardSlot = cardSubject ? [`node:${cardSubject.ref}`, `node:${fileRefOf(cardSubject.ref)}`].find((k) => bus.slotOf(k) >= 0) ?? null : null;
     const cardRecord = cardSubject ? records.find((r) => r.ref === cardSubject.ref) : undefined;
     const cardType = cardSlot ? MARK_TYPE_ORDER[marks?.type[bus.slotOf(cardSlot)] ?? -1] ?? SYMBOL_MARK_TYPE[railKindOf(cardRecord?.kind ?? '')] : 'external';
+    // The card's actions: the host's handler bound to the ref it acts on (a symbol's own; a station's first file, or the one carrying the anti-pattern).
+    const actOn = (act: ((ref: string) => void) | undefined, ref: string | undefined) => (act && ref ? () => act(ref) : undefined);
     const symbolCard = cardSubject && (
         <SymbolCard
             slotKey={cardSlot} symbolRef={cardSubject.ref} name={cardRecord?.name ?? index.get(cardSubject.ref)?.label ?? cardSubject.ref} state={cardSubject.state}
-            records={records} markType={cardType} labels={p.labels} onDrill={() => onDrill(`node:${cardSubject.ref}`)} onCode={openCode}
+            records={records} markType={cardType} labels={p.labels} onDrill={() => onDrill(`node:${cardSubject.ref}`)} onCode={d.openCode}
             onZoomIn={() => wheelStep(1)} onZoomOut={() => wheelStep(-1)} onOpenSource={p.onOpenSource}
+            facts={d.facts} onCallers={() => surface.setQuestion('callers')} onSimulate={actOn(dock.onSimulate, cardSubject.ref)} onRestructure={actOn(dock.onRestructure, cardSubject.ref)}
         />
     );
+    const cardRefs = map.stationOfKey(cardKey)?.refs ?? [];
     const card = (
         <StageBusContext.Provider value={bus}>
             <StageCard
-                cardKey={cardKey} map={map} drill={drill} graph={graph} labels={p.labels} compact={mapWidth > 0 && mapWidth < COMPACT_WIDTH}
+                cardKey={cardKey} map={map} drill={drill} graph={graph} labels={p.labels} compact={d.mapWidth > 0 && d.mapWidth < COMPACT_WIDTH}
                 onClose={closeCard} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel} onEnter={zoom.zoomInto}
-                onCode={openCode}
+                onCode={d.openCode} facts={d.facts} onSimulate={actOn(dock.onSimulate, cardRefs[0])}
+                onRestructure={actOn(dock.onRestructure, cardRefs.find((r) => d.facts.antiPatternOf(r)) ?? cardRefs[0])}
             />
             {symbolCard}
-            {site && <CallSiteCard site={site.site} at={site.at} boxWidth={mapWidth} labels={p.labels} onOpenSource={p.onOpenSource} onClose={closeSite} />}
-            {showCode && !sequence && <CallBadges labels={p.labels} onStep={reading.goStep} />}
-            {sequence && methodTarget && <CodeSequence method={methodTarget.name} steps={steps} current={current} byRef={reading.byRef} labels={p.labels} onStep={reading.goStep} />}
-            {showCode && methodTarget && (
-                <StepCard method={methodTarget} reading={reading} records={records} labels={p.labels} onDrill={drillTo} onOut={out} side={split ? 'right' : 'left'} />
+            {site && <CallSiteCard site={site.site} at={site.at} boxWidth={d.mapWidth} labels={p.labels} onOpenSource={p.onOpenSource} onClose={closeSite} />}
+            {d.reading && !d.sequence && <CallBadges labels={p.labels} onStep={reader.goStep} />}
+            {d.sequence && methodTarget && <CodeSequence method={methodTarget.name} steps={reader.steps} current={reader.current} byRef={reader.byRef} labels={p.labels} onStep={reader.goStep} />}
+            {d.reading && methodTarget && (
+                <StepCard method={methodTarget} reading={reader} records={records} labels={p.labels} onDrill={d.drillTo} onOut={out} side={d.split ? 'right' : 'left'} />
             )}
             {drill.loading && zoom.band !== 'system' && <ZoomLoading text={p.labels.surface.map.card.loading} />}
             <StageToast message={toast.message} />
         </StageBusContext.Provider>
     );
-    const code = showCode ? {
-        split,
-        pane: (
-            <CodeDock
-                target={codeTarget} name={codeName} reader={surface.readSource} labels={p.labels} records={records} scrollLine={scrollLine}
-                reading={reading} onDrill={drillTo} onOpenSource={p.onOpenSource} onClose={closeCode} onOut={out} hover={hoverRef} pane={split}
-                toast={toast.show} onSelect={onSelect} followCode={followCode} onHomeTab={clearAcross}
-                files={codeTarget ? { home: (zoom.code?.target ?? markTarget)?.path ?? codeTarget.path, across: acrossTarget?.path ?? null } : undefined}
-            />
-        ),
-        bar: (
+    // Reading: the file (the whole of it; `files` its tabs). Else the outline of the level, from the stations the stage already has.
+    const pane = !d.visible ? null : d.reading ? (
+        <CodeDock
+            target={d.codeTarget} name={d.codeName} reader={surface.readSource} labels={p.labels} records={records} scrollLine={d.scrollLine}
+            reading={reader} onDrill={d.drillTo} onOpenSource={p.onOpenSource} onClose={d.closeCode} onOut={out} hover={d.hoverRef} pane
+            toast={toast.show} onSelect={onSelect} followCode={d.followCode} onHomeTab={d.clearAcross} facts={d.facts} inside={d.inside}
+            onSimulate={dock.onSimulate} onRestructure={dock.onRestructure} onHide={d.hide} compare={dock.compare} readerAt={surface.readSourceAt}
+            files={d.codeTarget ? { home: (zoom.code?.target ?? d.markTarget)?.path ?? d.codeTarget.path, across: d.acrossTarget?.path ?? null } : undefined}
+        />
+    ) : (
+        <CodeOutline
+            stations={map.stations.stations} keyOf={map.keyOfStation} types={d.types} facts={d.facts} selected={selected} canEnter={(id) => drill.canEnter(id).can}
+            onSelect={onSelect} onEnter={zoom.zoomInto} onRestructure={dock.onRestructure} onHide={d.hide} note={surface.readSource ? undefined : t.levelNoSource} labels={p.labels}
+        />
+    );
+    const code = {
+        pane, visible: d.visible, split: d.split, reading: d.reading, show: d.visible ? undefined : dock.onToggleCode,
+        bar: d.reading ? (
             <CodeTrail
-                stack={drill.stack} onClimb={drill.climb} methods={zoom.trail} onMethod={zoom.codeBack} onLeaveCode={leaveCode} across={acrossTarget?.ref ?? null}
-                follow={reading.follow} onFollow={toggleFollow} onOut={out} labels={p.labels}
+                stack={drill.stack} onClimb={drill.climb} methods={zoom.trail} onMethod={zoom.codeBack} onLeaveCode={zoom.leaveCode} across={d.acrossTarget?.ref ?? null}
+                follow={reader.follow} onFollow={d.toggleFollow} onOut={out} labels={p.labels}
             />
-        ),
-    } : null;
-    const status = showCode ? <StatusStrip labels={p.labels} band={zoom.band} follow={reading.follow} path={codeTarget?.path ?? null} line={reading.line} /> : null;
+        ) : null,
+    };
+    const status = d.reading ? <StatusStrip labels={p.labels} band={zoom.band} follow={reader.follow} path={d.codeTarget?.path ?? null} line={reader.line} /> : null;
     return {
-        map, zoom, selected, onSelect, onDrill, onOut: out, onEscape, clearSelection, dismissed, wheelStep, toBand, codeLayout, setCodeLayout, patchMap, card, code, status,
+        map, zoom, selected, onSelect, onDrill, onOut: out, onEscape, clearSelection, dismissed, wheelStep, toBand, codeLayout: d.codeLayout, setCodeLayout: d.setCodeLayout, patchMap, card, code, status,
     };
 }
 

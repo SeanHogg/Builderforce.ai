@@ -17,8 +17,8 @@ export const markSet: Handler<'markSet'> = (store, { graph, changed, strings }) 
 /** The model a request names: its own inputs when it carries them (any realm builds the same model), else the held one. */
 const modelOf = (store: Parameters<Handler<'placement'>>[0], graph: number, model?: ModelInputs) => stageModelOf(store, graph, model?.changed, model?.strings);
 
-export const markPaint: Handler<'markPaint'> = (store, { graph, lensId, questionId, overlay, lit, roles, family, model }) => once(() =>
-    paintMarks(store.graph(graph), modelOf(store, graph, model), { lensId, questionId, overlay, lit, roles, family }));
+export const markPaint: Handler<'markPaint'> = (store, { graph, lensId, questionId, overlay, lit, roles, family, diff, model }) => once(() =>
+    paintMarks(store.graph(graph), modelOf(store, graph, model), { lensId, questionId, overlay, lit, roles, family, ...(diff ? { diff: new Map(diff) } : {}) }));
 
 export const placement: Handler<'placement'> = (store, req) => {
     // A drilled level is its own placement of the same marks (B7: drill enter / exit), whatever the camera.

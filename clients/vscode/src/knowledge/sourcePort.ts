@@ -14,6 +14,7 @@
 import { realpath, stat } from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { runGit } from "@builderforce/agent-tools/node-git-history";
 import { isMissingPath } from "../composerCommands/writeContainment";
 import { MAX_SOURCE_LINES, type KnowledgeSourceText } from "./knowledgeProtocol";
 import { inside, slash, type KnowledgeRoot } from "./knowledgeRoots";
@@ -51,8 +52,49 @@ export async function readSource(root: KnowledgeRoot, rel: unknown, startLine: u
   if (!info.isFile() || info.size > MAX_SOURCE_FILE_BYTES) return null;
   const range = clampLines(startLine, endLine);
   const text = new TextDecoder().decode(await vscode.workspace.fs.readFile(vscode.Uri.file(file)));
-  const lines = text.split(/\r?\n/).slice(range.startLine - 1, range.endLine);
-  return { startLine: range.startLine, lines, truncated: range.truncated };
+  return sliceLines(text, range);
+}
+
+/** The clamped `range` of `text`'s lines as the view's `SourceText` — one slicer for the working copy and for a commit's blob. */
+function sliceLines(text: string, range: { startLine: number; endLine: number; truncated: boolean }): KnowledgeSourceText {
+  return { startLine: range.startLine, lines: text.split(/\r?\n/).slice(range.startLine - 1, range.endLine), truncated: range.truncated };
+}
+
+/**
+ * A commit sha the host will hand to git: 7-40 hex digits and nothing else. Anything git would also accept as a revision
+ * (`HEAD~1`, `main`, `a..b`, `@{u}`) is refused, and so is anything starting with `-` — a value like `--output=x` must never
+ * reach git's argument list as an option.
+ */
+export const COMMIT_SHA = /^[0-9a-f]{7,40}$/i;
+
+/** Room for git to answer `cat-file` for one blob; a hung or huge repository does not hold the view's call. */
+const GIT_AT_TIMEOUT_MS = 10_000;
+
+/**
+ * Lines `startLine..endLine` of `rel` as it was at commit `rev` (PRD 43 C8), read from the root's repository.
+ *
+ *   - `rev` must match {@link COMMIT_SHA} (option injection, ref expressions);
+ *   - `rel` passes the SAME lexical check as `readSource` (`isSafeRelative`: no `..`, no absolute path, no NUL). Its real-path
+ *     check is not repeated: the file may no longer exist in the working tree, and git reads the object database, which no
+ *     working-tree link can redirect (a tree path never traverses a symlink);
+ *   - `rel` is addressed as `rev:./path`: the `./` makes git resolve it against the root (git's cwd), not the repository
+ *     top, so a root that is a subfolder of the repository cannot be escaped upward;
+ *   - the blob's size is asked first (`cat-file -s`) and a blob over {@link MAX_SOURCE_FILE_BYTES} is never read; `cat-file blob`
+ *     (not `show`) refuses a tree or a commit named by the path, and runs no textconv filter or external program;
+ *   - argv is an array (no shell), so no value is ever parsed as shell text.
+ *
+ * Null when any of that refuses, git fails (not a repository, unknown commit, no such file at that commit), or the blob is too big.
+ */
+export async function readSourceAt(root: KnowledgeRoot, rel: unknown, rev: unknown, startLine: unknown, endLine: unknown): Promise<KnowledgeSourceText | null> {
+  if (typeof rev !== "string" || !COMMIT_SHA.test(rev)) return null;
+  if (typeof rel !== "string" || !isSafeRelative(rel)) return null;
+  const spec = `${rev}:./${rel.replace(/\\/g, "/").replace(/^(\.\/)+/, "")}`;
+  const size = await runGit(root.rootPath, ["cat-file", "-s", spec], { timeoutMs: GIT_AT_TIMEOUT_MS });
+  const bytes = size.stdout === undefined ? Number.NaN : Number(size.stdout.trim());
+  if (!Number.isInteger(bytes) || bytes > MAX_SOURCE_FILE_BYTES) return null;
+  const blob = await runGit(root.rootPath, ["cat-file", "blob", spec], { timeoutMs: GIT_AT_TIMEOUT_MS });
+  if (blob.stdout === undefined) return null;
+  return sliceLines(blob.stdout, clampLines(startLine, endLine));
 }
 
 /** Opens `rel` in the editor with lines `startLine..endLine` selected (a preview tab). Null either way: a refused path opens nothing. */

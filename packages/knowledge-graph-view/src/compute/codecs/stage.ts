@@ -19,7 +19,8 @@ const withModel = <T extends { graph: KnowledgeGraph; model?: ModelInputs }>(inp
 };
 
 export const markSet: Codec<'markSet'> = {
-    encode: ({ graph, changed, strings }, residency) => {
+    // The wire always carries an array (the worker keys its model on it), however the caller spelled "no changed set".
+    encode: ({ graph, changed = [], strings }, residency) => {
         MODEL_INPUTS.set(graph, { changed: [...changed], strings: { ...strings } });
         return named({ graph, changed: [...changed], strings: { ...strings } }, residency);
     },

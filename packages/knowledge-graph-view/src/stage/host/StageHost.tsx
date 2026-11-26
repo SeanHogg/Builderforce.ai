@@ -9,9 +9,11 @@
  * overlay's camera switcher and zoom buttons, the stage's depth control, the Sequence's band control); none is the
  * stage's own. Cards and `onOpenSource` go through `useStageWiring`.
  *
- * With the code open (`wiring.code`) the box splits: the code pane on the left, the map on the right under its zoom-path
- * bar (`CodeTrail`); the stage, its cards and its pins are laid out in the map's own box, so every projection into it
- * starts at its origin. A box too narrow to split keeps the whole width for the map and floats the pane over it.
+ * The code pane (`wiring.code`, PRD 43 Part C1) is docked on the left of a box wide enough to split (the outline of the
+ * level; a file once one is read, and then the map sits under its zoom-path bar, `CodeTrail`); the stage, its cards and
+ * its pins are laid out in the map's own box, so every projection into it starts at its origin. A box too narrow to
+ * split shows ONE of the code and the picture of the same location, under a Code | Picture switch. A hidden pane leaves a
+ * tab on the left edge to bring it back.
  *
  * No WebGL, or a context lost for good: the List (the registry's `fallback` row) instead (B8).
  */
@@ -25,6 +27,7 @@ import { cssVar, useThemeColors } from '../../scene/themeColors';
 import { EdgesCapped } from '../../surface/CapNote';
 import { LayingOut } from '../../surface/LayingOut';
 import type { SceneProps } from '../../surface/registry';
+import { codeCompareOf, paintDiffEntries, type CompareView } from '../../surface/compareModel';
 import { showsTowers } from '../../surface/useShowInTower';
 import { Segmented } from '../../surface/ui';
 import { TYPE } from '../../surface/ui/type';
@@ -44,17 +47,34 @@ import { StageFactoryContext } from './StageFactoryContext';
 import { StagePins } from './StagePins';
 import { useDrillIdentity } from './useDrillIdentity';
 import { useHeldFrame } from './useHeldFrame';
+import { useSideMask } from './useSideMask';
 import { holdsForNestBasis, useNestBasis } from './useNestBasis';
 import { useStageStrings } from './stageStrings';
 
-export interface StageHostProps extends SceneProps {
+/** What the host threads to the code pane (PRD 43 Part C): its visibility, and the actions another slice wires. */
+export interface StageCodeProps {
+    /** The pane is shown (`usePanelVisibility`'s `code` slot; default true). */
+    codeShown?: boolean | undefined;
+    onToggleCode?: (() => void) | undefined;
+    /** Simulate / Restructure a symbol by ref; the lens row and the outline action are hidden while absent. */
+    onSimulate?: ((ref: string) => void) | undefined;
+    onRestructure?: ((ref: string) => void) | undefined;
+}
+
+/** The open comparison, if any (PRD 43 C5): the side on show, what it lacks, how it differs. The graph the host hands in is already the union. */
+export interface StageCompareProps {
+    compare?: CompareView | null | undefined;
+}
+
+export interface StageHostProps extends SceneProps, StageCodeProps, StageCompareProps {
     /** The placement the active camera row names. */
     camera: PlacementCamera;
     /** The DOM camera shown when the stage cannot draw (no WebGL, a lost context). */
     fallback: ComponentType<SceneProps>;
 }
 
-const NO_CHANGES: string[] = [];
+/** The Code | Picture switch's row in a box too narrow to split. */
+const SWITCH_PX = 44;
 // Exactly its scene box (the layout gives that box its minimum, `sceneMinHeight`): a floor here made the stage taller
 // than the box, so a fill camera scrolled inside it and drew only the strip on screen.
 const BOX = { position: 'relative', width: '100%', height: '100%' } as const;
@@ -74,7 +94,7 @@ const BANDS = ['system', 'class', 'method'] as const;
 /** The Map's ladder: the same bands plus the code. Going in stays with the wheel, double-click and Enter. */
 const MAP_BANDS: readonly ZoomBand[] = ZOOM_BANDS.map((b) => b.band);
 
-function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: PlacementCamera; renderer: StageRenderer; onLost(): void }) {
+function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimulate, onRestructure, compare, ...p }: SceneProps & StageCodeProps & StageCompareProps & { camera: PlacementCamera; renderer: StageRenderer; onLost(): void }) {
     const box = useRef<HTMLDivElement>(null);
     // Before the box is measured (and where nothing measures it: jsdom) the stage is laid out for a standard box.
     const measured = useContainerSize(box);
@@ -86,14 +106,22 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
     const strings = useStageStrings(labels);
     const [seqBand, setSeqBand] = useState(0);
 
-    const marks = useComputed('markSet', { graph, changed: NO_CHANGES, strings }, [graph, strings], null, { keep: false }).value;
+    // The MarkSet is built once per graph: a comparison hands the union graph for its whole run, and a commit's changed set is paint, never an input here.
+    const marks = useComputed('markSet', { graph, strings }, [graph, strings], null, { keep: false }).value;
     const generation = marks?.generation ?? 0;
-    const wiring = useStageWiring(p, renderer, marks, boxWidth);
+    const codeCompare = useMemo(() => codeCompareOf(compare), [compare]);
+    const wiring = useStageWiring(p, renderer, marks, boxWidth, { shown: codeShown, onToggleCode, onSimulate, onRestructure, compare: codeCompare });
     const drilled = !!surface.drill.view;
-    // The map's own box: beside the code pane and under its bar while the code is open.
+    // The map's own box: beside the docked pane, under the Code | Picture switch (a narrow box) and the zoom-path bar, above the status strip (the last two while a file is read).
     const code = wiring.code;
-    const codeWidth = code?.split ? codePaneWidth(boxWidth) : 0;
-    const width = boxWidth - codeWidth, height = boxHeight - (code ? CODE_BAR_PX + STATUS_PX : 0);
+    const codeWidth = code.split ? codePaneWidth(boxWidth) : 0;
+    const narrow = code.visible && !code.split;
+    const [paneView, setPaneView] = useState<'code' | 'picture'>('picture');
+    // Opening a file in a narrow box shows it; closing it returns to the picture.
+    useEffect(() => { setPaneView(code.reading ? 'code' : 'picture'); }, [code.reading]);
+    const showCodeHalf = narrow && paneView === 'code';
+    const switchPx = narrow ? SWITCH_PX : 0, barPx = code.reading ? CODE_BAR_PX : 0, statusPx = code.reading ? STATUS_PX : 0;
+    const width = boxWidth - codeWidth, height = boxHeight - switchPx - barPx - statusPx;
 
     // Paint: the lens, the overlay, the question (+ its family) and what it lights; Show in towers' roles while a tower
     // picture is on show (the 3D scene, or the Map tilted).
@@ -102,9 +130,12 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
     const towers = showsTowers(camera === 'map' ? 'transit' : camera === '3d' ? '3d' : 'graph', surface.towers);
     const highlight = towers ? surface.highlight : null;
     const roles = useMemo(() => (highlight ? [...highlight.roles] : null), [highlight]);
+    // Compare: how each ref differs on the side shown (a diff tone over the slot's own); a station mark is painted by its id.
+    const stations = surface.stations;
+    const diff = useMemo(() => (compare?.diff.size ? paintDiffEntries(compare.diff, stations) : null), [compare?.diff, stations]);
     const paint = useComputed('markPaint', {
-        graph, generation, lensId: p.lens.id, questionId: surface.question, overlay: bindings, lit, roles, family: surface.family,
-    }, [graph, generation, p.lens.id, surface.question, bindings, lit, roles, surface.family], null, { enabled: !!marks }).value;
+        graph, generation, lensId: p.lens.id, questionId: surface.question, overlay: bindings, lit, roles, family: surface.family, diff,
+    }, [graph, generation, p.lens.id, surface.question, bindings, lit, roles, surface.family, diff], null, { enabled: !!marks }).value;
 
     // Placement: Map always (its drill and unfold wiring read it; the worker caches it), and the camera on show.
     const channels = useMemo(() => ({ size: bindings.size, width: bindings.width }), [bindings.size, bindings.width]);
@@ -123,7 +154,8 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
     const setBasis = wiring.zoom.setBasis;
     useEffect(() => { setBasis(nestBasis.basis); }, [setBasis, nestBasis.basis]);
     const otherPlacement = useComputed('placement', place(other, other === '3d' ? 1 : 0, null, lod, pathId), [graph, generation, band, channels, other, lod, pathId, symbols], null, { enabled: !!marks }).value;
-    const placement = camera === 'map' ? wiring.patchMap(map) : otherPlacement;
+    // Before / After: the same placement with the slots the side lacks shrunk onto their anchor (the tween moves them).
+    const placement = useSideMask(camera === 'map' ? wiring.patchMap(map) : otherPlacement, marks, compare);
     // A zoom-entered level whose entry went stale with the rebuilt world waits for the placements it re-nests from (not when they failed: nothing is coming).
     const nesting = camera === 'map' && !!map && holdsForNestBasis(nestBasis.pending, nestBasis.basis, wiring.zoom.awaitsBasis(map));
     const ready = !!marks && !!placement && placement.generation === marks.generation && !nesting;
@@ -169,13 +201,29 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
 
     return (
         <div ref={box} style={BOX} data-stage-host data-stage-camera={camera}>
-            {code?.split && (
-                <div data-code-split style={{ position: 'absolute', insetBlockStart: 0, insetBlockEnd: STATUS_PX, insetInlineStart: 0, width: codeWidth, borderInlineEnd: `1px solid ${cssVar('border')}`, background: cssVar('bg') }}>
+            {code.split && (
+                <div data-code-split style={{ position: 'absolute', insetBlockStart: 0, insetBlockEnd: statusPx, insetInlineStart: 0, width: codeWidth, borderInlineEnd: `1px solid ${cssVar('border')}`, background: cssVar('bg') }}>
                     {code.pane}
                 </div>
             )}
-            {code && <div style={{ position: 'absolute', top: 0, left: codeWidth, width }}>{code.bar}</div>}
-            <div data-map-pane style={{ position: 'absolute', top: boxHeight - height, left: codeWidth, width, height }}>
+            {narrow && (
+                <div data-pane-switch style={{ position: 'absolute', top: 0, left: 0, right: 0, height: SWITCH_PX, boxSizing: 'border-box', display: 'flex', alignItems: 'center', padding: '0 8px', borderBottom: `1px solid ${cssVar('border')}`, background: cssVar('bg') }}>
+                    <Segmented
+                        label={sc.paneSwitchAria} value={paneView} onChange={(id) => setPaneView(id as 'code' | 'picture')}
+                        items={[{ id: 'code', label: sc.paneCode }, { id: 'picture', label: sc.panePicture }]}
+                    />
+                </div>
+            )}
+            {code.show && (
+                <button
+                    type="button" data-action="dock-show" aria-label={sc.dockShow} title={sc.dockShow} onClick={code.show}
+                    style={{ ...toggleButton, position: 'absolute', zIndex: 3, insetBlockStart: '50%', insetInlineStart: 0, transform: 'translateY(-50%)', minHeight: 40, borderRadius: '0 6px 6px 0' }}
+                >
+                    <span aria-hidden="true">›</span>
+                </button>
+            )}
+            {code.reading && <div style={{ position: 'absolute', top: switchPx, left: codeWidth, width }}>{code.bar}</div>}
+            <div data-map-pane style={{ position: 'absolute', top: switchPx + barPx, left: codeWidth, width, height, ...(showCodeHalf ? { visibility: 'hidden', pointerEvents: 'none' } : null) }}>
                 {/* Over the stage's top-left corner, so the stage box (and every projection into it) starts at the map's origin. */}
                 {(camera === 'sequence' || camera === 'map' || levelNote) && (
                     <div style={{ position: 'absolute', zIndex: 1, insetBlockStart: 8, insetInlineStart: 8, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, maxWidth: 'calc(100% - 16px)' }}>
@@ -225,9 +273,11 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
                 )}
                 {(drill.loading && camera === 'map') && <LayingOut labels={labels} corner />}
                 <EdgesCapped caption={caption} labels={labels} />
-                {code && !code.split && code.pane}
             </div>
-            {code && wiring.status}
+            {showCodeHalf && (
+                <div data-code-narrow style={{ position: 'absolute', insetInline: 0, insetBlockStart: switchPx + barPx, insetBlockEnd: statusPx, background: cssVar('bg') }}>{code.pane}</div>
+            )}
+            {wiring.status}
         </div>
     );
 }

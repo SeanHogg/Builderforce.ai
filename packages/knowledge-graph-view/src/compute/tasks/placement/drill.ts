@@ -19,16 +19,16 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { buildDrillView, type DrillFrame } from '../../../surface/transit/drillView';
 import { withSymbolRecords } from '../../../surface/transit/symbols';
 import type { Placement } from '../../../stage/types';
+import type { SymbolRecord } from '../../../types';
 import type { StageModel } from '../stageModel';
 import { associationLinks } from './associations';
 import { placeMap } from './map';
 import { drillFrameOf, type PlacementReq } from './request';
 import { symbolSlots } from './symbolSlots';
 
-export function placeDrill(g: KnowledgeGraph, model: StageModel, req: PlacementReq): Placement {
-    const frame = drillFrameOf(req.drill);
-    if (!frame) return placeMap(model, { ...req, drill: null });
-    const full = withSymbolRecords(g, req.symbols ?? []);
+/** A drilled level as a StageModel (its stations, lines and slots) plus what built it: the Map and the Flow place the SAME level. */
+export function drillLevel(g: KnowledgeGraph, model: StageModel, frame: Pick<DrillFrame, 'level' | 'ref'>, symbols: readonly SymbolRecord[]) {
+    const full = withSymbolRecords(g, symbols);
     const { marks, append, nodeSlot } = symbolSlots(model, full, g.nodes.length);
     const view = buildDrillView(full, model.stations, { ...frame, name: '' } as DrillFrame);
 
@@ -38,6 +38,13 @@ export function placeDrill(g: KnowledgeGraph, model: StageModel, req: PlacementR
         if (slot !== undefined) stationSlot.set(s.id, slot);
     }
     const level: StageModel = { ...model, stations: view.stations, lines: view.lines, marks, nodeSlot, stationSlot, order: view.order };
+    return { level, view, full, append, stationSlot };
+}
+
+export function placeDrill(g: KnowledgeGraph, model: StageModel, req: PlacementReq): Placement {
+    const frame = drillFrameOf(req.drill);
+    if (!frame) return placeMap(model, { ...req, drill: null });
+    const { level, view, append, stationSlot } = drillLevel(g, model, frame, req.symbols ?? []);
     const placed = placeMap(level, req);
     // The level's members by the ref they draw (a file at the class band, a symbol at the method band): the association
     // links land on them (B1a rule 9).

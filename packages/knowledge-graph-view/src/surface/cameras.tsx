@@ -38,6 +38,8 @@ export const CAMERAS: readonly CameraDef[] = [
     // The architecture cameras read the source files only: a graph with none (docs, nothing reviewed) hides them.
     { id: 'style', labelKey: 'viewStyle', placement: 'style', available: (graph) => hasLayeredCode(graph) },
     { id: 'features', labelKey: 'viewFeatures', placement: 'features', available: (graph) => hasSourceFiles(graph) },
-    { id: 'sequence', labelKey: 'viewSequence', placement: 'sequence', available: (_graph, env) => env.hasLines, switcher: false },
+    // Flow and Sequence read the lines (the entry walk), so they exist where the lines do.
+    { id: 'flow', labelKey: 'viewFlow', placement: 'flow', available: (_graph, env) => env.hasLines },
+    { id: 'sequence', labelKey: 'viewSequence', placement: 'sequence', available: (_graph, env) => env.hasLines },
     { id: 'list', labelKey: 'viewList', component: ListCamera, available: () => true, fallback: true },
 ];

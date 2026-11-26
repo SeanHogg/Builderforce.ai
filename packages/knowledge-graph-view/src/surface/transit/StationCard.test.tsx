@@ -40,6 +40,43 @@ describe('StationCard', () => {
         expect(a.onPatterns).toHaveBeenCalledTimes(1);
     });
 
+    const withFacts = (over: Partial<NonNullable<CardModel['facts']>> = {}): Partial<CardModel> => ({ facts: { tests: 'reached', antiPattern: null, ...over } });
+    const finding = { kind: 'god-module', name: 'God module', findingId: 'f1' };
+
+    it('offers Simulate, and Restructure INSTEAD of it when the station carries an anti-pattern', () => {
+        const onSimulate = vi.fn(), onRestructure = vi.fn();
+        render(<StationCard card={{ ...base, ...withFacts() }} labels={L} compact={false} at={{ left: 0, top: 0 }} onClose={vi.fn()} onEnter={vi.fn()} onUnfold={vi.fn()} onCallers={vi.fn()} onApi={vi.fn()} onPatterns={vi.fn()} onSimulate={onSimulate} onRestructure={onRestructure} />);
+        fireEvent.click(screen.getByRole('button', { name: t.simulate }));
+        expect(onSimulate).toHaveBeenCalledTimes(1);
+        expect(screen.queryByRole('button', { name: t.restructure })).toBeNull();
+        document.body.innerHTML = '';
+        render(<StationCard card={{ ...base, ...withFacts({ antiPattern: finding }) }} labels={L} compact={false} at={{ left: 0, top: 0 }} onClose={vi.fn()} onEnter={vi.fn()} onUnfold={vi.fn()} onCallers={vi.fn()} onApi={vi.fn()} onPatterns={vi.fn()} onSimulate={onSimulate} onRestructure={onRestructure} />);
+        expect(screen.queryByRole('button', { name: t.simulate })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: t.restructure }));
+        expect(onRestructure).toHaveBeenCalledTimes(1);
+    });
+
+    it('hides Simulate and Restructure when their callbacks are absent', () => {
+        card(withFacts());
+        expect(screen.queryByRole('button', { name: t.simulate })).toBeNull();
+        document.body.innerHTML = '';
+        card(withFacts({ antiPattern: finding }));
+        expect(screen.queryByRole('button', { name: t.restructure })).toBeNull();
+        expect(screen.queryByRole('button', { name: t.simulate })).toBeNull();
+    });
+
+    it('states risk, test reach and the anti-pattern name in the facts row', () => {
+        card(withFacts({ tests: 'none', antiPattern: finding }));
+        const row = document.querySelector('[data-card-facts]')!;
+        expect(row.querySelector('[data-fact="risk"]')?.textContent).toBe(`${t.risk}: 3`);
+        expect(row.querySelector('[data-fact="tests"]')?.textContent).toBe(t.testNone);
+        expect(row.querySelector('[data-fact="anti"]')?.textContent).toBe('God module');
+        document.body.innerHTML = '';
+        card(withFacts({ tests: 'reached' }));
+        expect(document.querySelector('[data-fact="tests"]')?.textContent).toBe(t.testReached);
+        expect(document.querySelector('[data-fact="anti"]')).toBeNull();
+    });
+
     it('moves focus into the card, and closes on Escape and on a press outside, not on a press inside', () => {
         const a = card();
         expect(document.activeElement).toBe(screen.getByRole('button', { name: t.goInside }));

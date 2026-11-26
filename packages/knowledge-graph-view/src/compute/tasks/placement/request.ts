@@ -26,6 +26,11 @@ export interface PlacementReq {
     unfolded: string | null;
     pins: readonly string[];
     pathId: string | null;
+    /**
+     * Code depth (Sequence): the symbol ref of the method whose calls are drawn — the participants are that method and the
+     * symbols it calls, the calls raised bars in call-site order. Absent = the band / line the other fields name.
+     */
+    method?: string;
     viewportBand: number;
     lod: number;
     /**
@@ -73,7 +78,7 @@ export const channelBindings = (c: PlacementChannels = NO_CHANNELS): Bindings =>
  */
 export const placementCacheKey = (build: string, r: PlacementReq): string => {
     const c = r.channels ?? NO_CHANNELS;
-    return [build, r.camera, r.drill ?? '', r.unfolded ?? '', r.pathId ?? '', r.viewportBand, r.lod, r.depth ?? 0, c.size, c.width, r.drill || r.camera === 'sequence' ? r.symbols?.length ?? 0 : 0].join('|');
+    return [build, r.camera, r.drill ?? '', r.unfolded ?? '', r.pathId ?? '', r.viewportBand, r.lod, r.depth ?? 0, c.size, c.width, r.drill || r.camera === 'sequence' || r.camera === 'flow' ? r.symbols?.length ?? 0 : 0, r.method ?? ''].join('|');
 };
 
 /**

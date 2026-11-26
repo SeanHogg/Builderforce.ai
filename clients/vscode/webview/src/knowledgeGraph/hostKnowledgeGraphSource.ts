@@ -301,5 +301,8 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
     // The code band's text: the extension keeps the path inside the root, caps the file size and clamps the lines; null when it refuses.
     readSource: (rootId: string, path: string, range: SourceRange) =>
       t.call<SourceText | null>({ op: 'readSource', rootId, path, startLine: range.startLine, endLine: range.endLine }),
+    // The same file at a commit (PRD 43 C8): the extension validates `rev` as a hex sha and reads it with git; null when it refuses or the file did not exist then.
+    readSourceAt: (rootId: string, path: string, rev: string, range: SourceRange) =>
+      t.call<SourceText | null>({ op: 'readSourceAt', rootId, path, rev, startLine: range.startLine, endLine: range.endLine }),
   };
 }

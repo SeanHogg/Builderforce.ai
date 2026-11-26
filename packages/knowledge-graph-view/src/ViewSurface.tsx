@@ -10,8 +10,10 @@ import { CAMERAS } from './surface/cameras';
 import { LayingOut } from './surface/LayingOut';
 import type { CameraDef, SceneProps } from './surface/registry';
 import { SurfaceErrorBoundary } from './surface/SurfaceErrorBoundary';
+import type { StageCodeProps, StageCompareProps } from './stage/host/StageHost';
 
-export type ViewSurfaceProps = SceneProps;
+/** The scene's props, plus what the stage host threads to its code pane (visibility, Simulate, Restructure) and the open comparison. */
+export type ViewSurfaceProps = SceneProps & StageCodeProps & StageCompareProps;
 
 const StageHost = lazy(() => import('./stage/host/StageHost'));
 

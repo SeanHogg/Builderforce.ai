@@ -8,6 +8,7 @@
 
 import type { KnowledgeGraphLabels } from '../labels';
 import { counted } from './plural';
+import { isUntested } from './coverageThreshold';
 import type { LensId } from '../types';
 import type { Line, LinesModel } from './lines';
 import { metricStatus, type MetricStatus } from './overlays';
@@ -60,7 +61,7 @@ export const QUESTIONS: readonly QuestionDef[] = [
     {
         id: 'untested', primary: true, note: () => null,
         status: (stations) => metricStatus('cov', stations),
-        matches: (s) => s.cov !== undefined && s.cov < 0.5,
+        matches: (s) => isUntested(s.cov),
     },
     {
         id: 'patterns', primary: true,

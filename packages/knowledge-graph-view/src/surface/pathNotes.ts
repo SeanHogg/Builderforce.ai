@@ -6,18 +6,16 @@
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from '../labels';
+import { isUntested } from './coverageThreshold';
 import { counted } from './plural';
 import type { Station } from './stations';
-
-/** Below this mean coverage a station reads as "no tests" (the same line the Untested question draws). */
-export const UNTESTED_BELOW = 0.5;
 
 /** "no tests · god · 2 findings": only what is true of the station, joined; null when nothing is. */
 export function stationNote(st: Station | undefined, labels: KnowledgeGraphLabels): string | null {
     if (!st) return null;
     const t = labels.surface.path;
     const parts: string[] = [];
-    if (st.cov !== undefined && st.cov < UNTESTED_BELOW) parts.push(t.noTests);
+    if (isUntested(st.cov)) parts.push(t.noTests);
     if (st.patterns[0]) parts.push(st.patterns[0]);
     if (st.findingIds.length > 0) parts.push(counted(labels, 'finding', st.findingIds.length));
     return parts.length > 0 ? parts.join(' · ') : null;

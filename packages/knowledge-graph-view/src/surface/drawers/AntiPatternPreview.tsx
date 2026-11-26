@@ -25,6 +25,7 @@ import type { AntiPatternGroup } from './antiPatternGroups';
 import { applyAntiPatterns, canApplyAll } from './antiPatternApply';
 import { AntiPatternBeforeAfter } from './AntiPatternBeforeAfter';
 import { layerNames } from './AntiPatternCard';
+import { SeeRestructured } from './SeeRestructured';
 import { PREVIEW_SAMPLE, useGroupPreviews } from './useGroupPreviews';
 import { PatternsFooter } from './PatternsFooter';
 
@@ -83,6 +84,7 @@ export function AntiPatternPreview({ labels, source, surface, onCompose, onChang
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                             <strong style={{ ...TYPE.title, flex: 1 }}>{head} · {counted(labels, g.from !== undefined ? 'link' : 'finding', g.count)}</strong>
                             <ProvenanceBadge provenance={findingProvenance(first)} labels={labels} />
+                            <SeeRestructured finding={first} labels={labels} />
                             <span style={{ ...TYPE.tag, color: cssVar(host ? 'agrees' : 'cycle') }}>{host ? t.tagHost : t.tagAgent}</span>
                         </div>
                         <AntiPatternBeforeAfter group={g} labels={labels} index={index} />

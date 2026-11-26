@@ -18,6 +18,7 @@ import { TYPE } from '../ui/type';
 import type { AntiPatternGroup } from './antiPatternGroups';
 import { ruleOf, ruleText } from './antiPatternRules';
 import { LayerArrow } from './LayerArrow';
+import { SeeRestructured } from './SeeRestructured';
 
 const TOP_FILES = 5;
 
@@ -95,6 +96,7 @@ export function AntiPatternCard({ group, labels, index, checked, onToggle, onSho
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', paddingInlineStart: 26 }}>
                 <button type="button" style={{ ...button, borderRadius: 8 }} aria-expanded={why} onClick={() => setWhy((v) => !v)}>{t.why}</button>
                 <button type="button" style={{ ...button, borderRadius: 8 }} disabled={!canShow} onClick={() => onShow(group)}>{t.showInTower}</button>
+                <SeeRestructured finding={first} labels={labels} />
             </div>
         </section>
     );

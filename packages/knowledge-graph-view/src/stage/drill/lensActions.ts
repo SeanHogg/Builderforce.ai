@@ -21,6 +21,8 @@ export interface LensCtx {
     inside: string | null;
     /** Whether the host handles `id`; a row with no handler is hidden (the old four always show, as plain text when unhandled). */
     has(id: LensActionId): boolean;
+    /** An anti-pattern kind in the person's words (`findingTitle`); absent ⇒ the raw kind. */
+    kindName?(kind: string): string;
 }
 
 export interface LensActionRow {
@@ -46,7 +48,7 @@ export const LENS_ACTIONS: readonly LensActionRow[] = [
     { id: 'simulate', glyph: '▷', when: (l, c) => !!c && c.has('simulate') && c.facts.untested(l.ref), label: (t) => t.lensSimulate },
     {
         id: 'restructure', glyph: '⚒', when: (l, c) => !!c && c.has('restructure') && c.facts.antiPatternOf(l.ref) !== null,
-        label: (t, l, c) => fillTemplate(t.lensRestructure, { name: c?.facts.antiPatternOf(l.ref)?.kind ?? '' }),
+        label: (t, l, c) => { const kind = c?.facts.antiPatternOf(l.ref)?.kind ?? ''; return fillTemplate(t.lensRestructure, { name: c?.kindName?.(kind) ?? kind }); },
     },
 ];
 

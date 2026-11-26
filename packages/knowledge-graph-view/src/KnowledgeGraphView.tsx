@@ -30,7 +30,6 @@ import type { VisibleGraph } from './graphModel';
 import { useStableGraph } from './stableGraph';
 import { useContainerWidth, useRenderEnvironment } from './environment';
 import { layoutOf, sceneMinHeight, sceneRowFlex, SCENE_TOP_FALLBACK } from './layout';
-import type { Revision } from './revision';
 import { useReviewTargets } from './ReviewLauncher';
 import { ViewSurface } from './ViewSurface';
 import { LensPanel } from './LensPanel';
@@ -78,6 +77,9 @@ import { SceneState, SceneStatus } from './surface/SceneState';
 import { SurfaceFrame } from './surface/SurfaceStates';
 import { EMPTY_GRAPH } from './emptyGraph';
 import { useSurface } from './surface/useSurface';
+import { useCompare } from './surface/useCompare';
+import { useCompareActions } from './surface/useCompareActions';
+import { RestructureContext } from './surface/useRestructure';
 import type { EvidenceSide, KnowledgeConfirm, KnowledgeGraphSource, KnowledgePanelRenderer, LensId, EditorView, SourceLocation, SourceRange, ViewMode } from './types';
 
 /** Nodes a desktop view draws at most (instanced geometry is sized for it). */
@@ -123,32 +125,30 @@ export function KnowledgeGraphView({
     const [chosen, setMode] = useState<ViewMode | null>(null);
     const [showAll, setShowAll] = useState(false), [tracing, setTracing] = useState(false), [linesOpen, setLinesOpen] = useState(false);
     const [simulateMode, setSimulateMode] = useState(false);
-    const [revision, setRevision] = useState<Revision>('after');
     const targets = useReviewTargets(source); // read ONCE: the empty state's launcher uses it
     const sync = useSyncStatus(source, kg.rootId, kg.graph); // read ONCE: the pill, the banner and the Sync drawer share it
     const zoom = useZoomHost();
 
-    // Before/After: offered when the host keeps a baseline; "before" draws the baseline graph.
+    // ONE compare state (PRD 43 C5): Before/After, a restructure and a picked commit all drive it. A two-graph comparison draws ONE union graph for its whole run.
+    const history = useHistory(source, kg.rootId);
+    const compare = useCompare({ source, rootId: kg.rootId, current: kg.graph, baseline: kg.baseline, commits: history.commits });
     const keepsBaseline = !!source.baseline || !!source.snapshot;
-    const showingBefore = revision === 'before' && !!kg.baseline;
-    const shown = showingBefore ? kg.baseline!.graph : kg.graph;
+    const shown = compare.view?.graph ?? kg.graph;
     // null until a graph arrives; the frame is drawn regardless. The findings of stray copies are folded away (PRD 41 A9).
     const real = shown ? foldCopyFindings(shown) : shown;
     const graph = real ?? EMPTY_GRAPH;
     useGraphResident(real); // registered in this render so the cameras' subsets find it; posted to the worker early
     useGraphResident(kg.baseline?.graph ?? null); // the Before/After twin the surface also reads
-    const side = showingBefore ? 'baseline' as const : 'current' as const;
+    const side = compare.showingBefore ? 'baseline' as const : 'current' as const;
     const evidenceFor = useMemo(() => (source.evidence ? (f: Finding, s: EvidenceSide) => source.evidence!(f, s) : undefined), [source]);
     const evidenceOf = useMemo(() => (evidenceFor ? (f: Finding) => evidenceFor(f, side) : undefined), [evidenceFor, side]);
     const { lens, selected } = kg;
-    // The commit scrubber: the commit picked marks the stations it changed (the "changed" question and metric).
-    const history = useHistory(source, kg.rootId);
-    const [picked, setPicked] = useState<string | null>(null);
-    useEffect(() => setPicked(null), [kg.rootId]);
-    const changed = useMemo(() => new Set(history.commits.find((c) => c.sha === picked)?.refs ?? []), [history, picked]);
+    // The commit scrubber: the commit picked marks the stations it changed (the "changed" question and metric); on the stage it is paint only.
+    const changed = useMemo(() => new Set(compare.picked?.refs ?? []), [compare.picked]);
     const symbols = useMemo(() => (source.symbolsOf && kg.rootId ? (refs: string[]) => source.symbolsOf!(kg.rootId!, refs) : undefined), [source, kg.rootId]);
     const readSource = useMemo(() => (source.readSource && kg.rootId ? (path: string, range: SourceRange) => source.readSource!(kg.rootId!, path, range) : undefined), [source, kg.rootId]);
-    const surface = useSurface(graph, showingBefore ? null : kg.baseline?.graph ?? null, { question: questionForLens(kg.requested.id), focus: kg.focus, changed, symbols, readSource, editorView, repoConfigName: labels.surface.repoConfig, communityFallback: labels.communityFallback });
+    const readSourceAt = useMemo(() => (source.readSourceAt && kg.rootId ? (path: string, rev: string, range: SourceRange) => source.readSourceAt!(kg.rootId!, path, rev, range) : undefined), [source, kg.rootId]);
+    const surface = useSurface(graph, compare.showingBefore ? null : kg.baseline?.graph ?? null, { question: questionForLens(kg.requested.id), focus: kg.focus, changed, symbols, readSource, readSourceAt, editorView, repoConfigName: labels.surface.repoConfig, communityFallback: labels.communityFallback });
     // PRD 38 P7: the station transition table, built once per graph (memoised on it in `transitionTableOf`).
     const transitions = useMemo(() => (real ? transitionTableOf(graph, surface.stations) : null), [real, graph, surface.stations]);
     // The question follows the lens in effect: a requested lens the graph cannot show falls back, and the pills must say which one is on.
@@ -242,6 +242,7 @@ export function KnowledgeGraphView({
         setSimulateMode(!simulateMode);
     };
     const changedStations = new Set([...changed].flatMap((r) => stationOfRef(surface.stations, r) ?? [])).size;
+    const actions = useCompareActions({ compare, current: kg.graph, graph, index, surface, symbols, labels, select, openSimulate: () => { if (!simulateMode) toggleSimulate(); } });
     const overlay = (
         <SceneOverlay
             {...chrome.overlayProps}
@@ -251,14 +252,14 @@ export function KnowledgeGraphView({
                     ariaLabel: fillTemplate(labels.surface.simulate.modeOpenAria, { name: selected ? index.get(selected)?.label ?? selected : labels.surface.simulate.modeEntry }),
                     onToggle: toggleSimulate,
                 }} /> : undefined}
-            time={<TimeSlider commits={history.commits} capped={history.total} picked={picked} labels={labels} changedStations={changedStations} onPick={(sha) => { setPicked(sha); if (sha) pickQuestion('changed'); }} />}
+            time={<TimeSlider commits={history.commits} capped={history.total} picked={compare.picked?.sha ?? null} labels={labels} changedStations={changedStations} onPick={(sha) => { compare.pickCommit(sha); if (sha) pickQuestion('changed'); }} />}
         />
     );
     const leftDock = hasLines && !layout.phone && !layout.linesStacked;
     const stackLines = hasLines && layout.linesStacked && !layout.phone;
 
     return (
-        <RetryUploadContext.Provider value={retryUpload}>
+        <RestructureContext.Provider value={actions.restructureFinding}><RetryUploadContext.Provider value={retryUpload}>
         <SurfaceFrame ref={rootRef} label={labels.regionLabel}>
             <SurfaceHeader
                 kg={kg} source={source} labels={labels} graph={graph} hasGraph={!!real} surface={surface} env={surfaceEnv} narrow={layout.phone} sync={sync.status}
@@ -277,7 +278,7 @@ export function KnowledgeGraphView({
                         </DockEdge>
                     )}
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                        {layout.phone && overlay}
+                        {layout.phone && overlay}{actions.bar}
                         <div style={{ position: 'relative', flex: 1, minHeight: sceneMinHeight(layout) }}>
                             {/* Below the floating controls in every camera: `--kg-scene-top` is the measured height `SceneOverlay` publishes on this box (a phone stacks them in flow, so 0). */}
                             <div data-testid="kg-scene-box" style={{ position: 'absolute', top: layout.phone ? 0 : `var(--kg-scene-top, ${SCENE_TOP_FALLBACK})`, right: 0, bottom: 0, left: 0, overflow: 'auto' }}>
@@ -287,7 +288,7 @@ export function KnowledgeGraphView({
                                             mode={mode} graph={graph} drawn={drawn} lens={lens} labels={labels} rootTitle={titleOf(graph.scope.rootId)}
                                             selected={selected} focus={kg.focus} reducedMotion={env.reducedMotion} surface={surface} onSelect={select} onShow={show} onCamera={setMode}
                                             onCompose={onCompose} evidence={evidenceOf} onOpenSource={onOpenSource}
-                                            codeShown={panels.visibility.code} onToggleCode={toggleCode}
+                                            codeShown={panels.visibility.code} onToggleCode={toggleCode} onSimulate={actions.onSimulate} onRestructure={actions.onRestructure} compare={compare.view}
                                         />
                                     </ZoomProvider>
                                 ) : (
@@ -342,7 +343,7 @@ export function KnowledgeGraphView({
                 graph={graph} env={surfaceEnv} labels={labels} surface={surface} panel={panel} onPanel={setPanel} renderPanel={renderPanel} source={source} rootId={kg.rootId ?? undefined}
                 rootTitle={titleOf(graph.scope.rootId)} onChanged={kg.reload} diagnostics={diagnostics} sync={sync} history={history} runs={runs} reviews={reviews}
                 lastReviewedAt={kg.scopes.find((x) => x.rootId === kg.rootId)?.lastReviewedAt}
-                revision={keepsBaseline ? { value: showingBefore ? 'before' : 'after', hasBefore: !!kg.baseline, onChange: setRevision } : undefined}
+                revision={keepsBaseline ? compare.revision : undefined}
                 onResendSkipped={source.review && kg.rootId ? () => { const id = kg.rootId!; setPanel(null); kg.review.start({ rootId: id, force: true }); } : undefined}
                 onCamera={setMode} cameras={cameras.map((c) => c.id)} onShow={show} onCompose={onCompose}
             />
@@ -353,6 +354,6 @@ export function KnowledgeGraphView({
                 onShowInTower={showInTower}
             />
         </SurfaceFrame>
-        </RetryUploadContext.Provider>
+        </RetryUploadContext.Provider></RestructureContext.Provider>
     );
 }

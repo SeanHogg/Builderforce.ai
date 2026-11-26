@@ -24,6 +24,7 @@ import {
     codeRows, drillRefForName, railShape, readingLineAt, scrollTopForLine, syntaxLight, visibleWindow, VIRTUAL_AFTER,
     type CallStep, type CodeTarget, type Lens, type RailKind, type TokenKind,
 } from './codeText';
+import type { CodeMarks } from './codeDiff';
 import { visibleLensActions, type LensActionId, type LensCtx } from './lensActions';
 
 export interface CodeLayerProps {
@@ -74,6 +75,10 @@ export interface CodeLayerProps {
     sticky?: ((firstLine: number) => readonly SymbolRecord[]) | undefined;
     /** A sticky row was clicked: go to its line. */
     onJump?: ((line: number) => void) | undefined;
+    /** While comparing (PRD 43 C8): the lines of this version the other lacks, as data; tinted `--kg-diff-added` / `--kg-diff-removed`. */
+    marks?: CodeMarks | null | undefined;
+    /** Comparing, and the earlier version cannot be read here: today's file is shown, and the pane says so. */
+    diffNote?: boolean | undefined;
 }
 
 /** A lens link (`LENS_ACTIONS`): a class's references, Show in map; a method's callers, Drill in; and Out, Simulate, Restructure. */
@@ -86,6 +91,9 @@ const VIEW_ROWS = 16;
 const READING_TINT = `color-mix(in srgb, ${cssVar('text')} 5%, transparent)`;
 const MARKED_TINT = `color-mix(in srgb, ${cssVar('accent')} 14%, transparent)`;
 const OUTSIDE_OPACITY = 0.3;
+/** A compare's marked lines: a faint wash and a bar on the edge, so neither tint nor colour alone says it (`data-diff` does too). */
+const DIFF_WASH = { added: `color-mix(in srgb, ${cssVar('diffAdded')} 16%, transparent)`, removed: `color-mix(in srgb, ${cssVar('diffRemoved')} 16%, transparent)` } as const;
+const DIFF_BAR = { added: cssVar('diffAdded'), removed: cssVar('diffRemoved') } as const;
 const RAIL_PX = 3;
 /** The gutter's glyph column (a symbol's shape on its first line), and the mark inside it. */
 const GLYPH_PX = 14;
@@ -164,10 +172,10 @@ function LensLine({ lens, labels, ctx, onLens }: { lens: Lens; labels: Knowledge
     );
 }
 
-/** The gutter's warning for a symbol carrying an anti-pattern (in place of its shape). */
-function WarnGlyph({ label }: { label: string }) {
+/** The warning mark for a symbol carrying an anti-pattern: the gutter's, in place of its shape, and the outline's. */
+export function WarnGlyph({ label, size = GLYPH_PX - 4 }: { label: string; size?: number }) {
     return (
-        <svg width={GLYPH_PX - 4} height={GLYPH_PX - 4} viewBox="0 0 10 10" role="img" aria-label={label} data-gutter-warn style={{ flex: 'none' }}>
+        <svg width={size} height={size} viewBox="0 0 10 10" role="img" aria-label={label} data-gutter-warn style={{ flex: 'none' }}>
             <title>{label}</title>
             <path d="M5 1 L9.5 9 H0.5 Z" fill={cssVar('violation')} />
         </svg>
@@ -176,7 +184,7 @@ function WarnGlyph({ label }: { label: string }) {
 
 export function CodeLayer({
     target, reader, labels, onOpenSource, onClose, onOut, scrollLine, records = [], onDrill, onReadingLine, steps, currentStep = -1, span, onStep, marked,
-    onViewport, onText, onPickLine, cursorLine, rails, railSpan, lens, onLens, lensCtx = null, sticky, onJump,
+    onViewport, onText, onPickLine, cursorLine, rails, railSpan, lens, onLens, lensCtx = null, sticky, onJump, marks, diffNote,
 }: CodeLayerProps) {
     const t = labels.surface.code, card = labels.surface.map.card;
     const linesRef = useRef<HTMLDivElement | null>(null);
@@ -249,7 +257,7 @@ export function CodeLayer({
         const warn = l ? lensCtx.facts.antiPatternOf(l.ref) : null;
         return (
             <span data-gutter-glyph={l?.ref} style={{ flex: `0 0 ${GLYPH_PX}px`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                {l && (warn ? <WarnGlyph label={fillTemplate(t.gutterWarn, { name: warn.kind })} /> : <ShapeGlyph shape={railShape(l.kind)} tone={RAIL_TONE[l.kind]} size={GLYPH_PX - 4} />)}
+                {l && (warn ? <WarnGlyph label={fillTemplate(t.gutterWarn, { name: lensCtx.kindName?.(warn.kind) ?? warn.kind })} /> : <ShapeGlyph shape={railShape(l.kind)} tone={RAIL_TONE[l.kind]} size={GLYPH_PX - 4} />)}
             </span>
         );
     };
@@ -271,9 +279,13 @@ export function CodeLayer({
                 border: `1px solid ${cssVar('border')}`, boxShadow: '0 8px 28px color-mix(in srgb, currentColor 18%, transparent)', minHeight: 0,
             }}
         >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 0 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 0 }}>
                 <b data-code-where style={{ ...TYPE.monoName, overflowWrap: 'anywhere', minWidth: 0 }}>{where}</b>
                 <button type="button" aria-label={card.close} onClick={onClose} style={{ border: 0, background: 'transparent', color: cssVar('muted'), cursor: 'pointer', minHeight: 24, minWidth: 24, padding: 0 }}><span aria-hidden="true">×</span></button>
+                {diffNote && <span role="note" data-code-diff-note style={{ flexBasis: '100%', ...TYPE.monoMeta }}>{labels.surface.compare.oldNotAvailable}</span>}
+                {marks && (marks.added.size > 0 || marks.removed.size > 0) && (
+                    <span role="note" data-code-marks style={{ flexBasis: '100%', ...TYPE.monoMeta }}>{fillTemplate(labels.surface.compare.codeMarks, { added: marks.added.size, removed: marks.removed.size })}</span>
+                )}
             </div>
             {read.state === 'loading' && <div role="status" style={TYPE.monoMeta}>{t.loading}</div>}
             {read.state === 'none' && <div role="note" data-code-unavailable style={TYPE.monoMeta}>{t.unavailable}</div>}
@@ -322,14 +334,17 @@ export function CodeLayer({
                             const isMarked = inSpan(marked, n1);
                             const step = stepByLine.get(n1);
                             const isCall = steps?.[currentStep]?.line === n1;
+                            const diff = marks?.added.has(n1) ? 'added' : marks?.removed.has(n1) ? 'removed' : null;
                             return (
                                 <div
-                                    key={n1} data-code-line={n1} data-reading={isReading ? '' : undefined} data-marked={isMarked ? '' : undefined} data-call-site={isCall ? '' : undefined}
+                                    key={n1} data-code-line={n1} data-reading={isReading ? '' : undefined} data-marked={isMarked ? '' : undefined} data-call-site={isCall ? '' : undefined} data-diff={diff ?? undefined}
                                     onClick={onPickLine ? () => onPickLine(n1) : undefined}
                                     style={{
                                         ...rowBox, ...placed(r),
-                                        background: isCall ? `color-mix(in srgb, ${cssVar('partner')} 16%, transparent)` : isReading ? READING_TINT : isMarked ? MARKED_TINT : undefined,
-                                        boxShadow: isCall ? `inset 2px 0 0 ${cssVar('partner')}` : undefined, opacity: outside ? OUTSIDE_OPACITY : undefined,
+                                        backgroundColor: isCall ? `color-mix(in srgb, ${cssVar('partner')} 16%, transparent)` : isReading ? READING_TINT : isMarked ? MARKED_TINT : undefined,
+                                        // The wash is an image so it shows under the reading and hover tints too.
+                                        backgroundImage: diff ? `linear-gradient(${DIFF_WASH[diff]}, ${DIFF_WASH[diff]})` : undefined,
+                                        boxShadow: isCall ? `inset 2px 0 0 ${cssVar('partner')}` : diff ? `inset 3px 0 0 ${DIFF_BAR[diff]}` : undefined, opacity: outside ? OUTSIDE_OPACITY : undefined,
                                     }}
                                 >
                                     {railOf(n1)}

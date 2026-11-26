@@ -73,6 +73,25 @@ describe('SymbolCard', () => {
         expect(document.querySelector('[data-chip="imported"]')?.textContent).toBe(L.surface.code.imported);
     });
 
+    it('shows Callers and Simulate only with their callbacks, and Restructure instead of Simulate for an anti-pattern', () => {
+        const t = L.surface.map.card;
+        mount();
+        expect(screen.queryByRole('button', { name: t.whoCalls })).toBeNull();
+        expect(screen.queryByRole('button', { name: t.simulate })).toBeNull();
+        document.body.innerHTML = '';
+        const props = mount({ onCallers: vi.fn(), onSimulate: vi.fn(), onRestructure: vi.fn(), facts: { antiPatternOf: () => null, untested: () => true } });
+        fireEvent.click(screen.getByRole('button', { name: t.whoCalls }));
+        fireEvent.click(screen.getByRole('button', { name: t.simulate }));
+        expect(props.onCallers).toHaveBeenCalledTimes(1);
+        expect(props.onSimulate).toHaveBeenCalledTimes(1);
+        expect(document.querySelector('[data-fact="tests"]')?.textContent).toBe(t.testNone);
+        document.body.innerHTML = '';
+        mount({ onSimulate: vi.fn(), onRestructure: vi.fn(), facts: { antiPatternOf: () => ({ kind: 'god-module', findingId: 'f' }), untested: () => false } });
+        expect(screen.queryByRole('button', { name: t.simulate })).toBeNull();
+        expect(screen.getByRole('button', { name: t.restructure })).toBeTruthy();
+        expect(document.querySelector('[data-fact="anti"]')?.textContent).toBe(L.findingKinds.godModule);
+    });
+
     it('shows nothing with no mark', () => {
         mount({ slotKey: null });
         expect(document.querySelector('[data-symbol-card]')).toBeNull();

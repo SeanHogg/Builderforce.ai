@@ -201,4 +201,4 @@ export interface SlotAppend {
 }
 
 /** The cameras that have a placement today (P1a: Map and Graph). A new camera is a row in `placement/index.ts`. */
-export type PlacementCamera = 'map' | 'graph' | '3d' | 'mind' | 'sequence' | 'system' | 'heat' | 'style' | 'features';
+export type PlacementCamera = 'map' | 'graph' | '3d' | 'mind' | 'sequence' | 'flow' | 'system' | 'heat' | 'style' | 'features';

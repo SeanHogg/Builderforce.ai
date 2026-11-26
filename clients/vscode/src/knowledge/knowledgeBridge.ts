@@ -26,7 +26,7 @@ import { rootHistory } from "./knowledgeHistory";
 import { pinpointRoot } from "./knowledgePinpointHost";
 import { retryRootSync, rootSyncStatus } from "./knowledgeSync";
 import { rootSymbols, SymbolsGate } from "./knowledgeSymbols";
-import { openSource, readSource } from "./sourcePort";
+import { openSource, readSource, readSourceAt } from "./sourcePort";
 import { tryRequestOf } from "./knowledgeTryRequestHost";
 import { reviewedRoots, rootById, rootForPath, type KnowledgeRoot } from "./knowledgeRoots";
 import { KnowledgeReviewSessions } from "./knowledgeReviewSessions";
@@ -220,6 +220,7 @@ export class KnowledgeBridge implements vscode.Disposable {
       }
       // The code band: the root must be open here (`rootOf` throws); the path and lines are checked in `sourcePort.ts`.
       case "readSource": return readSource(this.rootOf(call.rootId), call.path, call.startLine, call.endLine);
+      case "readSourceAt": return readSourceAt(this.rootOf(call.rootId), call.path, call.rev, call.startLine, call.endLine);
       case "openSource": return openSource(this.rootOf(call.rootId), call.path, call.startLine, call.endLine);
     }
   }

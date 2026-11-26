@@ -6,7 +6,7 @@
 
 import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from '../../order';
-import { UNTESTED_BELOW } from '../../scene/channels';
+import { isUntested } from '../coverageThreshold';
 
 export const MAX_GAPS = 12;
 
@@ -53,7 +53,7 @@ export function coverageModel(graph: Pick<KnowledgeGraph, 'nodes'>): CoverageMod
     const covs = files.flatMap((f) => (f.coverage === undefined ? [] : [f.coverage]));
     const cxs = files.flatMap((f) => (f.complexity === undefined ? [] : [f.complexity]));
     const both = files.filter((f): f is Required<FileMeasure> => f.complexity !== undefined && f.coverage !== undefined);
-    const gaps = both.filter((f) => f.complexity > 0 && f.coverage < UNTESTED_BELOW).sort((a, b) => risk(b) - risk(a) || cmp(a.ref, b.ref));
+    const gaps = both.filter((f) => f.complexity > 0 && isUntested(f.coverage)).sort((a, b) => risk(b) - risk(a) || cmp(a.ref, b.ref));
     return {
         files: files.length, withCoverage: covs.length, withComplexity: cxs.length,
         ...(covs.length ? { meanCoverage: covs.reduce((a, b) => a + b, 0) / covs.length } : {}),

@@ -4,6 +4,7 @@ import { PRESETS } from '../../surface/overlays';
 import { litStations, QUESTIONS, type QuestionId } from '../../surface/questions';
 import { withSymbols } from '../../surface/transit/testFixtures';
 import { surfaceFixture } from '../../testing';
+import { toneIndex } from '../../stage/tones';
 import { FLAG, SLOT_FOLDER, SLOT_NODE, SLOT_STATION, type MarkPaint } from '../../stage/types';
 import { paintMarks, questionLit, type PaintInput } from './markPaint';
 import { buildStageModel } from './stageModel';
@@ -73,6 +74,25 @@ describe('markPaint: the question and the family as data (PRD 43 B1a rule 1)', (
         const p = paint({ questionId: 'changed', lit: [one.id] });
         for (const s of stations.stations) expect(dim(p, model.stationSlot.get(s.id)!)).toBe(s.id !== one.id);
         expect(marks.slotKind[model.stationSlot.get(one.id)!]).toBe(SLOT_STATION);
+    });
+
+    it('a diff overrides the tone of the named slots (node key, station key or bare ref) and nothing else (PRD 43 C5)', () => {
+        const plain = paint({});
+        const nodeSlot = marks.keys.findIndex((k) => k.startsWith('node:'));
+        const stationSlot = marks.keys.findIndex((k) => k.startsWith('st:'));
+        const bare = marks.keys.findIndex((k, i) => i !== nodeSlot && k.startsWith('node:'));
+        const diff = new Map<string, 'added' | 'changed' | 'removed'>([
+            [marks.keys[nodeSlot]!, 'added'], [marks.keys[stationSlot]!, 'removed'], [marks.keys[bare]!.slice('node:'.length), 'changed'],
+        ]);
+        const p = paint({ diff });
+        expect(p.tone[nodeSlot]).toBe(toneIndex('diffAdded'));
+        expect(p.tone[stationSlot]).toBe(toneIndex('diffRemoved'));
+        expect(p.tone[bare]).toBe(toneIndex('changed'));
+        for (let i = 0; i < marks.keys.length; i++) {
+            if (i !== nodeSlot && i !== stationSlot && i !== bare) expect(p.tone[i], marks.keys[i]).toBe(plain.tone[i]);
+        }
+        expect([...p.flags]).toEqual([...plain.flags]);
+        expect([...paint({ diff: new Map() }).tone]).toEqual([...plain.tone]);
     });
 
     it('never moves anything: tone, tone2 and fill do not depend on the question', () => {

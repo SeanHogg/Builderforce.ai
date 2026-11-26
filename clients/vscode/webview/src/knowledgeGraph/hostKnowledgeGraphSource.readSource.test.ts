@@ -24,6 +24,17 @@ describe('the editor knowledge source — readSource', () => {
     await expect(createHostKnowledgeGraphSource(t).readSource!('r', 'a.ts', { startLine: 1, endLine: 1 })).rejects.toThrow('not open');
   });
 
+  it('readSourceAt asks the extension for a file as it was at a commit', async () => {
+    const calls: KnowledgeCall[] = [];
+    const text = { startLine: 1, lines: ['old'], truncated: false };
+    const t: KnowledgeTransport = {
+      call: async <T,>(call: KnowledgeCall) => { calls.push(call); return text as T; },
+      onEvent: () => () => undefined,
+    };
+    expect(await createHostKnowledgeGraphSource(t).readSourceAt!('r', 'src/a.ts', 'abc1234', { startLine: 1, endLine: 2 })).toEqual(text);
+    expect(calls).toEqual([{ op: 'readSourceAt', rootId: 'r', path: 'src/a.ts', rev: 'abc1234', startLine: 1, endLine: 2 }]);
+  });
+
   it('tells the host which root the view loads', async () => {
     const loaded: string[] = [];
     const t: KnowledgeTransport = { call: async <T,>() => null as T, onEvent: () => () => undefined };
