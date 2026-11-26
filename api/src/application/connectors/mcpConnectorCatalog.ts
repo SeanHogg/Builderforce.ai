@@ -50,10 +50,13 @@ const LOCAL_MCP: readonly {
 /** One chooser entry per registry identity. Each transport retains its own setup details. */
 export async function listMcpConnectorCatalog(db: Db, tenantId: number, env: Env): Promise<ConnectorOffer[]> {
   const offers = new Map<string, ConnectorOffer>();
-  for (const { manifest } of await listPublishedConnectors(db, tenantId, env)) {
-    const id = manifest.key;
+  const localIds = new Set(LOCAL_MCP.map((entry) => entry.id));
+  for (const { manifest, origin } of await listPublishedConnectors(db, tenantId, env)) {
+    const connectorKey = manifest.key;
+    // A tenant-authored key is not proof that its connector implements the same local server.
+    const id = origin !== 'builtin' && localIds.has(connectorKey) ? `http:${connectorKey}` : connectorKey;
     if (offers.has(id)) continue;
-    offers.set(id, { id, name: manifest.name, transports: [{ transport: 'http', connectorKey: id }] });
+    offers.set(id, { id, name: manifest.name, transports: [{ transport: 'http', connectorKey }] });
   }
   for (const { id, name, ...local } of LOCAL_MCP) {
     const offer = offers.get(id) ?? { id, name, transports: [] };

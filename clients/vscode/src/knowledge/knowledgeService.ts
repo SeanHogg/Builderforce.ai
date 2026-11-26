@@ -50,6 +50,7 @@ import { reviewRecords, useRecordMemento } from "./knowledgeSyncStatus";
 import { reviewParallelism } from "./review/extractPoolHost";
 import { UNTIMED, type LoadTimer } from "./knowledgeLoadTrace";
 import { storedGraphOffThread } from "./graphWorker";
+import { boundsLine, boundsOf } from "./graphBudget";
 import { preemptBackground } from "./indexLevels";
 import { useL3GuardLog } from "./l3CrashGuard";
 import { untilAborted } from "../run/boundedStep";
@@ -296,12 +297,16 @@ export async function loadGraph(
   await open.migrated;
   // The build runs in the graph worker (`graphWorker.ts`), never on this thread: the extension host is the webview bridge.
   // Its findings are memory's and the code pack's rules over the whole graph, computed by the build itself.
-  return timer.phase("build", () => storedGraphOffThread({
+  const graph = await timer.phase("build", () => storedGraphOffThread({
     folderPath: root.folderPath, rootId, partitions,
     ...(nearDuplicates ? { nearDuplicates } : {}),
     ...(q.focus ? { focus: q.focus } : {}),
     ...(q.maxNodes ? { maxNodes: q.maxNodes } : {}),
   }, open.local, options?.signal));
+  // What the bound cut (graphBudget.ts) goes in the load's trace entry, so Copy diagnostics says why edges/findings are fewer.
+  const bounds = graph ? boundsOf(graph) : undefined;
+  if (bounds) timer.note?.({ bounds: boundsLine(bounds), boundReasons: bounds.reasons });
+  return graph;
 }
 
 export interface LoadGraphOptions {

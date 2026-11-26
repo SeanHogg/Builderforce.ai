@@ -3,9 +3,16 @@ import {
   findSymbolTool,
   repoMapTool,
   searchCodeTool,
+  semanticSearchTool,
   type CapabilityProvider,
   type ToolDefinition,
 } from "@builderforce/agent-tools";
+import {
+  catalogDesktopSemantic,
+  desktopCompressAvailable,
+  desktopCompressProse,
+  liveDesktop,
+} from "@builderforce/agent-tools/node-desktop";
 import { extractCodeRefs } from "@builderforce/repo-map";
 import { advertiseName, normalizeInputSchema, type McpToolEntry } from "@seanhogg/builderforce-mcp";
 import { createMcpServer } from "@seanhogg/builderforce-mcp/server";
@@ -23,6 +30,7 @@ type ResolveWorkspace = (root?: string) => Workspace | Promise<Workspace>;
 
 export interface WorkspaceMcpTool extends McpToolEntry {
   legacyName?: string;
+  available?(): Promise<boolean>;
   run(args: Record<string, unknown>): Promise<unknown>;
 }
 
@@ -62,18 +70,42 @@ function scopedTool(
   };
 }
 
+async function findWorkspaceCode({ root, caps }: Workspace, args: Record<string, unknown>) {
+  const semantic = await catalogDesktopSemantic(root);
+  if (!semantic) throw new Error("The workspace hybrid search backend is unavailable");
+  if (typeof args.path === "string" && args.path.trim() && !await workspacePath(root, args.path.trim())) {
+    return { ok: false, error: "Search path is unavailable in the workspace" };
+  }
+  return fromDefinition(semanticSearchTool)({ root, caps: { ...caps, semantic } }, args);
+}
+
+async function compressWorkspaceProse(_workspace: Workspace, args: Record<string, unknown>) {
+  const { text, rate, kind = "text" } = args;
+  if (typeof text !== "string" || text.length > 100_000) {
+    throw new Error("text must be a string of at most 100000 characters");
+  }
+  if (kind !== "markdown" && kind !== "text" && kind !== "log" && kind !== "code") {
+    throw new Error("kind must be markdown, text, log, or code");
+  }
+  if (rate !== undefined && (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0 || rate > 1)) {
+    throw new Error("rate must be greater than 0 and at most 1");
+  }
+  if (!await desktopCompressAvailable()) throw new Error("The workspace compressor is unavailable");
+  return desktopCompressProse(text, kind, { ...(rate !== undefined ? { rate } : {}) });
+}
+
 async function checkWorkspaceReferences({ root, caps }: Workspace, args: Record<string, unknown>) {
   if (!Array.isArray(args.texts) || args.texts.length > 50
     || !args.texts.every((value) => typeof value === "string" && value.length <= 10_000)) {
     throw new Error("texts must contain up to 50 strings of at most 10000 characters each");
   }
-  const byText = args.texts.map((value: string) => extractCodeRefs(value).slice(0, 50));
+  const byText = args.texts.map((value: string) => extractCodeRefs(value));
   const checks = new Map<string, Promise<"found" | "missing" | "unverified">>();
   const results = [];
   for (const [index, references] of byText.entries()) {
     const missing = [];
     const unverified = [];
-    for (const reference of references) {
+    for (const reference of references.slice(0, 50)) {
       const key = `${reference.kind}:${reference.reference}`;
       let check = checks.get(key);
       if (!check && checks.size === 50) {
@@ -93,7 +125,12 @@ async function checkWorkspaceReferences({ root, caps }: Workspace, args: Record<
       if (status === "missing") missing.push(reference);
       if (status === "unverified") unverified.push(reference);
     }
-    results.push({ index, missing, ...(unverified.length ? { unverified } : {}) });
+    results.push({
+      index,
+      missing,
+      ...(unverified.length ? { unverified } : {}),
+      ...(references.length > 50 ? { partial: true } : {}),
+    });
   }
   return { results };
 }
@@ -121,6 +158,22 @@ export function createWorkspaceMcpTools(resolve: ResolveWorkspace, options: { re
         limit: { type: "number", description: "Maximum commits to return (default 20, maximum 50)" },
       },
     }, resolve, workspaceGitHistory),
+    {
+      ...fromTool("find", semanticSearchTool, findWorkspaceCode),
+      available: async () => (await liveDesktop()) !== null,
+    },
+    {
+      ...scopedTool("compress", "Compress prose with the optional workspace compressor. Code remains verbatim.", {
+        type: "object",
+        properties: {
+          text: { type: "string", maxLength: 100_000 },
+          kind: { type: "string", enum: ["markdown", "text", "log", "code"] },
+          rate: { type: "number", exclusiveMinimum: 0, maximum: 1 },
+        },
+        required: ["text"],
+      }, resolve, compressWorkspaceProse),
+      available: desktopCompressAvailable,
+    },
   ];
   return options.requireRoot ? tools.map((tool) => ({
     ...tool,
@@ -130,7 +183,13 @@ export function createWorkspaceMcpTools(resolve: ResolveWorkspace, options: { re
 
 export function createWorkspaceMcpServer(tools: readonly WorkspaceMcpTool[], compatibility: readonly WorkspaceMcpTool[] = []) {
   return createMcpServer({
-    list: () => tools,
+    async list() {
+      const available: WorkspaceMcpTool[] = [];
+      for (const tool of tools) {
+        if (!tool.available || await tool.available()) available.push(tool);
+      }
+      return available;
+    },
     resolve: (entries, name) => entries.find((entry) => entry.name === name)
       ?? compatibility.find((entry) => entry.legacyName === name || entry.name === name)
       ?? null,

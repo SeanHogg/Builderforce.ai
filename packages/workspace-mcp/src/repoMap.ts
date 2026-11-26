@@ -30,7 +30,10 @@ export async function workspaceRepoMap(
       },
       async readFile(path) {
         const result = await read.readFile(path);
-        if (!result.ok || typeof result.content !== "string") return result;
+        if (!result.ok || typeof result.content !== "string") {
+          partial ||= repoMapPort.accepts(path, 0);
+          return result;
+        }
         const size = Buffer.byteLength(result.content);
         if (size > limits.maxFileBytes || size + bytes > limits.maxTotalBytes) {
           partial = true;
@@ -47,7 +50,7 @@ export async function workspaceRepoMap(
   const maxTokens = typeof args.maxTokens === "number" && Number.isFinite(args.maxTokens)
     ? Math.min(8_000, Math.max(200, Math.floor(args.maxTokens)))
     : 1_500;
-  const focus = Array.isArray(args.focus) ? args.focus.filter((path): path is string => typeof path === "string") : [];
-  const query = typeof args.query === "string" ? args.query : undefined;
+  const focus = Array.isArray(args.focus) ? args.focus.slice(0, 50).filter((path): path is string => typeof path === "string") : [];
+  const query = typeof args.query === "string" ? args.query.slice(0, 10_000) : undefined;
   return { ok: true, map: renderRepoMap(graph, { maxTokens, focus, query }), partial };
 }

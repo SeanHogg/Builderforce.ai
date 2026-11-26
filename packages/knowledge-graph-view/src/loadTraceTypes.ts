@@ -27,6 +27,10 @@ export interface LoadTraceEntry {
     maxNodes?: number;
     count?: number;
     nearDuplicates?: number;
+    /** What the host's graph bound cut (edges, findings, folded partition violations, payload estimate). */
+    bounds?: string;
+    /** Why the graph carries fewer edges/findings than it was built with. */
+    boundReasons?: string[];
     hostLag?: LoadTraceLag;
 }
 

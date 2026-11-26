@@ -56,7 +56,19 @@ export function truncationReasons(graph: KnowledgeGraph, drawnNodes: number, com
     const reasons: string[] = [];
     if (drawnNodes < graph.nodes.length) reasons.push(compact && !showAll ? 'compact focus (top nodes only)' : 'max drawn nodes');
     if (graph.stats.truncated) reasons.push('graph truncated by the server');
+    // The host's bound on edges and findings (`stats.bounds`): the edge cap and the folded findings. `truncated` stays node-only.
+    reasons.push(...((graph.stats as { bounds?: { reasons?: string[] } }).bounds?.reasons ?? []));
     return reasons;
+}
+
+/** `k=n` pairs over the findings, sorted by kind; a folded `partition-violation` carries the true count it stands for in `params.count` (default 1). */
+function findingCounts(findings: KnowledgeGraph['findings']): string {
+    const m = new Map<string, number>();
+    for (const f of findings) {
+        const c = f.kind === 'partition-violation' ? Number((f.params as { count?: unknown } | undefined)?.count ?? 1) : 1;
+        m.set(f.kind, (m.get(f.kind) ?? 0) + (Number.isFinite(c) && c > 0 ? c : 1));
+    }
+    return m.size ? [...m.entries()].sort(([a], [b]) => cmp(a, b)).map(([k, n]) => `${k}=${n}`).join(', ') : 'none';
 }
 
 const TITLE = 'Knowledge graph diagnostics';
@@ -81,7 +93,7 @@ export function graphDiagnosticSections(i: GraphDiagnosticsInput): DiagnosticSec
         graph.push(`nodes by kind: ${counts(g.nodes.map((n) => n.kind))}`);
         graph.push(`edges by kind: ${counts(g.edges.map((e) => e.kind))}`);
         graph.push(`edges by origin: ${counts(g.edges.map((e) => e.origin))}`);
-        graph.push(`findings by kind: ${counts(g.findings.map((f) => f.kind))}`);
+        graph.push(`findings by kind: ${findingCounts(g.findings)}`);
         const parts = [...new Set(g.nodes.flatMap((n) => (n.partition ? [n.partition] : [])))].sort(cmp);
         graph.push(`partitions: ${parts.join(', ') || 'none'}`);
     }

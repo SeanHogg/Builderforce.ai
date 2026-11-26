@@ -56,6 +56,17 @@ describe('graphDiagnosticsText', () => {
         expect(truncationReasons({ ...g, stats: { ...g.stats, truncated: true } }, 6, false, false)).toEqual(['graph truncated by the server']);
     });
 
+    it('lists the host bound reasons (edge cap, folded findings) as truncation reasons', () => {
+        const bounded = { ...g, stats: { ...g.stats, bounds: { reasons: ['edges capped at 12000'] } } } as unknown as typeof g;
+        expect(truncationReasons(bounded, 6, false, false)).toEqual(['edges capped at 12000']);
+        expect(lines(base({ graph: bounded }))).toContain('truncation reason: edges capped at 12000');
+    });
+
+    it('sums a folded partition-violation finding by its true count', () => {
+        const folded = { ...g, findings: [{ ...g.findings.find((f) => f.kind === 'partition-violation')!, params: { count: 24674 } }, g.findings.find((f) => f.kind === 'cycle')!] } as typeof g;
+        expect(lines(base({ graph: folded }))).toContain('findings by kind: cycle=1, partition-violation=24674');
+    });
+
     it('adds the running phase, and the finished report with files per second', () => {
         const running: ReviewState = { status: 'running', progress: { phase: 'extract', done: 1, total: 2, path: 'a' } };
         expect(lines(base({ review: running, lastPhase: 'extract' }))).toContain('review: running (extract 1/2) · last phase extract');

@@ -50,6 +50,8 @@ function entryLine(e: LoadTraceEntry): string {
     if (e.nearDuplicates !== undefined) parts.push(`nearDuplicates=${e.nearDuplicates}`);
     if (e.focus !== undefined) parts.push(`focus=${e.focus ? 'yes' : 'no'}`);
     if (e.maxNodes !== undefined) parts.push(`maxNodes=${e.maxNodes}`);
+    if (e.bounds) parts.push(`bounds=${e.bounds}`);
+    if (e.boundReasons?.length) parts.push(`boundReasons=${e.boundReasons.join('; ')}`);
     if (e.hostLag) parts.push(lagText(e.hostLag));
     return `host ${e.op}: ${parts.join(' · ')}`;
 }

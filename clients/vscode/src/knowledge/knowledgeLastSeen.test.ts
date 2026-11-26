@@ -19,6 +19,37 @@ let dir = "";
 beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), "kg-last-seen-")); });
 afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
 
+describe("knowledgeLastSeen reporting", () => {
+  it("regression: a big graph is serialised in slices and round-trips identically, reporting its byte size", async () => {
+    const big = graph("big");
+    big.edges = Array.from({ length: 9000 }, (_, i) => ({ from: `a${i}`, to: `b${i}`, kind: "references", origin: "extracted" })) as unknown as KnowledgeGraph["edges"];
+    const rec: LastSeenRecord = { scopes: [], rootId: "big", graph: big };
+    let seen: { outcome: string; bytes: number } | undefined;
+    expect(await writeLastSeen(dir, "k", rec, (r) => { seen = r; })).toBe(true);
+    expect(seen?.outcome).toBe("written");
+    expect(seen?.bytes).toBe(Buffer.byteLength(JSON.stringify(rec)));
+    expect(await readLastSeen(dir, "k")).toEqual(rec);
+  });
+
+  it("regression: an oversize skip is reported with the bytes counted, never silent", async () => {
+    const huge = graph("huge");
+    huge.nodes[0] = { ...huge.nodes[0]!, label: "x".repeat(LAST_SEEN_MAX_BYTES + 10) };
+    let seen: { outcome: string; bytes: number } | undefined;
+    expect(await writeLastSeen(dir, "k", { scopes: [], rootId: "huge", graph: huge }, (r) => { seen = r; })).toBe(false);
+    expect(seen?.outcome).toBe("oversize");
+    expect(seen!.bytes).toBeGreaterThan(LAST_SEEN_MAX_BYTES);
+  });
+
+  it("regression: a read that misses says why (absent, then unreadable)", async () => {
+    const reasons: string[] = [];
+    expect(await readLastSeen(dir, "none", (r) => reasons.push(r))).toBeNull();
+    expect(reasons[0]).toMatch(/^absent/);
+    await writeLastSeen(dir, "bad", record("r1"));
+    expect(await readLastSeen(dir, "other", (r) => reasons.push(r))).toBeNull();
+    expect(reasons).toHaveLength(2);
+  });
+});
+
 describe("knowledgeLastSeen", () => {
   it("round-trips a record for a workspace, and leaves no temp file behind", async () => {
     const key = workspaceKey([{ path: "/w/b" }, { path: "/w/a" }]);

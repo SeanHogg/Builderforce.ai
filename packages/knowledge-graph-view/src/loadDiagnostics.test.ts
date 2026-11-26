@@ -39,6 +39,22 @@ describe('loadDiagnosticSection', () => {
         ]);
     });
 
+    it('shows the host bounds, the bound reasons and the persisted host log in the copied text', () => {
+        const bounded: LoadTrace = {
+            ...host,
+            entries: [{ ...host.entries[0]!, bounds: 'edges=123843>12000', boundReasons: ['edges capped at 12000'] }],
+            log: ['2026-11-26T00:00:00Z lastSeen: written root=r 1200B'],
+        };
+        const lines = loadDiagnosticSection({ timeline: painted, host: bounded }).lines;
+        expect(lines.some((l) => l.includes('bounds=edges=123843>12000') && l.includes('boundReasons=edges capped at 12000'))).toBe(true);
+        expect(lines).toContain('  2026-11-26T00:00:00Z lastSeen: written root=r 1200B');
+    });
+
+    it('prints decisions with their reason', () => {
+        const withDecision: LoadTimelineSnapshot = { ...painted, marks: [...painted.marks, { call: 'decision', kind: 'gate', reason: 'no stored graph: Run card', rootId: 'r', startMs: 9, endMs: 9, outcome: 'ok' }] };
+        expect(loadDiagnosticSection({ timeline: withDecision, host }).lines).toContain('view decision: +9ms · gate · root=r · no stored graph: Run card');
+    });
+
     it('flags a load stuck in a phase, and says how long it has been there', () => {
         const stuck: LoadTrace = {
             now: 200_000, entries: [],

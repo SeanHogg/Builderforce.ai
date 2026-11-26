@@ -60,14 +60,16 @@ export function insightsOf(graph: KnowledgeGraph): Insights {
     let errors = 0, warnings = 0, notes = 0, cycles = 0, violations = 0, cloneGroups = 0, brokenLinks = 0;
     const byKind = new Map<string, { count: number; nodes: Set<string> }>();
     for (const f of graph.findings) {
+        // A violation folded by the build's bound (one per layer pair and area pair) stands for `params.count` of them.
+        const weight = f.kind === 'partition-violation' ? Number(f.params.count) || 1 : 1;
         if (f.severity === 'error') errors++; else if (f.severity === 'warn') warnings++; else if (f.severity === 'info') notes++;
         if (f.kind === 'cycle') cycles++;
-        else if (f.kind === 'partition-violation' || f.kind === 'violation') violations++;
+        else if (f.kind === 'partition-violation' || f.kind === 'violation') violations += weight;
         else if (f.kind === 'clone-group') cloneGroups++;
         else if (f.kind === 'broken-link') brokenLinks += Number(f.params.count) || 1;
         let row = byKind.get(f.kind);
         if (!row) { row = { count: 0, nodes: new Set() }; byKind.set(f.kind, row); }
-        row.count++;
+        row.count += weight;
         for (const ref of f.nodes) row.nodes.add(ref);
     }
 

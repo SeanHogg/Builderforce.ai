@@ -3,11 +3,12 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { handleMcpHttpRequest } from "./mcp-server-http.js";
 
 it("serves the SDK workspace catalog and searches only the requested file", async () => {
   const root = await mkdtemp(join(tmpdir(), "bf-workspace-mcp-"));
+  vi.stubEnv("BUILDERFORCE_DESKTOP_DISCOVERY", join(root, "absent-desktop.json"));
   const data = ["match.ts", "excluded.ts"];
   const server = createServer((req, res) => {
     void handleMcpHttpRequest(req, res, {
@@ -69,6 +70,7 @@ it("serves the SDK workspace catalog and searches only the requested file", asyn
       { index: 0, missing: [{ kind: "path", reference: "missing.ts" }] },
     ]);
   } finally {
+    vi.unstubAllEnvs();
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
     await Promise.all(data.map((file) => rm(join(root, file), { force: true })));
     await rm(join(root, ".builderForceAgents", "symbols.json"), { force: true });

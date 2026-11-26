@@ -3,8 +3,9 @@ import { listMcpConnectorCatalog } from './mcpConnectorCatalog';
 
 vi.mock('./connectorRegistry', () => ({
   listPublishedConnectors: async () => [
-    { manifest: { key: 'github', name: 'GitHub' } },
-    { manifest: { key: 'http-only', name: 'HTTP only' } },
+    { origin: 'builtin', manifest: { key: 'github', name: 'GitHub' } },
+    { origin: 'tenant', manifest: { key: 'filesystem', name: 'Custom Filesystem' } },
+    { origin: 'tenant', manifest: { key: 'http-only', name: 'HTTP only' } },
   ],
 }));
 
@@ -19,5 +20,8 @@ it('merges credential-specific HTTP and local launch options into one provider o
     }),
   ]);
   expect(catalog.find((offer) => offer.id === 'filesystem')?.transports).toHaveLength(1);
+  expect(catalog.find((offer) => offer.id === 'http:filesystem')?.transports).toEqual([
+    { transport: 'http', connectorKey: 'filesystem' },
+  ]);
   expect(catalog.find((offer) => offer.id === 'http-only')?.transports).toEqual([{ transport: 'http', connectorKey: 'http-only' }]);
 });

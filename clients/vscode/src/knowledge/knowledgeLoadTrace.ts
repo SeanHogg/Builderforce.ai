@@ -20,6 +20,8 @@ export const TRACE_CAPACITY = 20;
 /** Times one named phase of a call; a sync `run` stays sync, a promise is timed until it settles. */
 export interface LoadTimer {
   phase<T>(name: string, run: () => T): T;
+  /** Adds facts to the call's entry from inside a phase (what the graph bound cut); absent on a timer that records nothing. */
+  note?(fields: TraceFields): void;
 }
 
 /** No timing: what `loadGraph` uses when its caller passes no timer. */
@@ -65,7 +67,7 @@ export function traceLine(e: KnowledgeLoadTraceEntry): string {
   for (const p of e.phases) parts.push(`${p.phase}=${p.ms}ms`);
   const extra: [string, unknown][] = [
     ["via", e.via], ["nodes", e.nodes], ["edges", e.edges], ["sources", e.sources], ["truncated", e.truncated], ["focus", e.focus],
-    ["maxNodes", e.maxNodes], ["count", e.count], ["nearDuplicates", e.nearDuplicates],
+    ["maxNodes", e.maxNodes], ["count", e.count], ["nearDuplicates", e.nearDuplicates], ["bounds", e.bounds],
   ];
   for (const [k, v] of extra) if (v !== undefined) parts.push(`${k}=${String(v)}`);
   if (e.hostLag) parts.push(`lagMax=${e.hostLag.maxMs}ms lagP99=${e.hostLag.p99Ms}ms`);
@@ -96,6 +98,7 @@ export function createLoadTrace(opts: LoadTraceOptions = {}): LoadTraceRecorder 
       // `Promise.all`) is not appended to a finished entry.
       let finished = false;
       const timer: LoadTimer = {
+        note(f) { if (!finished) fields = { ...fields, ...f }; },
         phase<T>(name: string, runPhase: () => T): T {
           const id = ++phaseSeq;
           const t0 = now();

@@ -22,6 +22,7 @@ import { resolveLabels, fillTemplate, type KnowledgeGraphLabels } from './labels
 import { useKnowledgeGraph } from './useKnowledgeGraph';
 import { currentLoadPhase, loadRunning, useFirstPaint, useHostLoadTrace, useTimedSource } from './useLoadTiming';
 import { graphDiagnostics } from './graphDiagnostics';
+import type { LoadTrace } from './loadTraceTypes';
 import { lensFindings } from './lenses';
 import { PHONE_FOCUS_NODES, lensGraph, nodeIndex } from './graphModel';
 import { useGraphResident } from './compute/useGraphResident';
@@ -174,11 +175,12 @@ export function KnowledgeGraphView({
     // "What changed?" (PRD 38 P4): the files that usually change with the changed ones and are not touched yet.
     const changedPartners = useMemo(() => (surface.question === 'changed' ? partnersOf(graph, surface.changedFiles ?? []) : undefined), [surface.question, graph, surface.changedFiles]);
     const resolvedFixes = useMemo(() => new Set(Object.values(surface.fixFlows).filter(isResolved).map((f) => f.findingId)), [surface.fixFlows]);
-    const diagnostics = () => graphDiagnostics({
+    // `freshHost`: the host trace read just now (Copy diagnostics in the header); undefined ⇒ the latest poll's.
+    const diagnostics = (freshHost?: LoadTrace | null) => graphDiagnostics({
         status: kg.status, rootId: kg.rootId, graph: real, drawn: { nodes: drawn.nodes.length, edges: drawn.edges.length },
         showAll, webgl: env.webgl, reducedMotion: env.reducedMotion, mode, width, compact, lens: lens.id,
         review: kg.review.state, lastPhase: kg.review.lastPhase, run: runRead.live, time: new Date().toISOString(),
-        load: { timeline: timing.timeline.snapshot(), host: source.loadTrace ? hostTrace.latest() : undefined },
+        load: { timeline: timing.timeline.snapshot(), host: freshHost !== undefined ? freshHost : source.loadTrace ? hostTrace.latest() : undefined },
         // Called on click, after the render below has defined these.
         ...(real ? {
             surface: {
@@ -188,6 +190,8 @@ export function KnowledgeGraphView({
             },
         } : {}),
     });
+    // The header's Copy diagnostics, in every status: reads the host's trace (and its persisted log) at the moment of the press.
+    const copyDiagnostics = async (): Promise<string> => diagnostics(source.loadTrace ? await source.loadTrace().catch(() => null) : undefined).text;
     const titleOf = (rootId: string) => kg.scopes.find((s) => s.rootId === rootId)?.title ?? rootId;
     // The ONE 3D / Flat switch (PRD 43 C4); Show in tower goes to 3D through it.
     const flatView = useFlatView();
@@ -274,7 +278,7 @@ export function KnowledgeGraphView({
             <SurfaceHeader
                 kg={kg} source={source} labels={labels} graph={graph} surface={surface} env={surfaceEnv} wrapped={layout.drawerSheet} sync={sync.status}
                 run={runRead.live} onOpenReviews={openReviews} outTo={chrome.out.to} onOut={chrome.out.onOut} drawerOpen={drawer.open} onToggleDrawer={drawer.toggle}
-                panes={panes} headerTools={headerTools}
+                panes={panes} headerTools={headerTools} drawerAvailable={!!real} diagnostics={copyDiagnostics}
                 spine={<Spine labels={labels} items={chrome.spineItems} roots={{ scopes: kg.scopes, rootId: kg.rootId, onRoot: kg.selectRoot }} onPick={chrome.onSpinePick} />}
                 askName={chrome.askName}
                 linesToggle={layout.phone && hasLines ? <Pill on={linesOpen} aria-expanded={linesOpen} onClick={() => setLinesOpen((v) => !v)}>{s.linesButton}</Pill> : undefined}

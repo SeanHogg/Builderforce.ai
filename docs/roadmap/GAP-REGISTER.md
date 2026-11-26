@@ -729,6 +729,52 @@ Gaps:
   - "brain" means the chat or the map.
 - `MEM-G116` **webcontainers `memoryIntegration` re-implements chunking, BM25, RRF and decay**, which M `retrieval` already provides.
 
+### Chat consolidation `[platform]`
+
+Details, paths and migration order: `docs/specs/tasks/platform-duplication-audit.md` §5. The web, canvas, VS Code and Chrome chats already share brain-ui and brain-embedded. These gaps are the copies that remain.
+
+- `CHAT-G001` **The web has a second markdown renderer** (`ChatMessageContent.tsx`). Extend brain-ui `Markdown` with the mermaid, save-fence, apply and link hooks, then delete it.
+- `CHAT-G002` **Web `ChatMessageBubble` and `ChatMessageActions` duplicate brain-ui `MessageRows` and `MessageActions`.**
+- `CHAT-G003` **The manager, guest and agent-execution panels draw their own transcript** instead of `BrainTimeline`.
+- `CHAT-G004` **The transcript serializer exists only in VS Code** (`webview/src/diagnostics/transcript*.ts`). Move it to brain-embedded.
+- `CHAT-G005` **The Chrome side panel has no Copy diagnostics.**
+- `CHAT-G006` **There are four chat diagnostics report builders:** manager, `diagnosticsCapture`/`diagnosticsReport`, canvas, and Evermind.
+- `CHAT-G007` **Model pickers are rendered in three hosts** (Chrome, VS Code, web). Keep only data adapters feeding `ModelPane`.
+- `CHAT-G008` **Starter and work-mode tiles are built per host.** Make them data for `StarterTiles`, with modes from `chatMode.ts`.
+- `CHAT-G009` **There are six label paths, plus hand-written key-mapping tables.** Use one brain-ui `labelCatalog` with a `t()` adapter per host.
+- `CHAT-G010` **Chat limits are copied per host:** Synapse constants and VS Code `attachmentLimits.ts`. Export one limits module.
+- `CHAT-G011` **The TUI's `commands.ts` and `auto-reply/commands-registry.ts` are a third and fourth slash-command registry,** with hand-written help.
+- `CHAT-G012` **There is no shared run-event vocabulary** across the gateway WebSocket, Tauri, SSE and the VS Code bridge. Define `RunEvent` with one adapter per transport.
+- `CHAT-G013` **The Control UI (Lit) has its own message normalizer, tool cards and copy-as-markdown.**
+- `CHAT-G014` **Agent-host chat (`chatRoutes.ts`) uses a second message store.** Fold it into `brain_chat_*` with an expand/contract migration.
+- `CHAT-G015` **Synapse chat is a full vanilla-JS fork:** composer, transcript, approval and `brain.rs` streaming with polling. It is removed by the Synapse IDE rebuild.
+- `CHAT-G016` **`useVoiceDictation` is copied into Synapse `dictation.js`** (and into Spawn, UNVERIFIED).
+- `CHAT-G017` **brain-embedded `ui/PromptInput.tsx` may be dead code.** Verify its references and delete it if unused.
+- `CHAT-G018` **Synapse chat, Chrome diagnostics and the shared limits have no tests.**
+
+### Shell and file tools consolidation `[platform]`
+
+Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §6. The tool definitions are shared in `packages/agent-tools`; the code beneath them is not.
+
+- `SHELL-G001` **The sandbox provider's containment check wrongly rejects names like `..foo`** (`sandbox-capability-provider.ts:101`, which uses `startsWith("..")`). Fix in progress.
+- `SHELL-G002` **The shared path resolver needs a symlink-aware variant**, used by every read/write/edit provider. Details are in the local security findings file. Fix in progress.
+- `SHELL-G003` **There are four process-tree kill implementations.** Make one shared `node-process` helper. Fix in progress.
+- `SHELL-G004` **Some Windows tree-kills resolve `taskkill` unsafely.** Details are in the local security findings file. Fix in progress.
+- `SHELL-G005` **Output caps are hard-coded per host** (VS Code 60,000 characters and 4 MB, browser 16,000, native 50 KB, 2 MB reads). Take them from `tool-output-policy`.
+- `SHELL-G006` **Command timeout defaults and units differ** (seconds vs ms; 5 vs 10 min). Add one `DEFAULT_COMMAND_TIMEOUT_MS`.
+- `SHELL-G007` **The `apply_patch` alias maps onto `edit_file`, which has a different contract** (`toolAliases.ts`). Fix in progress.
+- `SHELL-G008` **agent-runtime's native `read`, `exec` and `process` are not converged** onto the shared tools.
+- `SHELL-G009` **No command policy exists outside agent-runtime.** Port `exec-approvals` into `agent-tools` as a deny-list plus a confirm port. Details are in the local security findings file.
+- `SHELL-G010` **`LIST_MAX_FILES` and the file walker are copied three times** (on-prem, sandbox, VS Code).
+- `SHELL-G011` **The container's glob pruning is copied by hand** (`workspaceAgent.mjs:364`). Generate it from `glob.ts`.
+- `SHELL-G012` **Shell job tables are duplicated** (`MAX_JOBS = 32` in two places, plus `bash-process-registry.ts`).
+- `SHELL-G013` **The native edit matcher duplicates `applyStringEdit`.**
+- `SHELL-G014` **Tool-name tables are spread over more than 8 files** in agent-runtime, brain-embedded, the api and agent-tools.
+- `SHELL-G015` **Error shape and wording differ by host.** Standardize on `{ok:false, error, code}`.
+- `SHELL-G016` **The browser shell has no jobs, background runs or tree cancel.**
+- `SHELL-G017` **There is no cross-host conformance suite** for file and command tools.
+- `SHELL-G018` **There is one terminal component** (`frontend/src/components/Terminal.tsx`). New hosts reuse it.
+
 ### Data model — PRD 20 `[platform]`
 
 - `MAINT-G023` **LinkedIn rows retired by 1102** need a reconciler or a drop.

@@ -14,6 +14,7 @@ import { fillTemplate, type KnowledgeGraphLabels } from './labels';
 import { cssVar } from './scene/themeColors';
 import { ghostButtonStyle, Seg } from './surface/ui';
 import { chromeGlyph } from './surface/ui/glyphs';
+import { DiagnosticsButton } from './surface/DiagnosticsButton';
 import { TYPE } from './surface/ui/type';
 import type { QuestionId } from './surface/questions';
 
@@ -37,6 +38,13 @@ export interface ToolbarProps {
     drawerOpen: boolean;
     onToggleDrawer(): void;
     /**
+     * Whether the drawer can open at all: it holds graph panels, so it exists only once a graph is drawn. Without one the Panels
+     * button would do nothing, so it hides itself (the component decides its own visibility). Absent ⇒ available.
+     */
+    drawerAvailable?: boolean | undefined;
+    /** The text "Copy diagnostics" copies, taken when pressed; present ⇒ the button shows in every state. */
+    diagnostics?: (() => string | Promise<string>) | undefined;
+    /**
      * The Code | Picture switch: present exactly while the stage shows one of the two (its box too narrow to split: always at ≤900px, and wider with the
      * Lines dock and the drawer open). `code` is whether the code pane is the one on show.
      */
@@ -54,7 +62,7 @@ export interface ToolbarProps {
 
 const icon = (id: string): ReactNode => chromeGlyph(id);
 
-export function Toolbar({ labels, onSearch, question, askName, wrapped, outTo, onOut, spine, action, drawerOpen, onToggleDrawer, panes, askWrap, linesToggle, headerTools }: ToolbarProps) {
+export function Toolbar({ labels, onSearch, question, askName, wrapped, outTo, onOut, spine, action, drawerOpen, onToggleDrawer, drawerAvailable = true, diagnostics, panes, askWrap, linesToggle, headerTools }: ToolbarProps) {
     // null = nothing typed. The input is in the row only while asking (the search button expands it), except where the row wraps: the button is gone there, so the input stays.
     const [typed, setTyped] = useState<string | null>(null);
     const [asking, setAsking] = useState(false);
@@ -110,7 +118,10 @@ export function Toolbar({ labels, onSearch, question, askName, wrapped, outTo, o
                     <button type="button" data-testid="kg-search-button" aria-expanded={asking} onClick={() => setAsking((v) => !v)} {...iconBtn(labels.searchLabel, asking)}>{icon('search')}</button>
                 )}
                 {action}
-                <button type="button" data-testid="kg-panels-button" aria-expanded={drawerOpen} onClick={onToggleDrawer} {...iconBtn(panelsName, drawerOpen)}>{icon('panels')}</button>
+                {drawerAvailable && (
+                    <button type="button" data-testid="kg-panels-button" aria-expanded={drawerOpen} onClick={onToggleDrawer} {...iconBtn(panelsName, drawerOpen)}>{icon('panels')}</button>
+                )}
+                {diagnostics && <DiagnosticsButton labels={labels} text={diagnostics} />}
             </div>
         </div>
     );

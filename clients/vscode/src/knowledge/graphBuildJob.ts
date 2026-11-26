@@ -16,6 +16,7 @@ import type { KnowledgeGraph, KnowledgeStore } from "@seanhogg/builderforce-memo
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import type { GraphBuildRequest, GraphBuildResult } from "./graphBuildProtocol";
 import { readPackFile } from "./packs/packFile";
+import { boundGraph } from "./graphBudget";
 
 /**
  * A folder's knowledge, as a build reads it; undefined ⇒ the folder has no knowledge file (never reviewed). `releaseExtracted`,
@@ -25,7 +26,17 @@ export type FolderStores = (folderPath: string) => { store: KnowledgeStore; mani
 
 /** The build of `request`, in THIS thread, reading stored knowledge through `stores`. */
 export async function runGraphBuild<R extends GraphBuildRequest>(request: R, stores: FolderStores): Promise<GraphBuildResult<R>> {
-  return (await buildOf(request, stores)) as GraphBuildResult<R>;
+  const built = await buildOf(request, stores);
+  return (isViewGraph(request, built) ? boundGraph(built) : built) as GraphBuildResult<R>;
+}
+
+/**
+ * A graph the knowledge VIEW reads (and so crosses to the host and the webview): bounded before it leaves the build
+ * (`graphBudget.ts`). A run-delta side (`hashOverrides`) is compared finding-by-finding, never drawn: it stays whole.
+ */
+function isViewGraph(request: GraphBuildRequest, built: KnowledgeGraph | CodeGraphFindings | null): built is KnowledgeGraph {
+  if (built === null || request.kind === "extracted") return false;
+  return !(request.kind === "stored" && request.hashOverrides);
 }
 
 async function buildOf(request: GraphBuildRequest, stores: FolderStores): Promise<KnowledgeGraph | CodeGraphFindings | null> {

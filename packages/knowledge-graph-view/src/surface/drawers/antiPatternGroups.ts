@@ -60,12 +60,13 @@ export function groupAntiPatterns(findings: readonly Finding[], opts: GroupOptio
             groups.set(id, entry);
         }
         entry.group.findings.push(f);
+        // A violation folded by the build's bound stands for `params.count` of them.
+        entry.group.count += f.kind === PARTITION_VIOLATION ? Number(f.params.count) || 1 : 1;
         const tally = entry.touched;
         for (const ref of f.nodes) tally.set(ref, (tally.get(ref) ?? 0) + 1);
     }
     const out: AntiPatternGroup[] = [];
     for (const { group: g, touched } of groups.values()) {
-        g.count = g.findings.length;
         g.files = [...touched].sort((a, b) => b[1] - a[1] || cmp(a[0], b[0])).map(([ref]) => ref);
         out.push(g);
     }

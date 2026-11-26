@@ -158,7 +158,9 @@ export async function resolveAuthorization(
       );
       if (refresh.ok) {
         if (refresh.refreshed) {
-          if (!await storeGrant(db, env, { current: row, tokens: refresh.tokens })) return null;
+          if (!await storeGrant(db, env, { current: row, tokens: refresh.tokens })) {
+            throw new Error('The MCP server authorization changed during refresh');
+          }
         }
         return `Bearer ${refresh.tokens.accessToken}`;
       }

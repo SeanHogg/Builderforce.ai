@@ -11,7 +11,7 @@ Synapse is being rebuilt from the ground up (user, 2026-11-26), so its Rust MCP 
 | 3 | Local inference + model catalog + routing | **audited 2026-11-26** (below) |
 | 4 | Memory (Evermind), skills, episodes, runs | **audited 2026-11-26** (below) |
 | 5 | Chat composer / view | audited (§5) |
-| 6 | Shell / terminal, file tools | queued |
+| 6 | Shell / terminal, file tools | audited (§6) |
 | 7 | Auth / device sign-in / cloud client | queued |
 | 8 | Security policy (code-shield vs Shield) | queued |
 
@@ -523,3 +523,244 @@ Synapse's `bf-memory` is a thin MCP client: no second store.
 | MEM-G114 | 3 brain-map UIs (Synapse JS, `EvermindBrainMap`, `EvermindBrain3D`) | One, on the shared 3D stage (`AE-G059`) | `I/app/ui/js/views/brain/*`, frontend builder, the canvas station |
 | MEM-G115 | Name collisions: "memory" (RAM vs facts), "Evermind" (model vs facts vs console), "brain" (chat vs map) | Glossary + W rename `memory/` → `residency/` | W `packages/browser/src/memory` |
 | MEM-G116 | W `memoryIntegration` re-implements chunk + BM25 + RRF + decay | Reuse M `retrieval`/`ingest` | `W/packages/browser/src/memoryIntegration/*` |
+
+## 5. Chat: composer, transcript, streaming, persistence
+
+Paths: BF = `Builderforce.ai`, I = `builderforce-inference`. The audit is read-only; anything not opened is marked UNVERIFIED.
+
+### 5.1 Headline
+
+The React hosts (web, canvas, VS Code, Chrome) already share the chat. They mount:
+
+- from `@seanhogg/builderforce-brain-ui`: `AiSurface`, `BrainTimeline`, `BrainComposer`, `ToolConfirmBar`, `PendingQuestionBanner`, `StarterTile`, `PromptOptionsMenu`, `QueuedTurnChips`, `useVoiceDictation`;
+- from `@seanhogg/builderforce-brain-embedded`: `useBrainConversation`, `useChatTurns`, `streamChatCompletion`, `createHostModelStream`, `createBrainRestPersistence`, `gatherChatDiagnostics`, the `composerCommands` registry.
+
+The real duplication is in four places:
+
+1. **Synapse** has its own vanilla-JS chat: composer, transcript, approval, streaming through `brain.rs`, and a copy of dictation.
+2. **The agent-runtime TUI and the Lit Control UI** each have their own message model, their own tool cards and a third slash-command registry.
+3. **Web legacy components:**
+   - `ChatMessageContent.tsx` is a second markdown renderer.
+   - `ChatMessageBubble.tsx` and `ChatMessageActions.tsx` duplicate the brain-ui message rows and actions.
+4. **Pieces each host owns:** labels, starters, model-picker adapters, the transcript serializer and diagnostics.
+
+### 5.2 Surfaces
+
+| Surface | Shared pieces used | Implemented itself | Transport | Persistence |
+|---|---|---|---|---|
+| Web Brain panel `BF/frontend/src/components/brain/*` | composer, timeline, `AiSurface`, pickers, confirm, pending question, `useBrainConversation` | `ChatMessageContent`, `ChatMessageBubble`, `ChatMessageActions`, `WorkOptionsPicker`, `BrainCapabilityPicker`, `lib/brain/chatModes.ts`, `messageExport.ts` | SSE `/llm/v1/chat/completions`; `/api/brain/chats/:id/stream` for shared chats | `brain_chat_*` via `createBrainRestPersistence`; steps buffered in IndexedDB |
+| Web `ChatInput` consumers (agent execution, dashboard, agent host, guest, manager) | composer | transcript drawn with `ChatMessageBubble`/`Content`; manager diagnostics (`managerChatDiagnostics.ts`, `ManagerCopyDiagnostics.tsx`) | same | `brain_chat_*`; the guest has its own routes; agent-host chat has its own store (`chatRoutes.ts`) |
+| Canvas chat `creation-canvas/CanvasChatSurface.tsx`, `BrainSurface`, `BrainDock` | `SurfaceHeader`, timeline, `Avatar`, composer menu | canvas turn runner (`runCanvasGroupTurn.ts`, `useCanvasBrainTurn.ts`), `canvasDiagnosticsContext.tsx` | same | same |
+| VS Code webview `clients/vscode/webview/src/chat/*` | nearly all of brain-ui; `useBrainConversation`, `useToolConfirmationGate`, `gatherChatDiagnostics` | `chatLabels.ts` (240 lines), `composerLabels.ts`, `editorStarters.tsx`, `useComposerModels.ts`, `diagnostics/transcript.ts` and `transcriptSections.ts`, `runDelta/*`, `SubagentStrip` | agent loop in the extension host (`brainRunHost.ts`); events sent to the webview with postMessage; SSE proxied by `hostFetch.ts` | local-first records via `hostPersistence.ts`, synced to `brain_chat_*` |
+| Chrome side panel `clients/chrome/src/sidepanel/*` | composer, timeline, `AiSurface`, banners, starters, confirm | `ConfirmCard` (wraps `ToolConfirmBar`), `ModelPickerSection`, `rovrStarters`, `toolLabels`, `i18n/t`/`rovrLookup`; **no Copy diagnostics** | `createHostModelStream` → gateway SSE | IndexedDB `RovrRecords` with an outbox to `brain_chat_*` |
+| Synapse `I/app/ui/js/views/chat.js`, `chat/*`, `approval.js`, `stepText.js`, `src-tauri/src/cloud/brain.rs` | **none** | everything: composer, transcript, live reply, approvals, step text, dictation copy | Rust `reply_in_background` emits Tauri `brain-reply`; also polls messages every 2 s or 6 s | API only (`limit=24`); no local store |
+| TUI `BF/agent-runtime/src/tui/*`, `BF/packages/tui/src/*` | none | `ChatEntry` model, about 35 slash commands (`commands.ts`), model and agent pickers | gateway WebSocket (`delta`, `final`, `aborted`, `error`) | gateway sessions |
+| Control UI `BF/agent-runtime/ui/src/ui/*` (Lit) | none | `message-normalizer.ts`, `tool-cards.ts`, `grouped-render.ts`, `copy-as-markdown.ts` | gateway WebSocket | gateway sessions |
+| API `BF/api/src/presentation/routes/brainRoutes.ts` (893 lines), `chatRoutes.ts`, `guestRoutes.ts`, `llm/chatCompletionsRoutes.ts` | — | `application/brain/*` (`BrainService`, `brainMessageStore`, `chatStepStore`, `chatDiagnosticsStore`) | SSE, plus a room relay (SSE or WebSocket UNVERIFIED) | `brain_chats`, `brain_chat_messages`, `brain_chat_steps`, `brain_chat_diagnostics`; agent-host messages are separate |
+
+### 5.3 Duplicate-responsibility matrix
+
+| Capability | Survivor | Other copies |
+|---|---|---|
+| Composer | `brain-ui/src/composer/BrainComposer.tsx` | Synapse `chat/composer.js`; TUI input; `brain-embedded/src/ui/PromptInput.tsx` (may be dead, UNVERIFIED) |
+| Markdown | `brain-ui/src/Markdown.tsx` | `frontend/src/components/ChatMessageContent.tsx` (own react-markdown setup, mermaid, save-fence, apply, create-file); Control UI `grouped-render.ts` |
+| Message rows and actions | `brain-ui/src/timeline/MessageRows.tsx` and `MessageActions.tsx` | web `ChatMessageBubble`, `ChatMessageActions`, `BrainMessageActions` |
+| Tool cards and step text | `brain-ui` `ToolStep`, `StepRows`, `ToolGroupRow`, `toolStepView.ts` | Control UI `tool-cards.ts`; Synapse `stepText.js`; TUI renderer |
+| Approval | `brain-ui/src/ToolConfirmBar.tsx` | Synapse `approval.js` and `liveReply.js`; TUI approvals (the web and Chrome wrappers are fine) |
+| Model picker | `brain-ui` `promptOptions/ModelPane.tsx` and `composer/composerModel.ts` | Chrome `ModelPickerSection.tsx`; VS Code `useComposerModels.ts`; web `useComposerOptions.ts` and `dockModelMenu.ts`; TUI `/model` |
+| Slash-command registry | `brain-embedded/src/composerCommands/*` | VS Code `src/composerCommands/*` (host entries, fine); TUI `commands.ts` and `auto-reply/commands-registry.ts` (third and fourth registries, with hand-written help) |
+| Streaming and event parse | `brain-embedded` `streamChatCompletion.ts` and `hostModelStream.ts` | Synapse `brain.rs` `model_turn`; TUI `tui-stream-assembler.ts`; Control UI `controllers/chat.ts` |
+| Conversation store | `brain-embedded` `brainRestPersistence`, `localFirstPersistence`, `useBrainChats`, `useBrainConversation` | Synapse `chatStore.js` and `brain.rs`; agent-host store (`chatRoutes.ts`); TUI and Control UI gateway sessions |
+| Transcript and diagnostics | `brain-embedded` `gatherChatDiagnostics`, `chatDiagnosticsReport`, `brainTriage` | VS Code `diagnostics/transcript.ts` and `transcriptSections.ts`; web `managerChatDiagnostics.ts`, `diagnosticsCapture.ts`, `diagnosticsReport.ts`; `canvasDiagnosticsContext.tsx`; `brain-ui/src/evermind/diagnosticsReport.ts` |
+| Starters and work modes | `brain-ui/src/surface/StarterTiles.tsx`; `ModePane.tsx` and `brain-embedded/src/chatMode.ts` | VS Code `editorStarters.tsx`; Chrome `rovrStarters.tsx`; web `useComposerStarters.tsx`, `WorkOptionsPicker.tsx`, `BrainCapabilityPicker.tsx`, `lib/brain/chatModes.ts`; Chrome `runOptions.ts` |
+| Voice | `brain-ui/src/useVoiceDictation.ts` | Synapse `chat/dictation.js` (its header says it is a verbatim copy); Spawn `desktop/spawn/ui/js/dictation.js` (UNVERIFIED) |
+| Limits | `brain-embedded` `toolResultBudget`, `HISTORY_TOKEN_BUDGET`, `uploadUrls.ts` `ASSET_MAX_BYTES` | Synapse hardcodes `HISTORY=24`, `RECALL_CHARS=6000`, `RESULT_CHARS=16000` and a 5-minute approval wait; VS Code `attachmentLimits.ts` mirrors the API by comment |
+| Labels | `brain-ui` `labelCatalog.ts` and `timelineCatalog.ts` | six label paths: web next-intl plus hand maps (`PERSONA_PATH`, `RECIPIENT_PATH`); VS Code `chatLabels.ts` and `composerLabels.ts`; Chrome `i18n/t` plus a `QUEUED_KEY` map (`$1` vs `{model}`); Synapse `i18n.js`; TUI English literals; Control UI `ui/src/i18n` |
+
+### 5.4 Data-model overlaps
+
+- **Messages.** `BrainMessage` (`brain-embedded/src/types.ts`) is canonical; the API row adds `eventKey`. Steps are role `tool` with `metadata.kind = 'step'`, stored in `brain_chat_steps` and merged back by `chatStepStore.mergeSteps`. Other shapes:
+  - Synapse uses untyped JSON plus `live` and `replyError`.
+  - The TUI uses `ChatEntry`.
+  - The Control UI normalizes `unknown` messages itself.
+  - Agent-host chat has a separate messages table.
+- **Conversations.** `brain_chats` with `chatMode`. Chrome `LocalChat`, VS Code local-first records and TUI sessions meet the cloud chat only through sync (`chatIdentity.boundServerId`). TUI sessions never do.
+- **Stream events.** There is no shared vocabulary:
+  - TUI: `delta`, `final`, `aborted`, `error`;
+  - Synapse: `brain-reply`;
+  - gateway SSE: `chat.completion.chunk`;
+  - VS Code: `run.*` over the bridge;
+  - API room stream: its own events.
+
+### 5.5 Target design
+
+- **brain-ui owns everything on screen**, including:
+  - markdown, with hooks for mermaid, save-fence, apply and internal links;
+  - message rows and actions, with web-only actions (export) injected as data;
+  - starter and model-picker rendering; hosts supply only data adapters.
+- **brain-embedded owns the conversation:**
+  - the store, persistence and the turn controller;
+  - stream parsing;
+  - the transcript serializer, moved up from VS Code so web and Chrome get Copy transcript;
+  - limits, one exported constants module that every host imports;
+  - the composer-command registry, which the TUI also reads.
+- **One run-event vocabulary.** Define `RunEvent` once (`run.start`, `run.delta`, `run.step`, `run.confirm`, `run.final`, `run.error`). Adapters translate gateway WebSocket, Tauri and SSE into it, so every host shows the same states and diagnostics.
+- **One label catalog.** Use brain-ui `labelCatalog` keys; hosts provide a `t(key)` adapter only and delete their key-mapping tables.
+- **Synapse.** Under the IDE rebuild, the chat is the VS Code extension's webview chat running inside OpenVSCode Server, so the vanilla-JS chat, the `brain.rs` chat and `dictation.js` are deleted rather than ported. Until then, share the limits.
+- **TUI and Control UI.** These stay separate renderers (terminal and Lit), but they consume the shared registry, `RunEvent` and the message normalizer.
+
+### 5.6 Migration order
+
+1. Shared limits module, plus a test that each host imports it (cheap; it removes the drift).
+2. Move the transcript serializer from VS Code into brain-embedded. Use it in web, canvas and Chrome, which adds Copy diagnostics to Chrome.
+3. Extend brain-ui `Markdown` with the web hooks. Then delete `ChatMessageContent`, `ChatMessageBubble` and `ChatMessageActions` and move manager, guest and agent-execution to `BrainTimeline`.
+4. Label catalog: switch Chrome, web and VS Code to `labelCatalog` adapters and delete the key-mapping tables.
+5. Model-picker and starter adapters: keep only the data, rendered by brain-ui.
+6. Define `RunEvent` and add adapters for the TUI and Control UI; have the TUI read the shared command registry.
+7. Merge the agent-host chat store into `brain_chat_*`: expand/contract migration, `agent_host_id` as a column.
+8. Synapse: removed by the IDE rebuild.
+
+### 5.7 Gaps
+
+| ID | Gap | Fix | Where |
+|---|---|---|---|
+| CHAT-G001 | Second markdown renderer on the web | Extend brain-ui `Markdown`, then delete the copy | `frontend/src/components/ChatMessageContent.tsx` |
+| CHAT-G002 | Web message bubble and actions duplicate brain-ui rows | Fold into `MessageRows`/`MessageActions`; inject export | `ChatMessageBubble.tsx`, `ChatMessageActions.tsx`, `BrainMessageActions.tsx` |
+| CHAT-G003 | Manager, guest and agent-execution panels draw their own transcript | Mount `BrainTimeline` | `ManagerChatPanel.tsx`, `GuestBrainPanel.tsx`, `AgentExecutionPanel.tsx` |
+| CHAT-G004 | Transcript serializer lives only in VS Code | Move to brain-embedded | `webview/src/diagnostics/transcript.ts`, `transcriptSections.ts` |
+| CHAT-G005 | Chrome has no Copy diagnostics | Use the shared serializer and report | `clients/chrome/src/sidepanel/*` |
+| CHAT-G006 | Four diagnostics report builders | One `chatDiagnosticsReport`; canvas and manager supply sections | `managerChatDiagnostics.ts`, `diagnosticsCapture.ts`, `diagnosticsReport.ts`, `canvasDiagnosticsContext.tsx` |
+| CHAT-G007 | Model-picker rendering in three hosts | Data adapters only → `ModelPane` | Chrome `ModelPickerSection.tsx`, VS Code `useComposerModels.ts`, web `useComposerOptions.ts`, `dockModelMenu.ts` |
+| CHAT-G008 | Starter and work-mode tiles built per host | Starter data into `StarterTiles`; modes from `chatMode.ts` | `editorStarters.tsx`, `rovrStarters.tsx`, `useComposerStarters.tsx`, `WorkOptionsPicker.tsx`, `BrainCapabilityPicker.tsx`, `lib/brain/chatModes.ts`, Chrome `runOptions.ts` |
+| CHAT-G009 | Six label paths and hand key maps | One `labelCatalog` plus a `t()` adapter per host | `chatLabels.ts`, `composerLabels.ts`, Chrome `QUEUED_KEY`, web `PERSONA_PATH`/`RECIPIENT_PATH` |
+| CHAT-G010 | Limits copied per host | One exported limits module, with a test | Synapse constants, VS Code `attachmentLimits.ts`, brain-embedded budgets |
+| CHAT-G011 | Third and fourth slash-command registries with hand-written help | TUI reads `composerCommands`; help is generated | `agent-runtime/src/tui/commands.ts`, `auto-reply/commands-registry.ts` |
+| CHAT-G012 | No shared run-event vocabulary | `RunEvent` plus transport adapters | TUI assembler, Control UI controller, Synapse `brain.rs`, VS Code bridge |
+| CHAT-G013 | Control UI has its own message normalizer, tool cards and copy-as-markdown | Consume the shared normalizer and serializer | `agent-runtime/ui/src/ui/chat/*` |
+| CHAT-G014 | Agent-host chat uses a second message store | Fold into `brain_chat_*` (expand/contract) | `api/src/presentation/routes/chatRoutes.ts` and its tables |
+| CHAT-G015 | Synapse chat is a full fork: composer, transcript, approval, streaming, polling | Removed by the Synapse IDE rebuild (the VSIX chat) | `I/app/ui/js/views/chat.js`, `chat/*`, `approval.js`, `stepText.js`, `src-tauri/src/cloud/brain.rs` |
+| CHAT-G016 | Dictation copied into Synapse (and Spawn) | Deleted with CHAT-G015; until then, one plain-JS build of the core of `useVoiceDictation` | `I/app/ui/js/chat/dictation.js`, `desktop/spawn/ui/js/dictation.js` |
+| CHAT-G017 | `PromptInput.tsx` in brain-embedded may be dead | Verify references; delete if unused | `brain-embedded/src/ui/PromptInput.tsx` |
+| CHAT-G018 | No tests for Synapse chat, Chrome diagnostics or shared limits | Tests come with CHAT-G005 and CHAT-G010; Synapse via CHAT-G015 | — |
+
+## 6. Shell, terminal and file tools
+
+Paths are relative to `Builderforce.ai` unless marked I (`builderforce-inference`) or W (`builderforce-webcontainers`). The audit is read-only; items not opened are marked UNVERIFIED. Synapse and the Chrome extension have no shell or file tools. builderforce-memory has none either.
+
+### 6.1 Headline
+
+- **The tool definitions are already shared** in `packages/agent-tools` (`run_command`, `read_file`, `write_file`, `edit_file`, `delete_file`, `list_files`, plus `command_status`, `command_stop` and `output_filter`). Each host backs them with a `CapabilityProvider`.
+- **What is duplicated is the code beneath them:**
+  - path containment, about 11 copies;
+  - process-tree kill, 4 copies;
+  - shell job tables, 3 copies;
+  - command runners, 5 copies;
+  - file walkers, 3 copies;
+  - output caps and timeouts hard-coded per host;
+  - tool-name tables spread over more than 8 files.
+- **agent-runtime's native loop** still exposes its own `read`, `exec`, `process` and `apply_patch`. Only `write`, `edit` and `delete` are converged (`converged-coding-tools.ts`).
+
+### 6.2 Inventory: command execution
+
+| Host | Path | Limits | Policy | Tests |
+|---|---|---|---|---|
+| Shared definition | `packages/agent-tools/src/core-tools.ts:587`, `shell-tools.ts` | `yieldMs` ≤ 10 min; `cwdArg` rejects absolute paths and `..`; `compressShellResult` | branch-switch guard, command-shape and segment checks; no allow/deny list | `shell-tools*.test.ts`, `branch-switch*.test.ts` |
+| VS Code host | `clients/vscode/src/tools/localShell.ts`, `localShellJobs.ts`, `localShellOutputs.ts`, `processTree.ts` | 10 min; 4 MB buffer; 60,000 chars returned; 32 jobs; 4 MB kept per job | kills the whole tree; jobs end with the run; runs as the user, with no command policy | `localShell*.test.ts` |
+| Cloud container | `api/container/sandboxCore.mjs`, `sandboxJobs.mjs`, `server.mjs` | 10 min; 60,000 chars; 32 jobs | dedicated shell user, trusted `PATH`, scrubbed env, isolation self-check, git mirror, egress trust | UNVERIFIED |
+| agent-runtime native `exec`/`process` | `agent-runtime/src/agents/bash-tools.exec.ts` (1101 lines), `bash-tools.process.ts` (680), `bash-process-registry.ts`, `shell-utils.ts`, `src/process/kill-tree.ts` | 200,000 captured, 30,000 pending; timeout in **seconds**; jobs live 30 min to 3 h; PTY support | **the only allowlist and approval system** (`infra/exec-approvals*.ts`, `gateway/exec-approval-manager.ts`, `node-command-policy.ts`) | many |
+| Browser (web Brain) | `frontend/src/lib/browserRuntime/workspaceShell.ts` → W `bfsh -c` | 5 min; output is the **tail**, 16,000 chars; saved-back files ≤ 1 MB | code scan and build gate; no jobs or background runs | `workspaceShell*.test.ts` |
+| Other VS Code spawn sites | `verify/execRunner.ts`, `verify/targetedTests.ts`, `runDelta/analyzers/nodeAnalyzerExec.ts`, `knowledge/knowledgeShell.ts`, `child/childRunSpawner.ts`, plus about 30 more | each sets its own limits | — | various |
+| Terminal UI | `frontend/src/components/Terminal.tsx` (xterm; the only terminal component) | — | — | — |
+
+### 6.3 Inventory: file tools
+
+- **Shared:**
+  - `core-tools.ts` definitions;
+  - `edit.ts` and `edit-match.ts` (`applyStringEdit`, ≤ 20 edits per call);
+  - `fileRead.ts` and `fileWindow.ts` (≤ 8 paths, 64,000-character whole-read cap);
+  - `glob.ts`;
+  - `writeOverwriteGuard.ts` and `writeScope.ts`.
+- **Providers:**
+  - on-prem `agent-runtime/src/agents/node-capability-provider.ts`;
+  - sandbox `sandbox-capability-provider.ts`, which has its own `resolveInsideRoot` (line 101) and its own walker;
+  - VS Code `clients/vscode/src/tools/localCapabilities.ts`, with 2 MB reads and lists of 5,000 scanned and 400 returned;
+  - container `api/container/workspaceAgent.mjs`, with `insideClone` and a hand-copied `dirMayContainGlobMatch`;
+  - Worker/API `api/src/application/ide/workspaceStore.ts` and `worker/src/lib/workspacePath.ts`, both using `packages/workspace-path`;
+  - browser `frontend/src/lib/browserRuntime/coding.ts` and `workingTree.ts` (UNVERIFIED);
+  - MCP `packages/workspace-mcp/src/workspaceFiles.ts`, which re-checks with realpath.
+- **Native agent-runtime tools:**
+  - `native-file-tools.ts` (`read` ≤ 2,000 lines / 50 KB; its own BOM- and CRLF-tolerant edit matcher);
+  - `apply-patch.ts` and `apply-patch-update.ts` (real patch syntax, `assertSandboxPath`).
+- **Containment helpers**, all separate:
+  - `sandbox-paths.ts:149`;
+  - `sandbox/fs-paths.ts:227,235`;
+  - `infra/path-safety.ts:8`;
+  - `security/scan-paths.ts:3`;
+  - `commands/cleanup-utils.ts:49`;
+  - `agents/identity-avatar.ts:49`;
+  - `extensions/bluebubbles/src/media-send.ts:73`;
+  - VS Code `knowledge/sourcePort.ts:37` (realpath) and `knowledgeFixPaths.ts:29`;
+  - container `insideClone`.
+
+### 6.4 Duplicate-responsibility matrix
+
+| Capability | Survivor | Other copies |
+|---|---|---|
+| Path containment | `packages/agent-tools/src/node-path.ts` (`resolveInsideRoot`, `resolveInsideRootOrThrow`, `resolveShellCwd`), plus a new realpath variant | the 11 helpers in §6.3 |
+| R2/IDE key validation | `packages/workspace-path` | none found |
+| Process-tree kill | `clients/vscode/src/process/killTree.ts` (taskkill from `%SystemRoot%`), moved to a shared node subpath, with agent-runtime's graceful-then-forced option | `vscode tools/processTree.ts`, `agent-runtime/src/process/kill-tree.ts`, `agents/shell-utils.ts:153`, `api/container/sandboxJobs.mjs:186` |
+| Shell job table | `api/container/sandboxJobs.mjs` `createJobTable` | `vscode localShellJobs.ts` (`MAX_JOBS = 32` copied), `bash-process-registry.ts` |
+| Command runner | `api/container/sandboxCore.mjs` `runShell` | `localShell.ts`, `bash-tools.exec-runtime.ts`, `workspaceShell.ts`, `verify/execRunner.ts` |
+| Output caps and timeouts | `packages/tool-output-policy/src/caps.ts` (`SHELL_CAPTURE_CHARS`) | `localShell.ts:31-33`, `workspaceShell.ts:43,46`, `native-file-tools.ts`, `localCapabilities.ts`, `sandboxCore.mjs:34`, `bash-tools.exec.ts:226` |
+| File walk and list | `agent-tools/src/glob.ts` plus one node walker | `node-capability-provider.ts:73`, `sandbox-capability-provider.ts:68`, `localCapabilities.ts:48`; `workspaceAgent.mjs:364` (hand-copied) |
+| String edit | `agent-tools/src/edit.ts` `applyStringEdit` | `native-file-tools.ts` edit |
+| Tool-name tables | `agent-tools/src/toolAliases.ts` | agent-runtime `tool-policy.ts`, `coding-tools.policy.ts`, `tool-mutation.ts`, `sandbox/constants.ts`, `tool-retry.ts`, `tool-display.json`; `brain-embedded/src/localWorkspaceTools.ts`; api `writeAheadAllowlist.ts`; `agent-tools` `tool-mutation.ts` and `tool-side-effect.ts` |
+| Command policy and approvals | `agent-runtime/src/infra/exec-approvals*.ts`, ported to `agent-tools` | none (that is the gap) |
+
+### 6.5 Inconsistencies
+
+- **Tool names.** The shared tools are `run_command`, `read_file`, `write_file`, `edit_file` and `list_files`; native ones are `exec`, `process`, `read`, `write`, `edit` and `apply_patch`. The `apply_patch` → `edit_file` alias maps a patch-syntax call onto a unique-string replace, which has a different contract.
+- **Timeouts.** VS Code and the container use 10 min, the browser 5 min. Native `exec` takes seconds where the container API takes milliseconds.
+- **Output caps.** Returned output is 60,000 characters (VS Code and container), 16,000 (browser, tail only) or 200,000 (native). Whole-file reads are capped at 64,000 characters (shared), 2 MB (VS Code) or 2,000 lines / 50 KB (native). Whether each host keeps the head or the tail is UNVERIFIED.
+- **Containment rules differ:**
+  - `node-path.ts` splits on the separator; `sandbox-capability-provider.ts:101` uses `startsWith("..")`, which wrongly rejects a legitimate name like `..foo`.
+  - Only 2 of the 11 helpers resolve symlinks.
+  - Absolute paths inside the root are accepted by `node-path.ts` but rejected by `cwdArg`.
+- **Error shapes.** Errors come as `{ok:false, error}`, a thrown `PathEscapesRootError`, or a native `AgentToolResult`, and the wording differs per host.
+- **Kill.** Graceful-then-forced exists only in agent-runtime; VS Code and the container kill the process group straight away.
+
+### 6.6 Target design and order
+
+1. **Containment.** `node-path.ts` gains `resolveInsideRootReal` (realpath, borrowed from `sourcePort.ts`). Every read/write/edit provider uses it, and the local helpers are deleted. This also fixes the `..foo` bug.
+2. **Tree kill.** One shared `node-process` subpath in `agent-tools`: taskkill from `%SystemRoot%`, an optional grace period. Fold the other 4 copies into it.
+3. **Caps and timeouts.** `tool-output-policy` exports `SHELL_CAPTURE_CHARS`, `DEFAULT_COMMAND_TIMEOUT_MS` and the read caps; hosts import them. The container gets them through the existing hash-checked generator.
+4. **One node file walker, plus generating `dirMayContainGlobMatch`** into the container with `scripts/gen-container-shared.mjs`.
+5. **Tool names.** One table in `agent-tools` consumed by the agent-runtime policy files. Fix the `apply_patch` alias by giving `edit_file` patch syntax, or by removing the alias.
+6. **Converge the native `read` and `exec`/`process`** onto the shared definitions, or document why each stays.
+7. **Command policy.** Port `exec-approvals` into `agent-tools` as a deny-list plus a confirm port, applied by the VS Code and browser shells.
+8. **Job table.** One job-table module shared by the container and VS Code.
+9. **Conformance suite.** One test suite run against all four providers: containment, caps, error shape, kill.
+10. **Terminal.** Any new terminal (Synapse IDE, VS Code) reuses `frontend/src/components/Terminal.tsx`; under the IDE rebuild, VS Code's own terminal is used.
+
+### 6.7 Gaps
+
+| ID | Gap | Where |
+|---|---|---|
+| SHELL-G001 | Sandbox provider containment uses `startsWith("..")` and wrongly rejects `..foo` | `agent-runtime/src/agents/sandbox-capability-provider.ts:101` |
+| SHELL-G002 | The shared resolver does not resolve symlinks (details in the local security findings file) | `packages/agent-tools/src/node-path.ts`, `localCapabilities.ts`, `node-capability-provider.ts` |
+| SHELL-G003 | Four tree-kill implementations | `clients/vscode/src/process/killTree.ts`, `clients/vscode/src/tools/processTree.ts`, `agent-runtime/src/process/kill-tree.ts`, `agent-runtime/src/agents/shell-utils.ts`, `api/container/sandboxJobs.mjs:186` |
+| SHELL-G004 | Bare `taskkill` resolved from `PATH` (details in the local security findings file) | `processTree.ts`, `kill-tree.ts`, `shell-utils.ts` |
+| SHELL-G005 | Output caps hard-coded per host | `localShell.ts:32-33`, `workspaceShell.ts:46`, `native-file-tools.ts`, `localCapabilities.ts` |
+| SHELL-G006 | Timeout defaults and units differ (seconds vs ms; 5 vs 10 min) | `localShell.ts:31`, `sandboxCore.mjs:34`, `workspaceShell.ts:43`, `bash-tools.exec.ts:226` |
+| SHELL-G007 | The `apply_patch` alias points at `edit_file`, which has a different contract | `packages/agent-tools/src/toolAliases.ts`, `agent-runtime/src/agents/apply-patch.ts` |
+| SHELL-G008 | Native `read`, `exec` and `process` are not converged onto the shared tools | `converged-coding-tools.ts`, `native-file-tools.ts`, `bash-tools.exec.ts` |
+| SHELL-G009 | No command policy outside agent-runtime (details in the local security findings file) | `shell-tools.ts`, `localShell.ts`, `workspaceShell.ts`, `infra/exec-approvals*.ts` |
+| SHELL-G010 | `LIST_MAX_FILES` and the file walker copied three times | `node-capability-provider.ts:73`, `sandbox-capability-provider.ts:68`, `localCapabilities.ts:48` |
+| SHELL-G011 | Glob pruning copied by hand into the container | `api/container/workspaceAgent.mjs:364`, `agent-tools/src/glob.ts` |
+| SHELL-G012 | Job tables duplicated (`MAX_JOBS = 32` in two places) | `localShellJobs.ts:49`, `sandboxJobs.mjs:57`, `bash-process-registry.ts` |
+| SHELL-G013 | The native edit matcher duplicates `applyStringEdit` | `native-file-tools.ts`, `agent-tools/src/edit.ts`, `edit-match.ts` |
+| SHELL-G014 | Tool-name tables spread over more than 8 files | see §6.4 |
+| SHELL-G015 | Error shape and wording differ by host | all providers; target `{ok:false, error, code}` |
+| SHELL-G016 | The browser shell has no jobs, background runs or tree cancel | `workspaceShell.ts`, W `packages/browser/src/node/processHost.ts` |
+| SHELL-G017 | No cross-host conformance suite for file and command tools | — |
+| SHELL-G018 | Only one terminal component; new hosts must reuse it, not fork it | `frontend/src/components/Terminal.tsx` |

@@ -136,6 +136,10 @@ export interface KnowledgeLoadTraceEntry {
   count?: number;
   /** Near-duplicate pairs the index handed the build. */
   nearDuplicates?: number;
+  /** What the graph bound cut (`graphBudget.ts` `boundsLine`): edges, findings, folded partition violations, payload estimate. */
+  bounds?: string;
+  /** Why the graph carries fewer edges/findings than it was built with (`GraphBounds.reasons`). */
+  boundReasons?: string[];
   hostLag?: KnowledgeHostLag;
 }
 
