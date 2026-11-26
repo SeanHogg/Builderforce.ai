@@ -25,8 +25,7 @@
 
 /** A tool name is consented when the extension names it, or names nothing. */
 export function isToolConsented(allowedTools: string[] | null | undefined, tool: string): boolean {
-  if (allowedTools === null || allowedTools === undefined) return true;
-  return allowedTools.includes(tool);
+  return allowedTools?.includes(tool) ?? true;
 }
 
 /** Keep only the consented entries of one server's advertised tools. */
@@ -34,12 +33,13 @@ export function filterConsentedTools<T extends { name: string }>(
   allowedTools: string[] | null | undefined,
   tools: readonly T[],
 ): T[] {
-  if (allowedTools === null || allowedTools === undefined) return [...tools];
-  return tools.filter((t) => allowedTools.includes(t.name));
+  return tools.filter((t) => isToolConsented(allowedTools, t.name));
 }
 
 /** Thrown at the CALL boundary for a tool the tenant has not consented to. */
 export class McpToolNotConsentedError extends Error {
+  readonly status = 403;
+
   constructor(readonly tool: string) {
     super(`Tool '${tool}' is not approved for this MCP server. Approve it in the server's settings first.`);
     this.name = 'McpToolNotConsentedError';

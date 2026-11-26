@@ -53,6 +53,9 @@ importers:
       '@huggingface/transformers':
         specifier: ^3.8.1
         version: 3.8.1(@types/node@20.19.43)
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.32.0
+        version: 1.32.2(zod@4.6.7)
       '@seanhogg/bfi-node':
         specifier: link:../../packages/bfi-node
         version: link:../../packages/bfi-node
@@ -125,6 +128,12 @@ importers:
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
+      jsonc-parser:
+        specifier: 3.3.1
+        version: 3.3.1
+      smol-toml:
+        specifier: 1.9.1
+        version: 1.9.1
       fflate:
         specifier: ^0.8.2
         version: 0.8.3

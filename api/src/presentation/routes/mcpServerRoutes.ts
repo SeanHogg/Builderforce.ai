@@ -132,11 +132,12 @@ export function createMcpServerRoutes(): Hono<HonoEnv> {
       keyMaterial: c.env.JWT_SECRET,
       surface: requestedSurface,
       role: access.role,
+      names: 'canonical' as const,
     };
     const executionCtx = optionalExecutionCtx(c);
     const server = createMcpServer({
-      list: () => gateway === null ? listPublicMcpTools(requestedSurface) : listGatewayMcpTools(gateway),
-      resolve: (entries, name) => resolveGatewayMcpTool([...entries], name),
+      list: () => gateway === null ? listPublicMcpTools(requestedSurface, 'canonical') : listGatewayMcpTools(gateway),
+      resolve: resolveGatewayMcpTool,
       call: (entry, args) => {
         if (!gateway || !access) throw new Error('Unauthorized');
         return callGatewayMcpTool(gateway, { extensionId: entry.extensionId, tool: entry.tool, arguments: args }, {

@@ -1,11 +1,17 @@
 /** The agent-runtime gateway adapter for the local MCP catalog. */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { searchCodeTool } from "@builderforce/agent-tools";
-import { advertiseName, normalizeInputSchema, toMcp, type McpToolEntry } from "@seanhogg/builderforce-mcp";
+import { isAbsolute, resolve } from "node:path";
+import {
+  createWorkspaceMcpServer,
+  createWorkspaceMcpTools,
+  WORKSPACE_MCP_INFO,
+  type WorkspaceMcpTool,
+} from "@builderforce/workspace-mcp";
+import { advertiseName, normalizeInputSchema, toMcp } from "@seanhogg/builderforce-mcp";
 import { protectToolOutput } from "@seanhogg/builderforce-mcp/policy";
 import { ErrorCode, mcpRejection, safeToolError } from "@seanhogg/builderforce-mcp/protocol";
-import { createMcpServer, serveStatelessMcp } from "@seanhogg/builderforce-mcp/server";
-import { searchNodeWorkspaceCode } from "../agents/node-capability-provider.js";
+import { serveStatelessMcp } from "@seanhogg/builderforce-mcp/server";
+import { buildNodeCapabilityProvider } from "../agents/node-capability-provider.js";
 import { agentFleetTool } from "../builderforce/tools/agent-fleet-tool.js";
 import { codebaseSearchTool } from "../builderforce/tools/codebase-search-tool.js";
 import { gitHistoryTool } from "../builderforce/tools/git-history-tool.js";
@@ -24,7 +30,6 @@ import {
 } from "./http-common.js";
 import { getBearerToken, getHeader } from "./http-utils.js";
 
-const SERVER_INFO = { name: "builderforce-workspace", version: "1.0.0" };
 const MAX_BODY_BYTES = 512 * 1024;
 
 /**
@@ -52,12 +57,7 @@ const LEGACY_TOOLS = [
   agentFleetTool,
 ];
 
-interface WorkspaceTool extends McpToolEntry {
-  legacyName?: string;
-  run(args: Record<string, unknown>): Promise<unknown>;
-}
-
-const LEGACY_ENTRIES: readonly WorkspaceTool[] = LEGACY_TOOLS.map((tool) => ({
+const LEGACY_ENTRIES: readonly WorkspaceMcpTool[] = LEGACY_TOOLS.map((tool) => ({
   name: advertiseName("workspace", tool.name),
   legacyName: tool.name,
   title: tool.label,
@@ -71,30 +71,11 @@ const LEGACY_ENTRIES: readonly WorkspaceTool[] = LEGACY_TOOLS.map((tool) => ({
   },
 }));
 
-const SEARCH_TOOL: WorkspaceTool = {
-  name: advertiseName("workspace", "search"),
-  title: "Workspace search",
-  description: searchCodeTool.description,
-  inputSchema: normalizeInputSchema({
-    type: "object",
-    properties: {
-      ...normalizeInputSchema(searchCodeTool.parameters).properties,
-      projectRoot: { type: "string", description: "Absolute path to the workspace root" },
-    },
-    required: ["projectRoot", "query"],
-  }),
-  effect: "read",
-  surfaces: ["workspace"],
-  async run(args) {
-    const { projectRoot, query, path } = args;
-    if (typeof projectRoot !== "string" || !projectRoot.trim() || typeof query !== "string" || !query.trim()) {
-      throw new Error("projectRoot and query are required");
-    }
-    return searchNodeWorkspaceCode(projectRoot, query, typeof path === "string" ? path : undefined);
-  },
-};
-
-const WORKSPACE_TOOLS = [SEARCH_TOOL, ...LEGACY_ENTRIES];
+const WORKSPACE_TOOLS = createWorkspaceMcpTools((projectRoot) => {
+  if (!projectRoot || !isAbsolute(projectRoot)) throw new Error("An absolute projectRoot is required");
+  const root = resolve(projectRoot);
+  return { root, caps: buildNodeCapabilityProvider({ workspaceRoot: root }) };
+}, { requireRoot: true });
 
 function nodeRequestHeaders(req: IncomingMessage): Headers {
   const headers = new Headers();
@@ -163,8 +144,12 @@ export async function handleMcpHttpRequest(
 
   // Legacy GET manifest for clients that use the REST adapter.
   if (url.pathname === "/mcp" && req.method === "GET") {
+    if (getHeader(req, "accept")?.includes("text/event-stream")) {
+      sendJson(res, 405, mcpRejection(ErrorCode.MethodNotFound, "This MCP server is stateless; use POST"));
+      return true;
+    }
     sendJson(res, 200, {
-      serverInfo: SERVER_INFO,
+      serverInfo: WORKSPACE_MCP_INFO,
       capabilities: { tools: {} },
       tools: LEGACY_ENTRIES.map((entry) => ({ ...toMcp(entry), name: entry.legacyName })),
     });
@@ -179,11 +164,7 @@ export async function handleMcpHttpRequest(
       sendJson(res, status, mcpRejection(ErrorCode.ParseError, body.error));
       return true;
     }
-    const server = createMcpServer({
-      list: () => WORKSPACE_TOOLS,
-      resolve: (entries, name) => entries.find((entry) => entry.name === name || entry.legacyName === name) ?? null,
-      call: (entry, args) => entry.run(args),
-    }, { info: SERVER_INFO, gate: {} });
+    const server = createWorkspaceMcpServer(WORKSPACE_TOOLS, LEGACY_ENTRIES);
     const response = await serveStatelessMcp(server, new Request(url, { method: "POST", headers: nodeRequestHeaders(req) }), body.value);
     res.statusCode = response.status;
     response.headers.forEach((value, name) => res.setHeader(name, value));
@@ -207,7 +188,8 @@ export async function handleMcpHttpRequest(
       return true;
     }
 
-    const tool = WORKSPACE_TOOLS.find((entry) => entry.legacyName === toolName || entry.name === toolName);
+    const tool = LEGACY_ENTRIES.find((entry) => entry.legacyName === toolName || entry.name === toolName)
+      ?? WORKSPACE_TOOLS.find((entry) => entry.name === toolName);
     if (!tool) {
       sendJson(res, 404, { ok: false, error: `Tool not found: ${toolName}` });
       return true;

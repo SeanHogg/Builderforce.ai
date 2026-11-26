@@ -69,7 +69,7 @@ async function sessionKey(conn: McpServerConnection): Promise<string | undefined
   return JSON.stringify([conn.sessionScope, conn.serverUrl, digest]);
 }
 
-export class McpNegotiationError extends Error {
+class McpNegotiationError extends Error {
   constructor(cause: unknown) {
     super('MCP session initialization failed', { cause });
   }

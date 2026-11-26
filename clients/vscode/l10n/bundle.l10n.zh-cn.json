@@ -10,6 +10,7 @@
   "Still works: local tools, local chats and local models.": "仍可使用：本地工具、本地聊天和本地模型。",
   "Unavailable until it recovers: cloud models and sync (your changes are queued and sent later).": "恢复前不可用：云端模型和同步（您的更改将排队，稍后发送）。",
   "$(add) Register external MCP server…": "$(add) 注册外部 MCP 服务器…",
+  "$(gear) Manage local MCP servers": "$(gear) 管理本地 MCP 服务器",
   "$(credit-card) Add a card to unlock premium models": "$(credit-card) 添加银行卡以解锁高级模型",
   "$(rocket) Upgrade to unlock premium models": "$(rocket) 升级以解锁高级模型",
   "(the model produced nothing)": "（模型没有产生任何输出）",

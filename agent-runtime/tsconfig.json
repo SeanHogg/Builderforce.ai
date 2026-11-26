@@ -24,6 +24,10 @@
     "target": "es2023",
     "useDefineForClassFields": false,
     "paths": {
+      "@builderforce/workspace-mcp": ["../packages/workspace-mcp/src/index.ts"],
+      "@builderforce/agent-tools/knowledge": ["../packages/agent-tools/src/knowledge/index.ts"],
+      "@builderforce/agent-tools/node-git-history": ["../packages/agent-tools/src/node-git-history.ts"],
+      "@builderforce/agent-tools/node-path": ["../packages/agent-tools/src/node-path.ts"],
       "@seanhogg/builderforce-mcp/protocol": ["../packages/builderforce-mcp/src/protocol.ts"],
       "@seanhogg/builderforce-mcp/server": ["../packages/builderforce-mcp/src/server.ts"],
       "@modelcontextprotocol/sdk/types.js": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/types.d.ts", "./node_modules/@modelcontextprotocol/sdk/dist/esm/types.js"],

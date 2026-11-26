@@ -6,17 +6,20 @@ import {
   ListToolsRequestSchema,
   McpError,
   SUPPORTED_PROTOCOL_VERSIONS,
+  type CallToolResult,
   type Implementation,
 } from "@modelcontextprotocol/sdk/types.js";
 import { canCallTool, type ToolGate } from "./policy.js";
-import { mcpToolError, mcpToolResult } from "./protocol.js";
+import { mcpToolError, mcpToolResult, protectMcpToolResult } from "./protocol.js";
 import { toMcp, toToolEntry, type McpToolEntry, type RelayToolEntry } from "./tool.js";
 
-interface ToolCatalog<Entry> {
+type ToolCatalog<Entry> = {
   list(): readonly Entry[] | Promise<readonly Entry[]>;
-  call(entry: Entry, args: Record<string, unknown>): Promise<unknown>;
   resolve?(entries: readonly Entry[], name: string): Entry | null;
-}
+} & (
+  | { call(entry: Entry, args: Record<string, unknown>): Promise<unknown> }
+  | { callPrepared(entry: Entry, args: Record<string, unknown>): Promise<CallToolResult> }
+);
 
 export function createMcpServer<Entry extends McpToolEntry | RelayToolEntry>(
   catalog: ToolCatalog<Entry>,
@@ -45,7 +48,9 @@ export function createMcpServer<Entry extends McpToolEntry | RelayToolEntry>(
       if (!await canCallTool(options.gate, descriptor, args)) {
         return mcpToolError(entry.name, "Tool call requires approval");
       }
-      return mcpToolResult("tool" in entry ? entry.tool : entry.name, await catalog.call(entry, args));
+      const name = "tool" in entry ? entry.tool : entry.name;
+      if ("callPrepared" in catalog) return protectMcpToolResult(name, await catalog.callPrepared(entry, args));
+      return mcpToolResult(name, await catalog.call(entry, args));
     } catch (error) {
       return mcpToolError(entry.name, error instanceof Error ? error.message : "Tool call failed");
     }

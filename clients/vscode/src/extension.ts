@@ -547,8 +547,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // Bring-your-own MCP servers: the same owner-gated routes the web settings
     // panel drives, so a server registered from either surface serves both.
     vscode.commands.registerCommand("builderforce.registerMcpServer", async () => {
-      if (!(await ensureSignedIn(context))) return;
-      await manageMcpServers(context.secrets);
+      await manageMcpServers(context.secrets, () => ensureSignedIn(context));
     }),
     // Bring-your-own model provider connections (Anthropic, OpenAI, Google, etc.):
     // connect, test, reconnect, or remove BYO provider credentials.

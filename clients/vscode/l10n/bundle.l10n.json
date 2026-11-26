@@ -10,6 +10,7 @@
   "Still works: local tools, local chats and local models.": "Still works: local tools, local chats and local models.",
   "Unavailable until it recovers: cloud models and sync (your changes are queued and sent later).": "Unavailable until it recovers: cloud models and sync (your changes are queued and sent later).",
   "$(add) Register external MCP server…": "$(add) Register external MCP server…",
+  "$(gear) Manage local MCP servers": "$(gear) Manage local MCP servers",
   "$(credit-card) Add a card to unlock premium models": "$(credit-card) Add a card to unlock premium models",
   "$(rocket) Upgrade to unlock premium models": "$(rocket) Upgrade to unlock premium models",
   "(the model produced nothing)": "(the model produced nothing)",

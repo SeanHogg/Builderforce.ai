@@ -11,6 +11,7 @@ import { localSearch } from './graphModel';
 import { useReviewRun, type ReviewRun } from './useReviewRun';
 import { useLiveGraph } from './useLiveGraph';
 import { useGrowthReread } from './useGrowthReread';
+import { chooseRoot, errorText, LAST_SEEN_MISS } from './firstLoadGate';
 import { isNotReviewedHere, type KnowledgeBaseline, type KnowledgeGraphSource, type KnowledgeScopeSummary, type KnowledgeSearchHit, type LensId, type NotReviewedHere } from './types';
 
 /**
@@ -101,6 +102,8 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     const gated = !!source.runGated && !held;
     const [runRoot, setRunRoot] = useState<string | null>(null);
     const running = !gated || (rootId !== null && runRoot === rootId);
+    const gatedRef = useRef(gated);
+    gatedRef.current = gated;
 
     /** Latest values, readable from async continuations before state settles. */
     const rootIdRef = useRef<string | null>(null);
@@ -177,10 +180,13 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
                 setStale(false);
                 // A scope EXISTS (rootId was picked) but its graph is gone or unreadable: this is
                 // NOT "never reviewed" — say the load failed so the view can offer Retry.
-                setStatus(g ? 'ready' : 'load-failed');
+                // Nothing stored: the Run card — and Run must still load (the dedupe key does not hold it back).
+                if (!g && storedRead) loadedKey.current = null;
+                setStatus(g ? 'ready' : storedRead ? 'idle' : 'load-failed');
             })
-            .catch(() => {
+            .catch((error: unknown) => {
                 if (loadedKey.current !== entry) return;
+                source.decision?.({ kind: 'error', reason: `load failed: ${errorText(error)}`, rootId: root });
                 loadedKey.current = null; // a Retry (same key) is not deduped away
                 // A drawn graph is never replaced by the failure screen: it stays, flagged.
                 if (graphRef.current) setRefreshFailed(true); else setStatus('load-failed');
@@ -198,37 +204,54 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
         let scopesFailed = false;
         if (graphRef.current) { setStale(true); setRefreshFailed(false); } else setStatus('loading');
         // What this host showed last time paints on the first frame; any fresh answer wins over it.
+        // `seenSettled`: the lastSeen read is over (answered, missed or failed). A gated host waits on it before choosing a root, so a
+        // lastSeen for another root than the newest scope is never raced out by the scopes answer.
+        let seenSettled: Promise<unknown> = Promise.resolve();
         if (!graphRef.current && source.lastSeen) {
-            source.lastSeen().then((seen) => {
-                if (!live || graphRef.current || !seen) return;
+            seenSettled = source.lastSeen().then((seen) => {
+                if (!live) return;
+                if (!seen) { source.decision?.({ kind: 'lastSeen', reason: LAST_SEEN_MISS }); return; }
+                if (graphRef.current) { source.decision?.({ kind: 'lastSeen', reason: 'ignored: a graph is already drawn', rootId: seen.rootId }); return; }
                 // Gated and not running: nothing else draws until Run, so the last graph still paints after the fresh scopes
                 // (for the root they opened on), and it is not "updating".
                 const idle = gated && runRootRef.current !== seen.rootId && (!freshScopes || rootIdRef.current === seen.rootId);
-                if (freshScopes && !idle) return;
+                if (freshScopes && !idle) { source.decision?.({ kind: 'lastSeen', reason: 'ignored: the fresh scopes answered first', rootId: seen.rootId }); return; }
+                source.decision?.({ kind: 'lastSeen', reason: `painted the graph of ${seen.rootId} (${seen.graph.nodes.length} nodes)${idle ? ': not running, so it stays until Run' : ': stale until the fresh read lands'}`, rootId: seen.rootId });
                 if (!freshScopes) setScopes([...seen.scopes].sort(newestFirst));
                 setRootId(seen.rootId);
                 paint(seen.graph);
                 setStale(!idle);
                 setRefreshFailed(scopesFailed);
                 setStatus('ready');
-            }).catch(() => undefined);
+            }).catch((error: unknown) => {
+                if (live) source.decision?.({ kind: 'lastSeen', reason: `error (degrades to no last graph): ${errorText(error)}` });
+            });
         }
-        source.scopes()
+        (gated ? source.scopes().then(async (found) => { await seenSettled; return found; }) : source.scopes())
             .then((found) => {
                 if (!live) return;
                 freshScopes = true;
                 const sorted = [...found].sort(newestFirst);
                 setScopes(sorted);
-                if (sorted.length === 0) { paint(null); setStale(false); setStatus('empty'); setRootId(null); return; }
-                const current = rootIdRef.current;
-                const root = current && sorted.some((s) => s.rootId === current) ? current : sorted[0]!.rootId;
-                // Gated: the root is listed, nothing is built until Run (what is drawn is the last graph, not "updating").
-                if (gated && runRootRef.current !== root) { setRootId(root); setStale(false); if (!graphRef.current) setStatus('idle'); return; }
+                if (sorted.length === 0) { source.decision?.({ kind: 'gate', reason: 'no scopes: nothing reviewed (empty)' }); paint(null); setStale(false); setStatus('empty'); setRootId(null); return; }
+                const choice = chooseRoot(sorted, { painted: graphRef.current?.scope.rootId ?? null, current: rootIdRef.current });
+                const root = choice.root;
+                source.decision?.({ kind: 'root', reason: choice.reason, rootId: root });
+                // Gated: nothing is tracked until Run. A last graph drawn for this root stays (not "updating"); otherwise the root's STORED
+                // review is read read-only (no live updates, no rebuild) and painted: the Run card is only for a root with no stored graph.
+                if (gated && runRootRef.current !== root) {
+                    setRootId(root); setStale(false);
+                    if (graphRef.current?.scope.rootId === root) { source.decision?.({ kind: 'gate', reason: 'the last-seen graph of this root is on screen: kept; Run starts updates', rootId: root }); return; }
+                    if (graphRef.current) { paint(null); setBaseline(null); }
+                    loadGraphForRoot(root, loadFocusRef.current, generation);
+                    return;
+                }
                 loadGraphForRoot(root, loadFocusRef.current, generation);
                 setRootId(root);
             })
-            .catch(() => {
+            .catch((error: unknown) => {
                 if (!live) return;
+                source.decision?.({ kind: 'error', reason: `scopes failed: ${errorText(error)}` });
                 scopesFailed = true;
                 if (graphRef.current) { setStale(true); setRefreshFailed(true); } else setStatus('error');
             });
@@ -237,12 +260,12 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
 
     // A root picked in the picker, opened by a finished review, or refocused by a search
     // loads in its own pass; the dedupe key keeps this from re-reading what the scopes pass
-    // already started. Gated and not running: another root's picture is cleared, and nothing loads.
+    // already started. Gated and not running: another root's picture is cleared and the root's STORED review is read (read-only; no live updates).
     useEffect(() => {
         if (held || !rootId) return;
         if (!running) {
             if (graphRef.current && graphRef.current.scope.rootId !== rootId) { paint(null); setBaseline(null); }
-            if (!graphRef.current) { setStale(false); setStatus('idle'); }
+            if (!graphRef.current) loadGraphForRoot(rootId, loadFocus, generation);
             return;
         }
         loadGraphForRoot(rootId, loadFocus, generation);

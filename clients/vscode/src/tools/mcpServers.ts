@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { readMcpConfig, type McpConfigHost } from "@seanhogg/builderforce-mcp/config";
 import * as bfApi from "../bfApi";
 import { clearPlatformToolsCache } from "../platform/platformTools";
 import { messageOf } from "../shared/messageOf";
@@ -15,8 +16,53 @@ import { messageOf } from "../shared/messageOf";
  * a real browser because it cannot be shown in a webview.
  */
 
-/** Sentinel id for the "register a new server" row in the picker. */
-const REGISTER = "__register__";
+const NATIVE_MCP_LIST = "workbench.mcp.listServer";
+const WORKSPACE_MCP_CONFIGS = [
+  { host: "vscode", segments: [".vscode", "mcp.json"] },
+  { host: "claude-code", segments: [".mcp.json"] },
+  { host: "cursor", segments: [".cursor", "mcp.json"] },
+] as const satisfies readonly { host: McpConfigHost; segments: readonly string[] }[];
+
+type McpServerPick = vscode.QuickPickItem & (
+  | { kind: "register" | "native" }
+  | { kind: "remote"; server: bfApi.BfMcpExtension }
+  | { kind: "local"; config: vscode.Uri }
+);
+
+async function workspaceMcpPicks(): Promise<McpServerPick[]> {
+  const decoder = new TextDecoder("utf-8");
+  const workspacePicks = await Promise.all((vscode.workspace.workspaceFolders ?? []).map(async (folder) => {
+    const configs = await Promise.all(WORKSPACE_MCP_CONFIGS.map(async ({ host, segments }) => {
+      const config = vscode.Uri.joinPath(folder.uri, ...segments);
+      try {
+        const document = decoder.decode(await vscode.workspace.fs.readFile(config));
+        return { config, servers: readMcpConfig(document, host) };
+      } catch {
+        return null;
+      }
+    }));
+    const seen = new Set<string>();
+    const picks: McpServerPick[] = [];
+    for (const file of configs) {
+      if (!file) continue;
+      for (const [name, server] of file.servers) {
+        if (server.transport !== "stdio") continue;
+        const env = Object.entries(server.env ?? {}).sort(([a], [b]) => a.localeCompare(b));
+        const identity = JSON.stringify([server.command, server.args ?? [], server.cwd, env]);
+        if (seen.has(identity)) continue;
+        seen.add(identity);
+        picks.push({
+          kind: "local",
+          label: `$(terminal) ${name}`,
+          description: vscode.workspace.asRelativePath(file.config),
+          config: file.config,
+        });
+      }
+    }
+    return picks;
+  }));
+  return workspacePicks.flat();
+}
 
 function describe(server: bfApi.BfMcpExtension): string {
   if (!server.enabled) return vscode.l10n.t("disabled");
@@ -80,34 +126,48 @@ async function offerConnect(secrets: vscode.SecretStorage, server: bfApi.BfMcpEx
 }
 
 /**
- * The `builderforce.registerMcpServer` command: list what this workspace already
- * has, and either connect one of them or register a new one.
- * `ensureSignedIn` is the caller's gate — this needs the tenant JWT.
+ * Open local configurations and manage platform connections from one picker.
+ * Platform writes use the existing tenant sign-in flow.
  */
-export async function manageMcpServers(secrets: vscode.SecretStorage): Promise<void> {
-  let servers: bfApi.BfMcpExtension[];
-  try {
-    servers = await bfApi.listMcpExtensions(secrets);
-  } catch (e) {
-    const message = messageOf(e);
+export async function manageMcpServers(
+  secrets: vscode.SecretStorage,
+  ensureSignedIn: () => Promise<boolean>,
+): Promise<void> {
+  const [remote, local, commands] = await Promise.all([
+    bfApi.listMcpExtensions(secrets).then(
+      (servers) => ({ ok: true as const, servers }),
+      (error: unknown) => ({ ok: false as const, error }),
+    ),
+    workspaceMcpPicks(),
+    vscode.commands.getCommands(true),
+  ]);
+  const picks: McpServerPick[] = [...local];
+  if (commands.includes(NATIVE_MCP_LIST)) {
+    picks.unshift({ kind: "native", label: vscode.l10n.t("$(gear) Manage local MCP servers") });
+  }
+  if (!remote.ok) {
+    const message = messageOf(remote.error);
     // 403 is the owner gate, and saying so is more useful than the raw status.
     void vscode.window.showErrorMessage(
       /HTTP 403/.test(message)
         ? vscode.l10n.t("BuilderForce: only a workspace owner can manage MCP servers.")
         : vscode.l10n.t("BuilderForce: could not load MCP servers ({0}).", message),
     );
-    return;
+  } else {
+    picks.unshift(
+      { kind: "register", label: vscode.l10n.t("$(add) Register external MCP server…") },
+      ...remote.servers.map((server): McpServerPick => ({
+        kind: "remote",
+        label: `${server.authKind === "oauth" && !server.oauthConnectedAt ? "$(warning) " : "$(plug) "}${server.name}`,
+        description: describe(server),
+        server,
+      })),
+    );
   }
+  if (!picks.length) return;
 
   const pick = await vscode.window.showQuickPick(
-    [
-      { label: vscode.l10n.t("$(add) Register external MCP server…"), id: REGISTER, description: "" },
-      ...servers.map((s) => ({
-        label: `${s.authKind === "oauth" && !s.oauthConnectedAt ? "$(warning) " : "$(plug) "}${s.name}`,
-        description: describe(s),
-        id: s.id,
-      })),
-    ],
+    picks,
     {
       title: vscode.l10n.t("BuilderForce MCP servers"),
       placeHolder: vscode.l10n.t("Register a server, or connect one you already registered"),
@@ -116,7 +176,16 @@ export async function manageMcpServers(secrets: vscode.SecretStorage): Promise<v
   if (!pick) return;
 
   try {
-    if (pick.id === REGISTER) {
+    if (pick.kind === "native") {
+      await vscode.commands.executeCommand(NATIVE_MCP_LIST);
+      return;
+    }
+    if (pick.kind === "local") {
+      await vscode.window.showTextDocument(pick.config);
+      return;
+    }
+    if (pick.kind === "register") {
+      if (!(await ensureSignedIn())) return;
       const created = await registerFlow(secrets);
       if (!created) return;
       // The catalog is cached for a minute; drop it so the new server's tools are
@@ -128,8 +197,7 @@ export async function manageMcpServers(secrets: vscode.SecretStorage): Promise<v
       if (!created.hasSecret) await offerConnect(secrets, created);
       return;
     }
-    const server = servers.find((s) => s.id === pick.id);
-    if (server) await offerConnect(secrets, server);
+    if (pick.kind === "remote" && await ensureSignedIn()) await offerConnect(secrets, pick.server);
   } catch (e) {
     const message = messageOf(e);
     void vscode.window.showErrorMessage(

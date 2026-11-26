@@ -56,6 +56,12 @@
     "chatSessionsProvider"
   ],
   "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "builderforce.workspace",
+        "label": "%mcp.workspace.label%"
+      }
+    ],
     "jsonValidation": [
       {
         "fileMatch": "**/.builderforce/hooks.json",
@@ -1355,6 +1361,7 @@
     "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@huggingface/transformers": "^3.8.1",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@seanhogg/bfi-node": "link:../../packages/bfi-node",
     "@seanhogg/bfi-web": "link:../../packages/bfi-web",
     "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",
@@ -1379,6 +1386,8 @@
     "autoprefixer": "^10.6.2",
     "dependency-cruiser": "16.10.4",
     "esbuild": "^0.28.2",
+    "jsonc-parser": "3.3.1",
+    "smol-toml": "1.9.1",
     "fflate": "^0.8.2",
     "jscpd": "4.0.5",
     "jsdom": "28.1.0",

@@ -23,9 +23,9 @@
  * copy with no invalidation hook of its own.
  */
 
-import { resolveAdvertisedToolName, toolNameSet } from '@builderforce/agent-tools';
-import { resolveName } from '@seanhogg/builderforce-mcp';
-import { callConnectorTool, CONNECTOR_EXTENSION_ID, listConnectorTools } from '../connectors/connectorTools';
+import { resolveAdvertisedToolName } from '@builderforce/agent-tools';
+import { advertiseName, requiresWriteApproval, resolveName } from '@seanhogg/builderforce-mcp';
+import { callConnectorTool, CONNECTOR_EXTENSION_ID, decodeConnectorTool, listConnectorTools } from '../connectors/connectorTools';
 import { BUILTIN_EXTENSION_ID, callBuiltinTool, listBuiltinTools } from './builtinMcpService';
 import {
   BUILTIN_TOOL_FEATURE_GATES,
@@ -42,6 +42,7 @@ import {
   type ToolSurfaceDefinition,
 } from './toolSurfaces';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { sha256Fingerprint } from '../../infrastructure/crypto/digest';
 import type { TenantRole } from '../../domain/shared/types';
 import type { Env } from '../../env';
 
@@ -74,6 +75,8 @@ export interface GatewayMcpContext {
    * defaulted at each transport.
    */
   surface?: string | null;
+  /** Standard MCP advertises canonical names. The REST relay defaults to its existing names. */
+  names?: 'canonical';
 }
 
 /** Thrown when a caller names a surface that does not exist. */
@@ -106,7 +109,35 @@ export function roleFilterBuiltinTools<T extends { tool: string; mutates?: boole
   tools: readonly T[],
 ): T[] {
   if (role == null) return [...tools];
-  return tools.filter((t) => mayRunBuiltinTool(t.tool, t.mutates === true, role));
+  return tools.filter((t) => mayRunBuiltinTool(t.tool, requiresWriteApproval(t), role));
+}
+
+interface GatewayCatalogTool extends McpToolEntry {
+  legacyName?: string;
+}
+
+function catalogAddress(entry: McpToolEntry): { source: string; tool: string } {
+  if (entry.extensionId === BUILTIN_EXTENSION_ID) return { source: 'platform', tool: entry.tool };
+  if (entry.extensionId === CONNECTOR_EXTENSION_ID) {
+    const connector = decodeConnectorTool(entry.tool);
+    if (connector) return { source: `connector-${connector.connectorKey}`, tool: connector.actionKey };
+  }
+  return { source: `ext-${entry.extensionId}`, tool: entry.tool };
+}
+
+async function canonicalCatalog(tools: readonly McpToolEntry[]): Promise<GatewayCatalogTool[]> {
+  return Promise.all(tools.map(async (entry) => {
+    const { source, tool } = catalogAddress(entry);
+    let name: string;
+    try {
+      name = advertiseName(source, tool);
+    } catch {
+      // A provider can publish a name too long for the model's 64-character limit.
+      // Its catalog entry keeps the original upstream name and resolves the short alias.
+      name = advertiseName('catalog', await sha256Fingerprint(JSON.stringify([source, tool]), 40));
+    }
+    return { ...entry, name, legacyName: entry.name };
+  }));
 }
 
 /**
@@ -115,7 +146,7 @@ export function roleFilterBuiltinTools<T extends { tool: string; mutates?: boole
  * The two network-bound sources are fetched concurrently: the MCP leg calls every
  * customer server, and serialising a cached DB read behind it is free latency.
  */
-export async function listGatewayMcpTools(ctx: GatewayMcpContext): Promise<McpToolEntry[]> {
+export async function listGatewayMcpTools(ctx: GatewayMcpContext): Promise<GatewayCatalogTool[]> {
   const surface = surfaceFor(ctx.surface);
   const db = dbFor(ctx);
   // A source the surface excludes is not fetched at all. The extension leg calls
@@ -138,7 +169,8 @@ export async function listGatewayMcpTools(ctx: GatewayMcpContext): Promise<McpTo
         roleFilterBuiltinTools(ctx.role ?? null, await entitledBuiltinTools(ctx.env, ctx.tenantId, null, listBuiltinTools())),
       )
     : [];
-  return applyToolSurface([...builtinTools, ...connectorTools, ...extensionTools], surface);
+  const tools = applyToolSurface([...builtinTools, ...connectorTools, ...extensionTools], surface);
+  return ctx.names === 'canonical' ? canonicalCatalog(tools) : tools;
 }
 
 /** Built-in tools that must NEVER appear in the anonymous catalog: every
@@ -160,10 +192,14 @@ const PRIVATE_BUILTIN_TOOL_IDS: ReadonlySet<string> = new Set([
  * is ever disclosed. `?surface=` still applies, so a preview can be narrowed
  * the same way the signed-in catalog can.
  */
-export function listPublicMcpTools(surface?: string | null): McpToolEntry[] {
+export function listPublicMcpTools(surface?: string | null): GatewayCatalogTool[];
+export function listPublicMcpTools(surface: string | null | undefined, names: 'canonical'): Promise<GatewayCatalogTool[]>;
+export function listPublicMcpTools(surface?: string | null, names?: 'canonical'): GatewayCatalogTool[] | Promise<GatewayCatalogTool[]> {
   const resolved = surfaceFor(surface);
-  if (!surfaceIncludesSource(resolved, 'builtin')) return [];
-  return applyToolSurface(listBuiltinTools().filter((t) => !PRIVATE_BUILTIN_TOOL_IDS.has(t.tool)), resolved);
+  const tools = surfaceIncludesSource(resolved, 'builtin')
+    ? applyToolSurface(listBuiltinTools().filter((t) => !PRIVATE_BUILTIN_TOOL_IDS.has(t.tool)), resolved)
+    : [];
+  return names === 'canonical' ? canonicalCatalog(tools) : tools;
 }
 
 /**
@@ -174,15 +210,23 @@ export function listPublicMcpTools(surface?: string | null): McpToolEntry[] {
  * identifier. Both therefore route through the SAME `McpToolEntry.name` that was
  * advertised, so a rename can never desync the advertise and call sides.
  */
-export function resolveGatewayMcpTool(tools: McpToolEntry[], name: string): McpToolEntry | null {
-  // A catalog id (`tasks.archive_many`) or the unprefixed form reaches the advertised tool too
-  // (`resolveAdvertisedToolName`, the one resolver every surface shares).
-  const resolved = resolveAdvertisedToolName(name, toolNameSet(tools, (t) => t.name));
-  if (resolved !== null) return tools.find((t) => t.name === resolved) ?? null;
-  const address = resolveName(name);
-  return address?.source === 'platform'
-    ? tools.find((t) => t.extensionId === BUILTIN_EXTENSION_ID && t.tool === address.tool) ?? null
-    : null;
+export function resolveGatewayMcpTool(tools: readonly GatewayCatalogTool[], name: string): GatewayCatalogTool | null {
+  const requested = name.trim();
+  const exact = tools.filter((t) => t.name === requested);
+  if (exact.length > 0) return exact.length === 1 ? exact[0]! : null;
+
+  // Keep legacy REST/model names, dotted ids and bare platform aliases callable.
+  const legacyName = resolveAdvertisedToolName(requested, tools.map((t) => t.legacyName ?? t.name));
+  const matches = legacyName === null ? [] : tools.filter((t) => (t.legacyName ?? t.name) === legacyName);
+  if (matches.length > 0) return matches.length === 1 ? matches[0]! : null;
+
+  const address = resolveName(requested);
+  if (!address) return null;
+  const compatible = tools.filter((entry) => {
+    const candidate = catalogAddress(entry);
+    return candidate.source === address.source && candidate.tool === address.tool;
+  });
+  return compatible.length === 1 ? compatible[0]! : null;
 }
 
 /** Identity of the caller a tool runs as. Absent for pure machine (API-key) callers. */

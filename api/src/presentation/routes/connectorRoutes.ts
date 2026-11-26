@@ -48,6 +48,7 @@ import { executeConnectorAction } from '../../application/connectors/connectorRu
 import { importHandler } from './importRoutes';
 import { CONNECTOR_CATEGORIES } from '../../application/connectors/connectorManifest';
 import { connectorActionCatalog } from '../../application/connectors/connectorActionCatalog';
+import { listMcpConnectorCatalog } from '../../application/connectors/mcpConnectorCatalog';
 import { limitParam } from './queryParams';
 import { parseBody, z, zNonEmptyString, zOptionalString } from './requestBody';
 
@@ -114,6 +115,11 @@ export function createConnectorRoutes(db: Db): Hono<HonoEnv> {
   router.get('/actions', async (c) => {
     const tenantId = c.get('tenantId') as number;
     return c.json({ connectors: await connectorActionCatalog(db, c.env as Env, tenantId) });
+  });
+
+  router.get('/mcp-catalog', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    return c.json({ connectors: await listMcpConnectorCatalog(db, tenantId, c.env as Env) });
   });
 
   // GET /api/connectors/:key — the full manifest, for the detail panel and builder.
