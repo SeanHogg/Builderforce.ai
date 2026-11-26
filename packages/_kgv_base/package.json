@@ -1,0 +1,38 @@
+{
+  "name": "@builderforce/knowledge-graph-view",
+  "version": "2026.10.0",
+  "private": true,
+  "type": "module",
+  "description": "The ONE knowledge-graph view (PRD 38 §4.6, archived in DONE.md): a source-only React package — lens registry, deterministic 3D layout, instanced r3f scene, trace lanes, partition matrix, findings with Fix with agent, node panel, review progress and the list fallback. Pack-agnostic and host-agnostic: hosts supply a KnowledgeGraphSource and KnowledgeGraphLabels; the graph itself comes from @seanhogg/builderforce-memory/knowledge. Peers resolve from the host (the frontend's node_modules); this package installs nothing of its own.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts",
+    "./tokens.css": "./src/tokens.css",
+    "./delta": "./src/delta/index.ts",
+    "./delta/history": "./src/delta/history/index.ts"
+  },
+  "types": "./src/index.ts",
+  "sideEffects": [
+    "*.css"
+  ],
+  "scripts": {
+    "test": "node ../../frontend/node_modules/vitest/vitest.mjs run --config vitest.config.ts",
+    "harness": "node ../../clients/vscode/node_modules/vite/bin/vite.js build --config harness/vite.config.ts",
+    "harness:dev": "node ../../clients/vscode/node_modules/vite/bin/vite.js --config harness/vite.config.ts"
+  },
+  "peerDependencies": {
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
+    "@seanhogg/builderforce-memory": "^2026.10.85",
+    "@seanhogg/builderforce-memory-engine": "^2026.10.65",
+    "react": "~19.3.1",
+    "react-dom": "~19.3.1",
+    "three": "^0.185.1",
+    "troika-three-text": "^0.52.4"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "jsdom": "^31.0.1",
+    "vitest": "^4.0.18"
+  }
+}

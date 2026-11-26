@@ -1,0 +1,499 @@
+/**
+ * Every word the run delta card and panel show (PRD 41 §C11), as ONE typed object with English
+ * defaults. The engine (`@builderforce/run-delta`) emits codes and counts only; each code maps
+ * to a key here through {@link labelKey} (`guard-removed` → `rules.guardRemoved`,
+ * `ilities.functional-suitability` → `dimensions.ilitiesFunctionalSuitability`,
+ * `tool-missing:knip` → `reasons.toolMissing` with `{tool}`).
+ *
+ * Hosts pass their `runDelta.*` catalog through {@link runDeltaLabels} (the view's ONE walker),
+ * so the catalog mirrors this object key for key. Templates use `{name}` placeholders and
+ * `[[optional]]` parts, filled by `fillTemplate`, never by the host's i18n runtime.
+ */
+
+import { labelsFromCatalog } from '../catalogLabels';
+import { ANALYZER_METRIC_LABELS, ANALYZER_PARAM_LABELS, ANALYZER_REASON_LABELS, ANALYZER_RULE_LABELS } from './labelsAnalyzers';
+
+export const RUN_DELTA_NAMESPACE = 'runDelta';
+
+export interface RunDeltaLabels {
+    cardTitle: string;
+    /** The card header toggle's label while the detail rows are collapsed (the default). */
+    expandDetails: string;
+    /** The card header toggle's label while the detail rows are expanded. */
+    collapseDetails: string;
+    openDetails: string;
+    openCode: string;
+    close: string;
+    /** The card/panel footer action that seeds a fix directive for the issues this run found. */
+    resolve: string;
+    /** The resolve button's hover/screen-reader hint. */
+    resolveHint: string;
+    /** The card/panel action that copies the full delta results as a diagnostic. */
+    copyDiagnostics: string;
+    /** Copy feedback, shared with {@link CopiedNote} / {@link CopyFallback}. */
+    copied: string;
+    copyFailed: string;
+    panelTitle: string;
+    /** Shown beside a `heuristic` finding or reason: the ≈ mark and what it means. */
+    heuristicMark: string;
+    heuristicHint: string;
+    /** `{count}` introduced / resolved / changed in one dimension row. */
+    introducedCount: string;
+    resolvedCount: string;
+    changedCount: string;
+    blastRadius: string;
+    /** `{band}`, e.g. "Blast radius: high". */
+    blastRadiusValue: string;
+    blocking: string;
+    noFindings: string;
+    findingsHeading: string;
+    metricsHeading: string;
+    evidenceHeading: string;
+    paramsHeading: string;
+    /** Files whose before side could not be read: analyzed on the after side only (lineage `present`). */
+    unresolvedHeading: string;
+    excludedHeading: string;
+    /** `{count}` hits folded into one finding (`params.aggregated`). */
+    aggregated: string;
+    blockingHeading: string;
+    failedHeading: string;
+    /** The L3 analyzers a phase-1 delta still waits on (`MeasuredBy.status: 'pending'`): heading, and `{tool}` per row. */
+    measuringHeading: string;
+    measuringTool: string;
+    /** `{before}` → `{after}` `{unit}` (a missing side reads {@link notMeasuredValue}). */
+    metricValue: string;
+    notMeasuredValue: string;
+    waived: string;
+    sideBefore: string;
+    sideAfter: string;
+    /** Headline sentence parts (C10), joined in the catalog's own order. */
+    headline: {
+        sentence: string;
+        sentenceNoClauses: string;
+        clause: string;
+        detail: string;
+        clauseSeparator: string;
+        listSeparator: string;
+        unchanged: string;
+        notMeasured: string;
+        metricRegressed: string;
+    };
+    verdicts: { better: string; worse: string; same: string; notComparable: string; notMeasured: string };
+    dimensions: {
+        security: string;
+        performance: string;
+        quality: string;
+        ilitiesFunctionalSuitability: string;
+        ilitiesCompatibility: string;
+        ilitiesInteractionCapability: string;
+        ilitiesReliability: string;
+        ilitiesMaintainability: string;
+        ilitiesFlexibility: string;
+        ilitiesSafety: string;
+    };
+    severities: { info: string; warn: string; error: string };
+    lineages: { introduced: string; resolved: string; changed: string; persisting: string; present: string };
+    changes: { grew: string; shrank: string; moved: string };
+    bands: { low: string; medium: string; high: string };
+    /** Reason codes on a dimension, the blast radius or an analyzer run. `{tool}` for the prefixed ones. */
+    reasons: Record<string, string>;
+    /** Headline clause codes that are neither a rule id nor a reason. */
+    clauses: { findingsResolved: string; metricsImproved: string; worse: string };
+    /** One per engine rule id. */
+    rules: Record<string, string>;
+    metrics: Record<string, string>;
+    units: Record<string, string>;
+    /** `UnresolvedFile.reason`. */
+    excluded: Record<string, string>;
+    /** A finding param's name; a key with no entry is shown as the key. */
+    params: Record<string, string>;
+    /** Coded param values by param name (`via`, `change`, `kind`, `crossed`); any other value is data, shown as is. */
+    paramValues: Record<string, Record<string, string>>;
+    /** `unsafe-regex:<key>.<reason>` reasons. */
+    unsafeReasons: Record<string, string>;
+    /** The card while the delta computes (`status: 'pending'`), and when it ended without one (`failed`). */
+    pendingCard: string;
+    /** The pending card while the optional dynamic tier runs; `{minutes}` its ceiling. */
+    pendingDynamic: string;
+    failedCard: string;
+    /** §12.5: an autonomous run held at its finalize gate. `{rules}` = the blocking rules, localized and joined. */
+    held: string;
+    /** A run held because what it changed could not be measured (fail-closed): "Not measured: held for review". */
+    heldUnmeasured: string;
+    heldRules: string;
+    releaseRun: string;
+    releaseConfirmTitle: string;
+    releaseConfirmMessage: string;
+    releaseConfirmLabel: string;
+    released: string;
+    /** One per refusal the host answers (`RUN_DELTA_RELEASE_REFUSED`): no longer held, still being recorded, failed, signed out, not an approver. */
+    releaseRefused: string;
+    releasePending: string;
+    releaseError: string;
+    releaseIdentityRequired: string;
+    releaseNotApprover: string;
+    /** The panel's ignored `.builderforce/delta.json` entries, one label per `DroppedOverrideCode` (`unsafe-regex` with a reason reads `reasons.unsafeRegex`). */
+    overridesHeading: string;
+    /** The §D10 ranked finding order note: "{k} findings, highest-value first (ranked)". */
+    rankedNote: string;
+    /** The §D11 Predicted block: heading and advisory hint. */
+    predictedHeading: string;
+    predictedAdvisory: string;
+    /** Risk: `{probability}` (0–1) and `{band}`, with `{reasons}` the top 3, comma-joined. */
+    predictedRisk: string;
+    /** Similar runs: `{noFollowup}` of `{k}` needed no follow-up; `{reverted}` were reverted (plural forms via the catalog). */
+    predictedSimilar: string;
+    /** ≈ `{count}` undetected problems in `{dimension}` (capture–recapture). */
+    predictedUndetected: string;
+    /** ≈ `{count}` unusual new lines (naturalness); the catalog may use an ICU plural. */
+    predictedUnusualLines: string;
+    /** Unusual-lines hover/screen-reader explanation. */
+    predictedHint: string;
+    overrides: {
+        unknownKey: string;
+        invalid: string;
+        invalidRoot: string;
+        invalidJson: string;
+        unsafeRegex: string;
+        unreadable: string;
+        truncated: string;
+    };
+}
+
+export const DEFAULT_RUN_DELTA_LABELS: RunDeltaLabels = {
+    cardTitle: 'Run delta',
+    expandDetails: 'Expand details',
+    collapseDetails: 'Collapse details',
+    openDetails: 'Open details',
+    openCode: 'Open code',
+    close: 'Close',
+    resolve: 'Resolve',
+    resolveHint: 'Fix the issues this run found',
+    copyDiagnostics: 'Copy diagnostics',
+    copied: 'Copied',
+    copyFailed: 'Copy failed',
+    panelTitle: 'What this run changed',
+    heuristicMark: '≈',
+    heuristicHint: 'Estimated by a heuristic, not measured exactly',
+    introducedCount: '{count} new',
+    resolvedCount: '{count} resolved',
+    changedCount: '{count} changed',
+    blastRadius: 'Blast radius',
+    blastRadiusValue: 'Blast radius: {band}',
+    blocking: 'Blocks finalizing an autonomous run',
+    noFindings: 'No findings',
+    findingsHeading: 'Findings',
+    metricsHeading: 'Metrics',
+    evidenceHeading: 'Evidence',
+    paramsHeading: 'Details',
+    unresolvedHeading: 'Files without a before side',
+    excludedHeading: 'Excluded files',
+    aggregated: 'aggregated ({count})',
+    blockingHeading: 'What blocks an autonomous run',
+    failedHeading: 'Checks that did not run',
+    measuringHeading: 'Still measuring',
+    measuringTool: '{tool} — measuring…',
+    metricValue: '{before} → {after}[[ {unit}]]',
+    notMeasuredValue: 'not measured',
+    waived: 'Risk accepted: {reason}',
+    sideBefore: 'Before',
+    sideAfter: 'After',
+    headline: {
+        sentence: '{lead}: {clauses}.',
+        sentenceNoClauses: '{lead}.',
+        clause: '{dimension} ({detail})',
+        detail: '[[{count} × ]]{label}',
+        clauseSeparator: '; ',
+        listSeparator: ', ',
+        unchanged: 'Unchanged: {dimensions}.',
+        notMeasured: 'Not measured: {dimensions}.',
+        metricRegressed: '{metric} regressed',
+    },
+    verdicts: { better: 'Better', worse: 'Worse', same: 'Unchanged', notComparable: 'Not comparable', notMeasured: 'Not measured' },
+    dimensions: {
+        security: 'Security',
+        performance: 'Performance',
+        quality: 'Quality',
+        ilitiesFunctionalSuitability: 'Functional suitability',
+        ilitiesCompatibility: 'Compatibility',
+        ilitiesInteractionCapability: 'Interaction capability',
+        ilitiesReliability: 'Reliability',
+        ilitiesMaintainability: 'Maintainability',
+        ilitiesFlexibility: 'Flexibility',
+        ilitiesSafety: 'Safety',
+    },
+    severities: { info: 'Info', warn: 'Warning', error: 'Error' },
+    lineages: { introduced: 'New in this run', resolved: 'Resolved by this run', changed: 'Changed by this run', persisting: 'Already there', present: 'Present now' },
+    changes: { grew: 'grew', shrank: 'shrank', moved: 'moved' },
+    bands: { low: 'low', medium: 'medium', high: 'high' },
+    reasons: {
+        staticOnly: 'Static only',
+        ruleNotBuilt: 'Rule not built yet',
+        ruleFailed: 'A check failed',
+        ruleThrew: 'The check stopped with an error',
+        metricNotMeasured: 'A metric was not measured',
+        testsWeakened: 'Tests weakened',
+        heuristic: 'Heuristic',
+        notComparable: 'Not comparable',
+        beforeUnresolved: 'Some before files could not be read',
+        headSwitched: 'The branch changed during the run',
+        extractorMismatch: 'Different extractor on each side',
+        extractorVersionChanged: 'Extractor version changed',
+        contentHashRuleChanged: 'Content hash rule changed',
+        toolMissing: '{tool} missing on one side',
+        toolVersionChanged: '{tool} version changed',
+        analyzerFailed: '{tool} failed',
+        scopeChanged: 'Scope changed',
+        repoChanged: 'Repository changed',
+        branchChanged: 'Branch changed',
+        truncated: 'Results were truncated',
+        insufficientHistory: 'Not enough past runs to rank',
+        notComparableRule: '{rule} could not be certified',
+        ...ANALYZER_REASON_LABELS,
+        dynamicNotRun: '{tool} did not run',
+        optInOff: 'Off: not turned on in the settings',
+        notScheduled: 'Not scheduled for this run',
+        notConfigured: 'Not set up for this project',
+        toolUnavailable: 'Tool not installed in the project',
+        noChangedCode: 'No changed code to measure',
+        policyNever: 'Turned off by the project policy',
+        noShell: 'No process available to run it',
+        aborted: 'Stopped before it finished',
+        runnerThrew: 'The run stopped with an error',
+        tooFewPairs: 'Too few before/after measurements',
+        noReport: 'The tool wrote no report',
+        recomputeFailed: 'Measured, but the result could not be applied',
+        untrustedWorkspace: 'Not run: the workspace is not trusted',
+        budgetExhausted: 'Not run: the time allowed for this run is used up',
+        treeUnavailable: 'A temporary copy of the project could not be made',
+        nonFiniteSamples: 'A measurement was not a number',
+        notApplicable: 'Not applicable to this run',
+        noPlan: 'No plan with named files for this run',
+        unsafeRegex: '{key}: unsafe pattern dropped ({reason})',
+    },
+    clauses: { findingsResolved: 'findings resolved', metricsImproved: 'metrics improved', worse: 'got worse' },
+    rules: {
+        guardRemoved: 'Route lost its auth guard',
+        guardWeakened: 'Route guard weakened',
+        entryAdded: 'New entry point',
+        entryRemoved: 'Entry point removed',
+        capabilityAdded: 'New system capability',
+        weakCrypto: 'Weak cryptography',
+        secretAdded: 'Secret added to code',
+        ioInLoop: 'I/O inside a loop',
+        syncIo: 'Blocking I/O call',
+        testDeleted: 'Test deleted',
+        testSkipped: 'Test skipped',
+        onlyAdded: 'Focused test (.only) added',
+        assertionsReduced: 'Fewer assertions',
+        matcherWeakened: 'Weaker assertion matcher',
+        suppressionAdded: 'Lint or type check suppressed',
+        timeoutRaised: 'Test timeout raised',
+        snapshotUpdatedWithImpl: 'Snapshot updated with the code',
+        assertionEditedWithImpl: 'Assertion edited with the code',
+        apiBreaking: 'Breaking API change',
+        apiAdded: 'New public API',
+        cloneGroup: 'Duplicated code',
+        cycle: 'Dependency cycle',
+        godModule: 'Oversized module',
+        partitionViolation: 'Partition boundary crossed',
+        unusedDependency: 'Unused dependency',
+        unusedExport: 'Unused export',
+        unusedFile: 'Unused file',
+        godFileGrowth: 'Oversized file grew',
+        destructiveDdl: 'Destructive schema change',
+        forcePush: 'Force push in a script',
+        rmRf: 'Recursive delete in a script',
+        deltaConfigChanged: 'Delta policy file changed',
+        unboundedQuery: 'Query without a row limit',
+        cacheBypass: 'Cached read bypasses the cache',
+        nestedIteration: 'Nested loop over a collection (quadratic)',
+        regexRedos: 'Regex prone to catastrophic backtracking',
+        bundleWeight: 'Heavy server package in client code',
+        renderHot: 'Avoidable re-render',
+        untestedChange: 'Code changed with no test touching it',
+        envVarAdded: 'New environment variable required',
+        envVarRemoved: 'The changed files no longer read an environment variable',
+        enginesChanged: 'Runtime requirement (engines) changed',
+        routeSchemaChanged: 'Route request schema changed',
+        a11yViolation: 'Accessibility issue',
+        catchSwallowed: 'Error silently swallowed',
+        floatingPromise: 'Promise left unhandled',
+        errorHandlingRemoved: 'Error handling removed',
+        timeoutRetryChanged: 'Timeout or retry changed',
+        processExit: 'Library code exits the process',
+        platformSpecificApi: 'Platform-specific path or command',
+        nodeOnlyImport: 'Node-only module in browser or Worker code',
+        catchAllAdded: 'Catch-all error handler added',
+        outOfScopeChange: 'File changed outside the planned scope',
+        methodWidened: 'Route accepts more HTTP methods',
+        newUntrustedInput: 'Route reads new untrusted input',
+        taintPath: 'Untrusted input reaches a risky call',
+        tlsVerifyDisabled: 'TLS certificate check disabled',
+        corsPermissive: 'CORS open to any origin',
+        cookieInsecure: 'Cookie missing security flags',
+        cspPermissive: 'Permissive content security policy',
+        debugEnabled: 'Debug mode on in a production config',
+        workflowPermissive: 'Workflow with broad permissions',
+        containerRoot: 'Container runs as root',
+        infraSurfaceAdded: 'New route, binding or port exposed',
+        installScriptAdded: 'Install-time script added',
+        ...ANALYZER_RULE_LABELS,
+        benchmark: 'Benchmarks',
+        diffCoverage: 'Tests with coverage',
+        mutation: 'Mutation testing',
+        benchMetrics: 'Benchmarks',
+        testSlower: 'Test became much slower',
+        mutantSurvived: 'Surviving mutant',
+        mutantSurvivedMetrics: 'Mutation score',
+    },
+    metrics: {
+        complexityMax: 'Highest complexity',
+        complexitySum: 'Total complexity',
+        todoAdded: 'TODOs added',
+        anyCastAdded: '"any" casts added',
+        ...ANALYZER_METRIC_LABELS,
+        couplingEfferent: 'Outgoing dependencies of changed files',
+        couplingAfferent: 'Files depending on the changed files',
+        couplingInstability: 'Instability of the changed files',
+        hotspotTouched: 'Churn × complexity of the riskiest changed file',
+        mutationScore: 'Mutation score of changed files',
+    },
+    /** A unit with no entry (`count`) is shown bare. */
+    units: { cyclomatic: 'cyclomatic', ratio: 'fraction', instructions: 'instructions' },
+    excluded: {
+        preimageTooLarge: 'Before version too large to keep',
+        preimageMissing: 'Before version missing',
+        gitUnavailable: 'Git unavailable',
+        changedIgnored: 'Ignored file',
+        changedOutsideRun: 'Changed outside this run',
+        submoduleMoved: 'Submodule moved',
+        binary: 'Binary file',
+    },
+    params: {
+        route: 'Route',
+        guard: 'Guard',
+        via: 'Detected by',
+        file: 'File',
+        from: 'Previously',
+        replacement: 'Replaced by',
+        kind: 'Kind',
+        guards: 'Guards',
+        symbol: 'Symbol',
+        change: 'Change',
+        before: 'Before',
+        after: 'After',
+        crossed: 'Crossed the size limit',
+        test: 'Test',
+        assertions: 'Assertions',
+        to: 'Now',
+        loop: 'Loop',
+        call: 'Call',
+        key: 'Match',
+        count: 'Count',
+        members: 'Members',
+        collection: 'Collection',
+        module: 'Module',
+        name: 'Name',
+        sink: 'Risky call type',
+        source: 'Input source',
+        hops: 'Steps',
+        stride: 'Threat (STRIDE)',
+        missing: 'Missing flags',
+        credentials: 'With credentials',
+        reflected: 'Origin reflected',
+        chain: 'Path taken',
+        script: 'Script',
+        strideSpoofing: 'Spoofing covered by',
+        strideTampering: 'Tampering covered by',
+        strideRepudiation: 'Repudiation covered by',
+        strideInformationDisclosure: 'Information disclosure covered by',
+        strideDenialOfService: 'Denial of service covered by',
+        strideElevationOfPrivilege: 'Elevation of privilege covered by',
+        ...ANALYZER_PARAM_LABELS,
+    },
+    paramValues: {
+        via: { chain: 'Handler chain', middleware: 'Middleware', rekeyed: 'Route renamed', unguardedSibling: 'Unguarded among guarded siblings' },
+        change: { added: 'Added', edited: 'Edited', deleted: 'Deleted', removed: 'Removed', changed: 'Changed' },
+        kind: {
+            httpRoute: 'HTTP route', middleware: 'Middleware', vscodeCommand: 'VS Code command', webviewMessage: 'Webview message',
+            workerRoute: 'Worker route', binding: 'Binding', durableObject: 'Durable Object class', port: 'Exposed port',
+        },
+        crossed: { '0': 'No', '1': 'Yes' },
+        sink: {
+            commandExec: 'Shell command', dynamicCode: 'Dynamic code (eval)', html: 'HTML markup', sqlRaw: 'Raw SQL',
+            ssrf: 'Server-side request (SSRF)', pathTraversal: 'File path', openRedirect: 'Redirect', deserialization: 'Deserialization',
+            regexInjection: 'Regular expression',
+        },
+        source: {
+            httpRequest: 'HTTP request', webviewMessage: 'Webview message', processArgv: 'Command-line arguments', upload: 'Uploaded file',
+            mcpArgs: 'MCP tool arguments',
+        },
+        stride: {
+            spoofing: 'Spoofing', tampering: 'Tampering', repudiation: 'Repudiation', informationDisclosure: 'Information disclosure',
+            denialOfService: 'Denial of service', elevationOfPrivilege: 'Elevation of privilege',
+        },
+        credentials: { '1': 'Yes' },
+        reflected: { '1': 'Yes' },
+        strideSpoofing: { uncovered: 'Not covered' },
+        strideTampering: { uncovered: 'Not covered' },
+        strideRepudiation: { uncovered: 'Not covered' },
+        strideInformationDisclosure: { uncovered: 'Not covered' },
+        strideDenialOfService: { uncovered: 'Not covered' },
+        strideElevationOfPrivilege: { uncovered: 'Not covered' },
+    },
+    unsafeReasons: {
+        tooLong: 'too long',
+        invalid: 'invalid',
+        backreference: 'backreference',
+        nestedQuantifier: 'nested quantifier',
+        quantifiedAlternation: 'quantified alternation',
+    },
+    pendingCard: 'Measuring what this run changed…',
+    pendingDynamic: 'Running dynamic checks (tests, benchmarks), up to {minutes} min…',
+    failedCard: 'Not measured: what this run changed could not be measured.',
+    held: 'Held: needs review',
+    heldUnmeasured: 'Not measured: held for review',
+    heldRules: 'Blocked by {rules}',
+    rankedNote: '{k} findings, highest-value first (ranked)',
+    predictedHeading: 'Predicted',
+    predictedAdvisory: 'Estimated, not measured — a place to look, never a verdict.',
+    predictedRisk: '{probability} risk of a follow-up fix ({band}): {reasons}',
+    predictedSimilar: '{noFollowup} of {k} similar runs needed no follow-up; {reverted} were reverted',
+    predictedUndetected: '≈ {count} undetected problems in {dimension}',
+    predictedUnusualLines: '≈ {count} unusual new lines (predicted)',
+    predictedHint: 'Estimated from how unusual the new code is for this repository. A place to look, not a verdict.',
+    releaseRun: 'Release run',
+    releaseConfirmTitle: 'Release this run?',
+    releaseConfirmMessage: 'This run was held because its changes hit blocking rules ({rules}). Releasing it marks it complete with your sign-off.',
+    releaseConfirmLabel: 'Release',
+    released: 'Released by you',
+    releaseRefused: 'This run could not be released: it is no longer held.',
+    releasePending: 'The hold is still being recorded. Try again in a moment.',
+    releaseError: 'This run could not be released. Try again.',
+    releaseIdentityRequired: 'Sign in to release this run.',
+    releaseNotApprover: 'Only an approver on this board can release this run.',
+    overridesHeading: 'Overrides ignored',
+    overrides: {
+        unknownKey: 'Unknown setting “{section}”',
+        invalid: 'Invalid value in “{section}”',
+        invalidRoot: 'The policy file is not a JSON object',
+        invalidJson: 'The policy file is not valid JSON',
+        unsafeRegex: 'Unsafe pattern in “{section}”',
+        unreadable: 'The policy file could not be read[[ ({reason})]]',
+        truncated: '{count} more not shown',
+    },
+};
+
+/** A stable code → its label key: `guard-removed` → `guardRemoved`, `complexity.max` → `complexityMax`, `not_comparable` → `notComparable`. */
+export function labelKey(code: string): string {
+    return code.replace(/[._]/g, '-').replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase());
+}
+
+/** The host's `runDelta.*` catalog → labels; a missing key keeps its English default. */
+export function runDeltaLabels(raw: (key: string) => unknown): RunDeltaLabels {
+    return labelsFromCatalog(DEFAULT_RUN_DELTA_LABELS, RUN_DELTA_NAMESPACE, raw);
+}
+
+// Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+// gate re-runs checks against the repaired install instead of replaying a stale record.

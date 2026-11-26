@@ -1,0 +1,106 @@
+/**
+ * The Run Delta card (PRD 41 §C11.1): what a finished run changed, for people who don't read
+ * code. It sits in the chat transcript of the run that produced it (principle 6, one flow) —
+ * the headline, one row per dimension, the blast-radius band and "Open details". Props only:
+ * no fetching, no host calls; the same component renders on the web.
+ *
+ * Before the delta exists the chat shows {@link RunDeltaStatusCard} ("Measuring…", or not measured)
+ * instead. A run its delta HELD at the finalize gate (§12.5) shows {@link HeldNotice}.
+ */
+
+import { useState, type ReactNode } from 'react';
+import type { RunDelta } from '@builderforce/run-delta/contract';
+import { cssVar } from '../scene/themeColors';
+import { card } from '../styles';
+import { TYPE } from '../surface/ui/type';
+import { fillTemplate } from '../template';
+import { ChevronIcon, DeltaIconButton, CopyIcon, OpenDetailsIcon, ResolveIcon } from './DeltaActionIcons';
+import { headlineText, reasonLabel } from './deltaText';
+import { DimensionRow } from './DimensionRow';
+import { HeldNotice, type HeldNoticeProps } from './HeldNotice';
+import type { RunDeltaLabels } from './labels';
+import { PendingAnalyzers } from './PendingAnalyzers';
+import { reasonTag, VERDICT_TONE, VerdictIcon } from './VerdictMark';
+
+export interface RunDeltaCardProps {
+    delta: RunDelta;
+    labels: RunDeltaLabels;
+    /** The repo the delta covers, shown under the title when a run touched more than one. */
+    repoLabel?: string | undefined;
+    onOpenDetails(): void;
+    /** The card's hold state (§12.5): the rules that held the run, and the release controls. Absent ⇒ not held. */
+    held?: Omit<HeldNoticeProps, 'labels'> | undefined;
+    /** The Predicted block under the verdict rows (PRD 41 §D11), rendered by the host surface; advisory, never a verdict. */
+    predicted?: ReactNode;
+    /** Seeds a fix directive for the issues this run found (PRD 41 "Fix with agent"). Absent ⇒ no Resolve button. */
+    onResolve?: (() => void) | undefined;
+    /** Copies the full delta results as a diagnostic. Absent ⇒ no Copy diagnostics button. */
+    onCopyDiagnostics?: (() => void) | undefined;
+}
+
+const BAND_TONE = { low: cssVar('sev1'), medium: cssVar('sev3'), high: cssVar('sev5') } as const;
+
+export function RunDeltaCard({ delta, labels, repoLabel, onOpenDetails, held, predicted, onResolve, onCopyDiagnostics }: RunDeltaCardProps) {
+    // Collapsed by default: the header (headline + blast radius + actions) is the summary; the
+    // per-dimension rows, analyzers and prediction expand on demand.
+    const [expanded, setExpanded] = useState(false);
+    const headline = headlineText(labels, delta.summary);
+    const band = delta.blastRadius.band;
+    return (
+        <section
+            aria-label={labels.cardTitle}
+            data-run-delta={delta.runId}
+            style={{ ...card, display: 'grid', gap: 8, minWidth: 0, maxWidth: '100%', boxSizing: 'border-box', color: cssVar('text') }}
+        >
+            <header style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <h3 style={{ ...TYPE.sectionHeading, flex: '1 1 auto', minWidth: 0 }}>{labels.cardTitle}</h3>
+                {repoLabel && <span style={{ ...TYPE.monoMeta, overflowWrap: 'anywhere', minWidth: 0 }}>{repoLabel}</span>}
+                {onResolve && (
+                    <DeltaIconButton label={labels.resolve} title={labels.resolveHint} onClick={onResolve}>
+                        <ResolveIcon />
+                    </DeltaIconButton>
+                )}
+                {onCopyDiagnostics && (
+                    <DeltaIconButton label={labels.copyDiagnostics} onClick={onCopyDiagnostics}>
+                        <CopyIcon />
+                    </DeltaIconButton>
+                )}
+                <DeltaIconButton label={labels.openDetails} onClick={onOpenDetails}>
+                    <OpenDetailsIcon />
+                </DeltaIconButton>
+                <DeltaIconButton
+                    label={expanded ? labels.collapseDetails : labels.expandDetails}
+                    expanded={expanded}
+                    onClick={() => setExpanded((v) => !v)}
+                >
+                    <ChevronIcon expanded={expanded} />
+                </DeltaIconButton>
+            </header>
+            <p style={{ ...TYPE.body, margin: 0, display: 'flex', gap: 6, alignItems: 'flex-start', overflowWrap: 'anywhere' }}>
+                <span style={{ color: VERDICT_TONE[delta.headline], paddingTop: 1 }}><VerdictIcon verdict={delta.headline} /></span>
+                <span data-testid="run-delta-headline">{headline}</span>
+            </p>
+            {held && (held.rules.length > 0 || held.unmeasured) && <HeldNotice {...held} labels={labels} />}
+            {expanded && (
+                <>
+                    <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                        {delta.dimensions.map((d) => <DimensionRow key={d.id} dimension={d} labels={labels} />)}
+                    </ul>
+                    <PendingAnalyzers delta={delta} labels={labels} variant="line" />
+                    {predicted}
+                </>
+            )}
+            <footer style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <span data-band={band} style={{ ...TYPE.status, display: 'inline-flex', alignItems: 'center', gap: 6, color: cssVar('text') }}>
+                    <span aria-hidden="true" style={{ display: 'inline-block', width: 4, height: 14, borderRadius: 2, background: BAND_TONE[band] }} />
+                    {fillTemplate(labels.blastRadiusValue, { band: labels.bands[band] })}
+                </span>
+                {delta.blastRadius.reasons.map((r) => <span key={r} data-reason={r} style={reasonTag}>{reasonLabel(labels, r)}</span>)}
+                {delta.blocking.length > 0 && <span style={{ ...reasonTag, color: cssVar('sev5'), borderColor: cssVar('sev5') }}>{labels.blocking}</span>}
+            </footer>
+        </section>
+    );
+}
+
+// Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+// gate re-runs checks against the repaired install instead of replaying a stale record.

@@ -1,0 +1,245 @@
+/*
+ * The knowledge graph view's colours: every `--kg-*` token `scene/themeColors.ts` reads,
+ * defined ONCE for every host (the web, the VS Code webview, Rovr). A host imports it from its
+ * entry (`import '@builderforce/knowledge-graph-view/tokens.css'` — the bundler folds it into
+ * the host's one stylesheet) and keeps only its mapping, if any:
+ *
+ *   web      nothing: `--bf-*` is the app's theme bridge, and `html[data-theme]` flips the palette.
+ *   Rovr     nothing: its `--bf-*` follow the browser's colour scheme, and `main.tsx` mirrors that
+ *            onto `html[data-theme]` so this palette flips with them.
+ *   VS Code  the node/edge/finding hues, re-pointed at the editor's own theme colours.
+ *
+ * Every rule here has ZERO specificity (`:where`), so a host's plain `:root { --kg-x: … }`
+ * wins wherever it sits in the cascade. The neutrals (bg, panel, panel2, raise, border, text,
+ * muted, accent, accent-soft, on-accent) are the design mockup's own values, set HERE and
+ * nowhere else - a host does not re-point them (the dark set is `.kg`, the light set `.kg.light`).
+ * Neutral contrast (WCAG 2.x): dark text 14:1 on bg, muted 6.4:1 on panel2 / 5.8:1 on raise,
+ * on-accent 6.4:1 on accent; light text 17:1, muted 6.6:1 on raise, on-accent 5.0:1 on accent.
+ *
+ * The hues are DISTINCT per meaning (a file, a section, a claim, a duplicate and a violation
+ * never collapse onto one colour). Dark is the default; the light set is the darker twin of
+ * each hue. Contrast, computed (WCAG 2.x relative luminance):
+ *   dark  (on #111827)             hues 3.7:1 – 11.8:1 (unused 3.70 and edge 3.73 are the lowest);
+ *                                  muted (--bf-text-secondary #8892B0) 5.7:1, stale 7.0:1, error 9.4:1
+ *   light (on #F1F5F9, the page;   hues 3.7:1 – 6.5:1 (unused 3.70, edge 3.98 are the lowest) —
+ *          #FFFFFF is higher)      graphics need 3:1; muted (--bf-text-secondary #475569) 6.8:1, stale 5.3:1, error 7.6:1 — text needs 4.5:1
+ */
+
+:where(:root) {
+  /* The design's neutrals (B-Surface.dc.html `.kg`), literal: the view looks the same on every host. Light is the `.kg.light` set below. */
+  --kg-bg: #14161b;
+  --kg-panel: #1b1e25;
+  --kg-panel2: #22262f;
+  --kg-raise: #2a2f3a;
+  --kg-border: #333947;
+  --kg-text: #e7e9ef;
+  --kg-muted: #a0a9ba;
+  --kg-accent: #5b95ff;
+  --kg-accent-soft: rgba(91, 149, 255, 0.16);
+  --kg-on-accent: #0a1226;
+  --kg-node-file: #4d9eff;
+  --kg-node-section: #22d3ee;
+  --kg-node-symbol: #a78bfa;
+  --kg-node-entity: #34d399;
+  --kg-node-claim: #a3e635;
+  --kg-node-fact: #f472b6;
+  --kg-node-missing: #d4a373;
+  /* The file-category hues (PRD 38's redundant encoding): a file node reads its category from
+   * `fileCategory` and takes that tone. One blue→green arc, each distinct from every non-file
+   * tone on screen: source the base blue, tests cyan, docs teal, config amber (the warning
+   * family), styles magenta (fact's hue), data green (entity's), other neutral grey. */
+  --kg-cat-source: #4d9eff;
+  --kg-cat-test: #22d3ee;
+  --kg-cat-doc: #2dd4bf;
+  --kg-cat-config: #facc15;
+  --kg-cat-style: #f472b6;
+  --kg-cat-data: #34d399;
+  --kg-cat-other: #a8a29e;
+  /* The area nodes: a visible grey-blue region, a clear step above the `--kg-plane` surface. */
+  --kg-node-area: #4b5563;
+  --kg-edge: #7b8698;
+  --kg-violation: #f87171;
+  --kg-cycle: #fb923c;
+  --kg-partner: #f5b53d;
+  --kg-duplicate: #facc15;
+  --kg-contradicts: #fb7185;
+  --kg-agrees: #34d399;
+  --kg-stale: #a8a29e;
+  --kg-unused: #78716c;
+  --kg-changed: #38bdf8;
+  --kg-diff-added: #4ade80;
+  --kg-diff-removed: #f87171;
+  --kg-plane: rgba(148, 163, 184, 0.12);
+  /* Tower camera: the shadow under a tower and the scrim behind a drawer (`--kg-raise`, the pipe underlay, is a neutral above). */
+  --kg-scrim: rgba(0, 0, 0, 0.4);
+  --kg-tower-side: rgba(0, 0, 0, 0.22);
+  --kg-warn-bg: rgba(251, 146, 60, 0.16);
+  --kg-error: #fca5a5;
+  /* Severity ramp, 1 (clean) to 5 (worst): the colour channel of the surface's stations. */
+  --kg-sev-1: #4ade80;
+  --kg-sev-2: #a3e635;
+  --kg-sev-3: #facc15;
+  --kg-sev-4: #fb923c;
+  --kg-sev-5: #f87171;
+  /* Line palette: one hue per entry point, cycled after eight. */
+  --kg-line-1: #4d9eff;
+  --kg-line-2: #a78bfa;
+  --kg-line-3: #22d3ee;
+  --kg-line-4: #f472b6;
+  --kg-line-5: #34d399;
+  --kg-line-6: #fbbf24;
+  --kg-line-7: #fb7185;
+  --kg-line-8: #94a3b8;
+  /* Surface vocabulary. Hues follow the host theme where it has one (VS Code charts, ANSI), else the literal. */
+  /* The two typefaces are `--kg-font-ui` / `--kg-font-mono`, defined on the view's root (surface/ui/type.ts). */
+  /* Control height: 30px on a fine pointer, 40px (a tap target) on a coarse one — see the media query below. */
+  --kg-control: 30px;
+  /* Heat ramp w1 (quiet) .. w5 (hot): grey, steel, amber, orange, red (the design's literals). */
+  --kg-w-1: #2f3644;
+  --kg-w-2: #3f5c7a;
+  --kg-w-3: #b07a2a;
+  --kg-w-4: #e0702c;
+  --kg-w-5: #ef4b55;
+  /* Route hues l1..l4. */
+  --kg-l-1: var(--kg-accent);
+  --kg-l-2: var(--vscode-terminal-ansiCyan, #2dd4bf);
+  --kg-l-3: var(--vscode-charts-purple, #a78bfa);
+  --kg-l-4: var(--vscode-charts-orange, #fb923c);
+  /* Architecture layer bands. */
+  --kg-band-entry: var(--kg-accent);
+  --kg-band-presentation: var(--vscode-charts-blue, #4d9eff);
+  --kg-band-application: var(--vscode-charts-purple, #a78bfa);
+  --kg-band-domain: var(--vscode-charts-green, #34d399);
+  --kg-band-infrastructure: var(--vscode-charts-orange, #fb923c);
+  --kg-band-data: var(--vscode-charts-yellow, #facc15);
+  --kg-band-other: var(--kg-unused);
+  /* The 3D stage's palette (the design's `--s-*`, dark): floor plate, room, lighter tops, puck, drum, halls, lit and selected accents. */
+  --kg-s-floor: #151a23;
+  --kg-s-room: #1e2531;
+  --kg-s-node-top: #a3b6d3;
+  --kg-s-warn-top: #f1c680;
+  --kg-s-puck: #c9d3e2;
+  --kg-s-store: #5b9aa8;
+  --kg-s-store-top: #9ccbd6;
+  --kg-s-hall: #2c3545;
+  --kg-s-lit: #4f8cff;
+  --kg-s-sel: #ffffff;
+}
+
+/* Coarse pointer: keep the 40px tap target. */
+@media (pointer: coarse) {
+  :where(:root) {
+    --kg-control: 40px;
+  }
+}
+
+/* Light: a host opts in with `html[data-theme='light']` (the web and the VS Code canvas do; Rovr mirrors its OS scheme onto it). */
+:where(html[data-theme='light']) {
+  --kg-bg: #f1f5f9;
+  --kg-panel: #ffffff;
+  --kg-panel2: #f7f9fc;
+  --kg-raise: #eef2f7;
+  --kg-border: #d6dce6;
+  --kg-text: #0f172a;
+  --kg-muted: #475569;
+  --kg-accent: #2d60ff;
+  --kg-accent-soft: rgba(45, 96, 255, 0.1);
+  --kg-on-accent: #ffffff;
+  --kg-node-file: #2d60ff;
+  --kg-node-section: #0e7490;
+  --kg-node-symbol: #6d28d9;
+  --kg-node-entity: #047857;
+  --kg-node-claim: #4d7c0f;
+  --kg-node-fact: #be185d;
+  --kg-node-missing: #92400e;
+  /* Light twins of the category hues (the darker twin of each dark hue above). */
+  --kg-cat-source: #2d60ff;
+  --kg-cat-test: #0e7490;
+  --kg-cat-doc: #0f766e;
+  --kg-cat-config: #a16207;
+  --kg-cat-style: #be185d;
+  --kg-cat-data: #047857;
+  --kg-cat-other: #64748b;
+  --kg-node-area: #64748b;
+  --kg-edge: #7c8799;
+  --kg-violation: #b91c1c;
+  --kg-cycle: #c2410c;
+  --kg-partner: #b45309;
+  --kg-duplicate: #a16207;
+  --kg-contradicts: #be123c;
+  --kg-agrees: #047857;
+  /* Quiet must still read on the page: #8b97aa is 2.7:1 on --kg-bg (the old #dfe5ee was 1.2:1), and steel steps down from it to stay a visible step. */
+  --kg-w-1: #8b97aa;
+  --kg-w-2: #5f86b8;
+  --kg-w-3: #f0b36a;
+  --kg-w-4: #d9671f;
+  --kg-w-5: #b91c1c;
+  --kg-stale: #6a645e;
+  --kg-unused: #857d75;
+  --kg-changed: #0369a1;
+  --kg-diff-added: #15803d;
+  --kg-diff-removed: #b91c1c;
+  --kg-plane: rgba(100, 116, 139, 0.1);
+  --kg-scrim: rgba(15, 23, 42, 0.18);
+  --kg-tower-side: rgba(15, 23, 42, 0.16);
+  --kg-warn-bg: rgba(194, 65, 12, 0.12);
+  --kg-error: #991b1b;
+  --kg-sev-1: #15803d;
+  --kg-sev-2: #4d7c0f;
+  --kg-sev-3: #a16207;
+  --kg-sev-4: #c2410c;
+  --kg-sev-5: #b91c1c;
+  --kg-line-1: #2d60ff;
+  --kg-line-2: #6d28d9;
+  --kg-line-3: #0e7490;
+  --kg-line-4: #be185d;
+  --kg-line-5: #047857;
+  --kg-line-6: #b45309;
+  --kg-line-7: #be123c;
+  --kg-line-8: #475569;
+  --kg-l-2: var(--vscode-terminal-ansiCyan, #0f766e);
+  --kg-l-3: var(--vscode-charts-purple, #6d28d9);
+  --kg-l-4: var(--vscode-charts-orange, #c2410c);
+  --kg-band-presentation: var(--vscode-charts-blue, #2d60ff);
+  --kg-band-application: var(--vscode-charts-purple, #6d28d9);
+  --kg-band-domain: var(--vscode-charts-green, #047857);
+  --kg-band-infrastructure: var(--vscode-charts-orange, #c2410c);
+  --kg-band-data: var(--vscode-charts-yellow, #a16207);
+  /* The 3D stage's palette, light (the design's `[data-theme="light"]` `--s-*`). */
+  --kg-s-floor: #e8ecf2;
+  --kg-s-room: #dbe2ec;
+  --kg-s-node-top: #b4c4dc;
+  --kg-s-warn-top: #f3cd8e;
+  --kg-s-puck: #55657d;
+  --kg-s-store: #4f8f9e;
+  --kg-s-store-top: #8fc1cc;
+  --kg-s-hall: #c2cbd8;
+  --kg-s-lit: #2457d6;
+  --kg-s-sel: #101622;
+}
+
+/* VS Code light themes: the editor's own orange/yellow/green charts hues are too pale as text-weight marks; darken them toward black like hostTokens.css does for cycle/duplicate. */
+:where(body.vscode-light, body.vscode-high-contrast-light) {
+  --kg-l-4: color-mix(in srgb, var(--vscode-charts-orange, #c2410c) 70%, black);
+  --kg-band-domain: color-mix(in srgb, var(--vscode-charts-green, #047857) 75%, black);
+  --kg-band-infrastructure: color-mix(in srgb, var(--vscode-charts-orange, #c2410c) 70%, black);
+  --kg-band-data: color-mix(in srgb, var(--vscode-charts-yellow, #a16207) 75%, black);
+}
+
+/* Keyboard focus on the SVG nodes: stations, issue pins and the graph and map nodes show a ring from :focus-visible only (a mouse click draws none). */
+[data-station]:focus-visible,
+[data-pin]:focus-visible,
+svg [data-id][role="button"]:focus-visible {
+  outline: 2px solid var(--kg-accent);
+  outline-offset: 2px;
+}
+
+/* The status chip's spinner (counting, reviewing, stopping). Still under reduced motion: the ring then reads as a plain marker. */
+@keyframes kg-spin { to { transform: rotate(360deg); } }
+:where(.kg-spin) { animation: kg-spin 0.9s linear infinite; }
+@media (prefers-reduced-motion: reduce) { :where(.kg-spin) { animation: none; } }
+
+/* The indeterminate Bar (no known total yet): a 35% fill sliding along the track. A static partial fill under reduced motion. */
+.kg-bar-indeterminate { width: 35%; }
+@keyframes kg-bar-slide { from { transform: translateX(0); } to { transform: translateX(185.7%); } }
+@media (prefers-reduced-motion: no-preference) { .kg-bar-indeterminate { animation: kg-bar-slide 1.4s ease-in-out infinite alternate; } }

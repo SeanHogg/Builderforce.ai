@@ -564,7 +564,7 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
   - KV/prefix-cache logic exists in both TS and Rust.
   - Fix: one engine and one catalog.
 - `UP-G015` **Synapse has no editor and cannot host the VSIX.**
-  - Fix: an embedded OpenVSCode Server sidecar with `--enable-proposed-api` and the VSIX preinstalled. It wires to the existing `synapse mcp`, bf-local and context server.
+  - Fix: an embedded OpenVSCode Server sidecar with `--enable-proposed-api` and the VSIX preinstalled. The extension provides Workspace MCP and uses `bf-local` and the loopback context service.
   - First-slice done-checks:
     - WebView2 service-worker and webview behaviour;
     - bundle size;
@@ -584,7 +584,26 @@ Source: [platform-duplication-audit.md §1](../specs/tasks/platform-duplication-
 - **The target:** one `@seanhogg/builderforce-mcp` package (protocol, tool, naming, policy, server, client, relay and config modules) with three servers: platform, memory and workspace.
 - **The steps:** follow the migration order in §1.6. Each step's existing tests are the parity oracle.
 
-Gaps:
+**Implementation status as of 2026-11-26.** Synapse's Rust Workspace MCP server and connector host are retired. Platform and Workspace use the shared SDK package. Synapse still uses a private Evermind stdio client for desktop memory. See [DONE.md](../../DONE.md#-resolved-2026-11-26--synapse-rust-workspace-mcp-retirement).
+
+| Gaps | Status |
+|---|---|
+| MCP-G001–G002 | **Partial.** Platform, Workspace, outbound HTTP, and the marketplace probe use the SDK. The private Evermind stdio client in Synapse still owns its framing and protocol revision. |
+| MCP-G003 | **Resolved.** The TypeScript relay consumers share the package's tool contract. |
+| MCP-G004–G006 | **Partial.** Shared OpenAI and Anthropic adapters, canonical Platform and Workspace names, effect classification, and a shared gate are in code. Native adapters and host-specific approvals remain. |
+| MCP-G007 | **Partial.** Platform and Workspace apply shared output limits and redaction. Memory's default transports still need the shared package cutover. |
+| MCP-G008–G012 | **Resolved for the implemented transports.** Memory reports its package version and binds to loopback. Agent-runtime uses the SDK and no longer advertises duplicate Platform write tools. Standard MCP calls use `arguments`. The legacy REST compatibility route still accepts its original payload. |
+| MCP-G013 | **Open.** Catalog-change notifications, resources, and prompts are still pending. |
+| MCP-G014–G016 | **Resolved.** The outbound client reuses sessions, marketplace review uses the shared client, and the VS Code example points to `/mcp`. |
+| MCP-G017 | **Partial.** TypeScript consumers share relay plumbing and catalog caching. Rust and mobile retain native REST adapters. |
+| MCP-G018–G019 | **Partial.** The API has a shared connector catalog with HTTP and stdio offers. VS Code reads workspace MCP configs and uses native setup. Legacy Synapse config migration and Memory installer adoption remain open. |
+| MCP-G020 | **Partial.** The Memory installer and Claude plugin share a launch spec. Synapse's private Evermind client still has a Rust launcher. |
+| MCP-G021 | **Partial.** VS Code and the headless runtime share the Workspace catalog. The TypeScript chunk and dense index, persisted snapshot reuse, and benchmark remain tracked under code index consolidation. |
+| MCP-G022 | **Partial.** The Memory adapter supports canonical names and legacy aliases. Publishing the shared package is required for the default Memory transport and installer cutover. Other agent memory vocabularies still exist. |
+| MCP-G023 | **Partial.** The Platform catalog and VS Code config reader deduplicate entries within their own scope. Cross-host deduplication still needs reliable server and credential identity. |
+| MCP-G024 | **Resolved.** Workflow execution uses data-provider handlers, with compatibility for saved `mcp` nodes. |
+
+Findings from the original audit:
 
 - `MCP-G001` **6 hand-rolled JSON-RPC framings.**
   - They are the API server, the outbound client, the review probe, the agent-runtime server and Synapse ×2.

@@ -1,0 +1,97 @@
+/**
+ * The derivations the view's chrome needs, so `KnowledgeGraphView` stays a composition: where the
+ * layout reflows (`layoutOf`), the spine's crumbs and what a crumb does, the Act scope's name, the
+ * path strip's title and the props of the scene overlay. Everything is read from the graph's and
+ * the surface's state it is handed; it holds no state of its own.
+ */
+
+import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { labelFor } from '../graphModel';
+import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
+import type { SurfaceLayout } from '../layout';
+import type { LensDef } from '../lenses';
+import type { LensId, ViewMode } from '../types';
+import type { KnowledgeGraphState } from '../useKnowledgeGraph';
+import { buildSpine, withLineCrumb, withSystemCrumb, type SpineItem } from './path';
+import { isMultiSystem, systemName } from './systems';
+import { entryRoute } from './pathNotes';
+import type { QuestionId } from './questions';
+import type { CameraDef } from './registry';
+import type { SceneOverlayProps } from './SceneOverlay';
+import type { MapCap, ScaleLineProps } from './ScaleLine';
+import { stationOfRef } from './stations';
+import type { SurfaceModel } from './useSurface';
+import type { ZoomApi } from './zoom';
+
+export interface SurfaceChromeInput {
+    kg: KnowledgeGraphState;
+    surface: SurfaceModel;
+    graph: KnowledgeGraph;
+    labels: KnowledgeGraphLabels;
+    layout: SurfaceLayout;
+    index: ReadonlyMap<string, KNode>;
+    titleOf(rootId: string): string;
+    select(ref: string): void;
+    // The scene overlay.
+    cameras: readonly CameraDef[];
+    mode: ViewMode;
+    setMode(mode: ViewMode): void;
+    zoom: ZoomApi | null;
+    pickQuestion(id: QuestionId): void;
+    pickLens(id: LensId): void;
+    lens: LensDef;
+    visibleNodes: number;
+    showAll: boolean;
+    setShowAll(on: boolean): void;
+}
+
+export function useSurfaceChrome(i: SurfaceChromeInput) {
+    const { kg, surface, graph, labels, layout, index } = i;
+    const s = labels.surface;
+    const selected = kg.selected;
+
+    const spineStation = surface.station ?? (selected ? surface.stations.byId.get(stationOfRef(surface.stations, selected) ?? '') ?? null : null);
+    const lineLabel = surface.line ? fillTemplate(s.lineName, { name: surface.line.name }) : null;
+    // The spine gains the drawn line between the folder and the station; picking it steps back up to the line.
+    // A root of several systems starts the crumb at the system the line or station is in.
+    const systemCrumb = isMultiSystem(surface.lines.systems) ? systemName(surface.lines.systems, spineStation?.system ?? surface.line?.system) : undefined;
+    const spineItems = withSystemCrumb(withLineCrumb(
+        buildSpine({ rootTitle: i.titleOf(graph.scope.rootId), station: spineStation, node: selected ? index.get(selected) ?? null : null, nodeLabel: (r) => labelFor(index, r) }),
+        surface.pinned ? null : lineLabel,
+    ), systemCrumb);
+    const onSpinePick = (item: SpineItem) => {
+        if (item.kind === 'root') { kg.select(null); surface.selectStation(null); } else if (item.kind === 'line' || item.kind === 'system') surface.selectStation(null);
+        else if (item.kind === 'station') kg.select(null); else if (item.id) i.select(item.id);
+    };
+
+    const scopeName = surface.station ? surface.station.name : surface.lineChosen ? lineLabel : null;
+    const lineName = surface.pinned ? null : surface.line?.name ?? null;
+    // The route the line enters by ("GET /users"); a line with no route is titled by its own name, never "X line · X".
+    const entry = entryRoute(graph, surface.stations.byId.get(surface.path.stops[0]?.id ?? ''));
+    const named = lineName ? fillTemplate(s.lineName, { name: lineName }) : null;
+    const pathTitle = named ? (entry && entry !== lineName ? fillTemplate(s.path.title, { line: named, entry }) : named) : null;
+    const truncated = graph.stats.truncated || i.visibleNodes < graph.nodes.length;
+
+    // A graph the server cut with no outline (an older server) is drawn from its few files: the scale card says so.
+    const source = surface.coverage?.source;
+    const mapCap: MapCap | undefined = source?.kind === 'cut' ? { shown: source.files, total: source.sources, cut: true } : surface.stations.capped;
+
+    // The header's Out button: inside a drilled level it goes up one level; otherwise it leaves the picked station for the line.
+    // The drill is the transit map's: other cameras keep the station-to-line "Out".
+    const drilled = surface.drill.canOut && i.mode === 'transit';
+    const out = {
+        to: drilled ? surface.drill.parent?.name ?? s.map.world : surface.station ? lineLabel : null,
+        onOut: drilled ? surface.drill.out : () => surface.selectStation(null),
+    };
+    const overlayProps: SceneOverlayProps = {
+        labels, cameras: i.cameras, mode: i.mode, onMode: i.setMode, narrow: layout.phone,
+        stations: surface.stations.stations, question: surface.question, onQuestion: i.pickQuestion, lenses: kg.lenses, lens: i.lens.id, onLens: i.pickLens,
+        family: surface.family, onClearFamily: () => surface.setFamily(null),
+    };
+    // The scale sentence: the stage draws it under its Colour-by legend (`StageHost`'s `scale`).
+    const scaleProps: ScaleLineProps = {
+        labels, stats: graph.stats, truncated, compact: layout.compact, showAll: i.showAll, drawn: i.visibleNodes, total: graph.nodes.length, onShowAll: () => i.setShowAll(true), capped: mapCap,
+        stations: surface.stations.stations.length, files: graph.stats.sources,
+    };
+    return { layout, out, spineItems, onSpinePick, scopeName, pathTitle, truncated, overlayProps, scaleProps, askName: surface.station?.name ?? surface.line?.name ?? i.titleOf(graph.scope.rootId) };
+}

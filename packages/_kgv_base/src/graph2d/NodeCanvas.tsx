@@ -1,0 +1,189 @@
+/**
+ * The canvas node layer — one `<canvas>` for every node mark (thousands of DOM elements
+ * become ONE) plus a small SVG overlay of invisible, focusable `<g>` for the tab stops
+ * (canvas pixels can't take focus or keys). The marks are built in importance order,
+ * bucketed by SHAPE, culled against the committed viewBox, and painted in batches across
+ * requestAnimationFrame frames; any change to the committed view, the container's size,
+ * the theme or the node set restarts the pass with a clear. Pan/zoom drags only move the
+ * SVG's viewBox, so the canvas redraws when the view COMMITS — never during the gesture.
+ */
+
+import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import type { KNode } from '@seanhogg/builderforce-memory/knowledge';
+import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
+import { kindLabel } from '../names';
+import type { LensDef } from '../lenses';
+import { SHAPE_PATHS } from '../shapes';
+import { useThemeColors } from '../scene/themeColors';
+import type { ViewBox } from '../usePanZoom';
+import type { ContainerSize } from '../environment';
+import { bucketByShape, drawMark, markVisible, paintQueue, DRAW_BATCH, type NodeMark } from './drawNodes';
+import { layoutToCanvas, visibleRect } from './canvasView';
+import { nodeRadius, type Layout2D } from './layout2d';
+
+interface NodeCanvasProps {
+    ordered: readonly KNode[];
+    layout: Layout2D;
+    lens: LensDef;
+    selected: string | null;
+    stops: ReadonlySet<string>;
+    perPx: number;
+    view: ViewBox | null;
+    size: ContainerSize;
+    hostEl: HTMLElement | null;
+    labels: KnowledgeGraphLabels;
+    onActivate(ref: string): void;
+    onArrow(e: KeyboardEvent<SVGElement>): void;
+}
+
+/** The accessible name every node's button carries (canvas or overlay). */
+export function nodeAriaLabel(labels: KnowledgeGraphLabels, n: KNode): string {
+    return fillTemplate(labels.nodeAria, { label: n.label, kind: kindLabel(labels, n.kind) });
+}
+
+interface StopItem {
+    n: KNode;
+    at: readonly [number, number] | undefined;
+    /** The lens's emphasis for this node — mirrored on the hit circle's `opacity` so the
+     *  dim state stays observable in the DOM (and in jsdom, which has no canvas). */
+    dim: boolean;
+}
+
+/**
+ * The tab stops: the top `stops` nodes (plus the selection) as invisible focusable `<g>`,
+ * a transparent `<circle data-dot>` inside a real bounding box so clicks (and jsdom's
+ * fireEvent) land on the node. Exactly TAB_STOPS DOM nodes regardless of graph size, in
+ * importance order — the roving arrow keys walk their sibling order. Only re-renders when
+ * the stop set, the layout or the selection actually changes, not on every committed view.
+ */
+const TabStops = memo(function TabStops({ items, selected, labels, onActivate, onArrow }: {
+    items: readonly StopItem[];
+    selected: string | null;
+    labels: KnowledgeGraphLabels;
+    onActivate(ref: string): void;
+    onArrow(e: KeyboardEvent<SVGElement>): void;
+}) {
+    return (
+        <>
+            {items.map(({ n, at, dim }) => {
+                if (!at) return null;
+                const pressed = n.ref === selected;
+                return (
+                    <g
+                        key={n.ref} data-id={n.ref} role="button" aria-pressed={pressed} style={{ cursor: 'pointer' }}
+                        tabIndex={-1} data-keep="1"
+                        aria-label={nodeAriaLabel(labels, n)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(n.ref); } else onArrow(e);
+                        }}
+                    >
+                        <circle data-dot="true" cx={at[0]} cy={at[1]} r={Math.max(nodeRadius(n.importance), 0.35)} fill="transparent" opacity={dim ? 0.35 : 1} />
+                    </g>
+                );
+            })}
+        </>
+    );
+});
+
+export const NodeCanvas = memo(function NodeCanvas({ ordered, layout, lens, selected, stops, perPx, view, size, hostEl, labels, onActivate, onArrow }: NodeCanvasProps) {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const colors = useThemeColors(hostEl);
+    const [ready, setReady] = useState(false);
+
+    /** Marks in importance order, with each mark memoised on its primitives so a selection change doesn't rebuild 15k of them. */
+    const marks = useMemo(() => {
+        return ordered.flatMap((n): NodeMark[] => {
+            const at = layout.positions.get(n.ref);
+            if (!at) return [];
+            const style = lens.nodeStyle(n);
+            return [{ id: n.ref, x: at[0], y: at[1], r: Math.max(nodeRadius(n.importance), 3 * perPx), tone: style.tone, dim: style.emphasis === 'dim', shape: style.shape }];
+        });
+    }, [ordered, layout, lens, perPx]);
+
+    /** One Path2D per shape kind, reused across frames — the WebGL `Cylinders` bucketing, in 2D.
+     *  Null where there is no canvas runtime (jsdom, a headless host): the paint effect bails,
+     *  and the component still renders its tab-stop overlay, instead of crashing on `new Path2D`. */
+    const shapePaths = useMemo(() => {
+        if (typeof Path2D === 'undefined') return null;
+        const out = {} as Record<keyof typeof SHAPE_PATHS, Path2D>;
+        for (const shape of Object.keys(SHAPE_PATHS) as (keyof typeof SHAPE_PATHS)[]) out[shape] = new Path2D(SHAPE_PATHS[shape]);
+        return out;
+    }, []);
+
+    /** The region the SVG shows (viewBox + letterbox): the canvas covers exactly this, in the SVG's own units. */
+    const rect = useMemo(() => (view ? visibleRect(view, size.width, size.height) ?? view : null), [view, size.width, size.height]);
+
+    /** The painted marks, culling off-screen ones once per pass instead of per draw call. */
+    const paintSet = useMemo(() => (rect ? marks.filter((m) => markVisible(m, rect)) : []), [marks, rect]);
+
+    // The incremental paint pass: re-fit the backing store, then draw a batch of marks per frame
+    // until done, clearing the canvas to a pristine reset on the FIRST batch of a pass (a bare
+    // clearRect on a transformed context would leave half-transparent ghosts). Runs when the
+    // committed view, size, theme, lens or node set changes — never mid-gesture, since a drag
+    // only writes the viewBox attribute until the view commits.
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        // Not ready until this pass finishes — set before ANY early return, so a pass that cannot
+        // paint (no mapping) never leaves the last pass's `data-ready` standing.
+        setReady(false);
+        if (!canvas || !ctx || !rect || !size.width || !size.height || !colors || !shapePaths) return undefined;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.round(size.width * dpr);
+        canvas.height = Math.round(size.height * dpr);
+        const transform = layoutToCanvas(rect, canvas.width, canvas.height);
+        const queue = paintQueue(bucketByShape(paintSet));
+        let raf = 0;
+        let first = true;
+        const paint = (): void => {
+            // The first batch owns the canvas: reset any previous pass, re-fit the transform, draw its marks.
+            if (first) {
+                first = false;
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            ctx.setTransform(...transform);
+            const done = queue.next(DRAW_BATCH, (mark, shape) => drawMark(ctx, mark, shapePaths[shape], colors, colors.bg));
+            if (done) setReady(true);
+            else raf = requestAnimationFrame(paint);
+        };
+        raf = requestAnimationFrame(paint);
+        return () => cancelAnimationFrame(raf);
+    }, [paintSet, rect, size, colors, shapePaths]);
+
+    // The ≤25 tab stops (top-importance plus the selection): invisible focusable `<g>` so the
+    // roving keyboard walk, Enter/Space activation and the button accessible names survive the
+    // move off per-node DOM. Stable per node (memoised on primitives + selected) so a selection
+    // change re-renders only the two overlay stops whose pressed state moved.
+    const stopsItems = useMemo(
+        () => ordered.filter((n) => stops.has(n.ref) || n.ref === selected).map((n): StopItem => ({ n, at: layout.positions.get(n.ref), dim: lens.nodeStyle(n).emphasis === 'dim' })),
+        [ordered, stops, layout, selected, lens],
+    );
+
+    const onOverlayClick = (e: MouseEvent<SVGGElement>) => {
+        // The overlay already mapped the click to a node — do NOT let it bubble to the
+        // svg's nearest-hit handler, which would activate the same node a second time.
+        e.stopPropagation();
+        if (e.target === e.currentTarget) return;
+        const g = (e.target as Element).closest('[data-id]');
+        const id = g?.getAttribute('data-id');
+        if (id) onActivate(id);
+    };
+
+    if (!rect) return null;
+    return (
+        <g data-layer="canvas-nodes">
+            <foreignObject data-canvas-rect="true" x={rect.x} y={rect.y} width={rect.w} height={rect.h} style={{ overflow: 'visible' }} aria-hidden="true">
+                <canvas
+                    ref={canvasRef}
+                    data-canvas="nodes"
+                    data-ready={ready ? 'true' : undefined}
+                    style={{ width: '100%', height: '100%', display: 'block', pointerEvents: 'none' }}
+                />
+            </foreignObject>
+            <g onClick={onOverlayClick}>
+                <TabStops items={stopsItems} selected={selected} labels={labels} onActivate={onActivate} onArrow={onArrow} />
+            </g>
+        </g>
+    );
+});

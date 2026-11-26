@@ -1,0 +1,174 @@
+/**
+ * The Run Delta panel (PRD 41 §C11.2): a side sheet, never a modal, built on the view's `Panel`
+ * (the host's slide-out when it passes one, else the package `Sheet`). Findings are grouped by
+ * dimension, then by lineage; each dimension lists its metrics before → after (quantized values
+ * divided back by their `step`), and the files outside the verdicts and the checks that did not
+ * run are listed with their reasons, as are the repository's ignored overrides. Props only: "Open code" is a callback.
+ */
+
+import { rankFindings } from '@builderforce/run-delta/predict';
+import type { DeltaFinding, DimensionResult, RunDelta, RunDeltaOverrides } from '@builderforce/run-delta/contract';
+import { cssVar } from '../scene/themeColors';
+import { Panel } from '../Sheet';
+import { list, muted } from '../styles';
+import { TYPE } from '../surface/ui/type';
+import { fillTemplate } from '../template';
+import type { KnowledgePanelRenderer } from '../types';
+import {
+    blockingLabel, dimensionLabel, headlineText, lineageGroup, metricLabel, metricValueText, overrideLabel, reasonLabel, type LineageGroup,
+} from './deltaText';
+import { DeltaIconButton, CopyIcon, ResolveIcon } from './DeltaActionIcons';
+import { DeltaFindingItem, type RunDeltaCodeTarget } from './DeltaFindingItem';
+import { PendingAnalyzers } from './PendingAnalyzers';
+import { labelKey, type RunDeltaLabels } from './labels';
+import { VerdictMark } from './VerdictMark';
+
+/** Lineage groups in reading order; `present` (C9: no lineage) is its own last group. */
+const GROUPS: readonly LineageGroup[] = ['introduced', 'changed', 'resolved', 'persisting', 'present'];
+
+/** A dimension's findings by lineage group, in {@link GROUPS} order, empty groups dropped. */
+export function groupFindings(findings: readonly DeltaFinding[]): Array<{ group: LineageGroup; findings: DeltaFinding[] }> {
+    return GROUPS.map((group) => ({ group, findings: findings.filter((f) => lineageGroup(f) === group) })).filter((g) => g.findings.length > 0);
+}
+
+const subheading = { ...TYPE.sectionHeading, marginTop: 4 } as const;
+
+function DimensionSection({ dimension, labels, onOpenCode }: { dimension: DimensionResult; labels: RunDeltaLabels; onOpenCode?: ((t: RunDeltaCodeTarget) => void) | undefined }) {
+    // §D10.1: findings rank highest-value first; ties break by findingId (the engine's own order is otherwise kept).
+    const ranked = rankFindings(dimension.findings);
+    const groups = groupFindings(ranked);
+    const total = dimension.findings.length;
+    return (
+        <section data-dimension={dimension.id} style={{ display: 'grid', gap: 6, minWidth: 0 }}>
+            <header style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <h3 style={{ ...TYPE.title, flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>{dimensionLabel(labels, dimension.id)}</h3>
+                <VerdictMark verdict={dimension.verdict} labels={labels} />
+            </header>
+            {dimension.reasons.length > 0 && (
+                <p style={{ ...muted, margin: 0, overflowWrap: 'anywhere' }}>{dimension.reasons.map((r) => reasonLabel(labels, r)).join(' · ')}</p>
+            )}
+            {total > 1 && <p data-ranked style={{ ...TYPE.meta, margin: 0 }}>{fillTemplate(labels.rankedNote, { k: total })}</p>}
+            {groups.length === 0 && dimension.metrics.length === 0 && <p style={{ ...muted, margin: 0 }}>{labels.noFindings}</p>}
+            {groups.map(({ group, findings }) => (
+                <div key={group} data-lineage={group} style={{ display: 'grid', gap: 2, minWidth: 0 }}>
+                    <h4 style={subheading}>{labels.lineages[group]}</h4>
+                    <ul style={{ listStyle: 'none', margin: 0, padding: 0, minWidth: 0 }}>
+                        {findings.map((f) => <DeltaFindingItem key={f.identity.id} finding={f} labels={labels} onOpenCode={onOpenCode} />)}
+                    </ul>
+                </div>
+            ))}
+            {dimension.metrics.length > 0 && (
+                <div style={{ display: 'grid', gap: 2, minWidth: 0 }}>
+                    <h4 style={subheading}>{labels.metricsHeading}</h4>
+                    <ul style={{ ...list, gap: 2 }}>
+                        {dimension.metrics.map((m) => (
+                            <li key={m.metricId} data-metric={m.metricId} style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8, minWidth: 0 }}>
+                                <span style={{ ...TYPE.body, color: cssVar('text') }}>{metricLabel(labels, m.metricId)}</span>
+                                <span style={TYPE.monoValue}>{metricValueText(labels, m)}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </section>
+    );
+}
+
+/** A before side that could not be read: the file is still analyzed on its after side (lineage `present`), so it is not "excluded". */
+const UNRESOLVED: ReadonlySet<string> = new Set(['preimage-too-large', 'preimage-missing', 'git-unavailable']);
+
+function FileList({ heading, files, labels }: { heading: string; files: RunDelta['excluded']; labels: RunDeltaLabels }) {
+    if (files.length === 0) return null;
+    return (
+        <section style={{ display: 'grid', gap: 4 }}>
+            <h3 style={TYPE.title}>{heading}</h3>
+            <ul style={{ ...list, gap: 2 }}>
+                {files.map((e) => (
+                    <li key={e.path} data-excluded={e.reason} style={{ ...TYPE.meta, overflowWrap: 'anywhere' }}>
+                        <code style={TYPE.monoValue}>{e.path}</code> · {labels.excluded[labelKey(e.reason)] ?? e.reason}
+                    </li>
+                ))}
+            </ul>
+        </section>
+    );
+}
+
+export interface RunDeltaPanelProps {
+    open: boolean;
+    delta: RunDelta;
+    /** The repository's `.builderforce/delta.json` entries this delta ran without (redacted), listed as "Overrides ignored". */
+    overrides?: RunDeltaOverrides | undefined;
+    labels: RunDeltaLabels;
+    onClose(): void;
+    /** Opens a root-relative after-side path in the host's editor. Absent ⇒ locations are plain text. */
+    onOpenCode?: ((target: RunDeltaCodeTarget) => void) | undefined;
+    /** A narrow container: the sheet becomes a full-width bottom sheet. */
+    compact: boolean;
+    /** The host's slide-out (web: `SlideOutPanel`); absent ⇒ the package sheet. */
+    renderPanel?: KnowledgePanelRenderer | undefined;
+    /** Seeds a fix directive for the issues this run found (PRD 41 "Fix with agent"). Absent ⇒ no Resolve button. */
+    onResolve?: (() => void) | undefined;
+    /** Copies the full delta results as a diagnostic. Absent ⇒ no Copy diagnostics button. */
+    onCopyDiagnostics?: (() => void) | undefined;
+}
+
+export function RunDeltaPanel({ open, delta, overrides, labels, onClose, onOpenCode, compact, renderPanel, onResolve, onCopyDiagnostics }: RunDeltaPanelProps) {
+    const failed = delta.dimensions.flatMap((d) => d.measuredBy.filter((m) => m.status === 'failed').map((m) => ({ ...m, dimension: d.id })));
+    // The actions live in the panel HEADER (beside the title), not in the body: the body is findings only.
+    const headerActions = (onResolve || onCopyDiagnostics) ? (
+        <>
+            {onResolve && (
+                <DeltaIconButton label={labels.resolve} title={labels.resolveHint} onClick={onResolve}>
+                    <ResolveIcon />
+                </DeltaIconButton>
+            )}
+            {onCopyDiagnostics && (
+                <DeltaIconButton label={labels.copyDiagnostics} onClick={onCopyDiagnostics}>
+                    <CopyIcon />
+                </DeltaIconButton>
+            )}
+        </>
+    ) : undefined;
+    return (
+        <Panel open={open} title={labels.panelTitle} closeLabel={labels.close} onClose={onClose} compact={compact} width={440} render={renderPanel} headerActions={headerActions}>
+            <p style={{ ...TYPE.body, margin: 0, color: cssVar('text'), overflowWrap: 'anywhere' }}>{headlineText(labels, delta.summary)}</p>
+            {delta.dimensions.map((d) => <DimensionSection key={d.id} dimension={d} labels={labels} onOpenCode={onOpenCode} />)}
+            <PendingAnalyzers delta={delta} labels={labels} variant="section" />
+            {failed.length > 0 && (
+                <section style={{ display: 'grid', gap: 4 }}>
+                    <h3 style={TYPE.title}>{labels.failedHeading}</h3>
+                    <ul style={{ ...list, gap: 2 }}>
+                        {failed.map((m) => (
+                            <li key={`${m.dimension}:${m.tool}`} style={{ ...TYPE.meta, overflowWrap: 'anywhere' }}>
+                                <code style={TYPE.monoValue}>{m.tool}</code> · {reasonLabel(labels, m.reason ?? 'rule-failed')}
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+            )}
+            {delta.blocking.length > 0 && (
+                <section data-blocking style={{ display: 'grid', gap: 4 }}>
+                    <h3 style={TYPE.title}>{labels.blockingHeading}</h3>
+                    <ul style={{ ...list, gap: 2 }}>
+                        {delta.blocking.map((code) => <li key={code} style={{ ...TYPE.meta, overflowWrap: 'anywhere' }}>{blockingLabel(labels, code)}</li>)}
+                    </ul>
+                </section>
+            )}
+            {overrides && overrides.dropped.length > 0 && (
+                <section data-overrides style={{ display: 'grid', gap: 4 }}>
+                    <h3 style={TYPE.title}>{labels.overridesHeading}</h3>
+                    <ul style={{ ...list, gap: 2 }}>
+                        {overrides.dropped.map((d, i) => (
+                            <li key={`${d.code}:${d.section}:${i}`} data-override={d.code} style={{ ...TYPE.meta, overflowWrap: 'anywhere' }}>{overrideLabel(labels, d)}</li>
+                        ))}
+                    </ul>
+                </section>
+            )}
+            <FileList heading={labels.unresolvedHeading} files={delta.excluded.filter((e) => UNRESOLVED.has(e.reason))} labels={labels} />
+            <FileList heading={labels.excludedHeading} files={delta.excluded.filter((e) => !UNRESOLVED.has(e.reason))} labels={labels} />
+        </Panel>
+    );
+}
+
+// Evidence re-verification: busts the verify cache (content-hash key) so the pre-push
+// gate re-runs checks against the repaired install instead of replaying a stale record.

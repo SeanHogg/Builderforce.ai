@@ -1,0 +1,38 @@
+/**
+ * The panel registry: drawers opened from the header's panel buttons. A panel is one row
+ * `{ id, labelKey, component, available }`; the header, the sheet and the compact (bottom
+ * sheet) behaviour follow with no edit to the root. Each drawer reads only what it needs and
+ * says "not set up" when the data behind it was never collected.
+ */
+
+import { AgentRunsPanel } from './drawers/agentRuns/AgentRunsPanel';
+import { ApiPanel } from './drawers/ApiPanel';
+import { CoveragePanel } from './drawers/CoveragePanel';
+import { DomainsPanel } from './drawers/DomainsPanel';
+import { PatternsPanel } from './drawers/PatternsPanel';
+import { ResolvePanel } from './drawers/ResolvePanel';
+import { SimulatePanel } from './drawers/SimulatePanel';
+import type { PanelDef } from './registry';
+import { RunPanel } from './run/RunPanel';
+
+export type PanelId = 'run' | 'coverage' | 'patterns' | 'api' | 'resolve' | 'simulate' | 'agentRuns' | 'domains';
+
+/**
+ * The drawer's tabs after Act, in order (the design prototype's: Coverage, Patterns, API, Simulate, Fix, Review), then the panels it has no tab for
+ * (Domains, Agent runs). A panel is a tab only where its `available` rule holds; anything can open one with `openPanel`.
+ */
+export const DRAWER_ORDER: readonly PanelId[] = ['coverage', 'patterns', 'api', 'simulate', 'resolve', 'run', 'domains', 'agentRuns'];
+
+export const PANELS: readonly (PanelDef & { id: PanelId })[] = [
+    // The Reviews panel (start, watch, stop, runs, server, diagnostics): opened by the status chip and its action button; it has no header button.
+    { id: 'run', labelKey: 'panelRun', component: RunPanel, fill: true, available: (_graph, env) => env.hasRun === true },
+    { id: 'coverage', labelKey: 'panelCoverage', component: CoveragePanel, available: (graph) => graph.nodes.some((n) => n.kind === 'file' && n.pack === 'code') },
+    { id: 'patterns', labelKey: 'panelPatterns', component: PatternsPanel, available: (graph) => graph.nodes.some((n) => n.kind === 'file' && n.pack === 'code') },
+    { id: 'api', labelKey: 'panelApi', component: ApiPanel, available: (graph) => graph.nodes.some((n) => n.kind === 'file' && n.pack === 'code') },
+    // Domains: groups the loose files of a folder by name and imports, and moves them (the host applies, branches and undoes).
+    { id: 'domains', labelKey: 'panelDomains', component: DomainsPanel, available: (graph, env) => env.hasDomains === true && graph.nodes.some((n) => n.kind === 'file' && n.pack === 'code') },
+    { id: 'resolve', labelKey: 'panelResolve', component: ResolvePanel, available: (graph) => graph.findings.length > 0 },
+    { id: 'simulate', labelKey: 'panelSimulate', component: SimulatePanel, available: (_graph, env) => env.hasLines },
+    // Agent runs (PRD 46): what a recorded agent run did wrong, by turn, finding and file. Only when the host records runs.
+    { id: 'agentRuns', labelKey: 'panelAgentRuns', component: AgentRunsPanel, available: (_graph, env) => env.hasAgentRuns === true },
+];

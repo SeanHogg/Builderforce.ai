@@ -156,7 +156,9 @@ Each step is a separate PR, and existing tests run unchanged as the parity oracl
 5. **Replace the 6 relay copies with `relay`.** (MCP-G017)
 6. **Unify the user-server model.** Add the `transport` column to the connector catalog, read `mcp.json` through `config`, and apply one `ToolGate` everywhere. (MCP-G018–G020)
 7. **Merge the four code-search tools** into Workspace MCP behind one interface; the engine choice comes from area 2. (MCP-G021)
-8. **Retire Synapse `bf-mcp`/`bf-context` MCP and `bf-memory`** when the rebuilt Synapse ships (UP-G015). Rename the non-MCP "mcp" workflow nodes. (MCP-G022–G024)
+8. **Retire Synapse's Rust Workspace MCP and connector host.** The user approved removing both ahead of the rebuilt Synapse release on 2026-11-26. The VS Code extension provides Workspace MCP, and the loopback context service remains available for hybrid search and compression. Synapse's desktop features still use the private Evermind client in `bf-memory`. Workflow execution uses data-provider handlers and accepts saved `mcp` nodes. (MCP-G022–G024)
+
+See the [MCP gap register](../../roadmap/GAP-REGISTER.md#mcp-consolidation-platform-agents) for implementation status and remaining work. The benchmark in §2.5 gates retirement of the native index, which still backs optional Workspace capabilities.
 
 ### 1.7 Granular gaps
 

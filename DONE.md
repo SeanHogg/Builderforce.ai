@@ -1,3 +1,10 @@
+## ✅ RESOLVED 2026-11-26 — Synapse Rust Workspace MCP retirement
+
+- Removed Synapse's Rust Workspace MCP server, the `bf-mcp` connector host and catalog, and the desktop connector setup screen. Both former MCP CLI commands exit without starting a server.
+- The Builderforce VS Code extension registers Workspace MCP using the shared TypeScript catalog. Synapse's loopback context API provides hybrid search and compression when available. The desktop's Evermind features use a private stdio client in `bf-memory`.
+- Verified all 15 Rust context and memory tests, the Synapse desktop typecheck, the retired `bf-context mcp` command, and the updated Connect view's five locale catalogs.
+- The broader consolidation is tracked in the [MCP gap register](docs/roadmap/GAP-REGISTER.md#mcp-consolidation-platform-agents).
+
 ## ✅ RESOLVED 2026-11-26 — On-prem `search_code` is exact or regex, scoped before search (CIX-G001)
 
 - **The bug:** the on-prem `search_code` was wired to `runCodebaseSearch`, which ranks keyword hits. The tool's contract promises exact substring or regex matching. The `path` scope was also applied after the search instead of before.

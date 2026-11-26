@@ -1,0 +1,155 @@
+/** The header words of the surface: the interface and its English defaults (a host overrides them per key). */
+
+import type { ChannelId, MetricId, PresetId } from '../surface/overlays';
+import type { NoteKey, QuestionId } from '../surface/questions';
+
+export interface HeaderLabels {
+    spineLabel: string;
+    panelsLabel: string;
+    /** Collapse / expand names for the lines dock. The chevron on its edge uses these. */
+    panelToggles: Record<'label' | 'showLeft' | 'hideLeft', string>;
+    overlaysButton: string;
+    overlaysTitle: string;
+    /** The overlay button's name: `{preset}`. */
+    presetLabel: string;
+    presets: Record<PresetId | 'custom', string>;
+    channels: Record<ChannelId | 'pins', string>;
+    metricNames: Record<MetricId, string>;
+    notSetUp: string;
+    on: string;
+    off: string;
+    questionsLabel: string;
+    moreQuestions: string;
+    questions: Record<QuestionId, string>;
+    answerNone: string;
+    /** The question needs data this folder has not collected. */
+    answerNotSetUp: string;
+    /** A lit station's note; `{value}`. */
+    notes: Record<NoteKey, string>;
+    linesTitle: string;
+    linesButton: string;
+    linesEmpty: string;
+    /** `{name}`. */
+    lineName: string;
+    /** `{name}`. */
+    stationsOn: string;
+    stationsPick: string;
+    /** The scene overlay: `{name}` the level above; `{lens}`; `{family}`. (Its file counts are `counts.fileMissing` / `counts.fileTooLarge`.) */
+    overlay: Record<'outTo' | 'fit' | 'lensSub' | 'familyOnly' | 'clearFamily' | 'diagnose' | 'controls', string>;
+    /** `{description}`, `{path}`, `{findings}`. */
+    pinpoint: Record<
+        'label' | 'button' | 'hint' | 'reading' | 'failed' | 'noMatch' | 'thumbAlt' | 'descriptionTitle' | 'anchorsTitle' | 'matchesTitle' | 'diagnose'
+        | 'diagnoseText' | 'noFindings' | 'clear' | 'clearAria' | 'dropHere' | 'notImage',
+        string
+    >;
+    pinpointProvenance: Record<'vision' | 'exact' | 'catalog' | 'import', string>;
+    /** `{title}`, `{at}`, `{count}`. */
+    time: Record<'label' | 'aria' | 'now' | 'commitAria', string>;
+    /** The header: the review action's failure words, the parity line (`{local}`, `{server}`) and the overlay sentence. */
+    header: Record<'statusLabel' | 'updateFailed' | 'reviewFailed' | 'parityDiffers' | 'overlaysNote' | 'rootsLabel' | 'topLevel' | 'panesLabel' | 'paneCode' | 'panePicture' | 'drawerTabAct', string>;
+    /** The ask bar's placeholder per question, as a sentence; `{name}` is the station, the line or the folder. */
+    askSentence: Record<QuestionId, string>;
+    /** The ask bar's note per question: how it is answered. */
+    answerMode: Record<QuestionId, string>;
+    /** A drawer's subtitle, by panel id. */
+    drawerSubtitle: Record<'run' | 'coverage' | 'patterns' | 'api' | 'resolve' | 'simulate', string>;
+}
+
+export const HEADER_DEFAULTS: HeaderLabels = {
+    spineLabel: 'Where you are',
+    panelsLabel: 'Panels',
+    panelToggles: {
+        label: 'Panels shown', showLeft: 'Show lines panel', hideLeft: 'Hide lines panel',
+    },
+    overlaysButton: 'Overlays',
+    overlaysTitle: 'What the map shows',
+    presetLabel: '{preset} overlays',
+    presets: { risk: 'Risk', quality: 'Quality', activity: 'Activity', ownership: 'Ownership', custom: 'Custom' },
+    channels: { colour: 'Colour', size: 'Size · height', ring: 'Ring · fill · bar', width: 'Line width', pulse: 'Pulse', outline: 'Outline', pins: 'Issue pins' },
+    metricNames: { anti: 'Anti-patterns', cx: 'Complexity', cov: 'Coverage gap', use: 'Usage', churn: 'Churn', coupling: 'Hidden coupling', changed: 'Changed', owner: 'Owner', none: 'Off' },
+    notSetUp: 'Not set up',
+    on: 'On',
+    off: 'Off',
+    questionsLabel: 'Questions',
+    moreQuestions: 'More questions',
+    questions: {
+        where: 'Where does it go?', wrong: 'What is wrong?', untested: 'What has no test?', patterns: 'What patterns are here?',
+        changed: 'What changed?', callers: 'Who else calls these?', copied: 'What is copied?', unused: 'What is never called?',
+        claims: 'What do the docs claim?', layers: 'How is it layered?', knowledge: 'What do we know about it?',
+    },
+    answerNone: 'No station matches.',
+    answerNotSetUp: 'Not set up: this needs data that has not been collected.',
+    notes: {
+        patterns: '{value}', copied: '{value} clone groups', unused: '{value} unused', claims: '{value} claims',
+        layers: '{value}', knowledge: '{value} facts', changed: 'Changed',
+    },
+    linesTitle: 'Lines',
+    linesButton: 'Lines',
+    linesEmpty: 'No entry points were found, so there are no lines.',
+    lineName: '{name} line',
+    stationsOn: 'Stations on {name}',
+    stationsPick: 'Pick a line to list its stations.',
+    overlay: {
+        outTo: '↑ Out to {name}',
+        fit: 'Fit',
+        lensSub: 'was the {lens} view',
+        familyOnly: '{family} only',
+        clearFamily: 'Clear the {family} filter',
+        diagnose: 'Diagnose',
+        controls: 'Scene controls',
+    },
+    pinpoint: {
+        label: 'Screenshot',
+        button: 'Screenshot',
+        hint: 'Paste, drop or pick a screenshot to find the code behind it.',
+        reading: 'Reading the screenshot…',
+        failed: 'The screenshot could not be read.',
+        noMatch: 'Nothing in the code matched this screenshot.',
+        thumbAlt: 'Your screenshot',
+        descriptionTitle: 'What it shows',
+        anchorsTitle: 'Text read from the image',
+        matchesTitle: 'Where it is in the code',
+        diagnose: 'Diagnose with the agent',
+        diagnoseText: 'A screenshot shows: {description}. The code behind it, in order: {path}. Findings on that path: {findings}. Find out what is wrong and fix it.',
+        noFindings: 'none',
+        clear: 'Clear',
+        dropHere: 'Drop a screenshot here',
+        clearAria: 'Clear screenshot',
+        notImage: 'That file is not an image.',
+    },
+    pinpointProvenance: { vision: 'Vision', exact: 'Exact match', catalog: 'Catalog key', import: 'Import' },
+    time: {
+        label: 'Review',
+        aria: 'History: pick a commit to mark the stations it changed',
+        now: 'Now',
+        commitAria: '{title}, {at}',
+    },
+    header: {
+        statusLabel: 'Sync status',
+        updateFailed: 'Couldn’t update',
+        reviewFailed: 'Review failed',
+        parityDiffers: '{local} here · {server} on the server',
+        overlaysNote: 'Any metric can drive any channel. Map, System, Graph, Mind map, Tower, Heat, List and Sequence all read the same bindings, so a coverage bar can just as well be an anti-pattern bar.',
+        rootsLabel: 'Reviewed folders',
+        topLevel: 'Top level',
+        panesLabel: 'Pane',
+        paneCode: 'Code',
+        panePicture: 'Picture',
+        drawerTabAct: 'Act',
+    },
+    askSentence: {
+        where: 'where does {name} go?', wrong: 'what is wrong on {name}?', untested: 'what has no test on {name}?', patterns: 'which patterns are in {name}?',
+        changed: 'what changed since the review?', callers: 'who else calls {name}?', copied: 'what code is copied?', unused: 'what is never called?',
+        claims: 'what do the docs say, and is it true?', layers: 'which layer is each part in?', knowledge: 'what does memory know about {name}?',
+    },
+    answerMode: {
+        where: 'answered as a path', wrong: 'answered as issues', untested: 'dashed = no test runs it', patterns: 'answered as patterns',
+        changed: 'answered as commits', callers: 'answered as links', copied: 'answered as clone groups', unused: 'answered as unused code',
+        claims: 'answered as claims', layers: 'answered as layers', knowledge: 'answered as facts',
+    },
+    drawerSubtitle: {
+        run: 'every phase, every worker, every failure', coverage: 'tests, reach and gaps across the system',
+        patterns: 'design, enterprise and anti-patterns by layer', api: 'what the routes promise, what is tested, try it',
+        resolve: 'a deterministic fix or a prompt, then verify', simulate: 'run the path with real values',
+    },
+};

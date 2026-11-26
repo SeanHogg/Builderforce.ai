@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "types": ["node"] },
+  "include": [
+    "src/labels/surface.agentRuns.ts",
+    "src/surface/drawers/agentRuns/agentRunsModel.ts",
+    "src/surface/drawers/agentRuns/AgentRunList.tsx",
+    "src/surface/drawers/agentRuns/AgentRunsPanel.tsx",
+    "src/surface/drawers/agentRuns/AgentRunsPanel.test.tsx"
+  ]
+}
