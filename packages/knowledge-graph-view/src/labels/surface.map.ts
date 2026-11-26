@@ -79,9 +79,13 @@ export interface MapLabels {
             | 'callers' | 'simulate' | 'simulateTip' | 'restructure' | 'restructureTip' | 'risk' | 'testReached' | 'testNone' | 'riskWord' | 'noRisk' | 'ownerIs', string>;
         /** `reached` replaces `coverage` when the number is a static reach (a heuristic), not a measurement. */
         stats: Record<'issues' | 'complexity' | 'coverage' | 'reached' | 'usage', string>;
-        /** The numbers as words: the anti-pattern level (1 to 5), and the importance rank (`{rank}` of `{total}`). */
+        /**
+         * The numbers as words: the anti-pattern level (1 to 5), the same level as the note card's risk word (`card.riskWord`'s
+         * `{level}`, in the form that template needs: capitalised where it opens the phrase), and the importance rank (`{rank}` of `{total}`).
+         */
         statWords: {
             anti: Record<'none' | 'low' | 'medium' | 'high' | 'severe', string>;
+            riskLevel: Record<'none' | 'low' | 'medium' | 'high' | 'severe', string>;
             importance: string;
             importanceTip: string;
         };
@@ -236,11 +240,12 @@ export const MAP_DEFAULTS: MapLabels = {
             callers: 'Callers', simulate: 'Simulate', simulateTip: 'Run the path through this and see what it reaches',
             restructure: 'Restructure', restructureTip: 'See {name} restructured', risk: 'Risk',
             testReached: 'A test reaches it', testNone: 'No test reaches it',
-            riskWord: 'Risk: {level}', noRisk: 'No risk flags', ownerIs: '{name} team',
+            riskWord: '{level} risk', noRisk: 'No risk flags', ownerIs: '{name} team',
         },
         stats: { issues: 'Anti-patterns', complexity: 'Complexity', coverage: 'Coverage', reached: 'Reached', usage: 'Importance' },
         statWords: {
             anti: { none: 'none', low: 'low', medium: 'medium', high: 'high', severe: 'severe' },
+            riskLevel: { none: 'No', low: 'Low', medium: 'Medium', high: 'High', severe: 'Severe' },
             importance: '#{rank} of {total}',
             importanceTip: 'Relative to the busiest part',
         },

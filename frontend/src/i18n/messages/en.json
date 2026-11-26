@@ -38903,13 +38903,14 @@
           "risk": "Risk",
           "testReached": "A test reaches it",
           "testNone": "No test reaches it",
-          "riskWord": "Risk: {level}",
+          "riskWord": "{level} risk",
           "noRisk": "No risk flags",
           "ownerIs": "{name} team"
         },
         "stats": { "issues": "Anti-patterns", "complexity": "Complexity", "coverage": "Coverage", "reached": "Reached", "usage": "Importance" },
         "statWords": {
           "anti": { "none": "none", "low": "low", "medium": "medium", "high": "high", "severe": "severe" },
+          "riskLevel": { "none": "No", "low": "Low", "medium": "Medium", "high": "High", "severe": "Severe" },
           "importance": "#{rank} of {total}",
           "importanceTip": "Relative to the busiest part"
         },

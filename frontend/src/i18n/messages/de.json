@@ -39789,6 +39789,7 @@
             "high": "hoch",
             "severe": "schwer"
           },
+          "riskLevel": { "none": "keines", "low": "niedrig", "medium": "mittel", "high": "hoch", "severe": "schwer" },
           "importance": "Nr. {rank} von {total}",
           "importanceTip": "Relativ zum meistgenutzten Teil"
         },

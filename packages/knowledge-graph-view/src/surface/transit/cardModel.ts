@@ -90,8 +90,10 @@ export interface CardInput {
 }
 
 const ANTI_WORDS = ['none', 'low', 'medium', 'high', 'severe'] as const;
+/** An anti-pattern level's key (`statWords.anti` / `statWords.riskLevel`). */
+export type AntiLevel = (typeof ANTI_WORDS)[number];
 /** The anti-pattern level (1 to 5) as a word. */
-export const antiWord = (level: number): (typeof ANTI_WORDS)[number] => ANTI_WORDS[Math.min(5, Math.max(1, Math.round(level))) - 1]!;
+export const antiWord = (level: number): AntiLevel => ANTI_WORDS[Math.min(5, Math.max(1, Math.round(level))) - 1]!;
 /** 1-based importance rank by `use` (ties share the better rank), and how many stations were ranked. */
 export function importanceRank(s: Station, stations: readonly Station[] | undefined): { rank: number; total: number } {
     const all = stations ?? [];

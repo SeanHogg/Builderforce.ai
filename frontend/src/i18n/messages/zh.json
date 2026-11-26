@@ -39789,6 +39789,7 @@
             "high": "高",
             "severe": "严重"
           },
+          "riskLevel": { "none": "无", "low": "低", "medium": "中", "high": "高", "severe": "严重" },
           "importance": "第 {rank} / 共 {total}",
           "importanceTip": "相对于最繁忙的部分"
         },

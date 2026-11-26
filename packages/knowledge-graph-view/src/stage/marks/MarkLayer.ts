@@ -35,6 +35,19 @@ interface Batch {
 /** Floats per instance in `extrudeAB`: extrude A, extrude B, entry order. */
 const EX = 3;
 
+/**
+ * Each instance's entry order for `p`'s tween, per batch: the marks `p` shows counted across EVERY batch, so the 45 ms
+ * stagger runs mark after mark through the whole placement (a hidden mark shares the next shown one's place: it is not drawn).
+ */
+function entryOrder(p: Pick<Placement, 'scale'>, table: SlotTable): Float32Array[] {
+    let k = 0;
+    return table.batchSlots.map((slots, bi) => {
+        const count = table.batchCount[bi]!, out = new Float32Array(count);
+        for (let i = 0; i < count; i++) { out[i] = k; if ((p.scale[slots[i]!] ?? 0) > 0) k++; }
+        return out;
+    });
+}
+
 const dynamic = (capacity: number, itemSize: number): InstancedBufferAttribute =>
     new InstancedBufferAttribute(new Float32Array(capacity * itemSize), itemSize).setUsage(DynamicDrawUsage);
 
@@ -204,19 +217,6 @@ export class MarkLayer {
         return to === 1 ? 0 : 1;
     }
 
-    /**
-     * Each instance's entry order for `p`'s tween: the marks `p` shows, counted across EVERY batch, so the 45 ms stagger runs
-     * mark after mark through the whole placement (a hidden mark takes the next shown one's place: it is not drawn).
-     */
-    private writeOrder(p: Placement, table: SlotTable): void {
-        let k = 0;
-        this.batches.forEach((b, bi) => {
-            const slots = table.batchSlots[bi]!, count = table.batchCount[bi]!, order = b.order.array as Float32Array;
-            for (let i = 0; i < count; i++) { order[i] = k; if ((p.scale[slots[i]!] ?? 0) > 0) k++; }
-            uploadRange(this.stats, b.order, 0, count, bi);
-        });
-    }
-
     /** Set `w`'s drawn floor (CSS px across): the shader's `uMinMarkPx`, A in x, B in y. */
     private setFloor(w: 0 | 1, px: number): void { this.uniforms.uMinMarkPx.value.setComponent(w, px); }
 
@@ -245,7 +245,7 @@ export class MarkLayer {
                 this.appendedParent.set(run.base + k, parent);
                 for (let c = 0; c < 3; c++) place[i * 4 + c] = other[i * 4 + c] = parent >= 0 && from ? from.position[parent * 3 + c] ?? 0 : 0;
                 place[i * 4 + 3] = other[i * 4 + 3] = 0;
-                extrude[i * 2] = extrude[i * 2 + 1] = 0;
+                extrude[i * EX] = extrude[i * EX + 1] = extrude[i * EX + 2] = 0;
                 const pb = parent >= 0 ? table.batchOf[parent]! : -1;
                 if (pb >= 0) for (let c = 0; c < 4; c++) paint[i * 4 + c] = (this.batches[pb]!.paint.array as Float32Array)[table.instanceOf[parent]! * 4 + c]!;
             }
