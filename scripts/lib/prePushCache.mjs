@@ -29,6 +29,19 @@ function toolingFiles(root) {
   return [join(root, 'scripts', 'pre-push-check.mjs'), ...readdirSync(lib).filter((f) => f.startsWith('prePush')).sort().map((f) => join(lib, f))];
 }
 
+/** Where the durations live; `--git-path` keeps linked worktrees right. */
+export const timesFileFor = (root) => resolve(root, git(['rev-parse', '--git-path', 'bf-prepush-times.json'], { cwd: root, trim: true }));
+
+/** Task name -> milliseconds of its last completed run (`.git/bf-prepush-times.json`): orders typechecks smallest first. */
+export function loadTimes(file) {
+  try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return {}; }
+}
+
+/** Merge new durations into the file; best effort. */
+export function saveTimes(file, durations) {
+  try { writeFileSync(file, JSON.stringify({ ...loadTimes(file), ...durations })); } catch { /* ordering is only a hint */ }
+}
+
 /**
  * @param {{ shape: object, mergeBase: string, state: { tracked: string[], untracked: string[] } }} input
  * @returns {{ key: string, has: () => boolean, record: () => void }}

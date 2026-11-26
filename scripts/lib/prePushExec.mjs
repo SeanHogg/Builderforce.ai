@@ -5,21 +5,27 @@
  * `<root>/<dir>` (the first non-zero exit ends the task). Statuses: pass; fail (a finding: the ONLY blocking status); warn
  * (advisory or soft failure, missing tool, tooling error, crash); timeout (killed at the deadline: NOT VERIFIED, a warning).
  * `advisoryOnly` marks a warn that is just an advisory check failing: it does not stop a pass being recorded.
- * `kind: 'typecheck'` tasks are capped at TYPECHECK_LIMIT concurrent, because a TypeScript program holds gigabytes.
+ * `kind: 'typecheck'` tasks are capped at `typecheckLimit` concurrent (a TypeScript program holds gigabytes). A task with
+ * `background` set (hook mode) that has a tsc step is not killed at the budget: it is detached with its output going to its log
+ * file, finishes on its own and leaves its tsbuildinfo, and is reported as `background` (never a pass, so never stamped).
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
+import { isTsc } from './prePushIncremental.mjs';
 
-const TYPECHECK_LIMIT = 2;
+const DEFAULT_TYPECHECK_LIMIT = 2;
 const DEFAULT_TIMEOUT_S = 240;
-const GRACE_MS = 2000;
+const GRACE_MS = 1000;
+/** After the total budget, how long a run may still take to stop its children and report. */
+const HARD_STOP_MS = 2000;
 const BIN_PACKAGE = { tsc: 'typescript' };
 const GIT_ENV = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_PREFIX'];
 const LOG_DIR = join(tmpdir(), 'bf-prepush', new Date().toISOString().replace(/[:.]/g, '-'));
 const live = new Set();
 let orphanSuspected = false;
+const logPathFor = (task) => join(LOG_DIR, `${task.name.replace(/[^\w.-]+/g, '_')}.log`);
 
 class ToolNotFound extends Error {}
 
@@ -102,8 +108,22 @@ function runStep(root, task, argv, deadline) {
     }
     const env = { ...process.env, ...task.env };
     GIT_ENV.forEach((key) => delete env[key]);
+    // A BACKGROUND step (a typecheck in hook mode) writes straight to its log file from the start, so at the deadline it can be
+    // detached instead of killed: it finishes on its own and leaves its tsbuildinfo behind, making the next push warm.
+    const background = Boolean(task.background) && isTsc(argv);
+    let logFile;
+    let logFd;
+    if (background) {
+      try {
+        mkdirSync(LOG_DIR, { recursive: true });
+        logFile = logPathFor(task);
+        logFd = openSync(logFile, 'w');
+      } catch { logFile = undefined; }
+    }
+    const toFile = logFd !== undefined;
     const child = spawn(command.file, command.args, {
-      cwd: join(root, task.dir), shell: command.shell, windowsHide: true, detached: process.platform !== 'win32', env, stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: join(root, task.dir), shell: command.shell, windowsHide: true, detached: toFile || process.platform !== 'win32', env,
+      stdio: toFile ? ['ignore', logFd, logFd] : ['ignore', 'pipe', 'pipe'],
     });
     live.add(child);
     let out = `$ ${argv.join(' ')}\n`;
@@ -117,16 +137,20 @@ function runStep(root, task, argv, deadline) {
       live.delete(child);
       child.stdout?.destroy();
       child.stderr?.destroy();
-      done({ code, out: out + extra, timedOut, ...flags });
+      if (toFile) { try { closeSync(logFd); out += readFileSync(logFile, 'utf8'); } catch { /* the log is a convenience */ } }
+      done({ code, out: out + extra, timedOut, logFile, ...flags });
     };
     // `close` waits for every pipe holder to exit; a detached grandchild can keep the pipes open for ever, so `exit` (or the
     // kill) starts a short grace period after which the step ends with the child's own exit code (a clean exit still passes).
     const grace = () => setTimeout(() => finish(exitCode ?? 1, '\n(output closed after a grace period: a child process held the pipes)\n', { signalled: exitCode === null && !timedOut }), GRACE_MS).unref();
-    const timer = setTimeout(() => { timedOut = true; killTree(child); grace(); }, Math.max(1, deadline - Date.now()));
-    child.stdout.on('data', (c) => { out += c; });
-    child.stderr.on('data', (c) => { out += c; });
+    const timer = setTimeout(() => {
+      if (toFile) { live.delete(child); child.unref(); finish(1, '', { background: true }); return; }
+      timedOut = true; killTree(child); grace();
+    }, Math.max(1, deadline - Date.now()));
+    child.stdout?.on('data', (c) => { out += c; });
+    child.stderr?.on('data', (c) => { out += c; });
     child.on('error', (e) => finish(1, `${e}\n`, e.code === 'ENOENT' ? { notFound: true } : { tooling: true }));
-    child.on('exit', (code) => { exitCode = code; grace(); });
+    child.on('exit', (code) => { exitCode = code; if (toFile) finish(code ?? 1, '', { signalled: code === null }); else grace(); });
     child.on('close', (code) => finish(code ?? 1, '', { signalled: code === null }));
   });
 }
@@ -155,6 +179,11 @@ async function execute(root, task, budgetEnd) {
     if (Date.now() >= deadline) { status = 'timeout'; reason = `out of time before it started (${notVerified})`; break; }
     const step = await runStep(root, task, argv, deadline);
     output += step.out;
+    if (step.background) {
+      status = 'background';
+      reason = `still checking in the background (log: ${step.logFile}); the next push will be fast`;
+      break;
+    }
     if (step.timedOut) { status = 'timeout'; reason = `timed out (${notVerified})`; break; }
     if (step.notFound || (step.code !== 0 && isNotFoundExit(step.code))) { status = 'warn'; reason = `tool not found (${step.out.trim().split('\n').pop()}); install it or run pnpm install in ${task.dir}`; break; }
     if (step.tooling) { status = 'warn'; reason = `tooling error (${step.out.trim().split('\n').pop()}); ${notVerified}`; break; }
@@ -169,42 +198,55 @@ async function execute(root, task, budgetEnd) {
   if (status !== 'pass') {
     try {
       mkdirSync(LOG_DIR, { recursive: true });
-      logPath = join(LOG_DIR, `${task.name.replace(/[^\w.-]+/g, '_')}.log`);
-      writeFileSync(logPath, output);
+      logPath = logPathFor(task);
+      if (status !== 'background') writeFileSync(logPath, output); // a background step's log is still being written by the step itself
     } catch { logPath = undefined; }
   }
   return { task, status, reason, advisoryOnly, ms: Date.now() - startedAt, output, logPath, rerun: `(cd ${task.dir} && ${task.steps.map((s) => s.join(' ')).join(' && ')})` };
 }
 
-const LABEL = { pass: 'PASS', fail: 'FAIL', warn: 'WARN', timeout: 'TIMEOUT (not verified)' };
+const LABEL = { pass: 'PASS', fail: 'FAIL', warn: 'WARN', timeout: 'TIMEOUT (not verified)', background: 'BACKGROUND' };
+const rerunOf = (task) => `(cd ${task.dir} && ${task.steps.map((s) => s.join(' ')).join(' && ')})`;
 
-/** Run every task (printing a line as each finishes when `verbose`), all killed at `budgetEnd` (epoch ms). Resolves with all results. */
-export function runAll(root, tasks, limit, { budgetEnd = Infinity, verbose = true } = {}) {
+/**
+ * Run every task (printing a line as each finishes when `verbose`). Queue order is start order, so callers put the tasks that
+ * must finish first up front. At `budgetEnd` (epoch ms) running tasks are killed (a background typecheck is detached instead);
+ * HARD_STOP_MS later the run stops waiting: whatever is unfinished is reported as a timeout and children are killed.
+ */
+export function runAll(root, tasks, limit, { budgetEnd = Infinity, verbose = true, typecheckLimit = DEFAULT_TYPECHECK_LIMIT } = {}) {
   const queue = [...tasks];
   const results = [];
-  let active = 0;
+  const inflight = new Set();
   let typechecks = 0;
-  return new Promise((done) => {
+  let finished = false;
+  return new Promise((resolveAll) => {
+    const stop = () => { finished = true; clearTimeout(hardStop); resolveAll(results); };
+    const hardStop = Number.isFinite(budgetEnd) ? setTimeout(() => {
+      killAll();
+      for (const task of [...inflight, ...queue]) results.push({ task, status: 'timeout', reason: 'out of time (not verified locally, CI will check)', ms: 0, output: '', logPath: undefined, rerun: rerunOf(task) });
+      stop();
+    }, Math.max(0, budgetEnd - Date.now()) + HARD_STOP_MS) : undefined;
     const pump = () => {
-      while (active < limit) {
-        const next = queue.findIndex((t) => t.kind !== 'typecheck' || typechecks < TYPECHECK_LIMIT);
+      while (!finished && inflight.size < limit) {
+        const next = queue.findIndex((t) => t.kind !== 'typecheck' || typechecks < typecheckLimit);
         if (next < 0) break;
         const [task] = queue.splice(next, 1);
-        active += 1;
+        inflight.add(task);
         if (task.kind === 'typecheck') typechecks += 1;
         execute(root, task, budgetEnd)
-          .catch((error) => ({ task, status: 'warn', reason: `the check runner failed (${String(error?.message ?? error).split('\n')[0]}); not verified locally, CI will check`, ms: 0, output: String(error?.stack ?? error), logPath: undefined, rerun: task.steps.map((s) => s.join(' ')).join(' && ') }))
+          .catch((error) => ({ task, status: 'warn', reason: `the check runner failed (${String(error?.message ?? error).split('\n')[0]}); not verified locally, CI will check`, ms: 0, output: String(error?.stack ?? error), logPath: undefined, rerun: rerunOf(task) }))
           .then((r) => {
+            if (finished) return;
             if (verbose) console.log(`${LABEL[r.status].padEnd(22)} ${(r.ms / 1000).toFixed(1).padStart(6)}s  ${task.name}`);
             results.push(r);
           })
           .finally(() => {
-            active -= 1;
+            inflight.delete(task);
             if (task.kind === 'typecheck') typechecks -= 1;
             pump();
           });
       }
-      if (queue.length === 0 && active === 0) done(results);
+      if (!finished && queue.length === 0 && inflight.size === 0) stop();
     };
     pump();
   });

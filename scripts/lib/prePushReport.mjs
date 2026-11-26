@@ -19,7 +19,7 @@ function errorLines(output, n) {
  */
 export function summarize({ results, warnings, areas, seconds }) {
   const failed = results.filter((r) => r.status === 'fail');
-  const warned = [...results.filter((r) => r.status === 'warn' || r.status === 'timeout').map((r) => `${r.task.name}: ${r.reason ?? r.status}`), ...warnings];
+  const warned = [...results.filter((r) => ['warn', 'timeout', 'background'].includes(r.status)).map((r) => `${r.task.name}: ${r.reason ?? r.status}`), ...warnings];
   const passed = results.filter((r) => r.status === 'pass').length;
   const lines = [`pre-push ${failed.length ? 'FAILED' : 'OK'}: ${passed}/${results.length} checks passed, ${failed.length} failed, ${warned.length} warning(s), ${seconds.toFixed(1)}s (areas: ${areas.join(', ') || 'none'})`];
   const shown = warned.slice(0, MAX_WARN_LINES).map((w) => `WARN (does not block): ${w}`);

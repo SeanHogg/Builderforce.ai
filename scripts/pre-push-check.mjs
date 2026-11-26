@@ -21,7 +21,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { git } from './lib/git.mjs';
 import { changedFiles, commitsAhead, parsePushedRefs, pushDecision, workingTreeState } from './lib/prePushChanges.mjs';
 import { AREAS } from './lib/prePushAreas.mjs';
-import { prepareCache } from './lib/prePushCache.mjs';
+import { loadTimes, prepareCache, saveTimes, timesFileFor } from './lib/prePushCache.mjs';
+import { isCold } from './lib/prePushIncremental.mjs';
 import { orphanRisk, runAll } from './lib/prePushExec.mjs';
 import { touchesArea } from './lib/prePushRelated.mjs';
 import { summarize } from './lib/prePushReport.mjs';
@@ -29,6 +30,10 @@ import { tasksFor } from './lib/prePushTasks.mjs';
 
 const FINDING = 3;
 const USAGE = `usage: node scripts/pre-push-check.mjs [--all] [--tests | --no-tests] [--lint] [--perf] [--base <ref>] [-h|--help]
+       node scripts/pre-push-check.mjs --warm
+
+  --warm         prime every area's incremental typecheck cache once, with no time limit (run it once per checkout, so the
+                 hook's 90 s budget finishes its typechecks: tsbuildinfo files live in <area>/node_modules/.cache/bf-prepush)
 
   --all          ignore the affected filter: every area, as a CI full build does
   --tests        run the related tests (the default by hand; in the git hook also BF_PREPUSH_TESTS=1)
@@ -42,12 +47,13 @@ Exit 3 = a real finding (guard, typecheck or test failure); 2 = usage error; 0 =
 tools, timeouts and crashes are warnings. Hook mode skips tests and stops after BF_PREPUSH_BUDGET_S (default 90) seconds.
 Skip once: git push --no-verify, or BF_SKIP_PREPUSH=1. Full logs of non-passing checks are written under the OS temp dir.`;
 
-const startedAt = Date.now();
+// The budget is measured from the process's own start (node boot and module loading count), not from this line.
+const startedAt = Date.now() - process.uptime() * 1000;
 const root = fileURLToPath(new URL('..', import.meta.url));
 const argv = process.argv.slice(2);
 const isHook = process.env.BF_PREPUSH_HOOK === '1';
 const flag = (name) => argv.includes(name);
-const KNOWN = new Set(['--all', '--tests', '--no-tests', '--lint', '--perf', '--base', '-h', '--help']);
+const KNOWN = new Set(['--all', '--tests', '--no-tests', '--lint', '--perf', '--warm', '--base', '-h', '--help']);
 const baseAt = argv.indexOf('--base');
 const badArg = argv.find((a, i) => (a.startsWith('-') ? !KNOWN.has(a) : argv[i - 1] !== '--base'));
 const TEST_FILE = /\.(?:test|spec)\.|(?:^|\/)(?:test|tests|__tests__|parity)\/|oracle\.files\.txt|tests-unchanged|\.snap$/;
@@ -67,6 +73,16 @@ async function readPushedRefs() {
   return text;
 }
 
+/** Every area's typecheck once, one at a time, no budget: the tsbuildinfo files it leaves make hook runs incremental. */
+async function warm() {
+  const tasks = AREAS.flatMap((a) => tasksFor(root, a, [], { testsOn: false, optIns: new Set() }).tasks.filter((t) => t.kind === 'typecheck'));
+  console.log(`pre-push-check: warming ${tasks.length} typecheck cache(s), no time limit, one at a time (can take minutes)`);
+  const results = await runAll(root, tasks, 1, { typecheckLimit: 1 });
+  saveTimes(timesFileFor(root), Object.fromEntries(results.filter((r) => ['pass', 'fail', 'warn'].includes(r.status)).map((r) => [r.task.name, r.ms])));
+  console.log(`pre-push-check: warm done, ${results.filter((r) => r.status === 'pass').length}/${results.length} typechecks clean (type errors, if any, are reported by a normal run)`);
+  return 0;
+}
+
 async function main() {
   if (flag('-h') || flag('--help')) { console.log(USAGE); return 0; }
   if (badArg || (baseAt >= 0 && (!argv[baseAt + 1] || argv[baseAt + 1].startsWith('-')))) {
@@ -74,6 +90,7 @@ async function main() {
     return 2;
   }
   if (process.env.BF_SKIP_PREPUSH === '1') { console.log('pre-push-check: skipped (BF_SKIP_PREPUSH=1)'); return 0; }
+  if (flag('--warm')) return warm();
 
   const budgetS = Number(process.env.BF_PREPUSH_BUDGET_S) || (isHook ? 90 : 0);
   const budgetEnd = budgetS ? startedAt + budgetS * 1000 : Infinity;
@@ -139,7 +156,20 @@ async function main() {
     if (unchecked.length) console.log(`  not checked locally: ${unchecked.join(', ')}`);
   }
 
-  const results = await runAll(root, tasks, Math.max(1, availableParallelism() - 1), { budgetEnd, verbose: !isHook });
+  // Typechecks first, smallest (by last measured duration) first, so at least one finishes inside the budget; one at a time in
+  // hook mode. Guards and tests fill the other slots meanwhile. A typecheck that outlives the budget is detached, not killed.
+  const timesFile = timesFileFor(root);
+  const times = loadTimes(timesFile);
+  const byLastTime = (a, b) => { const d = (times[a.name] ?? Infinity) - (times[b.name] ?? Infinity); return Number.isNaN(d) ? 0 : d; };
+  const typechecks = tasks.filter((t) => t.kind === 'typecheck').sort(byLastTime);
+  for (const t of typechecks) {
+    t.background = isHook;
+    if (isHook && isCold(t)) warnings.push(`${t.name.split(':')[0]}: no incremental typecheck cache yet; run "node scripts/pre-push-check.mjs --warm" once so pushes finish within the budget`);
+  }
+  const ordered = [...typechecks, ...tasks.filter((t) => t.kind !== 'typecheck')];
+
+  const results = await runAll(root, ordered, Math.max(1, availableParallelism() - 1), { budgetEnd, verbose: !isHook, typecheckLimit: isHook ? 1 : 2 });
+  saveTimes(timesFile, Object.fromEntries(results.filter((r) => ['pass', 'fail'].includes(r.status) && r.ms > 0).map((r) => [r.task.name, r.ms])));
   if (orphanRisk()) warnings.push('a timed-out process could not be killed (taskkill failed); check Task Manager for stray node processes');
   const { lines, failed } = summarize({ results, warnings, areas, seconds: (Date.now() - startedAt) / 1000 });
   console.log(lines.join('\n'));

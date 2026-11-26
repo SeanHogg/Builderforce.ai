@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { installIssues } from './prePushInstall.mjs';
 import { scriptSteps } from './prePushExec.mjs';
+import { withIncremental } from './prePushIncremental.mjs';
 import { nearbyTests } from './prePushNearby.mjs';
 import { groupByOwner, relatedInputs } from './prePushRelated.mjs';
 import { SOURCE_RE, TEST_RE, chunkByChars, relativeTo } from './prePushUtil.mjs';
@@ -39,7 +40,8 @@ export function tasksFor(root, area, files, { testsOn, optIns }) {
     try {
       const scripted = script ? scriptSteps(root, area.dir, script) : { steps, fallback: false };
       if (scripted.fallback) warnings.push(`${area.id}: script "${script}" needs a shell; ran it as pnpm run ${script}`);
-      tasks.push(make('typecheck', advisory ? 'typecheck (advisory: CI does not run it)' : 'typecheck', [...before, ...scripted.steps], { advisory }));
+      const wrapped = [...before, ...scripted.steps].map((step) => withIncremental(root, area, step));
+      tasks.push(make('typecheck', advisory ? 'typecheck (advisory: CI does not run it)' : 'typecheck', wrapped.map((w) => w.argv), { advisory, buildInfos: wrapped.map((w) => w.buildInfo).filter(Boolean) }));
     } catch (error) {
       warnings.push(`${area.id}: typecheck not run (${error.message})`);
       incomplete = true;
