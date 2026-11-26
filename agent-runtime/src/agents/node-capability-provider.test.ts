@@ -40,6 +40,32 @@ describe("buildNodeCapabilityProvider", () => {
     expect(provider.human).toBeDefined();
   });
 
+  it("regression: search_code returns the exact match only (not keyword-ranked hits) and applies path scope before searching", async () => {
+    await fs.promises.mkdir(join(root, "src"), { recursive: true });
+    await fs.promises.mkdir(join(root, "other"), { recursive: true });
+    // Exact phrase lives in src/exact.ts. The other files share its KEYWORDS ("computeInvoiceTotal",
+    // "invoice", "total") but not the phrase, so a keyword-ranked search would return them too.
+    await writeFile(join(root, "src", "exact.ts"), "export const a = 1;\nconst x = computeInvoiceTotal(items);\n");
+    await writeFile(join(root, "src", "near.ts"), "// invoice total helpers\nexport function invoiceTotalHelper() {}\n");
+    await writeFile(join(root, "other", "exact.ts"), "const y = computeInvoiceTotal(items);\n");
+
+    const provider = buildNodeCapabilityProvider({ workspaceRoot: root });
+
+    const all = await provider.repoRead!.searchCode("computeInvoiceTotal");
+    expect(all.ok).toBe(true);
+    const allPaths = ((all as { matches?: Array<{ path: string; line: number }> }).matches ?? []).map((m) => m.path).toSorted();
+    expect(allPaths).toEqual(["other/exact.ts", "src/exact.ts"]);
+
+    const scoped = await provider.repoRead!.searchCode("computeInvoiceTotal", "src");
+    expect(scoped.ok).toBe(true);
+    const scopedMatches = (scoped as { matches?: Array<{ path: string; line: number }> }).matches ?? [];
+    expect(scopedMatches.map((m) => m.path)).toEqual(["src/exact.ts"]);
+    expect(scopedMatches[0].line).toBe(2);
+
+    const none = await provider.repoRead!.searchCode("computeInvoiceTotal", "src/near.ts");
+    expect((none as { total?: number }).total).toBe(0);
+  });
+
   it("backs the human capability inline (paused:false), returning the human's answer", async () => {
     const seen: Array<{ kind?: string; description: string }> = [];
     const provider = buildNodeCapabilityProvider({

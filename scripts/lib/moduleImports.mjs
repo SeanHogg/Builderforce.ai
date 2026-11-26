@@ -315,6 +315,7 @@ const PARENT_SPECIFIER = /['"`](\.\.\/[^'"`\n]+)['"`]/g;
  * @returns {{
  *   scan: (dirs: string[], mustContain?: string | string[]) => Promise<ImportSite[]>,
  *   reachOutside: (dirs: string[], mustContain?: string | string[]) => Promise<string[]>,
+ *   reachFrom: (entry: string, root: string) => Promise<Set<string>>,
  * }}
  */
 export function createImportScanner({ ts, repoRoot, limit = 2000 }) {
@@ -373,6 +374,21 @@ export function createImportScanner({ ts, repoRoot, limit = 2000 }) {
         return sites;
       });
       return (await Promise.all(pending)).flat();
+    },
+
+    async reachFrom(entry, root) {
+      const reached = new Set([entry]);
+      const pending = [entry];
+      while (pending.length) {
+        const file = pending.pop();
+        if (!file) break;
+        for (const target of await relativeTargets(file)) {
+          if (!target.startsWith(root + sep) || reached.has(target) || !followable(target)) continue;
+          reached.add(target);
+          pending.push(target);
+        }
+      }
+      return reached;
     },
 
     async reachOutside(dirs, mustContain) {

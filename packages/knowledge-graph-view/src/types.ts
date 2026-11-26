@@ -286,6 +286,18 @@ export interface KnowledgeGraphSource {
     readSourceAt?(rootId: string, path: string, rev: string, range: SourceRange): Promise<SourceText | null>;
     /** The host's timings of the calls the first paint waits on, and the phase a running load is in. Absent ⇒ the view's own timeline only. */
     loadTrace?(): Promise<LoadTrace>;
+    /**
+     * The view reports a DECISION it made (the gate chose idle or paint, the lastSeen outcome and why, the root it chose,
+     * Run pressed) so first-load triage records the why, not only the calls. Set by the view's timed wrapper; a host leaves it unset.
+     */
+    decision?(d: LoadDecision): void;
+}
+
+/** One decision of the first load (`useKnowledgeGraph`): its kind, the reason in a few words, and the root it concerns. */
+export interface LoadDecision {
+    kind: 'lastSeen' | 'root' | 'gate' | 'run' | 'paint' | 'error';
+    reason: string;
+    rootId?: string | undefined;
 }
 
 /** What the host's editor shows of a file of the root on show (root-relative `path`, 1-based lines): the code band follows it. */

@@ -10,7 +10,7 @@
  *
  * DRY: reuses the SAME base-URL + bearer resolution every other agent-runtime →
  * api call uses (`readSharedEnvVar` BUILDERFORCE_URL / BUILDERFORCE_API_KEY —
- * see platform-ticket-tools.ts, node-orchestration-tools.ts, hired-agents-sync.ts).
+ * see connector-tools.ts, node-orchestration-tools.ts, hired-agents-sync.ts).
  * Best-effort: any error (including a non-2xx) is swallowed at debug; a reporting
  * failure NEVER affects the run.
  */

@@ -1,3 +1,5 @@
+import { protectToolOutput } from "@seanhogg/builderforce-mcp/policy";
+import { safeToolError } from "@seanhogg/builderforce-mcp/protocol";
 /**
  * The gateway's REST MCP transport — the tenant's MCP extension tools, advertised to
  * the client-side Brain tool loop and relayed server-to-server. The customer's MCP
@@ -95,7 +97,7 @@ export function mountMcpGatewayRoutes(router: Hono<HonoEnv>): void {
           executionCtx: c.executionCtx,
         },
       );
-      return c.json({ result });
+      return c.json({ result: protectToolOutput(body.tool, result) });
     } catch (e) {
       // Recoverable: hand the model a tool-error result, don't 500 the loop — but the
       // STATUS has to say which KIND of failure it was. Every throw used to become a
@@ -106,7 +108,7 @@ export function mountMcpGatewayRoutes(router: Hono<HonoEnv>): void {
       // a 4xx now surfaces as itself; anything unmapped (500) stays 502, because from
       // the caller's side it is the relay that failed.
       const status = statusOf(e);
-      return statusResponse(c, { error: e instanceof Error ? e.message : 'MCP call failed' }, isClientError(status) ? status : 502, { source: 'presentation/routes/llm/mcpGatewayRoutes.ts', operation: 'gatewayMcpCall' }, e);
+      return statusResponse(c, { error: safeToolError(body.tool, e instanceof Error ? e.message : 'MCP call failed') }, isClientError(status) ? status : 502, { source: 'presentation/routes/llm/mcpGatewayRoutes.ts', operation: 'gatewayMcpCall' }, e);
     }
   });
 }

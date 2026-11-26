@@ -24,6 +24,13 @@
     "target": "es2023",
     "useDefineForClassFields": false,
     "paths": {
+      "@seanhogg/builderforce-mcp/protocol": ["../packages/builderforce-mcp/src/protocol.ts"],
+      "@seanhogg/builderforce-mcp/server": ["../packages/builderforce-mcp/src/server.ts"],
+      "@modelcontextprotocol/sdk/types.js": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/types.d.ts", "./node_modules/@modelcontextprotocol/sdk/dist/esm/types.js"],
+      "@modelcontextprotocol/sdk/server/index.js": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.d.ts", "./node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js"],
+      "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/server/webStandardStreamableHttp.d.ts", "./node_modules/@modelcontextprotocol/sdk/dist/esm/server/webStandardStreamableHttp.js"],
+      "@seanhogg/builderforce-mcp": ["../packages/builderforce-mcp/src/index.ts"],
+      "@seanhogg/builderforce-mcp/policy": ["../packages/builderforce-mcp/src/policy.ts"],
       "@builderforce/code-shield": ["../packages/code-shield/src/index.ts"],
       "@builderforce/sarif": ["../packages/sarif/src/index.ts"],
       "@seanhogg/builderforce-agents/plugin-sdk": ["./src/plugin-sdk/index.ts"],

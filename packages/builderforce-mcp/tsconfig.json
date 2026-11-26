@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "..",
+    "outDir": "dist/types",
+    "paths": {
+      "@builderforce/secret-redaction": ["../secret-redaction/src/index.ts"],
+      "@builderforce/tool-output-policy": ["../tool-output-policy/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

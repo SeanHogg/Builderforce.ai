@@ -11,17 +11,11 @@
  * Type-only import of `BrainAction`, so nothing here pulls React into a Node process.
  */
 
+import { toOpenAI } from "@seanhogg/builderforce-mcp";
 import type { BrainAction } from './BrainActionsContext';
 import type { BrainToolSpec } from './streamChatCompletion';
 
 /** Advertise these actions to the model. Order is preserved. */
 export function toolSpecsFor(actions: readonly BrainAction[]): BrainToolSpec[] {
-  return actions.map((action) => ({
-    type: 'function' as const,
-    function: {
-      name: action.name,
-      description: action.description,
-      parameters: action.parameters,
-    },
-  }));
+  return actions.map(toOpenAI);
 }

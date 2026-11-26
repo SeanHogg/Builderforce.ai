@@ -211,7 +211,7 @@ for (const project of relevant) {
 
   // Rule 9: an npm subpath those packages import resolves through THIS project's
   // `paths` onto an install it declares — the packages' own dirs are never installed in CI.
-  const compiled = new Set([...required].map((specifier) => graph.bySpecifier.get(specifier)).filter(Boolean));
+  const compiled = [...required].map((specifier) => ({ externals: graph.externalsBySpecifier.get(specifier) ?? [] }));
   for (const problem of unresolvedNpmSubpaths({ project, nodes: compiled, sourcePackageDirs, repoRoot })) {
     const { specifier } = problem.site;
     const suggested = suggestedSubpathTarget(project.dir, specifier, repoRoot) ?? `./node_modules/${specifier}`;

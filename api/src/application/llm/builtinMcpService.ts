@@ -1,3 +1,4 @@
+import { toOpenAI } from "@seanhogg/builderforce-mcp";
 import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { isApprovalVisibleTo, isSelfOwnedApproval } from '../../domain/approval/selfOwned';
 import { reportCaughtError, reportedFallback } from '../observability/caughtErrorReporter';
@@ -4459,18 +4460,16 @@ export function cloudAgentPlatformToolSchemas(originatingChatId?: number): ToolS
   if (!_cloudAgentPlatformSchemas) {
     _cloudAgentPlatformSchemas = CATALOG
       .filter((t) => CLOUD_AGENT_PLATFORM_SET.has(t.tool))
-      .map((t) => ({
-        type: 'function',
-        function: { name: advertisedName(t.tool), description: t.description, parameters: t.parameters as ToolSchema['function']['parameters'] },
+      .map((t) => toOpenAI({
+        ...t, name: advertisedName(t.tool), parameters: t.parameters as ToolSchema['function']['parameters'],
       }));
   }
   if (originatingChatId == null) return _cloudAgentPlatformSchemas;
   const entry = CATALOG.find((tool) => tool.tool === ORIGINATING_CHAT_TOOL);
   if (!entry) return _cloudAgentPlatformSchemas;
-  return [..._cloudAgentPlatformSchemas, {
-    type: 'function',
-    function: { name: advertisedName(entry.tool), description: entry.description, parameters: entry.parameters as ToolSchema['function']['parameters'] },
-  }];
+  return [..._cloudAgentPlatformSchemas, toOpenAI({
+    ...entry, name: advertisedName(entry.tool), parameters: entry.parameters as ToolSchema['function']['parameters'],
+  })];
 }
 
 let _cloudAgentPlatformNameMap: Map<string, string> | undefined;

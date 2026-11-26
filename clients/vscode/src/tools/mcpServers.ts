@@ -38,7 +38,7 @@ async function registerFlow(secrets: vscode.SecretStorage): Promise<bfApi.BfMcpE
   const serverUrl = await vscode.window.showInputBox({
     title: vscode.l10n.t("Register MCP server"),
     prompt: vscode.l10n.t("Server URL"),
-    placeHolder: "https://mcp.example.com/sse",
+    placeHolder: "https://mcp.example.com/mcp",
     ignoreFocusOut: true,
     // Mirrors the server's own guard: https only, no private or loopback hosts.
     validateInput: (v) =>

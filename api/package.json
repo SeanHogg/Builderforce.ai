@@ -72,6 +72,7 @@
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@neondatabase/serverless": "^0.10.4",
     "@seanhogg/builderforce-memory": "^2026.10.85",
     "@seanhogg/builderforce-memory-engine": "^2026.10.65",

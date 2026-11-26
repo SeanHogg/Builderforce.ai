@@ -48,4 +48,4 @@ export function advertisedName(tool: string): string {
  * entry by source needs it without importing `builtinMcpService` (and its whole
  * dependency graph) to read one string. Re-exported from there for existing callers.
  */
-export const BUILTIN_EXTENSION_ID = 'builtin';
+export { PLATFORM_EXTENSION_ID as BUILTIN_EXTENSION_ID } from '@seanhogg/builderforce-mcp';

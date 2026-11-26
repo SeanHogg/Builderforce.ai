@@ -8,7 +8,7 @@
  * checks the project against that caller's workspace. Nothing here decides who may call.
  */
 import { apiRequest } from '@/lib/apiClient';
-import { BUILTIN_EXTENSION_ID } from '@/lib/runTarget/runtimeTools/runtimeToolRoute';
+import { MCP_CALL_PATH, PLATFORM_EXTENSION_ID, mcpCallRequest, mcpCatalogPath, type RelayCallResult, type RelayCatalog } from '@seanhogg/builderforce-mcp';
 
 type Json = Record<string, unknown>;
 
@@ -19,10 +19,8 @@ export interface BuiltinToolCallOptions {
 
 /** Call one built-in tool and return its result. A relay failure throws (`ApiRequestError`). */
 export async function callBuiltinTool(tool: string, args: Json, options: BuiltinToolCallOptions = {}): Promise<unknown> {
-  const res = await apiRequest<{ result?: unknown }>('/llm/v1/mcp/call', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ extensionId: BUILTIN_EXTENSION_ID, tool, arguments: args }),
+  const res = await apiRequest<RelayCallResult>(MCP_CALL_PATH, {
+    ...mcpCallRequest({ extensionId: PLATFORM_EXTENSION_ID, tool, arguments: args }),
     ...(options.expectedErrors ? { expectedErrors: options.expectedErrors } : {}),
   });
   return res?.result ?? res;
@@ -30,7 +28,7 @@ export async function callBuiltinTool(tool: string, args: Json, options: Builtin
 
 /** The built-in tool keys this caller may run, in catalog order. */
 export async function listBuiltinToolKeys(): Promise<string[]> {
-  const res = await apiRequest<{ tools?: Array<{ extensionId?: unknown; tool?: unknown }> }>('/llm/v1/mcp/tools');
+  const res = await apiRequest<RelayCatalog>(mcpCatalogPath());
   return (res?.tools ?? []).flatMap((entry) =>
-    entry.extensionId === BUILTIN_EXTENSION_ID && typeof entry.tool === 'string' ? [entry.tool] : []);
+    entry.extensionId === PLATFORM_EXTENSION_ID && typeof entry.tool === 'string' ? [entry.tool] : []);
 }

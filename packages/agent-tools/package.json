@@ -21,6 +21,7 @@
     "./node-posix-shell": "./src/node-posix-shell.ts",
     "./node-symbols": "./src/node-symbols.ts",
     "./node-git-ignore": "./src/node-git-ignore.ts",
+    "./node-text-search": "./src/node-text-search.ts",
     "./node-git-remote": "./src/node-git-remote.ts",
     "./node-git-history": "./src/node-git-history.ts",
     "./node-desktop": "./src/node-desktop.ts",

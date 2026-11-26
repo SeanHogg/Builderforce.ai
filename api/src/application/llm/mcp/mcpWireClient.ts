@@ -1,42 +1,12 @@
-/**
- * The OUTBOUND MCP client — how Builderforce talks to somebody else's MCP server.
- *
- * `presentation/routes/mcpServerRoutes.ts` is the mirror of this file: there we ARE
- * a spec MCP server. Here we are a spec MCP CLIENT, which until now we were not —
- * the gateway spoke a Builderforce-shaped REST pair (`GET {url}/tools`, `POST
- * {url}/call`) that no third-party server implements, so "register your MCP server"
- * only worked for a server somebody had written against our docs.
- *
- * Two transports live here behind ONE interface, because the choice is a property
- * of the far end and nothing above should branch on it:
- *
- *   `mcp`    — JSON-RPC 2.0 over Streamable HTTP: `initialize` → (notification)
- *              `notifications/initialized` → `tools/list` / `tools/call`. Answers
- *              arrive as `application/json` or as an SSE stream carrying one
- *              message, and both are accepted because both are spec-legal.
- *   `legacy` — the original Builderforce REST pair, kept working for every server
- *              already registered against it.
- *
- * `auto` probes the spec transport first and falls back. The caller remembers what
- * answered (`tenant_mcp_extensions.protocol`) so the probe is paid once per server.
- *
- * SECURITY. Every request out of this module is made by the gateway, from our
- * network, carrying the tenant's credential — which is the whole reason the
- * roadmap entry asked for this to be built deliberately. So: the URL is re-checked
- * against the SSRF guard immediately before each fetch (a hostname that was public
- * at registration can be re-pointed at a private address later), redirects are
- * `manual` so a 302 cannot bounce an authed request inward, and a 401 is turned
- * into a typed {@link McpAuthChallenge} rather than being retried with anything.
- */
+/** Guarded gateway adapter for Streamable HTTP MCP and registered legacy REST servers. */
 
+import { createMcpHttpClient, McpAuthChallenge, isExpiredMcpSession, type McpHttpSession } from '@seanhogg/builderforce-mcp/client';
 import { assertSafeUrl } from '../../../infrastructure/net/ssrfGuard';
 import { fetchPublic } from '../../../infrastructure/net/fetchPublic';
 
 /** How a server is addressed. `auto` = probe, then remember what answered. */
 export type McpProtocol = 'auto' | 'mcp' | 'legacy';
 
-/** The revision we announce on `initialize`. */
-const CLIENT_PROTOCOL_VERSION = '2025-06-18';
 const CLIENT_INFO = { name: 'builderforce-gateway', title: 'Builderforce', version: '1.0.0' } as const;
 
 /** Wall-clock ceiling on one call to a customer server. */
@@ -59,23 +29,11 @@ export interface McpServerConnection {
   authorization: string | null;
   protocol: McpProtocol;
   fetchImpl?: typeof fetch;
+  /** Tenant and extension identity. Omit to use a fresh connection. */
+  sessionScope?: string;
 }
 
-/**
- * The far server demanded authorization. Carries the `WWW-Authenticate` challenge
- * so the OAuth layer can discover where to send the human, WITHOUT this module
- * knowing anything about OAuth.
- */
-export class McpAuthChallenge extends Error {
-  constructor(
-    readonly status: number,
-    /** Raw `WWW-Authenticate` header, if the server sent one. */
-    readonly challenge: string | null,
-  ) {
-    super(`MCP server requires authorization (HTTP ${status})`);
-    this.name = 'McpAuthChallenge';
-  }
-}
+export { McpAuthChallenge };
 
 /** What a transport probe resolved to, so the caller can persist it. */
 export interface McpListResult {
@@ -99,95 +57,70 @@ function headersFor(conn: McpServerConnection, accept: string): Record<string, s
   return headers;
 }
 
-/** A JSON-RPC response can arrive as one JSON object or as an SSE stream whose
- *  `data:` lines carry it. Accept both — the spec permits either per request. */
-async function readJsonRpcBody(res: Response): Promise<Record<string, unknown> | null> {
-  const contentType = res.headers.get('content-type') ?? '';
-  const text = await res.text();
-  if (!text) return null;
-  if (!contentType.includes('text/event-stream')) {
-    try {
-      return JSON.parse(text) as Record<string, unknown>;
-    } catch {
-      return null;
-    }
-  }
-  // Last `data:` payload that parses as a JSON-RPC response wins; a server may
-  // send progress notifications ahead of the result on the same stream.
-  let latest: Record<string, unknown> | null = null;
-  for (const line of text.split('\n')) {
-    if (!line.startsWith('data:')) continue;
-    try {
-      const parsed = JSON.parse(line.slice(5).trim()) as Record<string, unknown>;
-      if ('result' in parsed || 'error' in parsed) latest = parsed;
-    } catch {
-      // A partial or non-JSON frame is not a result — skip it and keep scanning.
-      continue;
-    }
-  }
-  return latest;
+// Cache session metadata only. Worker isolates cannot share promises or fetch streams between requests.
+const sessions = new Map<string, { session: McpHttpSession; expires: number }>();
+const SESSION_TTL_MS = 5 * 60_000;
+const MAX_SESSIONS = 256;
+
+async function sessionKey(conn: McpServerConnection): Promise<string | undefined> {
+  if (!conn.sessionScope) return;
+  const fingerprint = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(conn.authorization ?? ''));
+  const digest = Array.from(new Uint8Array(fingerprint), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return JSON.stringify([conn.sessionScope, conn.serverUrl, digest]);
 }
 
-interface RpcOptions {
-  /** Session id from `initialize`, echoed on every later request. */
-  sessionId?: string | null;
-  /** A notification carries no id and expects no answer. */
-  notification?: boolean;
+export class McpNegotiationError extends Error {
+  constructor(cause: unknown) {
+    super('MCP session initialization failed', { cause });
+  }
 }
 
-/** One JSON-RPC request against the server's single endpoint. */
-async function rpc(
+async function usingMcp<T>(
   conn: McpServerConnection,
-  method: string,
-  params: Record<string, unknown>,
-  options: RpcOptions = {},
-): Promise<{ result: Record<string, unknown> | null; sessionId: string | null }> {
+  run: (client: ReturnType<typeof createMcpHttpClient>) => Promise<T>,
+  recoverExpiredSession: boolean,
+): Promise<T> {
   assertLiveSafe(conn.serverUrl);
-  const headers = headersFor(conn, 'application/json, text/event-stream');
-  headers['MCP-Protocol-Version'] = CLIENT_PROTOCOL_VERSION;
-  if (options.sessionId) headers['Mcp-Session-Id'] = options.sessionId;
+  const key = await sessionKey(conn);
+  const cached = key ? sessions.get(key) : undefined;
+  const live = cached && cached.expires > Date.now() ? cached.session : undefined;
 
-  const body = options.notification
-    ? { jsonrpc: '2.0', method, params }
-    : { jsonrpc: '2.0', id: `bf-${method}`, method, params };
-
-  const res = await fetchPublic(trimUrl(conn.serverUrl), {
-    method: 'POST',
-    headers,
-    redirect: 'manual',
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  }, conn.fetchImpl ? { fetchImpl: conn.fetchImpl } : {});
-
-  if (res.status === 401 || res.status === 403) {
-    throw new McpAuthChallenge(res.status, res.headers.get('www-authenticate'));
+  async function runSession(session?: McpHttpSession): Promise<T> {
+    const client = createMcpHttpClient({
+      url: trimUrl(conn.serverUrl), authorization: conn.authorization, info: CLIENT_INFO,
+      timeoutMs: REQUEST_TIMEOUT_MS, session,
+      fetch: (url, options) => fetchPublic(url as string, options, { fetchImpl: conn.fetchImpl }),
+    });
+    await client.start();
+    try {
+      if (!session) {
+        try {
+          session = await client.initialize();
+        } catch (error) {
+          if (error instanceof McpAuthChallenge) throw error;
+          throw new McpNegotiationError(error);
+        }
+        if (key) {
+          sessions.delete(key);
+          sessions.set(key, { session, expires: Date.now() + SESSION_TTL_MS });
+          if (sessions.size > MAX_SESSIONS) sessions.delete(sessions.keys().next().value!);
+        }
+      }
+      return await run(client);
+    } finally {
+      await client.close();
+    }
   }
-  if (!res.ok) throw new Error(`MCP server returned ${res.status} for ${method}`);
 
-  const sessionId = res.headers.get('mcp-session-id');
-  if (options.notification) return { result: null, sessionId };
-
-  const parsed = await readJsonRpcBody(res);
-  if (!parsed) throw new Error(`MCP server sent no JSON-RPC response for ${method}`);
-  if (parsed.error) {
-    const err = parsed.error as { message?: string; code?: number };
-    throw new Error(err.message ? `MCP error: ${err.message}` : `MCP error ${err.code ?? ''}`.trim());
+  try {
+    return await runSession(live);
+  } catch (error) {
+    if (!live || !key || !isExpiredMcpSession(error)) throw error;
+    if (sessions.get(key) === cached) sessions.delete(key);
+    // Only replay discovery. A misbehaving upstream may return 404 after a write.
+    if (!recoverExpiredSession) throw error;
+    return runSession(sessions.get(key)?.session);
   }
-  return { result: (parsed.result ?? {}) as Record<string, unknown>, sessionId };
-}
-
-/** Open a session: `initialize`, then the `initialized` notification the spec
- *  requires before any other request. Returns the session id when one is issued
- *  (a stateless server issues none, and that is legal). */
-async function initialize(conn: McpServerConnection): Promise<string | null> {
-  const { sessionId } = await rpc(conn, 'initialize', {
-    protocolVersion: CLIENT_PROTOCOL_VERSION,
-    capabilities: {},
-    clientInfo: CLIENT_INFO,
-  });
-  // Best-effort: a server that rejects the notification is still usable.
-  await rpc(conn, 'notifications/initialized', {}, { sessionId, notification: true }).catch(() => undefined);
-  return sessionId;
 }
 
 function toDescriptor(raw: unknown): RemoteToolDescriptor | null {
@@ -204,23 +137,9 @@ function toDescriptor(raw: unknown): RemoteToolDescriptor | null {
   };
 }
 
-/** `tools/list`, following the spec's `nextCursor` pagination to the end. */
 async function listToolsOverMcp(conn: McpServerConnection): Promise<RemoteToolDescriptor[]> {
-  const sessionId = await initialize(conn);
-  const tools: RemoteToolDescriptor[] = [];
-  let cursor: string | undefined;
-  // Bounded: a server that keeps handing back a cursor must not spin the gateway.
-  for (let page = 0; page < 20; page++) {
-    const { result } = await rpc(conn, 'tools/list', cursor ? { cursor } : {}, { sessionId });
-    for (const raw of (result?.tools as unknown[] | undefined) ?? []) {
-      const tool = toDescriptor(raw);
-      if (tool) tools.push(tool);
-    }
-    const next = result?.nextCursor;
-    if (typeof next !== 'string' || !next) break;
-    cursor = next;
-  }
-  return tools;
+  const tools = await usingMcp(conn, (client) => client.listTools(), true);
+  return tools.map(toDescriptor).filter((tool): tool is RemoteToolDescriptor => tool !== null);
 }
 
 /**
@@ -233,9 +152,8 @@ async function callToolOverMcp(
   tool: string,
   args: unknown,
 ): Promise<unknown> {
-  const sessionId = await initialize(conn);
-  const { result } = await rpc(conn, 'tools/call', { name: tool, arguments: args ?? {} }, { sessionId });
-  if (!result) return {};
+  if (args != null && (typeof args !== 'object' || Array.isArray(args))) throw new Error('MCP tool arguments must be an object');
+  const result = await usingMcp(conn, (client) => client.callTool(tool, (args ?? {}) as Record<string, unknown>), false);
   if (result.structuredContent !== undefined && !result.isError) return result.structuredContent;
   const content = (result.content as Array<Record<string, unknown>> | undefined) ?? [];
   const text = content
@@ -324,7 +242,7 @@ export async function callRemoteTool(
   try {
     return { result: await callToolOverMcp(conn, tool, args), protocol: 'mcp' };
   } catch (err) {
-    if (err instanceof McpAuthChallenge) throw err;
+    if (!(err instanceof McpNegotiationError)) throw err;
     return { result: await callToolOverLegacy(conn, tool, args), protocol: 'legacy' };
   }
 }

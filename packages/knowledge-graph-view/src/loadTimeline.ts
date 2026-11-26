@@ -7,14 +7,18 @@
  */
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { isNotReviewedHere, type KnowledgeGraphSource } from './types';
+import { isNotReviewedHere, type KnowledgeGraphSource, type LoadDecision } from './types';
 
 export type TimedCall = 'lastSeen' | 'scopes' | 'load' | 'baseline';
 /** `miss`: the call answered nothing (no last-seen graph, no baseline, no graph). */
 export type TimedOutcome = 'ok' | 'miss' | 'not-here' | 'error';
 
 export interface TimelineMark {
-    call: TimedCall;
+    /** A call the view made, or `decision`: something the view DECIDED (`LoadDecision`; its words are `reason`). */
+    call: TimedCall | 'decision';
+    /** A decision's kind (`gate`, `root`, `lastSeen`, `run`, `paint`, `error`) and the why. */
+    kind?: string;
+    reason?: string;
     rootId?: string;
     focus?: boolean;
     /** Ms since mount. */
@@ -47,6 +51,8 @@ export interface LoadTimeline {
     begin(call: TimedCall, info?: Pick<TimelineMark, 'rootId' | 'focus'>): (end: Pick<TimelineMark, 'outcome' | 'error' | 'nodes' | 'edges' | 'count'>) => void;
     /** The view settled on a screen; the first one is kept, and the first fresh graph. */
     painted(from: PaintSource): void;
+    /** Records a decision with its reason (no duration: it is a point in time). */
+    decide(d: LoadDecision): void;
     snapshot(): LoadTimelineSnapshot;
 }
 
@@ -60,12 +66,19 @@ export function createLoadTimeline(now: () => number = () => performance.now()):
     const marks: TimelineMark[] = [];
     let firstPaint: LoadTimelineSnapshot['firstPaint'];
     let freshMs: number | undefined;
+    const push = (mark: TimelineMark): void => {
+        marks.push(mark);
+        // The first calls are the first load: they stay; the middle is dropped when the list is full.
+        if (marks.length > TIMELINE_MARKS) marks.splice(FIRST_KEPT, 1);
+    };
     return {
+        decide(d) {
+            const ms = at();
+            push({ call: 'decision', kind: d.kind, reason: d.reason, startMs: ms, endMs: ms, outcome: 'ok', ...(d.rootId ? { rootId: d.rootId } : {}) });
+        },
         begin(call, info = {}) {
             const mark: TimelineMark = { call, startMs: at(), ...(info.rootId ? { rootId: info.rootId } : {}), ...(info.focus ? { focus: true } : {}) };
-            marks.push(mark);
-            // The first calls are the first load: they stay; the middle is dropped when the list is full.
-            if (marks.length > TIMELINE_MARKS) marks.splice(FIRST_KEPT, 1);
+            push(mark);
             return (end) => {
                 if (mark.endMs !== undefined) return;
                 Object.assign(mark, { endMs: at() }, Object.fromEntries(Object.entries(end).filter(([, v]) => v !== undefined)));
@@ -73,6 +86,7 @@ export function createLoadTimeline(now: () => number = () => performance.now()):
         },
         painted(from) {
             const ms = at();
+            if (!firstPaint) push({ call: 'decision', kind: 'paint', reason: `first screen: ${from}`, startMs: ms, endMs: ms, outcome: 'ok' });
             firstPaint ??= { ms, from };
             if (from === 'fresh' || from === 'snapshot') freshMs ??= ms;
         },
@@ -106,6 +120,7 @@ async function timed<T>(timeline: LoadTimeline, call: TimedCall, info: Pick<Time
  */
 export function timedSource(source: KnowledgeGraphSource, timeline: LoadTimeline): KnowledgeGraphSource {
     const out = Object.create(source) as KnowledgeGraphSource;
+    out.decision = (d) => timeline.decide(d);
     out.scopes = () => timed(timeline, 'scopes', {}, () => source.scopes(), (rows) => ({ outcome: 'ok', count: rows.length }));
     out.load = (rootId, opts) => timed(timeline, 'load', { rootId, ...(opts?.focus ? { focus: true } : {}) }, () => source.load(rootId, opts), (g) => (
         !g ? { outcome: 'miss' } : isNotReviewedHere(g) ? { outcome: 'not-here' } : { outcome: 'ok', ...counts(g) }

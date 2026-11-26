@@ -16,7 +16,7 @@
  *
  * DRY: base URL + bearer come from the SAME `readSharedEnvVar` pair every other
  * agent-runtime → api call uses (`personality-event-reporter.ts`,
- * `platform-ticket-tools.ts`, `project-facts-sync.ts`), and the agentHost id from the
+ * `connector-tools.ts`, `project-facts-sync.ts`), and the agentHost id from the
  * workspace's `.builderForceAgents/context.yaml`, exactly as `server-startup.ts` reads it.
  *
  * Best-effort by contract: a host that is not linked to a Builderforce workspace, an

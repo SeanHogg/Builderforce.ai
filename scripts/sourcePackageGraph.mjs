@@ -46,6 +46,7 @@ import { createImportScanner, loadTypeScript, packageRoot } from './lib/moduleIm
  * @property {SourcePackageNode[]} nodes
  * @property {Map<string, SourcePackageNode>} bySpecifier Every specifier → its package.
  * @property {Map<string, string>} entryBySpecifier Every specifier → the source file it resolves to.
+ * @property {Map<string, import('./lib/moduleImports.mjs').ImportSite[]>} externalsBySpecifier
  * @property {(specifiers: Iterable<string>) => Set<string>} closure
  * @property {() => string[][]} cycles
  */
@@ -110,6 +111,15 @@ export async function sourcePackageGraph(repoRoot, ts = loadTypeScript(repoRoot)
   }
 
   const nodes = [...byDir.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const entryImports = new Map(await Promise.all(entries.map(async ({ specifier, entry }) => {
+    const node = bySpecifier.get(specifier);
+    const reached = await scanner.reachFrom(entry, node.srcDir);
+    return [specifier, node.imports.filter((site) => reached.has(site.file))];
+  })));
+  const externalsBySpecifier = new Map([...entryImports].map(([specifier, imports]) => [
+    specifier,
+    imports.filter((site) => !bySpecifier.has(site.specifier)),
+  ]));
 
   /** Transitive expansion of a specifier set under the edge relation. */
   function closure(specifiers) {
@@ -119,9 +129,9 @@ export async function sourcePackageGraph(repoRoot, ts = loadTypeScript(repoRoot)
       const specifier = /** @type {string} */ (pending.pop());
       if (out.has(specifier)) continue;
       out.add(specifier);
-      const node = bySpecifier.get(specifier);
-      if (!node) continue;
-      for (const edge of node.edges) if (!out.has(edge)) pending.push(edge);
+      for (const site of entryImports.get(specifier) ?? []) {
+        if (bySpecifier.has(site.specifier) && !out.has(site.specifier)) pending.push(site.specifier);
+      }
     }
     return out;
   }
@@ -154,7 +164,7 @@ export async function sourcePackageGraph(repoRoot, ts = loadTypeScript(repoRoot)
     return found;
   }
 
-  return { nodes, bySpecifier, entryBySpecifier, closure, cycles };
+  return { nodes, bySpecifier, entryBySpecifier, externalsBySpecifier, closure, cycles };
 }
 
 export { packageRoot };

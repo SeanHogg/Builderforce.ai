@@ -17,7 +17,7 @@ import type {
   IAgentMemoryService,
   ILimbicSystem,
   ILlmService,
-  IMcpService,
+  IDataProviderService,
   ITelemetryService,
 } from "./ports.js";
 import {
@@ -126,7 +126,9 @@ export type OrchestratorConfig = {
   agentTransport?: IAgentTransport | null;
   relayService?: IRelayService;
   llmService?: ILlmService | null;
-  mcpService?: IMcpService | null;
+  dataProviderService?: IDataProviderService | null;
+  /** Compatibility for configurations written before the data-provider rename. */
+  mcpService?: IDataProviderService | null;
   limbicSystem?: ILimbicSystem | null;
 };
 
@@ -147,8 +149,8 @@ export class AgentOrchestrator {
   private memoryService: IAgentMemoryService | null = null;
   /** Domain port: LLM platform calls (builder `llm` nodes) via the gateway. */
   private llmService: ILlmService | null = null;
-  /** Domain port: MCP / SaaS integration invocation (builder `mcp` nodes). */
-  private mcpService: IMcpService | null = null;
+  /** Domain port for workflow data-provider operations. */
+  private dataProviderService: IDataProviderService | null = null;
   /** Domain port: the agent's limbic system (dynamic affective layer). */
   private limbicSystem: ILimbicSystem | null = null;
   /** Unified local/remote transport for task dispatch and agentNode discovery.
@@ -214,9 +216,8 @@ export class AgentOrchestrator {
     if (config.llmService !== undefined) {
       this.llmService = config.llmService;
     }
-    if (config.mcpService !== undefined) {
-      this.mcpService = config.mcpService;
-    }
+    const dataProviderService = config.dataProviderService !== undefined ? config.dataProviderService : config.mcpService;
+    if (dataProviderService !== undefined) this.dataProviderService = dataProviderService;
     if (config.limbicSystem !== undefined) {
       this.limbicSystem = config.limbicSystem;
     }
@@ -794,8 +795,9 @@ export class AgentOrchestrator {
     switch (kind) {
       case "llm":
         return this.runLlmNode(config, upstream);
-      case "mcp":
-        return this.runMcpNode(config, upstream);
+      case "mcp": // Stored workflows use this legacy kind.
+      case "dataProvider":
+        return this.runDataProviderNode(config);
       case "memory":
         return this.runMemoryNode(config, upstream);
       case "knowledge":
@@ -845,14 +847,12 @@ export class AgentOrchestrator {
     });
   }
 
-  /** MCP node — invoke an MCP-server / SaaS integration tool. `params` is parsed
-   *  from the node's JSON config. No-ops (records intent) when no MCP service is
-   *  wired. */
-  private async runMcpNode(config: Record<string, unknown>, _upstream: string): Promise<string> {
+  /** Invoke the workflow's configured data provider. */
+  private async runDataProviderNode(config: Record<string, unknown>): Promise<string> {
     const integration = String(config.integration ?? config.source ?? "");
     const operation = String(config.operation ?? "");
-    if (!this.mcpService) {
-      return `[mcp:${integration || "tool"}] no MCP transport wired — recorded intent for "${operation}"`;
+    if (!this.dataProviderService) {
+      return `[dataProvider:${integration || "tool"}] no data-provider service wired — recorded intent for "${operation}"`;
     }
     let params: Record<string, unknown> = {};
     if (config.params) {
@@ -863,7 +863,7 @@ export class AgentOrchestrator {
         /* leave params empty on malformed JSON */
       }
     }
-    return this.mcpService.invoke({ integration, operation, params });
+    return this.dataProviderService.invoke({ integration, operation, params });
   }
 
   /** Memory node — recall from, or write to, the SSM hippocampus memory layer. */

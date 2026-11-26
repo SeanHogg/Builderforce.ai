@@ -24,6 +24,7 @@
  */
 
 import { resolveAdvertisedToolName, toolNameSet } from '@builderforce/agent-tools';
+import { resolveName } from '@seanhogg/builderforce-mcp';
 import { callConnectorTool, CONNECTOR_EXTENSION_ID, listConnectorTools } from '../connectors/connectorTools';
 import { BUILTIN_EXTENSION_ID, callBuiltinTool, listBuiltinTools } from './builtinMcpService';
 import {
@@ -177,7 +178,11 @@ export function resolveGatewayMcpTool(tools: McpToolEntry[], name: string): McpT
   // A catalog id (`tasks.archive_many`) or the unprefixed form reaches the advertised tool too
   // (`resolveAdvertisedToolName`, the one resolver every surface shares).
   const resolved = resolveAdvertisedToolName(name, toolNameSet(tools, (t) => t.name));
-  return resolved === null ? null : tools.find((t) => t.name === resolved) ?? null;
+  if (resolved !== null) return tools.find((t) => t.name === resolved) ?? null;
+  const address = resolveName(name);
+  return address?.source === 'platform'
+    ? tools.find((t) => t.extensionId === BUILTIN_EXTENSION_ID && t.tool === address.tool) ?? null
+    : null;
 }
 
 /** Identity of the caller a tool runs as. Absent for pure machine (API-key) callers. */

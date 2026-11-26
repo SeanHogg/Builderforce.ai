@@ -8,8 +8,8 @@
  * (PRD 12 Phase B) for the file subset.
  *
  * Where the cloud provider commits over the git API, this one writes to disk; where the
- * cloud searcher hits a git-index, this shells out through the shared `runCodebaseSearch`
- * backend (the same one the native `codebase_search` tool already uses — DRY). Every
+ * cloud searcher hits a git-index, this runs the shared exact/regex searcher
+ * (`agent-tools/node-text-search`, the same one the editor uses). Every
  * path is resolved INSIDE `workspaceRoot` and a traversal escape is rejected, so the
  * provider is self-guarding (no external `workspaceOnly` wrapper needed).
  *
@@ -29,7 +29,7 @@ import {
   writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { join, relative, resolve as resolvePath, sep } from "node:path";
-import { applyStringEdit, editFacts, matchGlobInScope, dirMayContainGlobMatch, normalizeScopeDir, isUnderScopeDir, semanticCapabilitiesOf } from "@builderforce/agent-tools";
+import { applyStringEdit, editFacts, matchGlobInScope, dirMayContainGlobMatch, normalizeScopeDir, semanticCapabilitiesOf } from "@builderforce/agent-tools";
 // The ONE workspace-containment resolver, shared with the VS Code local provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
 // node-builtin-free for the Worker).
@@ -52,8 +52,20 @@ import type {
 } from "@builderforce/agent-tools";
 import { onDeviceCostLeverOn } from "../infra/cost-levers.js";
 import { resolveOnPremSemantic } from "./on-prem-semantic.js";
-import { IGNORED_DIRS, runCodebaseSearch } from "../builderforce/shared-tools/node-code-tools.js";
+import { IGNORED_DIRS } from "../builderforce/shared-tools/node-code-tools.js";
+import { searchWorkspace } from "@builderforce/agent-tools/node-text-search.js";
+import { execFile } from "node:child_process";
 import { requestHumanInput, type HumanInputRequest, type HumanInputResult } from "../infra/approval-gate.js";
+
+/** `rg` when it is runnable from PATH, else null (the shared searcher then walks the tree
+ *  in-process). Probed once per process: a missing binary is the common on-prem case. */
+let onPathRipgrep: Promise<string | null> | undefined;
+function findOnPathRipgrep(): Promise<string | null> {
+  onPathRipgrep ??= new Promise((resolve) => {
+    execFile("rg", ["--version"], { windowsHide: true, timeout: 5_000 }, (err) => resolve(err ? null : "rg"));
+  });
+  return onPathRipgrep;
+}
 
 /** Directories never walked by `list_files` — the SAME ignore set the on-prem searcher
  *  uses (DRY: one source in node-code-tools), as a Set for O(1) membership. */
@@ -186,13 +198,24 @@ export interface NodeProviderOptions {
   research?: LocalResearchCapability;
 }
 
+/** Search one on-prem workspace using the shared editor search engine. */
+export async function searchNodeWorkspaceCode(
+  workspaceRoot: string,
+  query: string,
+  scope?: string,
+): Promise<RepoSearchResult> {
+  const root = resolvePath(workspaceRoot);
+  const scopeDir = normalizeScopeDir(scope);
+  const start = scopeDir ? resolveInside(root, scopeDir) : root;
+  if (!start) return { ok: false, error: `'${scopeDir ?? ""}' is outside the workspace` };
+  return searchWorkspace({ root, start, query, ripgrep: await findOnPathRipgrep() });
+}
+
 /**
  * Build the on-prem disk-backed {@link CapabilityProvider}. List/search the working tree
  * (always confined to {@link NodeProviderOptions.workspaceRoot}), read/write/edit/delete
  * files in place (confined per {@link NodeProviderOptions.scope}), and escalate to a
- * human via the shared
- * `human` capability (so the on-prem coding agent can run the SAME shared `ask_human`
- * tool as the cloud loop).
+ * human via the shared `human` capability.
  */
 export function buildNodeCapabilityProvider(options: NodeProviderOptions): CapabilityProvider {
   const root = resolvePath(options.workspaceRoot);
@@ -294,23 +317,12 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         }
       },
       async searchCode(query, scope): Promise<RepoSearchResult> {
-        const r = (await runCodebaseSearch(root, { query })) as {
-          error?: string;
-          results?: Array<{ filePath: string } & Record<string, unknown>>;
-        };
-        if (r.error) {
-          return { ok: false, error: r.error };
-        }
-        let matches = (r.results ?? []).map((m) => ({ path: m.filePath, ...m }));
-        // Honor an optional subdirectory scope by prefix-filtering the ripgrep hits,
-        // so `search_code`'s `path` argument narrows results here too (parity with the
-        // editor provider that scopes its walk natively). Normalization + prefix-match
-        // are the ONE shared helpers so this can't drift from the other providers. The
-        // ripgrep result set is complete (not a capped ranked page), so filtering it is
-        // lossless — unlike the cloud GitHub-API path, which must scope in the query.
-        const scopeDir = normalizeScopeDir(scope);
-        if (scopeDir) matches = matches.filter((m) => typeof m.path === "string" && isUnderScopeDir(m.path, scopeDir));
-        return { ok: true, query, total: matches.length, matches };
+        // The `search_code` contract is EXACT substring / regex, so this runs the ONE
+        // shared searcher (the same one the editor uses), not the keyword-ranked
+        // `codebase_search` backend. The `path` scope is the search TARGET, resolved
+        // inside the workspace BEFORE searching (a directory or a single file) — never
+        // a post-filter over a whole-root result.
+        return searchNodeWorkspaceCode(root, query, scope);
       },
     },
     repoWrite: {

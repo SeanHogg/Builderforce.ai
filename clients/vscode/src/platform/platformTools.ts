@@ -1,3 +1,4 @@
+import { createMcpRelay, createMcpCatalogCache, type RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
 import type * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "../gateway/gateway";
 import { GATEWAY_WORKSPACE_HEADER, gatewayAuthHeaders, gatewayWorkspaceHeaders, observeGatewayResponse } from "../auth/gatewayAuth";
@@ -5,7 +6,6 @@ import type { ToolDef } from "../tools/fileTools";
 import { hostLog } from "../host/hostLog";
 import { namesRunChat } from "../tickets/localTicketScope";
 import { toolMutating } from "../tools/toolMutating";
-import { ttlCache } from "../localFirst/ttlCache";
 import { describeNetworkError, retryOnConnectFailure } from "@seanhogg/builderforce-brain-embedded";
 import { messageOf } from "../shared/messageOf";
 
@@ -22,18 +22,6 @@ import { messageOf } from "../shared/messageOf";
  * chat stream uses, so the IDE "brain" and the web "brain" act as one.
  */
 
-/** One advertised tool from the gateway MCP relay (mirror of api McpToolEntry). */
-interface McpToolEntry {
-  extensionId: string;
-  /** Original tool name on the owning server, sent back on the relay call. */
-  tool: string;
-  /** Flat, gateway-safe name the model sees (e.g. `builtin_tasks_create`). */
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  /** Whether the tool writes. Undefined (external servers) ⇒ treat as mutating. */
-  mutates?: boolean;
-}
 
 /** Best-effort stringify of a relay result for the model's tool message. */
 function stringifyResult(result: unknown): string {
@@ -51,8 +39,7 @@ function stringifyResult(result: unknown): string {
 // The RAW entries are cached, not the adapted ToolDefs: each call adapts with the
 // identity it is given, so two chats inside one TTL cannot inherit each other's
 // `chatId` translation through a shared `execute` closure.
-const CATALOG_TTL = 60_000;
-const catalogCache = ttlCache<string, McpToolEntry[]>(CATALOG_TTL);
+const catalogCache = createMcpCatalogCache<McpToolEntry[]>();
 
 /**
  * The chat identity a platform-tool call's `chatId` arguments are translated through
@@ -134,7 +121,7 @@ async function chatIdForServer(
 
 /** Drop the cached catalog (call on sign-out / workspace change). */
 export function clearPlatformToolsCache(): void {
-  catalogCache.invalidate();
+  catalogCache.clear();
 }
 
 /**
@@ -152,29 +139,23 @@ export async function listPlatformTools(
   identity?: PlatformChatIdentity,
 ): Promise<ToolDef[]> {
   const key = await getApiKey(secrets);
-  if (!key) return [];
+  if (!key) {
+    catalogCache.clear();
+    return [];
+  }
   const url = getBaseUrl();
-  // The catalog is per workspace: the gateway resolves the key to the selected tenant.
-  const catalogKey = `${url}|${gatewayWorkspaceHeaders()[GATEWAY_WORKSPACE_HEADER] ?? ""}`;
-  const cached = catalogCache.get(catalogKey);
+  const catalogKey = JSON.stringify([url, gatewayWorkspaceHeaders()[GATEWAY_WORKSPACE_HEADER], key]);
   let entries: McpToolEntry[];
-  if (cached) {
-    entries = cached.value;
-  } else {
-    try {
-      // A run that starts while the network is down would otherwise hold NO platform tools,
-      // and every `builtin_*` call it was told to make would fail as an unknown tool.
+  try {
+    entries = await catalogCache.get(catalogKey, async () => {
       const headers = gatewayAuthHeaders(key, { "content-type": "application/json" });
-      const res = observeGatewayResponse(await retryOnConnectFailure(() => fetch(`${url}/llm/v1/mcp/tools`, {
-        headers,
-      })), headers);
-      if (!res.ok) return [];
-      const body = (await res.json()) as { tools?: McpToolEntry[] };
-      entries = Array.isArray(body.tools) ? body.tools : [];
-    } catch {
-      return [];
-    }
-    catalogCache.set(catalogKey, entries);
+      const response = observeGatewayResponse(await retryOnConnectFailure(() => fetch(`${url}/llm/v1/mcp/tools`, { headers })), headers);
+      if (!response.ok) throw new Error(`tool catalog unavailable (HTTP ${response.status})`);
+      const body = (await response.json()) as { tools?: McpToolEntry[] };
+      return Array.isArray(body.tools) ? body.tools : [];
+    });
+  } catch {
+    return [];
   }
 
   const tools = entries.map((e): ToolDef => ({
@@ -194,6 +175,15 @@ export async function listPlatformTools(
   return tools;
 }
 
+function platformRelay(baseUrl: string, key: string) {
+  const headers = gatewayAuthHeaders(key);
+  return createMcpRelay({
+    baseUrl, headers,
+    // Retry connection failures only, before a write could have reached the gateway.
+    fetch: async (input, init) => observeGatewayResponse(await retryOnConnectFailure(() => fetch(input, init)), headers),
+  });
+}
+
 /** Invoke one platform tool through the gateway MCP relay; returns its result text. */
 export async function callPlatformTool(
   secrets: vscode.SecretStorage,
@@ -203,15 +193,8 @@ export async function callPlatformTool(
 ): Promise<string> {
   const key = await getApiKey(secrets);
   if (!key) throw new Error("not signed in");
-  // Sent again only while the connection cannot be opened — then nothing reached the
-  // gateway, so even a write is safe to repeat. Any other failure is reported as it is.
-  const headers = gatewayAuthHeaders(key, { "content-type": "application/json" });
-  const res = await retryOnConnectFailure(() => fetch(`${getBaseUrl()}/llm/v1/mcp/call`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ extensionId, tool, arguments: args }),
-  })).then((r) => observeGatewayResponse(r, headers)).catch((e: unknown) => {
-    throw new Error(describeNetworkError(e), { cause: e });
+  const res = await platformRelay(getBaseUrl(), key).call({ extensionId, tool, arguments: args }).catch((error: unknown) => {
+    throw new Error(describeNetworkError(error), { cause: error });
   });
   const text = await res.text().catch(() => "");
   if (!res.ok) {

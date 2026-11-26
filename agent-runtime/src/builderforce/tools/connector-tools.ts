@@ -23,6 +23,7 @@
  * agent first needs a connector, which is the right price.
  */
 
+import { createMcpRelay, requiresWriteApproval, type RelayToolEntry } from "@seanhogg/builderforce-mcp";
 import { Type } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "../model/agent-types.js";
 import { readSharedEnvVar } from "../../infra/env-file.js";
@@ -34,15 +35,6 @@ const CONNECTOR_EXTENSION_ID = "connector";
 const TOOL_SEP = "::";
 
 const GATEWAY_TIMEOUT_MS = 30_000;
-
-interface GatewayToolEntry {
-  extensionId: string;
-  tool: string;
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  mutates?: boolean;
-}
 
 function resolveGateway(): { base: string; apiKey: string } | { error: string } {
   const apiKey = readSharedEnvVar("BUILDERFORCE_API_KEY");
@@ -58,7 +50,7 @@ function resolveGateway(): { base: string; apiKey: string } | { error: string } 
 }
 
 /** Fetch the tenant's advertised catalog and keep only the connector entries. */
-async function fetchConnectorEntries(): Promise<GatewayToolEntry[] | { error: string }> {
+async function fetchConnectorEntries(): Promise<RelayToolEntry[] | { error: string }> {
   const gw = resolveGateway();
   if ("error" in gw) return gw;
   try {
@@ -67,13 +59,9 @@ async function fetchConnectorEntries(): Promise<GatewayToolEntry[] | { error: st
     // full JSON-Schemas) on every `connectors_list`, only to throw all of it away one
     // line later. The client-side filter stays as the belt: a gateway too old to know
     // the parameter ignores it and answers with everything, which must still be correct.
-    const res = await fetch(`${gw.base}/llm/v1/mcp/tools?surface=connectors`, {
-      headers: { Accept: "application/json", Authorization: `Bearer ${gw.apiKey}` },
-      signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
-    });
-    if (!res.ok) return { error: `Gateway returned ${res.status} listing connector tools` };
-    const body = (await res.json()) as { tools?: GatewayToolEntry[] };
-    return (body.tools ?? []).filter((t) => t.extensionId === CONNECTOR_EXTENSION_ID);
+    const relay = createMcpRelay({ baseUrl: gw.base, token: gw.apiKey, timeoutMs: GATEWAY_TIMEOUT_MS });
+    const entries = await relay.list("connectors", (status) => `Gateway returned ${status} listing connector tools`);
+    return entries.filter((tool) => tool.extensionId === CONNECTOR_EXTENSION_ID);
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) };
   }
@@ -113,7 +101,7 @@ export const connectorsListTool: AgentTool<typeof ConnectorsListSchema, string> 
       list.push({
         action: actionKey,
         description: entry.description,
-        mutates: entry.mutates !== false,
+        mutates: requiresWriteApproval(entry),
         input: entry.parameters,
       });
       byConnector.set(connectorKey, list);
@@ -158,15 +146,11 @@ export const connectorCallTool: AgentTool<typeof ConnectorCallSchema, string> = 
     const gw = resolveGateway();
     if ("error" in gw) return jsonResult(gw) as AgentToolResult<string>;
     try {
-      const res = await fetch(`${gw.base}/llm/v1/mcp/call`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${gw.apiKey}` },
-        body: JSON.stringify({
-          extensionId: CONNECTOR_EXTENSION_ID,
-          tool: `${params.connector}${TOOL_SEP}${params.action}`,
-          arguments: params.input ?? {},
-        }),
-        signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
+      const relay = createMcpRelay({ baseUrl: gw.base, token: gw.apiKey, timeoutMs: GATEWAY_TIMEOUT_MS });
+      const res = await relay.call({
+        extensionId: CONNECTOR_EXTENSION_ID,
+        tool: `${params.connector}${TOOL_SEP}${params.action}`,
+        arguments: params.input ?? {},
       });
       const text = await res.text();
       let payload: unknown;

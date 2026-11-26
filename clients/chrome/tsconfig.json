@@ -8,6 +8,7 @@
     "jsx": "react-jsx",
     "types": ["chrome", "node"],
     "paths": {
+      "@seanhogg/builderforce-mcp": ["../../packages/builderforce-mcp/src/index.ts"],
       "@builderforce/agent-tools": ["../../packages/agent-tools/src/index.ts"],
       "@builderforce/agent-tools/knowledge": ["../../packages/agent-tools/src/knowledge/index.ts"],
       "@builderforce/knowledge-browser": ["../../packages/knowledge-browser/src/index.ts"],

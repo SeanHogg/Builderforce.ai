@@ -20,17 +20,8 @@ import type { BrainTransport } from './streamChatCompletion';
 // with the run loop's read-repeat guard, so both fingerprint arguments the same way.
 import { stableStringify } from '@builderforce/agent-tools';
 
-/** One tool as the gateway advertises it. */
-export interface McpToolEntry {
-  extensionId: string;
-  tool: string;
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  /** Whether the tool writes. Drives the confirm-before-mutate gate. Undefined
-   *  (external MCP servers don't advertise it) ⇒ treated as mutating (fail safe). */
-  mutates?: boolean;
-}
+import { createMcpRelay, requiresWriteApproval, type RelayCallResult, type RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
+export type { RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
 
 /**
  * The host's say over where a catalog tool runs: return a runner for a tool the host
@@ -92,14 +83,9 @@ export async function fetchMcpToolEntries(
   transport: Pick<BrainTransport, 'baseUrl' | 'getToken'>,
   skipExtensionIds: readonly string[] = [],
 ): Promise<McpToolEntry[]> {
-  const token = transport.getToken();
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers });
-  if (!res.ok) throw new Error(`tool catalog unavailable (HTTP ${res.status})`);
-  const body = (await res.json()) as { tools?: McpToolEntry[] };
+  const tools = await createMcpRelay({ baseUrl: transport.baseUrl, token: transport.getToken() }).list();
   const skip = new Set(skipExtensionIds);
-  return (body.tools ?? []).filter((t) => !skip.has(t.extensionId));
+  return tools.filter((t) => !skip.has(t.extensionId));
 }
 
 /**
@@ -121,9 +107,9 @@ export function mcpActionsFrom(
     // Gate writes off the advertised flag; only an explicit mutates=false is
     // read-only. Undefined (external servers) ⇒ mutating, so the host's
     // confirm-before-mutate gate fires (fail safe).
-    mutates: entry.mutates !== false,
+    mutates: requiresWriteApproval(entry),
     run: (args: unknown) => {
-      const mutating = entry.mutates !== false;
+      const mutating = requiresWriteApproval(entry);
       const exec = async (): Promise<unknown> => {
         // A tool the HOST can answer where the work lives (a browser run's `runtime.*`
         // tools, answered in the tab that holds the run) is routed there; the host's
@@ -134,15 +120,9 @@ export function mcpActionsFrom(
           onToolResult?.({ name: entry.name, tool: entry.tool, extensionId: entry.extensionId, mutating, ok: !isErrorResult(out) });
           return out;
         }
-        const token = transport.getToken();
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (token) headers.Authorization = `Bearer ${token}`;
-        const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/call`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: args }),
-        });
-        const body = (await res.json().catch(() => ({}))) as { result?: unknown; error?: string };
+        const relay = createMcpRelay({ baseUrl: transport.baseUrl, token: transport.getToken() });
+        const res = await relay.call({ extensionId: entry.extensionId, tool: entry.tool, arguments: args });
+        const body = (await res.json().catch(() => ({}))) as RelayCallResult;
         const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : (body.result ?? body);
         // Announce the resolved call so the host can refresh live data on writes.
         onToolResult?.({

@@ -18,7 +18,7 @@ import { fetchWebDocumentCached } from '../../web/webFetch';
 import { assertSafeUrl, BlockedUrlError } from '../../../infrastructure/net/ssrfGuard';
 import { fetchPublic } from '../../../infrastructure/net/fetchPublic';
 import { renderValueTemplate } from '../../../domain/workflowExpr';
-import { executeMcpNode, type McpNodeConfig } from '../mcpNode';
+import { executeDataProviderNode, type DataProviderNodeConfig } from '../dataProviderNode';
 import { executeConnectorNode, type ConnectorNodeConfig } from '../connectorNode';
 import { getWorkflowVariable, setWorkflowVariable, incrementWorkflowVariable } from '../workflowVariables';
 import { expressionContext, renderTemplate } from './helpers';
@@ -142,11 +142,11 @@ export const IO_NODE_HANDLERS: NodeHandlerTable = {
   mcp: async ({ env, node, inputText, usageCtx, outbound }) => {
     if (outbound?.mcp) return { output: await outbound.mcp(node.config, inputText) };
     // Every Data + Marketing palette integration lands here, issuing the SAME HTTP
-    // call the connect form's "Test connection" makes (see ../mcpNode.ts).
+    // call the connect form's "Test connection" makes (see ../dataProviderNode.ts).
     if (!usageCtx) throw new Error('An integration node needs a tenant context to load your connection');
-    const outcome = await executeMcpNode(
+    const outcome = await executeDataProviderNode(
       { db: usageCtx.db, tenantId: usageCtx.tenantId, encryptionSecret: credentialSecret(env) },
-      node.config as McpNodeConfig,
+      node.config as DataProviderNodeConfig,
       inputText,
     );
     if (!outcome.ok) throw new Error(outcome.error);

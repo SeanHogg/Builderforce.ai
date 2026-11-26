@@ -164,7 +164,7 @@ export function sourcePackageAliasMap(repoRoot) {
  * for its own imports and agent-tools' 2026.10.80 (the old O(n·m) `.gitignore` matcher)
  * for the knowledge index, and typing in the editor stalled on it.
  */
-export const PINNED_INSTALL_PACKAGES = ['@seanhogg/builderforce-memory', '@seanhogg/builderforce-memory-engine'];
+export const PINNED_INSTALL_PACKAGES = ['@modelcontextprotocol/sdk', '@seanhogg/builderforce-memory', '@seanhogg/builderforce-memory-engine'];
 
 /**
  * The specifiers a pin applies to: each package root and any subpath of it

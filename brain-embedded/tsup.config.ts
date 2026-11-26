@@ -69,7 +69,7 @@ export default defineConfig(libraryConfig({
   // `tsc --noEmit` keeps the narrow one. It is the repo root because the `paths`
   // below point at `packages/*/src`, outside this package.
   dts: {
-    resolve: [/^@builderforce\//, /^@seanhogg\/bfi-web$/, /^@seanhogg\/builderforce-memory/, /^@seanhogg\/builderforce-memory-engine/],
+    resolve: [/^@builderforce\//, /^@seanhogg\/builderforce-mcp$/, /^@seanhogg\/bfi-web$/, /^@seanhogg\/builderforce-memory/, /^@seanhogg\/builderforce-memory-engine/],
     compilerOptions: {
       rootDir: '..',
       paths: {

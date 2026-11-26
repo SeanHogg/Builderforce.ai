@@ -34,6 +34,7 @@
     // (Vite `dedupe` in vite.config.ts), so types and runtime agree. Never point these
     // at the frontend's copy.
     "paths": {
+      "@seanhogg/builderforce-mcp": ["../../../packages/builderforce-mcp/src/index.ts"],
       "react": ["../node_modules/@types/react/index.d.ts"],
       "react/*": ["../node_modules/@types/react/*"],
       "react-dom": ["../node_modules/@types/react-dom/index.d.ts"],

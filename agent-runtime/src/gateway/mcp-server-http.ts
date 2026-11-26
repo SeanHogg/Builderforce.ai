@@ -1,35 +1,21 @@
-/**
- * MCP (Model Context Protocol) HTTP server for BuilderForceAgents.
- *
- * Mounts at /mcp on the local gateway (port 18789).
- * Exposes BuilderForceAgents tools so external AI coding tools (Cursor, Continue.dev, Windsurf,
- * Goose, Claude Code) can call them as MCP context providers.
- *
- * Endpoints:
- *   GET  /mcp           — MCP tool manifest (list of available tools + schemas)
- *   POST /mcp/call      — Invoke a tool by name with arguments
- *
- * Auth: Bearer token (same as gateway auth). Local loopback requests are allowed
- * without a token when gateway auth is disabled.
- *
- * MCP spec reference: https://modelcontextprotocol.io/specification
- */
-
+/** The agent-runtime gateway adapter for the local MCP catalog. */
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { searchCodeTool } from "@builderforce/agent-tools";
+import { advertiseName, normalizeInputSchema, toMcp, type McpToolEntry } from "@seanhogg/builderforce-mcp";
+import { protectToolOutput } from "@seanhogg/builderforce-mcp/policy";
+import { ErrorCode, mcpRejection, safeToolError } from "@seanhogg/builderforce-mcp/protocol";
+import { createMcpServer, serveStatelessMcp } from "@seanhogg/builderforce-mcp/server";
+import { searchNodeWorkspaceCode } from "../agents/node-capability-provider.js";
 import { agentFleetTool } from "../builderforce/tools/agent-fleet-tool.js";
 import { codebaseSearchTool } from "../builderforce/tools/codebase-search-tool.js";
 import { gitHistoryTool } from "../builderforce/tools/git-history-tool.js";
-import {
-  reviewsRecordTool,
-  securityRecordTool,
-  ticketsFromDeltaTool,
-} from "../builderforce/tools/platform-ticket-tools.js";
 import { projectKnowledgeTool } from "../builderforce/tools/project-knowledge-tool.js";
 import { semanticSearchTool } from "../builderforce/tools/semantic-search-tool.js";
 import { workflowStatusTool } from "../builderforce/tools/workflow-status-tool.js";
 import { loadConfig } from "../config/config.js";
 import type { AuthRateLimiter } from "./auth-rate-limit.js";
 import { authorizeGatewayConnect, type ResolvedGatewayAuth } from "./auth.js";
+import { readJsonBody } from "./hooks.js";
 import {
   readJsonBodyOrError,
   sendJson,
@@ -38,9 +24,8 @@ import {
 } from "./http-common.js";
 import { getBearerToken, getHeader } from "./http-utils.js";
 
-const MCP_VERSION = "2024-11-05";
-const SERVER_NAME = "builderforce";
-const SERVER_VERSION = "1.0.0";
+const SERVER_INFO = { name: "builderforce-workspace", version: "1.0.0" };
+const MAX_BODY_BYTES = 512 * 1024;
 
 /**
  * True if an `Origin` header names a loopback host. MCP clients (Cursor, Claude
@@ -58,49 +43,66 @@ function isLoopbackOrigin(origin: string): boolean {
   }
 }
 
-/** The BuilderForceAgents tools exposed via MCP. */
-const MCP_TOOLS = [
-  semanticSearchTool, // vector+ranked semantic search (preferred)
-  codebaseSearchTool, // keyword grep fallback
+const LEGACY_TOOLS = [
+  semanticSearchTool,
+  codebaseSearchTool,
   projectKnowledgeTool,
   gitHistoryTool,
   workflowStatusTool,
   agentFleetTool,
-  ticketsFromDeltaTool, // relay: record a code delta on the board (builtin tickets.from_delta)
-  reviewsRecordTool, // relay: record a Done-item review outcome (builtin reviews.record)
-  securityRecordTool, // relay: file a SOC 2 finding as a SECURITY ticket (builtin security.record_finding)
 ];
 
-/**
- * Convert a TypeBox schema object to an MCP-compatible JSON Schema fragment.
- * TypeBox schemas are already valid JSON Schema so we can pass them through.
- */
-function toJsonSchema(schema: unknown): Record<string, unknown> {
-  if (schema && typeof schema === "object") {
-    // Strip TypeBox internal metadata ($schema, symbols) that JSON Schema consumers don't need
-    const { $schema: _s, ...rest } = schema as Record<string, unknown>;
-    return rest;
-  }
-  return { type: "object", properties: {} };
+interface WorkspaceTool extends McpToolEntry {
+  legacyName?: string;
+  run(args: Record<string, unknown>): Promise<unknown>;
 }
 
-/** Build the MCP initialize / tools/list response body. */
-function buildManifest() {
-  return {
-    protocolVersion: MCP_VERSION,
-    capabilities: {
-      tools: {},
+const LEGACY_ENTRIES: readonly WorkspaceTool[] = LEGACY_TOOLS.map((tool) => ({
+  name: advertiseName("workspace", tool.name),
+  legacyName: tool.name,
+  title: tool.label,
+  description: tool.description,
+  inputSchema: normalizeInputSchema(tool.parameters),
+  effect: "read",
+  surfaces: ["workspace"],
+  async run(args) {
+    const result = await tool.execute(crypto.randomUUID(), args as never);
+    return result.content ?? result;
+  },
+}));
+
+const SEARCH_TOOL: WorkspaceTool = {
+  name: advertiseName("workspace", "search"),
+  title: "Workspace search",
+  description: searchCodeTool.description,
+  inputSchema: normalizeInputSchema({
+    type: "object",
+    properties: {
+      ...normalizeInputSchema(searchCodeTool.parameters).properties,
+      projectRoot: { type: "string", description: "Absolute path to the workspace root" },
     },
-    serverInfo: {
-      name: SERVER_NAME,
-      version: SERVER_VERSION,
-    },
-    tools: MCP_TOOLS.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: toJsonSchema(tool.parameters),
-    })),
-  };
+    required: ["projectRoot", "query"],
+  }),
+  effect: "read",
+  surfaces: ["workspace"],
+  async run(args) {
+    const { projectRoot, query, path } = args;
+    if (typeof projectRoot !== "string" || !projectRoot.trim() || typeof query !== "string" || !query.trim()) {
+      throw new Error("projectRoot and query are required");
+    }
+    return searchNodeWorkspaceCode(projectRoot, query, typeof path === "string" ? path : undefined);
+  },
+};
+
+const WORKSPACE_TOOLS = [SEARCH_TOOL, ...LEGACY_ENTRIES];
+
+function nodeRequestHeaders(req: IncomingMessage): Headers {
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (typeof value === "string") headers.set(key, value);
+    else for (const part of value ?? []) headers.append(key, part);
+  }
+  return headers;
 }
 
 export async function handleMcpHttpRequest(
@@ -114,7 +116,7 @@ export async function handleMcpHttpRequest(
 ): Promise<boolean> {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
 
-  if (!url.pathname.startsWith("/mcp")) {
+  if (url.pathname !== "/mcp" && !url.pathname.startsWith("/mcp/")) {
     return false;
   }
 
@@ -123,11 +125,7 @@ export async function handleMcpHttpRequest(
   // Origin BEFORE auth so a page can't invoke tools even when loopback auth is off.
   const origin = getHeader(req, "origin");
   if (origin && !isLoopbackOrigin(origin)) {
-    sendJson(res, 403, {
-      jsonrpc: "2.0",
-      id: null,
-      error: { code: -32002, message: "Forbidden: cross-origin requests are not allowed" },
-    });
+    sendJson(res, 403, mcpRejection(ErrorCode.InvalidRequest, "Forbidden: cross-origin requests are not allowed"));
     return true;
   }
 
@@ -141,11 +139,8 @@ export async function handleMcpHttpRequest(
     rateLimiter: opts.rateLimiter,
   });
   if (!authResult.ok) {
-    sendJson(res, 401, {
-      jsonrpc: "2.0",
-      id: null,
-      error: { code: -32001, message: "Unauthorized" },
-    });
+    res.setHeader("WWW-Authenticate", 'Bearer realm="builderforce-workspace"');
+    sendJson(res, 401, mcpRejection(ErrorCode.InvalidRequest, "Unauthorized"));
     return true;
   }
 
@@ -157,7 +152,7 @@ export async function handleMcpHttpRequest(
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Protocol-Version");
   }
 
   if (req.method === "OPTIONS") {
@@ -166,107 +161,39 @@ export async function handleMcpHttpRequest(
     return true;
   }
 
-  // GET /mcp  →  manifest / initialize response
+  // Legacy GET manifest for clients that use the REST adapter.
   if (url.pathname === "/mcp" && req.method === "GET") {
-    sendJson(res, 200, buildManifest());
+    sendJson(res, 200, {
+      serverInfo: SERVER_INFO,
+      capabilities: { tools: {} },
+      tools: LEGACY_ENTRIES.map((entry) => ({ ...toMcp(entry), name: entry.legacyName })),
+    });
     return true;
   }
 
   // POST /mcp  →  JSON-RPC 2.0 dispatch (MCP standard transport)
   if (url.pathname === "/mcp" && req.method === "POST") {
-    const bodyUnknown = await readJsonBodyOrError(req, res, 512 * 1024);
-    if (bodyUnknown === undefined) {
+    const body = await readJsonBody(req, MAX_BODY_BYTES);
+    if (!body.ok) {
+      const status = body.error === "payload too large" ? 413 : body.error === "request body timeout" ? 408 : 400;
+      sendJson(res, status, mcpRejection(ErrorCode.ParseError, body.error));
       return true;
     }
-
-    const body = bodyUnknown as Record<string, unknown>;
-    const id = body.id ?? null;
-    const method = typeof body.method === "string" ? body.method : "";
-    const params = (body.params ?? {}) as Record<string, unknown>;
-
-    // MCP initialize
-    if (method === "initialize") {
-      sendJson(res, 200, {
-        jsonrpc: "2.0",
-        id,
-        result: buildManifest(),
-      });
-      return true;
-    }
-
-    // MCP tools/list
-    if (method === "tools/list") {
-      sendJson(res, 200, {
-        jsonrpc: "2.0",
-        id,
-        result: { tools: buildManifest().tools },
-      });
-      return true;
-    }
-
-    // MCP tools/call
-    if (method === "tools/call") {
-      const toolName = typeof params.name === "string" ? params.name : "";
-      const toolArgs = (params.arguments ?? params.args ?? {}) as Record<string, unknown>;
-
-      const tool = MCP_TOOLS.find((t) => t.name === toolName);
-      if (!tool) {
-        sendJson(res, 200, {
-          jsonrpc: "2.0",
-          id,
-          error: {
-            code: -32601,
-            message: `Tool not found: ${toolName}`,
-          },
-        });
-        return true;
-      }
-
-      try {
-        const result = await tool.execute(`mcp-${Date.now()}`, toolArgs as never);
-        const content =
-          typeof result.content === "string"
-            ? result.content
-            : JSON.stringify(result.content ?? result);
-
-        sendJson(res, 200, {
-          jsonrpc: "2.0",
-          id,
-          result: {
-            content: [{ type: "text", text: content }],
-            isError: false,
-          },
-        });
-      } catch (err) {
-        sendJson(res, 200, {
-          jsonrpc: "2.0",
-          id,
-          result: {
-            content: [
-              {
-                type: "text",
-                text: `Error: ${err instanceof Error ? err.message : String(err)}`,
-              },
-            ],
-            isError: true,
-          },
-        });
-      }
-      return true;
-    }
-
-    // Unknown method
-    sendJson(res, 200, {
-      jsonrpc: "2.0",
-      id,
-      error: { code: -32601, message: `Method not found: ${method}` },
-    });
+    const server = createMcpServer({
+      list: () => WORKSPACE_TOOLS,
+      resolve: (entries, name) => entries.find((entry) => entry.name === name || entry.legacyName === name) ?? null,
+      call: (entry, args) => entry.run(args),
+    }, { info: SERVER_INFO, gate: {} });
+    const response = await serveStatelessMcp(server, new Request(url, { method: "POST", headers: nodeRequestHeaders(req) }), body.value);
+    res.statusCode = response.status;
+    response.headers.forEach((value, name) => res.setHeader(name, value));
+    res.end(await response.text());
     return true;
   }
 
   // Legacy REST: POST /mcp/call  (convenience endpoint for non-MCP clients)
   if (url.pathname === "/mcp/call" && req.method === "POST") {
-    const bodyUnknown = await readJsonBodyOrError(req, res, 512 * 1024);
+    const bodyUnknown = await readJsonBodyOrError(req, res, MAX_BODY_BYTES);
     if (bodyUnknown === undefined) {
       return true;
     }
@@ -280,19 +207,19 @@ export async function handleMcpHttpRequest(
       return true;
     }
 
-    const tool = MCP_TOOLS.find((t) => t.name === toolName);
+    const tool = WORKSPACE_TOOLS.find((entry) => entry.legacyName === toolName || entry.name === toolName);
     if (!tool) {
       sendJson(res, 404, { ok: false, error: `Tool not found: ${toolName}` });
       return true;
     }
 
     try {
-      const result = await tool.execute(`mcp-${Date.now()}`, toolArgs as never);
-      sendJson(res, 200, { ok: true, result: result.content ?? result });
+      const result = await tool.run(toolArgs);
+      sendJson(res, 200, { ok: true, result: protectToolOutput(tool.name, result) });
     } catch (err) {
       sendJson(res, 500, {
         ok: false,
-        error: err instanceof Error ? err.message : String(err),
+        error: safeToolError(tool.name, err instanceof Error ? err.message : String(err)),
       });
     }
     return true;

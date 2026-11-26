@@ -1,3 +1,4 @@
+import type { RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Tenant MCP extension service — REGISTRATION of a tenant's external MCP servers.
@@ -61,24 +62,7 @@ export interface McpExtensionView {
   createdAt: string;
 }
 
-/** A tool advertised to the Brain, tagged with the extension that owns it. */
-export interface McpToolEntry {
-  extensionId: string;
-  /** Original tool name on the MCP server (used on the relay call). */
-  tool: string;
-  /** Flat, namespaced, gateway-safe name the model sees (no dots). */
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  /**
-   * Whether the tool changes state. Lets every client (web Brain, VS Code
-   * extension, external MCP clients) gate writes behind a confirm prompt off ONE
-   * advertised flag instead of re-deriving it. First-party built-in tools always
-   * set this; external tenant MCP servers don't expose it, so it's omitted there
-   * and clients MUST treat `undefined` as mutating (fail safe — confirm).
-   */
-  mutates?: boolean;
-}
+export type { RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
 
 /**
  * SSRF guard for a tenant-supplied MCP server URL [1402]. The gateway fetches
@@ -248,6 +232,7 @@ export async function listToolsForTenant(
           const authorization = await resolveAuthorization(db, env, row, keyMaterial);
           const listed = await listRemoteTools({
             serverUrl: row.serverUrl,
+            sessionScope: `${row.tenantId}:${row.id}`,
             authorization,
             protocol: row.protocol as McpProtocol,
             fetchImpl,
@@ -324,6 +309,7 @@ export async function callMcpTool(
   const { protocol, result } = await callRemoteTool(
     {
       serverUrl: row.serverUrl,
+      sessionScope: `${row.tenantId}:${row.id}`,
       authorization,
       protocol: row.protocol as McpProtocol,
       fetchImpl,

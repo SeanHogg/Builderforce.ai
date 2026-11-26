@@ -1,0 +1,525 @@
+# Platform duplication audit
+
+Part of the [unified platform review](unified-platform-gap-review.md). Areas are audited one at a time, and each one ends in a single target design plus granular gaps (`MCP-G###`, …) in [GAP-REGISTER.md](../../roadmap/GAP-REGISTER.md).
+
+Synapse is being rebuilt from the ground up (user, 2026-11-26), so its Rust MCP code is judged only on whether a shared component should replace it.
+
+| # | Area | Status |
+|---|---|---|
+| 1 | MCP | **audited 2026-11-26** (below) |
+| 2 | Code index / search / context | **audited 2026-11-26** (below) |
+| 3 | Local inference + model catalog + routing | **audited 2026-11-26** (below) |
+| 4 | Memory (Evermind), skills, episodes, runs | **audited 2026-11-26** (below) |
+| 5 | Chat composer / view | queued |
+| 6 | Shell / terminal, file tools | queued |
+| 7 | Auth / device sign-in / cloud client | queued |
+| 8 | Security policy (code-shield vs Shield) | queued |
+
+---
+
+## 1. MCP
+
+### 1.1 Inventory: 11 implementations across 3 repos
+
+| # | Implementation | Repo · path | Role | Transport | Library | Protocol | Tools |
+|---|---|---|---|---|---|---|---|
+| A | Platform MCP server | Builderforce.ai `api/src/presentation/routes/mcpServerRoutes.ts` (mounted `api/src/index.ts:1043`) | server | Streamable HTTP, stateless, POST-only, batches | hand-rolled | negotiates 2025-06-18 / 2025-03-26 / 2024-11-05 | ~360+ (gateway catalog, `?surface=`) |
+| B | Gateway catalog + dispatcher | `api/src/application/llm/mcpGateway.ts`, `builtinMcpService.ts` (4609 lines, ~378 tools), `connectors/connectorTools.ts`, `mcpExtensionService.ts`, `toolSurfaces.ts` | catalog + gateway | in-process + REST `/llm/v1/mcp/{tools,surfaces,call}` | custom | — | built-in + connectors + tenant MCP |
+| C | Outbound MCP client | `api/src/application/llm/mcp/mcpWireClient.ts` (+ `mcpOAuth*.ts`, `mcpExtensionAuth.ts`, `mcpToolConsent.ts`) | client | Streamable HTTP (JSON or SSE body) + legacy REST fallback | hand-rolled | 2025-06-18 | forwards tenant servers |
+| D | Marketplace review probe | `api/src/application/developer/dynamicReview.ts:349-430` | client (probe) | HTTP, no `initialize` | hand-rolled (3rd framing) | none sent | `tools/list` only |
+| E | agent-runtime local MCP | `agent-runtime/src/gateway/mcp-server-http.ts` (via `server-http.ts:500`, port 18789) | server | HTTP `GET/POST /mcp` + legacy `/mcp/call` | hand-rolled | 2024-11-05 only | 9 |
+| F | REST relay consumers | `brain-embedded/src/mcpCatalog.ts` (web via `McpExtensionsBridge.tsx`, VS Code `platform/platformTools.ts`, Chrome `tools/platformTools.ts`); copies in `frontend/src/lib/builtinTools.ts`, `agent-runtime/.../connector-tools.ts`, `platform-ticket-tools.ts`, mobile `PlatformTools` | client (REST) | HTTPS | custom | — | platform catalog |
+| G | User-server registration UI | VS Code `src/tools/mcpServers.ts`, `bfApi/mcpExtensions.ts`; web `components/mcp/*`, `lib/mcpExtensionsApi.ts` | host UI (→ API CRUD) | — | — | — | — |
+| H | Synapse `McpClient` | builderforce-inference `crates/bf-mcp/src/client.rs` | client | stdio NDJSON | hand-rolled Rust | 2025-06-18 | forwards |
+| I | Synapse connector `Host` | `crates/bf-mcp/src/{host,catalog,spec}.rs`, Tauri `app/src-tauri/src/connectors.rs` | host (stdio user servers, 7 one-click) | stdio | hand-rolled Rust | 2025-06-18 | `mcp_<conn>_<tool>` |
+| J | Synapse context server | `crates/bf-context/src/mcp.rs` (`synapse mcp`, `bf-context mcp`) + loopback HTTP `server.rs` | server | stdio (+ loopback HTTP API) | hand-rolled Rust | 2025-06-18 (echoes the client) | 5 |
+| K | Memory MCP | builderforce-memory `packages/memory-mcp` (`@seanhogg/builderforce-memory-mcp` 2026.10.85) | server ×3 transports | stdio, Streamable HTTP (stateless), in-process Agent SDK | **official `@modelcontextprotocol/sdk ^1.12`** | SDK-negotiated | 9 memory/cost + 20 experience |
+
+These are not MCP but look like it, and should be renamed or documented:
+- `api/src/application/workflow/mcpNode.ts` and `agent-runtime/src/builderforce/orchestrator.ts:797-866` are data-provider calls.
+- The webcontainers `ENV_TOOL_KEYS`/`runtime.agents.*` are an in-process tool catalog.
+- `agent-runtime/src/acp/*` is the Agent Client Protocol; it sends `mcpServers: []`.
+
+Facts that shape the design:
+- **Only K uses the official SDK.** Builderforce.ai only *pins* it (pnpm override `^1.32.0` in `agent-runtime/package.json:246` and `clients/vscode/package.json:1414`).
+- No code anywhere **reads** a host `mcp.json`.
+- **Every server is tools-only.** None offers resources, prompts, sampling or `list_changed`.
+- No MCP path applies `tool-output-policy` or `secret-redaction`.
+
+### 1.2 Duplicate-responsibility matrix
+
+| Responsibility | Copies | Where |
+|---|---|---|
+| JSON-RPC framing / envelopes / error codes | **6** | A `mcpServerRoutes.ts:53-90`; E `mcp-server-http.ts:127-262` (own codes −32001/−32002); C `mcpWireClient.ts:150-175`; D `dynamicReview.ts:~387-405`; H `client.rs`; J `mcp.rs` |
+| SSE-body result parsing | 2 | C `readJsonRpcBody`; D (own "first `data:` line") |
+| Protocol-version constant / negotiation | 5 | A (3 versions), C, E (2024-11-05), H, J (hard-coded 2025-06-18); K is SDK |
+| Tool registry / catalog | **6** | B `CATALOG`; E `MCP_TOOLS`; J `tool_list` (JSON literals); K `buildMemoryTools` (zod); `creation-canvas-contract/canvasTools.ts`; webcontainers `ENV_TOOL_KEYS` |
+| `McpToolEntry` type | 3 "mirrors" | `mcpExtensionService.ts`, `brain-embedded/src/mcpCatalog.ts:25`, `clients/vscode/src/platform/platformTools.ts:~21` |
+| Tool → LLM function shape | 4 | `brain-embedded/src/toolSpecs.ts:18`; `builtinMcpService.ts:4458`; Synapse `brain_tools.rs`; `bf-cloud PlatformTool::as_function` |
+| Tool → MCP `inputSchema` | 3 | A `tools/list`; E `:~84` (TypeBox `$schema` strip); J literals |
+| Advertised-name scheme | **4** | `builtin_<id>` (`agent-tools/src/toolNaming.ts:~28` + `api/.../toolNaming.ts`); `mcp_<8hex>_<tool>` (`mcpExtensionService.ts:~201`, a second `advertisedName` with another signature); `mcp_<conn>_<tool>` 64-char (Synapse `flat_name`); `mcp__server__tool` (`toolNaming.ts:20`, `agent-stall/src/index.ts:96`; no producer) |
+| Write/read-only decision | **4** | `mutates` (B; absent = write); `readOnlyHint` (H/I); webcontainers `mutates` map; A maps `readOnlyHint = mutates===false` |
+| Per-tool approval/consent | **5** | `mcpToolConsent.ts` (server); `mcpCatalog.ts` `mutates !== false`; VS Code `toolMutating`/`platformCallGate`; Chrome `safety.ts`; Synapse Approve (`Tool::writes()`) |
+| REST relay client for `/llm/v1/mcp/call` | **6** | `brain-embedded/mcpCatalog.ts`; `frontend/src/lib/builtinTools.ts:22,33`; `agent-runtime/.../connector-tools.ts:70,161`; `platform-ticket-tools.ts`; `bf-cloud/src/tools.rs`; mobile `PlatformTools` |
+| Catalog TTL cache | 3 | VS Code 60s `ttlCache`; Chrome 60s; API external 60s (`mcpExtensionService.ts:~159`) |
+| Bearer extraction (server) | 3 | A `requireTenantAccess`; E `getBearerToken`; K HTTP auth (sha256, timing-safe) |
+| Outbound auth header build | 5 | `mcpWireClient headersFor`; `mcpCatalog.ts:~96,~138`; `platform-ticket-tools.ts:~38`; `connector-tools.ts`; `builtinTools.ts` |
+| User-server config store | 2, disjoint | API DB `tenant_mcp_extensions` (`identity.ts:294`, remote https only) vs Synapse `connectors.json` (local stdio) |
+| Server-URL validation | 3 | `assertSafeServerUrl` (API); VS Code `mcpServers.ts` regex; `McpServerForm.tsx` |
+| stdio spawn/supervise | 1 (Rust) | H only. TS has none (K is a server). |
+| Launch spec (npx args for memory-mcp) | 3 by hand | `bf-memory/launch.rs RUNTIME_PEERS`; `memory-mcp/src/install/server-spec.ts`; `plugins/builderforce-memory/.claude-plugin/plugin.json` |
+| Windows `.cmd` shim / command-line split | 2 | Rust `LaunchSpec`/`split_command_line`; TS `buildServerSpec` |
+| Host `mcp.json` writer | 2 | K installer (8 hosts, write-only); Synapse `connect_info` (writes the `mcpServers` JSON) |
+
+### 1.3 Tool-level overlaps
+
+| Concept | Names in use | Where |
+|---|---|---|
+| Code search | `codebase_semantic_search`, `codebase_search` (E) · `semantic_search`, `repo_map` (J) · `search_code` (`agent-tools/core-tools.ts:106`) · `builtin_knowledge_search` (B) | 4 implementations of "find code" |
+| Memory | `memory_recall/remember/forget` (`core-tools.ts:347-415`) · `memory_search/get` (`agent-runtime/agents/tools/memory-tool.ts:42,72`) · `memory_recall/get/recall_by_tag/remember/forget/compact/restore` (K) | 3 vocabularies; K is canonical |
+| Tickets / reviews / security | `tickets_from_delta`, `reviews_record`, `security_record` (E) = `builtin_tickets_from_delta`, `builtin_reviews_record`, `builtin_security_record_finding` (B) | same function, two names |
+| Runs / workflows | `workflow_status`, `agent_fleet` (E) · `executions.*`, `workflows.runs` (B) · `run_start/step/finish/list/get` (K) | 3 meanings of "run" |
+| Project knowledge | `project_knowledge` (E) · `projects.*` (B) | |
+| Files / exec | `read_file`, `write_file`, `run_command` (`core-tools.ts`) · `env.fs.*`, `env.run` (webcontainers) · `filesystem` connector (I) · VS Code local tools | 4 |
+| Compression | `compress_context` (J, LLMLingua-2) · `memory_compact` (K, lossless) | similar name, different goal; keep both, but rename J |
+| Fact checking | `check_references` (J) · `memory_compact` recall probe (K) | no shared code |
+| Third-party tools | GitHub/Slack via the tenant connector (B) and via the local connector (I) | possible double-advertising (unverified) |
+
+### 1.4 Inconsistencies
+
+- **Protocol:** E speaks only 2024-11-05.
+  - E returns tools *inside* `initialize`, which is non-standard.
+  - E has no `ping`, no notifications, no batch and no annotations.
+- **Errors:**
+  - Auth failure: A sends −32600 with 401; E sends −32001 with 401.
+  - Unknown tool on E: −32601 with HTTP 200 on `/mcp`, but 404 on `/mcp/call`.
+  - The REST relay returns `{error}` with 4xx/502; K returns `{error:"unauthorized"}`; `bf-cloud` returns `Status{502}`; webcontainers returns typed `code`.
+- **Timeouts:**
+  - outbound 20s (C);
+  - relay 30s (E);
+  - stdio call 30s, hosted 120s, start 180s (H/I);
+  - platform 120s (`bf-cloud`);
+  - browser relays have none.
+- **Sessions:** C re-runs `initialize` before every `tools/list` and every `tools/call`, which doubles the round trips.
+- **Arguments:** E accepts `arguments | args` and `tool`; A accepts `arguments` only.
+- **Wrong placeholder:** VS Code's URL placeholder is `…/sse`, but C only speaks Streamable HTTP.
+- **Stale version:** K's default `serverInfo.version` is `2026.5.31`, while the package is `2026.10.85`.
+- **Loopback:** not verified whether K's HTTP bin binds to loopback.
+
+### 1.5 Target design: one MCP stack
+
+**Principle:** use the official SDK under every TypeScript MCP surface, keep one tool vocabulary, and make one package own the protocol. Synapse's Rust MCP is not ported; the rebuilt Synapse hosts the VSIX, and the VSIX is TypeScript.
+
+**New package `@seanhogg/builderforce-mcp`.** It is source-and-published, depends on `@modelcontextprotocol/sdk`, and is runtime-neutral (Workers, Node, browser).
+
+| Module | Replaces |
+|---|---|
+| `protocol`: version negotiation, error codes, `isError` result helpers (re-exported SDK types) | the 6 framings and 5 version constants |
+| `tool`: ONE `McpToolEntry` (`name`, `title`, `description`, `inputSchema`, `effect: 'read' \| 'write' \| 'external'`, `surface[]`) plus `toMcp()`, `toOpenAI()`, `toAnthropic()` and `fromMcp()` (maps `readOnlyHint` ⇄ `effect`) | 3 type mirrors, 4 LLM shapers, 3 inputSchema shapers, 4 write/read rules |
+| `naming`: ONE advertised-name codec, `<source>__<tool>` (MCP-client convention, ≤64 chars, reversible), with `resolve(name) → {source, tool}` | 4 naming schemes |
+| `policy`: a `ToolGate` port (consent list, approval-for-write, role filter hook) plus output policy applied centrally (`tool-output-policy`, `secret-redaction`) | 5 consent/approval copies; adds the missing redaction |
+| `server`: `createMcpServer(catalog, {auth, transport})`, using the SDK's Streamable-HTTP transport (Workers fetch adapter) and stdio | A, E |
+| `client`: a session-reusing Streamable-HTTP/SSE client (one `initialize` per session, cursor pagination, timeout, typed `AuthChallenge`) plus a stdio client with supervise and restart (Node only) | C, D, H |
+| `relay`: ONE typed client for the platform REST face (`/llm/v1/mcp/*`) with the TTL cache | 6 relay copies, 3 TTL caches |
+| `config`: read **and** write host configs (Claude Code, Claude Desktop, Cursor, VS Code `mcp.json`, Windsurf, Cline, Gemini, Codex TOML), plus ONE `LaunchSpec` (npx args, Windows `.cmd`) | K installer (moves here), Synapse `connect_info`, the 3 hand-copied npx specs |
+
+**Servers after consolidation:** three servers, one per bounded context, all built with `createMcpServer`.
+
+1. **Platform MCP** (A on B): remote, tenant-scoped, the canonical catalog for everything that lives in the platform.
+2. **Memory MCP** (K): canonical memory and experience. Stdio, HTTP and in-process transports stay, now on the shared package.
+3. **Workspace MCP**, one local server for a machine's code.
+   - It exposes the code index, search, repo map, git history, references and context compression.
+   - It replaces E's local tools and J.
+   - Its host is the VS Code extension (and therefore the rebuilt Synapse IDE) plus `agent-runtime` headless, sharing one implementation. Which index engine sits behind it is the next audit (area 2).
+
+**User-connected servers: one model, two transports.**
+- Remote servers (https) stay tenant records in `tenant_mcp_extensions`, called through `client`.
+- Local stdio servers become entries in the host's own `mcp.json`, read through `config`.
+  - In VS Code and the Synapse IDE they also surface through VS Code's built-in MCP support.
+  - Synapse's `connectors.json` and its 7-entry one-click catalog fold into one catalog: the API connector catalog, with a `transport: 'stdio' | 'http'` column.
+- One gate (`policy.ToolGate`) applies to both kinds.
+
+**Vocabulary:**
+- Platform tools keep their dotted catalog ids (`tasks.create`). They are advertised as `platform__tasks_create`.
+- Memory tools are `memory__recall`; workspace tools are `workspace__search`; tenant or local servers are `<server>__<tool>`.
+- E's duplicate snake names (`tickets_from_delta`, …) are deleted; E calls the platform tool by its id.
+- In-process catalogs (canvas `canvas_*`, webcontainers `env.*`) are not MCP servers. They register as `McpToolEntry` sources in the same catalog type so that names, effect and gating are shared.
+
+### 1.6 Migration order
+
+Each step is a separate PR, and existing tests run unchanged as the parity oracle.
+
+1. **Create `@seanhogg/builderforce-mcp`** with `protocol`, `tool`, `naming` and `policy`. Move `McpToolEntry` and `toolNaming.ts` in, and re-point the 3 mirrors and 4 shapers. (MCP-G001–G006)
+2. **Move K onto the package.** Move `install/` to `config`, fix the stale version and verify the HTTP loopback bind. (MCP-G007–G009)
+3. **Rebase A on `server`.** Rewrite E as a `createMcpServer` instance (fixing its protocol, ping, errors and annotations) and delete E's duplicate tools. (MCP-G010–G013)
+4. **Replace C and D with `client`.** This reuses sessions and gives one SSE parser. Fix the VS Code `/sse` placeholder. (MCP-G014–G016)
+5. **Replace the 6 relay copies with `relay`.** (MCP-G017)
+6. **Unify the user-server model.** Add the `transport` column to the connector catalog, read `mcp.json` through `config`, and apply one `ToolGate` everywhere. (MCP-G018–G020)
+7. **Merge the four code-search tools** into Workspace MCP behind one interface; the engine choice comes from area 2. (MCP-G021)
+8. **Retire Synapse `bf-mcp`/`bf-context` MCP and `bf-memory`** when the rebuilt Synapse ships (UP-G015). Rename the non-MCP "mcp" workflow nodes. (MCP-G022–G024)
+
+### 1.7 Granular gaps
+
+| ID | Gap | Fix | Where |
+|---|---|---|---|
+| MCP-G001 | 6 hand-rolled JSON-RPC framings; only memory-mcp uses the official SDK | `protocol` module on the SDK | A, C, D, E, H, J |
+| MCP-G002 | 5 protocol-version constants; E is stuck on 2024-11-05 | negotiate in one place | A, C, E, H, J |
+| MCP-G003 | `McpToolEntry` mirrored 3× | one type in `tool` | `mcpExtensionService.ts`, `mcpCatalog.ts:25`, `platformTools.ts:~21` |
+| MCP-G004 | 4 tool→LLM-function shapers; no Anthropic shaper | `toOpenAI`/`toAnthropic` | `toolSpecs.ts:18`, `builtinMcpService.ts:4458`, Synapse ×2 |
+| MCP-G005 | 4 advertised-name schemes; `mcp__server__tool` is parsed but never produced; two different `advertisedName` functions | one codec | `toolNaming.ts` ×2, `mcpExtensionService.ts:~201`, `agent-stall:96`, `flat_name` |
+| MCP-G006 | 4 encodings of read/write (`mutates`, `readOnlyHint`, webcontainers map) and 5 approval gates | `effect` + `ToolGate` | B, H/I, webcontainers, `mcpToolConsent`, `mcpCatalog`, VS Code, Chrome `safety.ts` |
+| MCP-G007 | No MCP path applies `tool-output-policy` / `secret-redaction`; the gateway and E return untruncated, unredacted results | central output policy | A, B, E |
+| MCP-G008 | memory-mcp default `serverInfo.version` is stale (2026.5.31 vs 2026.10.85) | read from package.json | `memory-mcp/src/transports/{mcp-server,sdk}.ts` |
+| MCP-G009 | memory-mcp HTTP bin loopback binding unverified | bind 127.0.0.1 by default | `memory-mcp/src/bin/http.ts` |
+| MCP-G010 | E is non-standard: tools inside `initialize`, no ping/notifications/batch/annotations, its own error codes | rebuild on `server` | `agent-runtime/src/gateway/mcp-server-http.ts` |
+| MCP-G011 | E duplicates platform tools under snake names (`tickets_from_delta`, `reviews_record`, `security_record`) | call the platform ids, delete the copies | `mcp-server-http.ts:63`, `platform-ticket-tools.ts` |
+| MCP-G012 | E accepts `args` and `arguments`; A accepts only `arguments` | the SDK schema only | E |
+| MCP-G013 | No server offers resources, prompts or `list_changed` (catalogs change per tenant/role) | advertise `listChanged`; expose docs/specs as resources where useful | A, E, J, K |
+| MCP-G014 | Outbound client re-initializes before every list and call | session reuse | `mcpWireClient.ts` |
+| MCP-G015 | Second SSE parser and framing in the marketplace probe | use `client` | `dynamicReview.ts:349-430` |
+| MCP-G016 | VS Code server-URL placeholder says `/sse`, but the client is Streamable-HTTP only | fix the placeholder, or add legacy SSE to `client` | `clients/vscode/src/tools/mcpServers.ts` |
+| MCP-G017 | 6 REST relay clients for `/llm/v1/mcp/call`, 3 TTL caches, 5 auth-header builders | `relay` | `mcpCatalog.ts`, `builtinTools.ts`, `connector-tools.ts`, `platform-ticket-tools.ts`, `bf-cloud/tools.rs`, mobile |
+| MCP-G018 | Two disjoint user-server stores: tenant DB (remote) vs Synapse `connectors.json` (local); two one-click catalogs | one connector catalog with `transport` | `identity.ts:294`, `bf-mcp/catalog.rs` |
+| MCP-G019 | Nothing reads a host `mcp.json`; the memory installer only writes it | `config` read + write | `memory-mcp/src/install/*` |
+| MCP-G020 | npx launch spec for memory-mcp copied by hand 3× | one `LaunchSpec` | `launch.rs`, `server-spec.ts`, `plugin.json` |
+| MCP-G021 | 4 code-search tools (`codebase_*`, `semantic_search`/`repo_map`, `search_code`, `knowledge.search`) | Workspace MCP + area-2 audit | E, J, `core-tools.ts:106`, B |
+| MCP-G022 | 3 memory tool vocabularies (`core-tools`, `memory-tool.ts`, memory-mcp) | memory-mcp names only | `core-tools.ts:347-415`, `agent-runtime/agents/tools/memory-tool.ts` |
+| MCP-G023 | Possible double-advertising of the same third-party server (tenant connector + local connector) | dedupe by server identity in the catalog | B + I (unverified) |
+| MCP-G024 | Non-MCP code named "mcp" (workflow `mcpNode`, orchestrator `mcp` node) | rename to `dataProvider` | `api/.../workflow/mcpNode.ts`, `orchestrator.ts:797-866` |
+
+---
+
+## 2. Code index / search / repo map / context
+
+### 2.1 Inventory: 13 implementations
+
+Roots: `B` = Builderforce.ai, `I` = builderforce-inference/crates, `M` = builderforce-memory/packages.
+
+| # | Implementation | Path | Parse | Embed | Store | Lexical / rank | Repo map | Host |
+|---|---|---|---|---|---|---|---|---|
+| 1 | **bf-index** | `I/bf-index/src/*` | native tree-sitter, 11 languages; chunks ≤150 lines (header 25 + members; fallback 60/10) | fastembed bge-small-en-v1.5 384d (ONNX CPU, 33 MB) | SQLite per workspace (FTS5 + f32 BLOB, brute-force cosine) | identifier-aware BM25 + cosine, RRF k=60, +0.05 exact-symbol boost, cap 25 | file ref graph + personalized PageRank (0.85/30/1e-6), budget 1500–8000 tokens | Synapse (Rust) |
+| 2 | bf-context | `I/bf-context/src/*` | — (wraps #1) | — | `~/.builderforce/desktop/indexes/<blake3>.db` | `semantic_search` (8/25), `check_references` (≤50) | `repo_map` | loopback HTTP + MCP |
+| 3 | bf-compress | `I/bf-compress` | — | LLMLingua-2 ONNX 178 MB | — | `compress_context` | — | Synapse |
+| 4 | `codebase_semantic_search` | `B/agent-runtime/src/builderforce/shared-tools/node-code-tools.ts:~361-595` | regex `extractSymbols` | **none** (BM25 only, despite the name) | `<root>/.builderForceAgents/search-index.json`, 5-min staleness | BM25 over the first 200 lines per file, 5000 files, 20 results | — | agent-runtime |
+| 5 | `codebase_search` (= on-prem `search_code`) | same file `:~187-350`; wired at `agents/node-capability-provider.ts:296` | — | — | — | ripgrep per keyword + hand-weighted score, 20 results | — | agent-runtime |
+| 6 | code-map / ast-parser | `B/agent-runtime/src/builderforce/{code-map,ast-parser}.ts` | TS compiler API (TS/JS only) | — | — | — | dependency graph | agent-runtime |
+| 7 | Shared definition index | `B/packages/agent-tools/src/{symbols,node-tree-sitter,node-symbols,symbolRepoMap,symbolRelations,callScan}.ts` | web-tree-sitter WASM, 7 languages + regex fallback | — | `<ws>/.builderforce/symbols.json` (VS Code) · `<root>/.builderForceAgents/symbols.json` (on-prem) | `find_symbol`, `file_outline` | coarse (no ref graph) | VS Code, agent-runtime |
+| 8 | **packages/repo-map** | `B/packages/repo-map/src/*` | regex facts (a deliberate TS mirror of #1's graph and map) | — | R2, keyed by repo+sha | keyword over definitions | PageRank (same constants as #1) | Cloudflare Worker |
+| 9 | Cloud dense arm | `B/api/src/application/repos/repoSymbolVectors.ts`, `knowledge/knowledgeEmbedder.ts` | — | bge-m3 Workers AI, int8, signatures only | R2 per repo | RRF with #8 | — | Worker |
+| 10 | **Deterministic knowledge index** | `M/memory/src/retrieval/knowledge-index/*` + `B/packages/agent-tools/src/knowledge/index/*` + `B/clients/vscode/src/knowledge/index/hostKnowledgeIndex.ts` + `B/api/.../knowledgeIndexPort.ts` | graph cards (path + symbol, no bodies) | chain: Synapse (never offered) → Evermind CPU → Ollama | int8 CSR `.idx` (editor) / `.bin` (R2) | exact → lexical → dense cascade | — | Worker, browser, Node |
+| 11 | Memory RAG | `M/memory/src/retrieval/*`, `rag/*`, `vectorstore/*` | recursive char chunker 1000/200 | Evermind | HNSW / REST | BM25 + dense RRF + MMR | — | any; also backs API `knowledge.search` = SOP/doc search (`recallSops.ts`), not code |
+| 12 | Knowledge-review graph | memory `knowledge/*`, agent-tools `knowledge/*` (codePack, codeLayers, codeEntryPoints, codeGraph…), VS Code `src/knowledge/*`, knowledge-browser, knowledge-client, knowledge-graph-view | regex + manifests + dependency-cruiser/jscpd/knip | — | packs | — | — | all |
+| 13 | Other `search_code` backings | VS Code `src/workspace/workspaceSearch.ts` (exact/regex ripgrep, cap 100); cloud `repos/readRepoContents.ts searchRepoCode` (GitHub/GitLab API, 30); IDE `cloudAgent/ideWorkspaceCoding.ts searchIdeWorkspace` (R2 substring scan, 30) | — | — | — | — | — | — |
+
+Checked and not duplicates:
+- `packages/prefetch/lexical.ts` is an intent tokenizer.
+- webcontainers has no index.
+- Chrome calls the API.
+- `@huggingface/transformers` is used for chat, not indexing.
+
+### 2.2 Duplicate-responsibility matrix
+
+| Responsibility | Copies |
+|---|---|
+| Symbol / definition parsing | **5**: bf-index `lang.rs` (11 languages), agent-tools `node-tree-sitter.ts` (7), agent-tools `symbols.ts` regex, agent-runtime `ast-parser.ts` (TS API), `symbolRelations.ts` (regex) |
+| Chunking | 3 incompatible: bf-index (tree-sitter, 150/60 lines), memory `chunk.ts` (1000/200 chars), node-code-tools (first 200 lines, no chunks) |
+| Embedders | **4 models**: bge-small 384d (Synapse), bge-m3 (cloud), Evermind SSM (editor, memory-mcp), Ollama (editor). No vectors are shared across stores |
+| Vector stores | 4: SQLite BLOB, int8 CSR `.idx`/`.bin`, HNSW, R2 per-repo vectors |
+| Lexical search | **6**: FTS5 + `terms.rs`, BM25 JSON (node-code-tools), memory `bm25.ts` + knowledge-index `lexical.ts`, repo-map `search.ts`, ripgrep ×2, GitHub API |
+| Tokenizers | 5: `terms.rs`, repo-map `terms.ts` (mirror), knowledge-index `tokenize.ts`, node-code-tools `ssTokenise`, prefetch `lexical.ts` |
+| Fusion / ranking | 4: `search.rs` RRF, memory `fusion.ts` RRF, cloudRepoMap RRF, node-code-tools hand weights |
+| Repo map | 3: `repo_map.rs`, repo-map `render.ts` (mirror), `symbolRepoMap.ts` (no graph) |
+| File walk + ignore rules | **7**: `walk.rs`, repo-map `filePolicy.ts`, agent-tools `skipDirs.ts`, memory `ignoreMatcher.ts`, VS Code `workspaceSearch.ts SKIP_DIRS`, node-code-tools `IGNORED_DIRS` (11 dirs), `ON_PREM_INDEX_SKIP_DIRS` |
+| Change detection | 3: blake3 + notify watcher (bf-index), VS Code `indexWatcher` + mtime snapshot, agent-runtime 5-min staleness (no watcher) |
+| `search_code` backing | **4 different semantics**: exact/regex (VS Code), keyword-ranked (on-prem), GitHub search (cloud), lower-cased substring (IDE workspace) |
+
+### 2.3 Same repo, indexed several times on one machine
+
+With VS Code, Synapse and agent-runtime all running, one repo produces:
+
+- `~/.builderforce/desktop/indexes/<hash>.db` (Synapse: chunks + bge-small vectors);
+- `<ws>/.builderforce/symbols.json`, `.builderforce/knowledge/<rootId>.idx` and the stat manifest (VS Code);
+- `<ws>/.builderForceAgents/symbols.json` and `search-index.json` (agent-runtime). The directory name differs (`.builderForceAgents` vs `.builderforce`).
+
+That is three walks, three parsers, two symbol snapshots and two embedders. None reuses another's output. The editor's embedder chain lists Synapse first, but Synapse never offers an embedder.
+
+### 2.4 Survivor choice
+
+| Capability | Best today | Why |
+|---|---|---|
+| Parsing / chunking | bf-index (native tree-sitter, 11 languages, body chunks) | Only one with real chunks. agent-tools WASM tree-sitter is 7 languages, but `tree-sitter-wasms` ships grammars for all 11. |
+| Repo map | bf-index ≡ packages/repo-map (same algorithm) | repo-map already runs in Workers, Node and the browser; it only lacks tree-sitter facts. |
+| Lexical + dense store | memory knowledge-index | Pure TS, runs everywhere, int8 + CSR, fingerprint-guarded. Lacks body chunks. |
+| Embedder | Undecided: bge-small (Synapse) vs Evermind vs bge-m3 | One model per index fingerprint; see §2.5. |
+| References check, watcher, hash-incremental | bf-index only | Must be ported. |
+| Exact / regex search | VS Code `workspaceSearch.ts` (ripgrep + JS fallback) | Correct semantics; it lives in the client instead of a package. |
+
+### 2.5 Target design: one code index, every host
+
+Following decision 4 (interface first; Rust only where a benchmark proves a gain), there is one TypeScript engine assembled from parts that already exist, so it runs in the VS Code extension host / rebuilt Synapse IDE, agent-runtime, the Cloudflare Worker and the browser.
+
+**Package `@seanhogg/builderforce-code-index`** (new), composed from:
+- `parse`: agent-tools `node-tree-sitter.ts`, extended to bf-index's 11 languages from the same `tree-sitter-wasms`. `symbols.ts` regex stays the per-file fallback. `ast-parser.ts` and `symbolRelations.ts` regex are deleted, and the TS API call graph moves to a tree-sitter `calls` query.
+- `chunk`: a port of bf-index `chunk.rs` rules (definition chunks ≤150 lines, header + members, 60/10 fallback). The memory `chunk.ts` stays for prose only.
+- `graph` + `map`: **packages/repo-map, unchanged**, fed tree-sitter facts instead of regex. `symbolRepoMap.ts` is deleted.
+- `store` + `search`: the **memory knowledge-index** (exact → lexical → dense), extended with body-chunk records beside cards, so one `.idx` per root replaces `.db`, `symbols.json`, `search-index.json` and the `.idx` cards. `bm25.ts` stays as its lexical primitive; FTS5 and the node-code-tools BM25 are deleted.
+- `walk`: ONE ignore policy (merge the 7 lists; repo-map `filePolicy.ts` is the base) and one path normaliser (repo-relative POSIX, canonical root).
+- `refresh`: content-hash incremental (port of blake3 → a webcrypto/sha-1 per file) plus a host watcher port. VS Code supplies `FileSystemWatcher`, Node supplies `fs.watch`, and the Worker refreshes per commit sha (as `cloudRepoMap.ts` does).
+- `refs`: a port of `check_references`.
+- `embed`: one `EmbedderPort` chain with ONE fingerprint per index.
+  - Default: the platform's chosen local model.
+  - In the cloud, bge-m3. Cloud and local indexes stay separate stores, but they share a format.
+
+**One location:** `<ws>/.builderforce/index/<rootId>.idx`. `.builderForceAgents/` is retired. The VS Code extension, the Synapse IDE (the same extension) and agent-runtime on one machine share the file through a single-writer lock, and the second process reads it.
+
+**One tool vocabulary on Workspace MCP** (§1.5):
+
+| Tool | Semantics |
+|---|---|
+| `workspace__search` | exact or regex text search (ripgrep; JS fallback; `path` scope applied *before* the search) |
+| `workspace__find` | semantic + lexical hybrid over chunks and cards (replaces `semantic_search`, `codebase_semantic_search` and `codebase_search`) |
+| `workspace__symbol` / `__outline` | definition lookup |
+| `workspace__map` | PageRank repo map (budgeted) |
+| `workspace__references` | `check_references` |
+| `workspace__compress` | LLMLingua (stays optional; it needs a native or ONNX backend) |
+
+**Benchmark gate** (decision 4): before retiring bf-index, time the TS engine on hired.video and Builderforce.ai (cold index, warm query p50/p95, memory). If native is decisively faster, compile `bf-index` to WASM behind the same `parse`/`chunk` interface instead of keeping a Rust sidecar.
+
+### 2.6 Granular gaps
+
+| ID | Gap | Fix | Where |
+|---|---|---|---|
+| CIX-G001 | **Bug:** on-prem `search_code` is keyword-ranked ripgrep (`runCodebaseSearch`), but its contract promises an exact substring or regex. The `path` scope is applied after the search. | Route it to exact/regex search, with the scope applied first | `agent-runtime/src/agents/node-capability-provider.ts:296`, `node-code-tools.ts:~187` |
+| CIX-G002 | `codebase_semantic_search` has no embeddings (BM25 over the first 200 lines); the name is misleading | Replace it with `workspace__find` | `node-code-tools.ts:~361-595`, `mcp-server-http.ts` |
+| CIX-G003 | Exact search lives in the VS Code client, not a package; 4 `search_code` semantics exist across hosts | Move `workspaceSearch.ts` into `code-index/search`; make cloud and IDE match its contract | `clients/vscode/src/workspace/workspaceSearch.ts`, `readRepoContents.ts`, `ideWorkspaceCoding.ts` |
+| CIX-G004 | 5 symbol parsers (native tree-sitter 11 languages, WASM 7, regex, TS compiler API, regex relations) | One `parse` on WASM tree-sitter (11 languages) plus a regex fallback | `lang.rs`, `node-tree-sitter.ts`, `symbols.ts`, `ast-parser.ts`, `symbolRelations.ts` |
+| CIX-G005 | 3 chunkers; only Synapse embeds code bodies; the editor index holds cards only | Port the `chunk.rs` rules; add chunk records to the knowledge index | `chunk.rs`, memory `knowledge-index/*` |
+| CIX-G006 | repo-map is a hand-maintained TS mirror of `graph.rs`/`repo_map.rs`, fed by regex | Keep repo-map as the one implementation, fed by `parse`; delete `symbolRepoMap.ts` | `packages/repo-map`, `agent-tools/symbolRepoMap.ts` |
+| CIX-G007 | 6 lexical engines and 5 tokenizers | knowledge-index lexical + `bm25.ts`; one `codeTokenize` | see §2.2 |
+| CIX-G008 | 4 RRF/fusion copies | memory `fusion.ts` only | `search.rs`, cloudRepoMap, node-code-tools |
+| CIX-G009 | 7 ignore lists that disagree (`target`, `vendor`, `media`, dot-dirs, `.vercel`, `.worktrees`…) | One policy (base: `filePolicy.ts`) | §2.2 row "File walk" |
+| CIX-G010 | Path normalisation is done case by case (`normalizeScopeDir`, `relPosix`, `replace(/\\/g,'/')`) | One normaliser in `walk` | agent-tools, VS Code, agent-runtime |
+| CIX-G011 | One repo is indexed 3× on one machine, in two dot-dirs (`.builderforce` vs `.builderForceAgents`) | One `.idx` per root; single writer; retire `.builderForceAgents` | §2.3 |
+| CIX-G012 | 4 embedding models and no shared fingerprint policy; the editor chain lists a Synapse embedder that is never offered | One `EmbedderPort` chain with a declared default model per surface | `embedderChain.ts`, `embedderPort.ts`, `bf-index/embed.rs`, `knowledgeEmbedder.ts` |
+| CIX-G013 | Change detection: watcher + blake3 (Synapse) vs mtime snapshot (VS Code) vs 5-min staleness (agent-runtime) | Content-hash incremental + host watcher port | `watcher.rs`, `indexWatcher.ts`, `node-code-tools.ts` |
+| CIX-G014 | `check_references` exists only in Rust | Port it to `code-index/refs` | `bf-index/refs.rs` |
+| CIX-G015 | Result caps disagree (8/25/20/100/30), as do file caps (1 MB / 256 KB; 5k / 6k / 40k files) | One cap policy per tool, documented | §2.2 |
+| CIX-G016 | No benchmark compares the TS and native index | Run the benchmark gate in §2.5 before retiring bf-index | — |
+| CIX-G017 | API `knowledge.search` is SOP/doc search (`recallSops.ts`), but its name suggests code | Rename it to `docs.search`, or document it | `builtinMcpService.ts:1402` |
+
+---
+
+## 3. Local inference, model catalog, routing, caches
+
+Roots: `BI` = builderforce-inference, `BF` = Builderforce.ai, `WC` = builderforce-webcontainers, `MEM` = builderforce-memory.
+
+### 3.1 Inventory
+
+**Engines (run a model):**
+- `BI/crates/bfi-*`: one Rust engine (`bfi-engine`) with three targets.
+  - Targets: native `bfi-server`, wasm `bfi-web`, napi `bfi-node`.
+  - GGUF reader (incl. Q1_0/PQ2_0/PTQ1_0), CPU SIMD + wgpu backends, qwen3 / qwen35-Bonsai.
+  - Prefix KV (`engine/prefix.rs`), speculative decoding (`spec.rs`) and grammar-constrained tools.
+  - Serves OpenAI, Anthropic and Ollama APIs on :11434.
+- `BF/packages/bfi-node` (2026.10.12) and `bfi-web`: vendored prebuilt artifacts of the above (`SOURCE.json`), linked into VS Code.
+  - **`bfi-web` is stale:** 2026.10.10 against crate 2026.10.12.
+- Others:
+  - `agent-runtime/llama-stream.ts` (node-llama-cpp);
+  - `brain-embedded/pageEngines/{webllmEngine,browserEngine}.ts` (WebLLM, Gemini Nano);
+  - WC `inference/` (ONNX Runtime Web, wllama, WebLLM adapters): **no consumer found**;
+  - MEM `memory-engine` (SSM/Evermind: a different model family, not a duplicate).
+
+**Hosts that drive an engine:**
+- VS Code `src/hostBfi/*` (a worker_thread loading native `bfi-node`, else wasm; it auto-provisions Bonsai ≤600 MB);
+- `brain-embedded/pageEngines/bfiEngine.ts` (browser);
+- `bf-local/runtime.rs` (supervises `bfi serve` for Synapse).
+
+**Catalogs: about 9, only 3 of them generated, from different sources:**
+1. `model-catalog` (tiers, role ladders, BYO vocabulary);
+2. `model-catalog/generated/priceSnapshot.ts` (OpenRouter, generated);
+3. api `llm/vendors/*.ts` (the routing source of truth: tier, context, capabilities) + `liveModels.snapshot.json`;
+4. api `modelCatalog.ts` (a live OpenRouter fetch for marketing);
+5. frontend `lib/modelCatalog.ts` and `brain-embedded/gatewayModels.ts` (read the gateway);
+6. agent-runtime `models-config.providers.ts` + 5 `*-models.ts` (**hand-coded context and price**);
+7. `local-inference/catalog.ts` + `webllmCatalog.generated.ts` (generated) + `bfiLimits.generated.ts` (generated from Rust `kv_plan`);
+8. `BI/bf-local/hub.rs` (hard-coded Ollama-tag hub: llama3.x, qwen2.5, gemma2);
+9. api `providerModelCatalog.ts` (per-tenant fetch).
+
+**Routers: about 10.**
+- The shared core is `packages/model-router` (+ `learned-routing`, `difficulty-router`, `cost-levers`). api and agent-runtime each bind their own `CatalogView` to it, which is fine.
+- Extra pickers:
+  - api `proxySeed`/`poolRouting`/`modelPool*`/`proxyRoutePlan`, `pickCloudModel.ts`, `byoRoleOrder.ts`/`byoModelRouting.ts`;
+  - `local-inference/plan.ts` + `brain-embedded/hostModelStream.ts` + `localSuccessRouter.ts`;
+  - VS Code `models/modelRouting.ts`;
+  - Chrome `inference/route.ts`;
+  - agent-runtime `provider-cascade.ts`;
+  - MEM `InferenceRouter.ts` (SSM vs transformer: a different problem).
+
+**Fit / hardware budget:** 4 copies.
+- Rust `bfi-runtime/fit.rs` + `bfi-models/kv_plan.rs`;
+- TS `local-inference/fit.ts` (generated limits: good);
+- `bf-local/hub.rs` (its own 0.6 share);
+- WC `adaptive/`.
+
+**KV / prefix cache:** 3 implementations.
+- Rust `prefix.rs` (the real one);
+- `bfi-core/resident` (GPU-resident);
+- WC `kvcache/{paged,radix,lru,quant}.ts`, with **no engine feeding it**.
+
+**Response caches:** 3.
+- api `{responseCache,proxyResponseCache,semanticCache,semanticChatCache}.ts`;
+- MEM `ResponseCache`/`SemanticCache`/`CachingBridge`;
+- api `promptCaching.ts` (Anthropic `cache_control`, distinct).
+
+**Ollama clients:** 6.
+- `local-inference/{probe,embed}.ts`, agent-runtime `ollama-stream.ts`, api `vendors/{ollama,ollamaLocal}.ts`, Chrome `localRuntimes.ts`, `bfi/ollama.rs` (reads its store);
+- also `bfi-server` *serves* the Ollama API.
+
+**Weight stores on one machine: 8.**
+1. `~/.builderforce/models` (Rust; the path is coded twice, in `bfi-runtime/store.rs` and `bf-local/runtime.rs`);
+2. `~/.ollama/models`;
+3. VS Code `globalStorage/local-models/<runtime>/`;
+4. browser Cache Storage (HF URL);
+5. WebLLM Cache Storage;
+6. WC IndexedDB;
+7. node-llama-cpp path;
+8. Gemini Nano.
+
+**The same Bonsai GGUF can sit in 3 of them on one PC.**
+
+### 3.2 Inconsistencies
+
+- **One engine, two runtime ids:** `synapse` and `bfi` both probe :11434 (Chrome dedupes them).
+- **Bonsai ids differ:** `bonsai-1.7b-q1_0` (GGUF, runtime `bfi`) vs `Bonsai-1.7B-q4-ONNX` (runtime `webllm`).
+- **The two local catalogs share no models:** the Rust hub uses Ollama tags; the TS catalog never lists them.
+- **Price ids are OpenRouter ids** (incl. `~…-latest` aliases) and need `vendors/modelTwins.ts` to meet the vendor ids.
+- **Context-window defaults disagree:** Ollama 128000 (agent-runtime), Bonsai 32768/65536, WebLLM 1024–4096.
+- **The `bfi` CLI User-Agent** is hard-coded `bfi/2026.10.4`.
+- **memory-engine `export/gguf.ts`** produces a GGUF that stock llama.cpp cannot run (unverified whether the docs say otherwise).
+
+### 3.3 Target design
+
+| Capability | Survivor | Retire / fold |
+|---|---|---|
+| Engine (native, wasm, napi, server) | `BI/crates/bfi-*`; distribution = the vendored `BF/packages/bfi-*` only | WC `inference/` (unused); node-llama-cpp `llama-stream.ts` once `bfi-node` covers the on-prem GGUF path |
+| Local runtime registry, catalog, fit, local-first plan | `BF/packages/local-inference` | `bf-local/hub.rs` + its `fit.rs` (Synapse rebuild); one runtime id for the engine (`bfi`; `synapse` becomes a host label, not a runtime) |
+| Hardware limits | Rust `kv_plan` → generated `bfiLimits` (already) | `hub.rs` 0.6 share, WC `adaptive/` |
+| Cloud catalog (price, context, tier, roles) | `packages/model-catalog`, generated from ONE pipeline: priceSnapshot + vendor registry + context table | agent-runtime hand tables (`models-config.providers.ts`, `*-models.ts`); api `modelCatalog.ts` reads the same snapshot |
+| Routing order | `packages/model-router` (+ learned, difficulty, cost-levers) | VS Code `modelRouting.ts`, Chrome `route.ts` and `provider-cascade.ts` become thin `CatalogView` bindings; api pickers (`pickCloudModel`, `byo*`, `poolRouting`) collapse into model-router policies |
+| Prefix / KV cache | Rust `prefix.rs` (+ `resident`) | WC `kvcache/*` (no consumer) |
+| Response cache | one library: MEM `ResponseCache`/`SemanticCache` behind api `cacheScope.ts` | api's own copies |
+| Ollama client | `local-inference` (`probe`, `embed`, + a stream adapter) | agent-runtime `ollama-stream.ts`, Chrome `localRuntimes.ts` probe |
+| Weight store | ONE machine store: `~/.builderforce/models` (`BFI_MODELS_DIR`), with sha256 and resumable download; VS Code `hostBfi/modelFiles.ts` points at it | VS Code `globalStorage/local-models`; the duplicated `models_dir()` in `bf-local`. Browser Cache Storage stays (a different host) |
+
+### 3.4 Granular gaps
+
+| ID | Gap | Fix | Where |
+|---|---|---|---|
+| INF-G001 | The vendored `bfi-web` is stale (2026.10.10 vs crate 2026.10.12); its `SOURCE.json` may lag the bytes | Re-run `scripts/vendor-bfi-web.mjs`; add a drift guard against the crate version | `BF/packages/bfi-web`, `BI/crates/bfi-web` |
+| INF-G002 | WC `inference/` (ONNX/wllama/WebLLM) has no consumer | Validate, then retire (or wire it if a host needs ONNX) | `WC/packages/browser/src/inference/*`, `ml.ts` |
+| INF-G003 | WC `kvcache/*` (paged/radix/lru/quant) has no engine feeding it | Retire; the Rust `prefix.rs` is the prefix cache | `WC/packages/browser/src/kvcache/*` |
+| INF-G004 | WC `adaptive/` and `learning/` duplicate the fit and routing ideas, with no consumer found | Validate, then retire | `WC/packages/browser/src/{adaptive,learning}` |
+| INF-G005 | About 9 model catalogs; agent-runtime hand-codes context windows and prices | One generated catalog pipeline in `model-catalog`; agent-runtime consumes it | `agent-runtime/src/agents/models-config.providers.ts`, `*-models.ts` |
+| INF-G006 | Rust `hub.rs` local catalog (Ollama tags) is disjoint from the TS `local-inference` catalog | One local catalog (`local-inference`); Synapse rebuild drops `hub.rs` | `BI/crates/bf-local/src/hub.rs` |
+| INF-G007 | 4 fit/hardware-budget implementations | Rust `kv_plan` → generated `bfiLimits` only | `hub.rs`, `fit.rs` ×2, WC `adaptive` |
+| INF-G008 | About 10 model pickers; api pickers outside `model-router` | model-router policies; hosts keep only `CatalogView` bindings | api `pickCloudModel`, `byo*`, `poolRouting`, `proxySeed`; VS Code `modelRouting.ts`; Chrome `route.ts`; `provider-cascade.ts` |
+| INF-G009 | 3 response-cache implementations | One library behind `cacheScope.ts` | api `*Cache.ts`, MEM `ResponseCache`/`SemanticCache` |
+| INF-G010 | 6 Ollama clients | `local-inference` owns probe, embed and stream | `ollama-stream.ts`, Chrome `localRuntimes.ts`, api `vendors/ollama*.ts` |
+| INF-G011 | 8 weight stores; the same Bonsai GGUF stored up to 3× per machine; `models_dir()` coded twice in Rust | One machine store `~/.builderforce/models` shared by VS Code and `bfi serve` | `hostBfi/modelFiles.ts`, `bf-local/runtime.rs`, `bfi-runtime/store.rs` |
+| INF-G012 | `synapse` and `bfi` are two runtime ids for one engine on :11434 | One runtime id (`bfi`); host labels are separate | `local-inference/runtimes.ts`, Chrome `localRuntimes.ts` |
+| INF-G013 | Bonsai id drift (`bonsai-1.7b-q1_0` vs `Bonsai-1.7B-q4-ONNX`); context-window defaults disagree (128000 / 32768 / 1024–4096) | Ids and context come from the one catalog | `local-inference/catalog.ts`, `ollama-stream.ts` |
+| INF-G014 | node-llama-cpp is a second native GGUF engine in agent-runtime | Use `bfi-node` (same contract as VS Code) | `agent-runtime/src/agents/llama-stream.ts` |
+| INF-G015 | `bfi` CLI User-Agent hard-coded `bfi/2026.10.4` | Derive it from the crate version | `BI/crates/bfi/src/hf.rs` |
+| INF-G016 | memory-engine GGUF export is not llama.cpp-runnable; the docs may imply it is | Document the format, or rename the exporter | `MEM/packages/memory-engine/src/export/gguf.ts` |
+
+---
+
+## 4. Agent memory: Evermind, facts, skills, episodes, runs
+
+Roots: `B` = Builderforce.ai, `M` = builderforce-memory, `I` = builderforce-inference, `W` = builderforce-webcontainers.
+
+### 4.1 What is already shared, and what is not
+
+**Already shared:**
+- the fact engine (`M/memory` `MemoryStore`, `recallRanked`, `EvermindCognition.commitFact`);
+- the memory MCP server (`M/memory-mcp`);
+- the experience model: Episode, Skill, Run, Train-Once (`M/memory-engine/experience`);
+- ONE console, `EvermindConsole` in `packages/brain-ui`, mounted by the frontend, VS Code `EvermindScreen` and the Synapse `app/console`;
+- the `memory_*` tool contract (`agent-tools` `MemoryCapability`), with a cloud implementation (`buildMemoryCapability` over `memoryService`) and an on-prem one (`agent-runtime/run/nodeMemory.ts`).
+
+Synapse's `bf-memory` is a thin MCP client: no second store.
+
+**Not shared:**
+
+| Capability | Copies |
+|---|---|
+| Fact stores | **9 shapes**:<br>- `memory.json` (local);<br>- cloud tables `project_facts` and `agent_memory` (scoped);<br>- `facts` (subject/predicate/object, a different model);<br>- Evermind Durable Object `mem:` ring;<br>- `.builderforce/memory/<date>.md` notes;<br>- Claude auto-memory `*.md`;<br>- agent-runtime sqlite-vec index (`src/memory/*`);<br>- W `memoryIntegration` IndexedDB;<br>- brain-embedded `onDeviceMemory` (a tab Q&A cache). |
+| Recall / ranking | **6 formulas**:<br>- M hybrid RRF + importance + 90-day decay;<br>- api `memorySemanticRecall` (pgvector + lexical, its own formula);<br>- Evermind `/evermind/recall` (SSM cosine);<br>- agent-runtime `memory/hybrid` (wraps M math, own store);<br>- W `LexicalIndex` (its own BM25 + RRF);<br>- api `recallSops` (BM25). |
+| Remember / dedupe | `commitFact` (replace by key); `memoryService.remember` (scope specificity); `writeProjectFact`; agent-runtime vector dedupe; Evermind `learn-text` reconcile. |
+| Compaction | memory-mcp `compaction.ts` (reused by VS Code); M `working/consolidate` (codemap); `brainMemory` consolidation into `project_memories`; agent-runtime `memory-flush` (prompt-driven). |
+| Tool names | `memory_recall` / `memory_remember` / `memory_forget` (memory-mcp, agent-tools); **VS Code** `recall_facts` / `remember_fact`; agent-runtime legacy `memory_search` / `memory_get`. |
+| Episodes / skills / runs schema | TS `memory-engine/experience/types.ts` **hand-mirrored in Rust** `I/crates/bf-teach/model.rs`. Synapse `facts_list` reads `memory.json` directly, bypassing the server. |
+| "Skill" | **3 unrelated meanings**:<br>(a) a Train-Once procedural skill (engine);<br>(b) a SKILL.md agent skill (`packages/agent-skills`, cloud `skills` / `tenant_skills` / `marketplace_skills` / `skill_files`, agent-runtime `skill-registry`);<br>(c) the Claude Code plugin skill (`plugins/builderforce-memory/skills`). |
+| Run ledgers | memory-engine `Run` / `RunStepLog` (`experience.json`), written by Synapse `runs.rs`; cloud `runDelta` / `runOutcomes`, `commitRunMemory` facts `run-outcome:<scope>:<id>`; `brain_chat_steps`; agent-runtime `run-outcome-memory.ts`. |
+| Chat learning | `chat_memories` (per session) + `project_memories` (per project) vs Evermind `learn-text` contributions vs the `brain_chat_*` tables. |
+| "Learn" / train | local `trainOnce` and `experience_train` (CPU) vs cloud `evermindLearningPipeline`, `evermindDistillation`, `evermindDeltaLearn` (server SSM). Different data, same word. |
+| Brain map UI | Synapse hand-written `ui/js/views/brain/*.js` vs frontend `EvermindBrainMap` vs `EvermindBrain3D` (canvas station). Synapse also has hand-written facts, skills, teach and runs views. |
+| Embedding spaces | **5, not comparable**: pgvector 1536 (legacy) + 1024 bge-m3 (cloud); `EvermindLM` hidden state (local and the Durable Object); agent-runtime provider embeddings (OpenAI, Gemini, Voyage); W injected embedder. |
+| Local ↔ cloud sync | **None for facts.**<br>- The Merkle knowledge sync covers graphs only.<br>- `/api/sync/v1` covers chat and tickets.<br>- The VS Code import teaches Evermind (`learn-text`), not `project_facts` (unverified).<br>- agent-runtime pushes `team:` and `run-outcome:` facts one way. |
+
+### 4.2 Inconsistencies
+
+- **Names:**
+  - "Evermind" means the model, the whole brain, the facts and the console.
+  - "Brain" means the chat assistant, the map visual and Synapse `cloud/brain.rs`.
+  - "Memory" means facts, RAM (W `src/memory`), the `agent_memory` table, markdown notes and the workspace index (`memory_search`).
+- **IDs:**
+  - memory-mcp keys are free strings;
+  - cloud keys are `varchar(255)` with uuid ids;
+  - `chat_memories` uses serial ids;
+  - experience ids are 16 hex characters.
+  - Key prefixes are not registered anywhere: `team:`, `run-outcome:`, `codemap:`, `[absorbed→…]`.
+- **Limits:**
+  - local 10,000 entries vs cloud key length 255;
+  - recall defaults 5 (VS Code max 20) vs Synapse injecting 6,000 characters;
+  - the 90-day half-life applies locally only.
+- **Locations:**
+  - `~/.builderforce-memory/memory.json` (canonical) and `~/.claude/builderforce-memory/memory.json` (legacy; whichever is newer wins, which is a split-brain risk);
+  - `<ws>/.builderforce/memory/<date>.md`;
+  - `.builderforce/model.bin`.
+
+### 4.3 Target design
+
+| Capability | Survivor | Change |
+|---|---|---|
+| Fact model, rank and write | M `MemoryStore` + `recallRanked` + `commitFact` | Cloud `memoryService` keeps governance and scoping but calls M's ranker (one formula). `facts` (triples) is either folded into `agent_memory` or documented as the knowledge graph's own store. |
+| Tool contract | `agent-tools` `memory_*` (`MemoryCapability`) | VS Code `recall_facts`/`remember_fact` → `memory_*`; retire agent-runtime `memory_search`/`memory_get` with the pi loop. This matches `MCP-G022`. |
+| Compaction | memory-mcp `compaction.ts` | `brainMemory` consolidation and `memory-flush` call it. |
+| Experience (episodes, procedural skills, runs, Train-Once) | M `memory-engine/experience` | Rust `bf-teach` types are retired with the Synapse rebuild (the TS IDE hosts the teach flow). No direct reads of `memory.json`. |
+| SKILL.md skills | `packages/agent-skills` + cloud `skills*` | Rename the procedural kind ("routine" or "recipe") so "skill" means one thing. |
+| Run ledger | cloud `runOutcomes` / `runDelta` for runs; experience `Run` only for Train-Once replays | One `RunRef` id shared across both. |
+| Consoles and maps | brain-ui `EvermindConsole` + one brain map (merge into the shared 3D stage, `AE-G059`) | Synapse hand-written views are retired. |
+| Local ↔ cloud facts sync | new: facts over the existing local-first `/api/sync/v1` outbox (`packages/local-first`, `write-outbox`) | `memory.json` ↔ `project_facts`/`agent_memory` with scope and provenance; the import path stops being the only bridge. |
+| Embeddings | one fingerprint per store, declared; the cloud failover vendor stated | (same policy as `CIX-G012`) |
+| RAM manager naming | W `src/memory` → `src/residency` | It is not agent memory. W `memoryIntegration` reuses M `retrieval`/`ingest`. |
+
+### 4.4 Granular gaps
+
+| ID | Gap | Fix | Where |
+|---|---|---|---|
+| MEM-G101 | 9 fact-store shapes with no declared owner per scope | One owner table per scope; others become caches or imports | §4.1 row "Fact stores" |
+| MEM-G102 | 6 recall formulas; the cloud ranks with its own formula | Cloud calls M `recallRanked` | `api/.../memory/memorySemanticRecall.ts`, W `memoryIntegration`, agent-runtime `src/memory/*` |
+| MEM-G103 | VS Code memory tools are `recall_facts`/`remember_fact`, not `memory_*` | Adopt the `MemoryCapability` tools | `clients/vscode/src/memory/cognition.ts` |
+| MEM-G104 | agent-runtime keeps a second memory index (sqlite-vec + provider embedders) with tools `memory_search`/`memory_get` | Retire with the pi loop; the workspace-notes index moves to `code-index` (§2) | `agent-runtime/src/memory/*`, `agents/tools/memory-tool.ts` |
+| MEM-G105 | Experience types hand-mirrored in Rust `bf-teach` | Retire with the Synapse rebuild; until then, add a contract test | `I/crates/bf-teach/src/model.rs` |
+| MEM-G106 | Synapse reads `memory.json` directly (`facts_list`), bypassing memory-mcp | Go through the MCP tools | `I/app/src-tauri/src/agents/*` |
+| MEM-G107 | "Skill" has 3 meanings | Rename the procedural kind | memory-engine `experience`, memory-mcp `skill_*` tools |
+| MEM-G108 | 4 run ledgers with unrelated ids | One `RunRef` | `experience.json` runs, `runOutcomes`, `runDelta`, `brain_chat_steps` |
+| MEM-G109 | 4 compaction paths | memory-mcp `compaction.ts` only | `brainMemory.ts`, `working/consolidate`, `memory-flush.ts` |
+| MEM-G110 | No local ↔ cloud fact sync | Facts over `/api/sync/v1` outbox | `packages/local-first`, `write-outbox`, memory-mcp backend |
+| MEM-G111 | Two live memory file locations; the newest wins (split-brain risk) | Migrate the legacy file once, then read one location | `memory-mcp` `resolveMemoryFile()` |
+| MEM-G112 | Fact key prefixes (`team:`, `run-outcome:`, `codemap:`, `[absorbed→…]`) are conventions with no registry | One key-namespace registry in M | M `memory`, api `runEndMemory.ts`, `teamMemoryFeed.ts` |
+| MEM-G113 | 5 incompatible embedding spaces; cloud memory is pinned to one vendor with no failover | Declare one fingerprint per store and a failover | `memorySemanticRecall.ts`, `evermindEmbed.ts`, agent-runtime embedders |
+| MEM-G114 | 3 brain-map UIs (Synapse JS, `EvermindBrainMap`, `EvermindBrain3D`) | One, on the shared 3D stage (`AE-G059`) | `I/app/ui/js/views/brain/*`, frontend builder, the canvas station |
+| MEM-G115 | Name collisions: "memory" (RAM vs facts), "Evermind" (model vs facts vs console), "brain" (chat vs map) | Glossary + W rename `memory/` → `residency/` | W `packages/browser/src/memory` |
+| MEM-G116 | W `memoryIntegration` re-implements chunk + BM25 + RRF + decay | Reuse M `retrieval`/`ingest` | `W/packages/browser/src/memoryIntegration/*` |

@@ -18,11 +18,12 @@ import {
   type BrainAction,
   type BrainTransport,
 } from '@seanhogg/builderforce-brain-embedded';
+import { createMcpCatalogCache, MCP_CATALOG_TTL_MS } from '@seanhogg/builderforce-mcp';
 import type { RunCatalog } from '../host/rovrRunHost';
 import { ADD_TASK_TOOL, BROWSER_TOOL } from './toolNames';
 
 /** How long one read of the catalog serves runs — the editor's TTL. */
-export const PLATFORM_CATALOG_TTL_MS = 60_000;
+export const PLATFORM_CATALOG_TTL_MS = MCP_CATALOG_TTL_MS;
 
 /** Names Rovr's own tools hold; a platform tool advertising one is dropped, never shadows. */
 const ROVR_TOOL_NAMES: ReadonlySet<string> = new Set<string>([...Object.values(BROWSER_TOOL), ADD_TASK_TOOL]);
@@ -50,28 +51,23 @@ const sharedLoad = async (transport: CatalogTransport): Promise<BrainAction[]> =
 
 export function createPlatformCatalog(deps: PlatformCatalogDeps): PlatformCatalog {
   const load = deps.load ?? sharedLoad;
-  const now = deps.now ?? Date.now;
-  let cached: { key: string; at: number; actions: Promise<BrainAction[]> } | null = null;
+  const catalog = createMcpCatalogCache<BrainAction[]>(deps.now);
 
   return {
     async actions() {
       const key = await deps.key();
       if (!key) {
-        cached = null;
+        catalog.clear();
         return [];
       }
-      if (cached && cached.key === key && now() - cached.at < PLATFORM_CATALOG_TTL_MS) return cached.actions;
       const transport: CatalogTransport = { baseUrl: deps.baseUrl, getToken: () => key };
-      const actions = load(transport)
-        .then((list) => list.filter((action) => !ROVR_TOOL_NAMES.has(action.name)))
+      return catalog.get(key, () => load(transport)
         .catch((error: unknown) => {
-          // Not cached: the next run retries rather than living a minute without tools.
-          if (cached?.actions === actions) cached = null;
           deps.onError?.(error);
-          return [] as BrainAction[];
-        });
-      cached = { key, at: now(), actions };
-      return actions;
+          throw error;
+        })
+        .then((list) => list.filter((action) => !ROVR_TOOL_NAMES.has(action.name))))
+        .catch(() => []);
     },
   };
 }

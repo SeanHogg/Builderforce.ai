@@ -19,11 +19,14 @@ export interface LoadDiagnosticsInput {
 export const SLOW_LOAD_MS = 10_000;
 /** Host calls listed, newest last. */
 const HOST_ENTRIES = 10;
+/** Lines of the host's rolling log file listed. */
+const HOST_LOG_LINES = 60;
 
 const ms = (n: number): string => `${Math.round(n)}ms`;
 const lagText = (l: LoadTraceLag): string => `lag max=${ms(l.maxMs)} p99=${ms(l.p99Ms)}`;
 
 function markLine(m: TimelineMark, nowMs: number): string {
+    if (m.call === 'decision') return `view decision: +${ms(m.startMs)} · ${m.kind ?? 'decision'}${m.rootId ? ` · root=${m.rootId}` : ''} · ${m.reason ?? ''}`;
     const parts = [`+${ms(m.startMs)}`];
     if (m.rootId) parts.push(`root=${m.rootId}`);
     if (m.focus) parts.push('focus');
@@ -67,6 +70,11 @@ export function loadDiagnosticSection({ timeline: t, host }: LoadDiagnosticsInpu
             const phases = f.phases.map((p) => `in ${p.phase} for ${ms(host.now - p.startedAt)}`).join(', ') || 'between phases';
             lines.push(`host running: ${[f.op, ...(f.rootId ? [`root=${f.rootId}`] : []), ms(age), phases, ...(f.hostLag ? [lagText(f.hostLag)] : [])].join(' · ')}`);
         }
+    }
+    // The host's rolling log file (survives a reload): its newest lines, so a first load that went wrong earlier is still readable.
+    if (host?.log?.length) {
+        lines.push(`host log (newest ${Math.min(host.log.length, HOST_LOG_LINES)}):`);
+        for (const l of host.log.slice(-HOST_LOG_LINES)) lines.push(`  ${l}`);
     }
     const slowPaint = t.firstPaint ? t.firstPaint.ms > SLOW_LOAD_MS : t.nowMs > SLOW_LOAD_MS;
     const slowCall = t.marks.some((m) => m.endMs === undefined && t.nowMs - m.startMs > SLOW_LOAD_MS);

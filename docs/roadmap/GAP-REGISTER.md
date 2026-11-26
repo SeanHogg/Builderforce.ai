@@ -420,6 +420,35 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
   - The journey then starts at `frontend/lib/data-manager.ts` and lists it twice.
   - Fix: extend the one manifest seam (HTML module script, wrangler main, literal Vite input), ignore config-file targets, de-duplicate path stops, and add a regression test per case.
   - Fixing this makes every line start where the app really starts. [make.md › PRD 43](../../docs/specs/make.md)
+- `AE-G062` **The VS Code visualizer opens on "Ready to run" although reviews exist** (user, 2026-11-26, VSIX .224, hired.video).
+  - Cause: on a run-gated host, only the `lastSeen` cache can paint without Run. It misses in three cases:
+    - it was never written, or was over `LAST_SEEN_MAX_BYTES`;
+    - its root differs from the newest scope (a race with `scopes()`);
+    - it errored, and both catches are silent.
+  - Also broken:
+    - the header expand-column button does nothing;
+    - diagnostics cannot be reached on first load;
+    - nothing logs the load steps.
+  - Fix (in progress):
+    - paint the stored review on open, read-only; Run still starts live updates;
+    - make the expand button work, or hide itself when it cannot act;
+    - offer Copy diagnostics in every state;
+    - record decision marks in the load timeline;
+    - log host bridge ops to an output channel and a capped rolling file.
+- `AE-G059` **The 3D view is copied per surface, the canvas Room is a separate scene, and app components and agents are not drawn in 3D** (user, 2026-11-26).
+  - There are four `<Canvas>` roots and three camera systems: the KG `stage/*`, `world3d/WorldViewport`+`Scene3D`, `RoomScene` and `Model3dViewport`.
+  - Agents appear only as generic Room seats, and nothing renders an `AppBlueprint`.
+  - Fix: extract `@builderforce/stage3d` from the KG stage, and add one content source each for code, blueprint, agents, room, model3d and brain. Walk becomes a rig camera mode. Delete the per-surface canvases.
+  - Fixing this unblocks one 3D picture of an app while it is built in the starter, canvas, Studio and VS Code. Design: [one-stage-one-editor.md](../specs/tasks/one-stage-one-editor.md).
+- `AE-G060` **Code is shown by two different editors**: Monaco (`CodeEditor.tsx`, `FileChangeViewer.tsx`) and the KG custom reader and diff (`drill/CodeLayer`, `codeDiff.ts`).
+  - Fix: one `@builderforce/code-editor` `CodeSurface` (Monaco; edit/read/diff modes) that carries the KG reader's symbol rails and lenses as decorations. Migrate the three editors and delete the old copies.
+  - Design: [one-stage-one-editor.md](../specs/tasks/one-stage-one-editor.md).
+- `AE-G061` **`npm run package` for the VSIX takes about 9.5 minutes.**
+  - The webview vite build emits 43 MB: a 14.3 MB `index.js` with no `manualChunks`, then three.js, Monaco, pdfjs and mermaid.
+  - The `webview-build-if-changed` stamp is likely invalidated by every version bump.
+  - `ensure-linked-builds` hashes every linked source file even when nothing changed.
+  - Fix: measure the per-step `[prepublish]` timings first, then split the entry, keep the stamp independent of the version, and cache the hash.
+  - Fixing this unblocks faster ship loops.
 
 ### Evermind / SSM `[agents]`
 
@@ -476,6 +505,218 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 - `AVR-G021` **Engine convergence:** sandbox-aware provider; `read`, `exec`, `process` stay native; `RelayTaskEngine`.
 - `AVR-G022` **Portal channel config flows up only;** `channel.configure` doesn't exist. *Blocker: a running on-prem host.*
 - `AVR-G023` **`@builderforce` participant forgets tool work after restart;** native sessions tab needs the proposed API; sign-in untested (*blocker: a test tenant + `BF_EDITOR_KEY`*).
+
+### Unified platform `[platform]`
+
+Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-review.md) (2026-11-26). Each entry below lists what is wrong, then the fix.
+
+- `UP-G001` **Starter kit and `AppBlueprint` are two shapes, and the manifest has no model, knowledge or IDE-component sections.**
+  - The shapes are `ide-templates` kits plus the `builderforce.json` v1 manifest on one side, and `creation-canvas-contract` `AppBlueprint` on the other, bridged by `manifestToBlueprintOverrides`.
+  - Fix: one environment manifest, from which `AppBlueprint` is derived.
+- `UP-G002` **AI, knowledge, agent, game (Spawn/Roblox) and Movie/Video editor starters are not kits.**
+  - The user decided on 2026-11-26 that Spawn becomes a project type and that a Movie/Video editor project type is required. Both are built on existing pieces: `bf-roblox` and `canvasVideoTools`.
+  - Starter entry points are split three ways: `CreationStarterPanel`, `create/*` and `CanvasAppStart`.
+  - Kits are not marketplace items.
+  - Fix: one picker fed by the kit registry, mountable in every host.
+- `UP-G003` **Shell logic is implemented twice.**
+  - The web uses `browserRuntime/workspaceShell.ts`; VS Code uses `src/tools/localShell*.ts`.
+  - Fix: one `ShellPort` with WebContainer and local adapters.
+- `UP-G004` **The chat composer and view are implemented three times.**
+  - Web: `ChatInput`, `CanvasChatSurface`. VS Code: `webview/chat/VsCodeChat*`. Chrome: `sidepanel/ChatView`.
+  - Fix: move the composer and view into `brain-ui` and delete the copies.
+- `UP-G005` **No code or runtime debugger, resource monitor or database explorer exists in any host.**
+- `UP-G006` **The studios live only in `frontend/src/components`.**
+  - These are AI Training, Finetune, Benchmark/Eval, Deployment and Security scan. VS Code mounts only Evermind.
+  - Fix: extract them as packages and mount them in every host.
+- `UP-G007` **Two security engines have no shared policy model.**
+  - They are `packages/code-shield` and the webcontainers `src/security` Shield/egress.
+- `UP-G008` **There is no host-adapter seam for UI or workspace services.**
+  - VS Code reuses the frontend by compiling `creation-canvas/**` through Next shims.
+  - Packages are source-only, so there is no runtime SDK.
+  - Fix: a `workspace` port, an event bus and component contracts, following the pattern of `agent-run/surface.ts` `RunPorts`.
+- `UP-G009` **Agents cannot reach what the UI can do.**
+  - Canvas and build tools execute in the frontend (`canvasAiToolExecution.ts`), so MCP, REST and CLI cannot call them.
+  - `/sdk` is an LLM gateway client only, and there is no event bus.
+- `UP-G010` **The Idea → Reach lifecycle exists only on the web.**
+  - VS Code and Synapse have no stage model.
+- `UP-G011` **The run target registry is too narrow and lives in the wrong place.**
+  - It has only `browser` and `container`, with no `cloudflare` or `native`.
+  - It lives in `frontend/src/lib/runTarget`, not in a package.
+- `UP-G012` **No runtime capability matrix is published to kits.**
+  - Nuxt and SQLite are missing in webcontainers.
+- `UP-G013` **There is no kernel interface over the existing runtime services.**
+  - The services exist: the memory manager, scheduler, Shield, snapshots, recovery and manifest capabilities.
+  - Missing: a unified capability manager, hard per-process limits and a hibernate lifecycle state.
+  - There are no runtime benchmarks; the webcontainers `scripts/benchmark` time only the repo's tests and build.
+- `UP-G014` **Four local-inference stacks exist.**
+  - They are Rust `bfi-*`, `bfi-web`/`bfi-node` (copied into Builderforce.ai/packages), webcontainers `src/inference` + `kvcache`, and `packages/local-inference` + `model-catalog`.
+  - KV/prefix-cache logic exists in both TS and Rust.
+  - Fix: one engine and one catalog.
+- `UP-G015` **Synapse has no editor and cannot host the VSIX.**
+  - Fix: an embedded OpenVSCode Server sidecar with `--enable-proposed-api` and the VSIX preinstalled. It wires to the existing `synapse mcp`, bf-local and context server.
+  - First-slice done-checks:
+    - WebView2 service-worker and webview behaviour;
+    - bundle size;
+    - marketplace licensing.
+- `UP-G016` **Consistency debt across the repos.**
+  - Package scope stays `@seanhogg/*` (user, 2026-11-26), so no rename is planned.
+  - Spawn pins `bf-cloud` to git `main`. This becomes moot once Spawn becomes a project type.
+  - The Synapse console links `brain-ui` by relative path into the Builderforce.ai monorepo.
+  - Synapse and Spawn have duplicate Tauri shells.
+  - The Builderforce.ai root holds stray logs and probe files (`_tsc_*.log`, `tsgo-*.log`, `_probe_sqlite.cjs`, a file named `-p`).
+
+### MCP consolidation `[platform]` `[agents]`
+
+Source: [platform-duplication-audit.md §1](../specs/tasks/platform-duplication-audit.md) (2026-11-26).
+
+- **The problem:** 11 MCP implementations across 3 repos, of which only memory-mcp uses the official SDK.
+- **The target:** one `@seanhogg/builderforce-mcp` package (protocol, tool, naming, policy, server, client, relay and config modules) with three servers: platform, memory and workspace.
+- **The steps:** follow the migration order in §1.6. Each step's existing tests are the parity oracle.
+
+Gaps:
+
+- `MCP-G001` **6 hand-rolled JSON-RPC framings.**
+  - They are the API server, the outbound client, the review probe, the agent-runtime server and Synapse ×2.
+  - Fix: move them onto the SDK in a shared `protocol` module.
+- `MCP-G002` **5 protocol-version constants.** agent-runtime is stuck on 2024-11-05.
+- `MCP-G003` **`McpToolEntry` is mirrored 3×**: `mcpExtensionService.ts`, `brain-embedded/mcpCatalog.ts:25` and `vscode/platform/platformTools.ts`.
+- `MCP-G004` **Tools are reshaped for the LLM in 4 places**, and there is no Anthropic shaper.
+  - The 4 are `toolSpecs.ts:18`, `builtinMcpService.ts:4458` and Synapse ×2.
+- `MCP-G005` **4 advertised-name schemes**: `builtin_`, `mcp_<hex>_`, `mcp_<conn>_` and `mcp__server__tool`.
+  - The last is parsed but never produced.
+  - Two different `advertisedName` functions exist.
+- `MCP-G006` **Read/write is encoded 4 ways and approval is gated 5 ways.**
+  - Encodings: `mutates`, `readOnlyHint`, the webcontainers map, and the API's `readOnlyHint = mutates === false` mapping.
+  - Gates: `mcpToolConsent`, `mcpCatalog`, VS Code `platformCallGate`, Chrome `safety.ts` and the Synapse Approve.
+- `MCP-G007` **No MCP path applies `tool-output-policy` or `secret-redaction`.** The gateway and agent-runtime return results untruncated and unredacted.
+- `MCP-G008` **memory-mcp's default `serverInfo.version` is stale**: 2026.5.31 against the package's 2026.10.85.
+- `MCP-G009` **memory-mcp's HTTP bin loopback binding is unverified.** It should bind to 127.0.0.1 by default.
+- `MCP-G010` **The agent-runtime MCP server (`gateway/mcp-server-http.ts`) is non-standard.**
+  - It returns tools inside `initialize`.
+  - It has no ping, notifications, batch or annotations.
+  - Its error codes are −32001/−32002.
+- `MCP-G011` **agent-runtime duplicates platform tools under snake names**: `tickets_from_delta`, `reviews_record` and `security_record`.
+- `MCP-G012` **agent-runtime accepts both `args` and `arguments`**, while the API accepts only `arguments`.
+- `MCP-G013` **No MCP server advertises resources, prompts or `listChanged`**, although catalogs change per tenant and role.
+- `MCP-G014` **The outbound `mcpWireClient` re-initializes before every `tools/list` and `tools/call`**, with no session reuse.
+- `MCP-G015` **The marketplace probe (`dynamicReview.ts:349-430`) is a third framing with a second SSE parser.**
+- `MCP-G016` **The VS Code MCP server URL placeholder says `/sse`**, but the outbound client is Streamable-HTTP only.
+- `MCP-G017` **Duplicated relay plumbing:**
+  - 6 REST relay clients for `/llm/v1/mcp/call`: brain-embedded, frontend `builtinTools.ts`, agent-runtime ×2, `bf-cloud` and mobile.
+  - 3 catalog TTL caches.
+  - 5 auth-header builders.
+- `MCP-G018` **User-connected servers have two disjoint stores and two one-click catalogs.**
+  - Stores: `tenant_mcp_extensions` (remote) and Synapse `connectors.json` (local stdio).
+  - Fix: one connector catalog with a `transport` column.
+- `MCP-G019` **Nothing reads a host `mcp.json`.** The memory-mcp installer writes 8 hosts but never reads any of them.
+- `MCP-G020` **The memory-mcp npx launch spec is copied by hand 3×**: `bf-memory/launch.rs`, `server-spec.ts` and `plugin.json`.
+- `MCP-G021` **4 code-search tools exist**: agent-runtime `codebase_*`, Synapse `semantic_search`/`repo_map`, agent-tools `search_code` and platform `knowledge.search`. Merging them depends on audit area 2.
+- `MCP-G022` **3 memory tool vocabularies exist**: `agent-tools/core-tools.ts:347-415`, `agent-runtime/agents/tools/memory-tool.ts` and memory-mcp. Keep only the memory-mcp names.
+- `MCP-G023` **The same third-party server may be advertised twice**, through a tenant connector and a local connector (unverified). Fix: dedupe by server identity.
+- `MCP-G024` **Non-MCP code is named "mcp"**: workflow `mcpNode.ts` and the orchestrator `mcp` node. Rename it to data provider.
+
+### Code index consolidation `[platform]` `[agents]`
+
+Source: [platform-duplication-audit.md §2](../specs/tasks/platform-duplication-audit.md) (2026-11-26).
+
+- **The problem:** 13 implementations, and one repo is indexed 3× on one machine.
+- **The target:** one TS `@seanhogg/builderforce-code-index`, built from:
+  - agent-tools WASM tree-sitter, extended to 11 languages;
+  - a port of the bf-index chunk rules;
+  - packages/repo-map as the graph and map;
+  - the memory knowledge-index as the store and search.
+
+  It runs on every host, with a benchmark gate before bf-index is retired.
+
+Gaps:
+
+- `CIX-G002` **`codebase_semantic_search` has no embeddings**: it is BM25 over the first 200 lines of each file.
+- `CIX-G003` **Exact search lives only in the VS Code client** (`workspaceSearch.ts`), and `search_code` has 4 different meanings across hosts.
+- `CIX-G004` **5 symbol parsers exist**: native tree-sitter (11 languages), WASM tree-sitter (7), regex, the TS compiler API and regex relations.
+- `CIX-G005` **3 chunkers exist, and only Synapse embeds code bodies.** The editor index holds cards only.
+- `CIX-G006` **repo-map is a hand-kept TS mirror of the Rust `graph.rs`/`repo_map.rs`, fed by regex.** `symbolRepoMap.ts` is a third, graph-less map.
+- `CIX-G007` **6 lexical engines and 5 tokenizers exist.**
+- `CIX-G008` **4 RRF/fusion copies exist.**
+- `CIX-G009` **7 ignore lists disagree with each other.**
+- `CIX-G010` **Path normalisation is done case by case.**
+- `CIX-G011` **One repo gets three indexes, in two dot-dirs** (`.builderforce` and `.builderForceAgents`).
+- `CIX-G012` **4 embedding models are in use, with no shared fingerprint policy.** The editor's embedder chain lists a Synapse embedder that is never offered.
+- `CIX-G013` **3 change-detection schemes exist**: a watcher plus blake3, an mtime snapshot, and a 5-minute staleness window.
+- `CIX-G014` **`check_references` exists only in Rust.**
+- `CIX-G015` **Result caps and file caps disagree.**
+  - Result caps: 8 / 25 / 20 / 100 / 30.
+  - File caps: 1 MB / 256 KB.
+- `CIX-G016` **No benchmark compares the TS and native index.**
+- `CIX-G017` **API `knowledge.search` searches SOPs and docs (`recallSops.ts`), but its name suggests code search.**
+
+### Inference, catalog and routing consolidation `[platform]` `[agents]`
+
+Source: [platform-duplication-audit.md §3](../specs/tasks/platform-duplication-audit.md) (2026-11-26).
+
+Target survivors, one per job:
+
+| Job | Survivor |
+|---|---|
+| Engine | Rust `bfi-*`, vendored into Builderforce.ai |
+| Local catalog, fit and plan | `local-inference` |
+| Cloud catalog | one generated `model-catalog` |
+| Routing | `model-router` |
+| Prefix cache | Rust `prefix.rs` |
+| Weight store | one machine store, `~/.builderforce/models` |
+
+Gaps:
+
+- `INF-G001` **The vendored `bfi-web` is stale**: 2026.10.10, while the crate is 2026.10.12. It has no drift guard.
+- `INF-G002` **webcontainers `inference/` has no consumer.** It holds the ONNX, wllama and WebLLM adapters.
+- `INF-G003` **webcontainers `kvcache/*` has no engine feeding it.**
+- `INF-G004` **webcontainers `adaptive/` and `learning/` have no consumer found.** They duplicate the fit and routing logic.
+- `INF-G005` **About 9 model catalogs exist**, and agent-runtime hard-codes context windows and prices (`models-config.providers.ts`, `*-models.ts`).
+- `INF-G006` **Synapse's Rust `bf-local/hub.rs` local catalog (Ollama tags) is disjoint from the TS `local-inference` catalog.**
+- `INF-G007` **4 fit/hardware-budget implementations exist.**
+- `INF-G008` **About 10 model pickers exist.** The api pickers (`pickCloudModel`, `byo*`, `poolRouting`, `proxySeed`) sit outside `model-router`.
+- `INF-G009` **3 response-cache implementations exist**: the api `*Cache.ts` files, and the memory `ResponseCache`/`SemanticCache`.
+- `INF-G010` **6 Ollama clients exist.**
+- `INF-G011` **8 weight stores exist on one machine.**
+  - The same Bonsai GGUF can be stored up to 3×.
+  - The Rust `models_dir()` is coded twice.
+- `INF-G012` **One engine has two runtime ids**: `synapse` and `bfi`, both on port 11434.
+- `INF-G013` **Model ids and context defaults drift.**
+  - Bonsai is `bonsai-1.7b-q1_0` in one place and `Bonsai-1.7B-q4-ONNX` in another.
+  - Context-window defaults are 128000, 32768, and 1024–4096 in different places.
+- `INF-G014` **agent-runtime uses node-llama-cpp as a second native GGUF engine**, beside `bfi-node`.
+- `INF-G015` **The `bfi` CLI User-Agent is hard-coded** as `bfi/2026.10.4`.
+- `INF-G016` **The memory-engine GGUF export cannot be run by llama.cpp**, and the docs may imply that it can.
+
+### Agent memory consolidation `[agents]`
+
+Source: [platform-duplication-audit.md §4](../specs/tasks/platform-duplication-audit.md) (2026-11-26).
+
+- **Already shared:** the fact engine, memory-mcp, the experience model, the `EvermindConsole` and the `memory_*` contract.
+- **Still divergent:** the stores, ranking, tool names, run ledgers, the meaning of "skill", and sync.
+
+Gaps:
+
+- `MEM-G101` **There are 9 fact-store shapes, with no declared owner per scope.**
+- `MEM-G102` **There are 6 recall formulas.** The cloud `memorySemanticRecall` ranks with its own formula instead of M's `recallRanked`.
+- `MEM-G103` **VS Code memory tools are named `recall_facts`/`remember_fact`, not `memory_*`** (`clients/vscode/src/memory/cognition.ts`).
+- `MEM-G104` **agent-runtime keeps a second memory index.**
+  - It uses sqlite-vec with provider embedders, and exposes `memory_search`/`memory_get`.
+  - Location: `agent-runtime/src/memory/*`.
+- `MEM-G105` **The experience types are hand-mirrored in Rust** (`bf-teach/model.rs`), with no contract test.
+- `MEM-G106` **Synapse reads `memory.json` directly** (`facts_list`), bypassing memory-mcp.
+- `MEM-G107` **"Skill" means three unrelated things**: the Train-Once procedure, SKILL.md, and the Claude plugin skill.
+- `MEM-G108` **There are 4 run ledgers with unrelated ids**: experience runs, `runOutcomes`, `runDelta` and `brain_chat_steps`.
+- `MEM-G109` **There are 4 compaction paths**: memory-mcp, `working/consolidate`, `brainMemory` and `memory-flush`.
+- `MEM-G110` **There is no local↔cloud fact sync.** The VS Code import teaches Evermind but does not write `project_facts`.
+- `MEM-G111` **There are two live memory file locations**: `~/.builderforce-memory` and the legacy `~/.claude/builderforce-memory`. Whichever is newest wins, which risks a split brain.
+- `MEM-G112` **Fact key prefixes have no registry**: `team:`, `run-outcome:`, `codemap:` and `[absorbed→…]`.
+- `MEM-G113` **There are 5 incompatible embedding spaces**, and cloud memory is pinned to one vendor with no failover.
+- `MEM-G114` **There are 3 brain-map UIs**: the Synapse JS map, `EvermindBrainMap` and `EvermindBrain3D`.
+- `MEM-G115` **Names collide:**
+  - "memory" means RAM in webcontainers but facts elsewhere;
+  - "Evermind" means the model, the facts or the console;
+  - "brain" means the chat or the map.
+- `MEM-G116` **webcontainers `memoryIntegration` re-implements chunking, BM25, RRF and decay**, which M `retrieval` already provides.
 
 ### Data model — PRD 20 `[platform]`
 

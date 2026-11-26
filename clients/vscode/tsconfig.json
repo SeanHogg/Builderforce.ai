@@ -9,6 +9,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["node", "vscode"],
     "paths": {
+      "@seanhogg/builderforce-mcp": ["../../packages/builderforce-mcp/src/index.ts"],
       "@builderforce/agent-loop": ["../../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-run": ["../../packages/agent-run/src/index.ts"],
       "@builderforce/agent-run/memory": ["../../packages/agent-run/src/policy/memory/commit.ts"],

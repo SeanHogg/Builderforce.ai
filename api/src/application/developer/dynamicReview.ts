@@ -51,6 +51,7 @@
  */
 
 import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
+import { createMcpHttpClient, McpAuthChallenge } from '@seanhogg/builderforce-mcp/client';
 import { fetchPublic } from '../../infrastructure/net/fetchPublic';
 import {
   authFieldsFor,
@@ -349,8 +350,6 @@ async function exerciseConnector(
 // The MCP probe
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface JsonRpcResponse { result?: { tools?: Array<{ name?: unknown }> }; error?: { message?: unknown } }
-
 /**
  * Exercise an `mcp_server` package by asking the server what it actually exposes.
  *
@@ -389,35 +388,44 @@ async function exerciseMcpServer(
   const started = Date.now();
   let advertised: string[];
   try {
-    const res = await fetchPublic(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
-      redirect: 'manual',
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    }, { fetchImpl });
-    const text = await res.text();
-    if (!res.ok) {
-      findings.push(finding('tools_list', 'fail', `the server answered ${res.status} to tools/list — an MCP package whose server does not list its tools cannot be installed`));
-      evidence.push({ subject: 'tools/list', outcome: 'fail', detail: `answered ${res.status}`, method: 'POST', url: url.toString(), status: res.status, durationMs: Date.now() - started });
-      return { findings, evidence };
+    let status: number | undefined;
+    const client = createMcpHttpClient({
+      url: url.toString(),
+      info: { name: 'builderforce-marketplace-review', version: '1.0.0' },
+      timeoutMs: PROBE_TIMEOUT_MS,
+      fetch: async (target, options) => {
+        const response = await fetchPublic(target as string, options, { fetchImpl });
+        status = response.status;
+        return response;
+      },
+    });
+    await client.start();
+    try {
+      // Public discovery servers can list tools immediately. Initialize when a server requires a session.
+      let tools: unknown[];
+      try {
+        tools = await client.listTools();
+      } catch (error) {
+        if (error instanceof McpAuthChallenge) throw error;
+        await client.initialize();
+        tools = await client.listTools();
+      }
+      advertised = tools.flatMap((tool) => {
+        if (!tool || typeof tool !== 'object' || !('name' in tool) || typeof tool.name !== 'string' || !tool.name) {
+          throw new Error('MCP catalog contains an invalid tool name');
+        }
+        return [tool.name];
+      });
+    } finally {
+      await client.close();
     }
-    // A streaming transport answers `data: {json}` lines; take the first JSON body.
-    const jsonText = text.trimStart().startsWith('{') ? text : (text.split('\n').find((l) => l.startsWith('data:'))?.slice(5).trim() ?? text);
-    const parsed = JSON.parse(jsonText) as JsonRpcResponse;
-    if (parsed.error) {
-      findings.push(finding('tools_list', 'fail', `the server refused tools/list: ${String(parsed.error.message ?? 'error')}`));
-      evidence.push({ subject: 'tools/list', outcome: 'fail', detail: String(parsed.error.message ?? 'error'), method: 'POST', url: url.toString(), status: res.status, durationMs: Date.now() - started });
-      return { findings, evidence };
-    }
-    advertised = (parsed.result?.tools ?? []).map((t) => String(t?.name ?? '')).filter(Boolean);
     evidence.push({
       subject: 'tools/list',
       outcome: 'pass',
       detail: `the server advertised ${advertised.length} tool(s): ${advertised.slice(0, 20).join(', ') || '(none)'}`,
       method: 'POST',
       url: url.toString(),
-      status: res.status,
+      status,
       durationMs: Date.now() - started,
     });
   } catch (error) {

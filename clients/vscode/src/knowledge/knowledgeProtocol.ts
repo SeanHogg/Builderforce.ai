@@ -149,7 +149,13 @@ export interface KnowledgeLoadInFlight {
 }
 
 /** `loadTrace`'s answer: the latest finished calls (oldest first), the running ones, and the host's clock. The view restates this as `LoadTrace`. */
-export interface KnowledgeLoadTrace { now: number; entries: KnowledgeLoadTraceEntry[]; inFlight: KnowledgeLoadInFlight[] }
+export interface KnowledgeLoadTrace {
+  now: number;
+  entries: KnowledgeLoadTraceEntry[];
+  inFlight: KnowledgeLoadInFlight[];
+  /** The newest lines of the persisted rolling log (`knowledgeRollingLog.ts`), oldest first. */
+  log?: string[];
+}
 
 /** How a run ended; `interrupted` is the host's own word for a record left `running` by a window that closed. */
 export type KnowledgeRunOutcome = NonNullable<ReviewRun["outcome"]> | "interrupted";

@@ -1,3 +1,14 @@
+## ✅ RESOLVED 2026-11-26 — On-prem `search_code` is exact or regex, scoped before search (CIX-G001)
+
+- **The bug:** the on-prem `search_code` was wired to `runCodebaseSearch`, which ranks keyword hits. The tool's contract promises exact substring or regex matching. The `path` scope was also applied after the search instead of before.
+- **The fix:** VS Code's exact/regex search core moved into `packages/agent-tools/src/node-text-search.ts`, exported as `./node-text-search`.
+  - `clients/vscode/src/workspace/workspaceSearch.ts` now only re-exports it.
+  - `agent-runtime/src/agents/node-capability-provider.ts` resolves `path` with `resolveInsideRoot`, which blocks escapes, before calling `searchWorkspace`. The `rg` availability probe is cached.
+  - `runCodebaseSearch` now serves only the `codebase_search` tool.
+- **Tests:** a new `regression:` test in `node-capability-provider.test.ts`. Results: agent-runtime 13/13, and VS Code `workspaceSearch` 24/24 with its tests unchanged.
+- **Review:** Opus reviewed it and found no correctness issues. The one change was moving an import so it no longer sits in the middle of the import block.
+- **Audit:** [platform-duplication-audit.md §2](docs/specs/tasks/platform-duplication-audit.md).
+
 ## ✅ RESOLVED 2026-11-26 — Knowledge view: code and picture at one location (PRD 43 Part C, C1–C9)
 
 Built from the prototype `.builderforce/design/code-visualizer.html`:

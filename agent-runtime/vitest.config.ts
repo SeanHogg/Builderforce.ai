@@ -32,6 +32,11 @@ export default defineConfig({
         replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-posix-shell.ts"),
       },
       {
+        // The ONE exact/regex `search_code` searcher (`node-capability-provider.ts`), same NodeNext `.js` form.
+        find: "@builderforce/agent-tools/node-text-search.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-text-search.ts"),
+      },
+      {
         // The second node-only export (the definition index behind find_symbol /
         // file_outline), spelled the same NodeNext way for the same reason.
         find: "@builderforce/agent-tools/node-symbols.js",

@@ -151,13 +151,19 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
         setRefreshFailed(false);
         if (keep) setStale(true);
         else { paint(null); setBaseline(null); setStale(false); setStatus('loading'); }
+        // A run-gated host that is not running this root reads its STORED review (read-only, no live updates): a miss there is the Run card.
+        const storedRead = gatedRef.current && runRootRef.current !== root;
         const before = refocus
             ? Promise.resolve(memo.value)
-            : (source.baseline ? source.baseline(root).catch(() => null) : Promise.resolve(null));
+            : (source.baseline
+                ? source.baseline(root).catch((error: unknown) => { source.decision?.({ kind: 'error', reason: `baseline failed: ${errorText(error)}`, rootId: root }); return null; })
+                : Promise.resolve(null));
+        if (storedRead) source.decision?.({ kind: 'gate', reason: 'reading the stored review read-only (no Run: no live updates, no rebuild)', rootId: root });
         Promise.all([source.load(root, focus ? { focus } : undefined), before])
             .then(([g, base]) => {
                 if (loadedKey.current !== entry) return;
                 baselineMemo.current = { source, key: memoKey, value: base };
+                if (storedRead) source.decision?.({ kind: 'gate', reason: !g ? 'the load returned nothing: no stored graph, so the Run card' : isNotReviewedHere(g) ? 'not reviewed on this machine' : 'stored graph read: painted without Run', rootId: root });
                 // No review of this root on this machine: said plainly, never drawn from anything else.
                 if (isNotReviewedHere(g)) {
                     paint(null); setBaseline(null); setStale(false); setRefreshFailed(false);

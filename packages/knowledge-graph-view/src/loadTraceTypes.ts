@@ -40,7 +40,13 @@ export interface LoadTraceInFlight {
 }
 
 /** `now` is the host's clock, so in-flight ages are measured on the clock that stamped them. */
-export interface LoadTrace { now: number; entries: LoadTraceEntry[]; inFlight: LoadTraceInFlight[] }
+export interface LoadTrace {
+    now: number;
+    entries: LoadTraceEntry[];
+    inFlight: LoadTraceInFlight[];
+    /** The newest lines of the host's persisted rolling log (oldest first), when the host keeps one. */
+    log?: string[];
+}
 
 /** The host phases the loading screen names (`labels.loadPhases`); another phase shows as its id. */
 export const LOAD_PHASES = ['partitions', 'index', 'nearDuplicates', 'build', 'pack', 'server', 'notHere'] as const;

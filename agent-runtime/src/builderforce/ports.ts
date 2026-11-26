@@ -108,9 +108,11 @@ export interface McpInvocation {
 
 /** Invokes an MCP-server / SaaS integration tool. Builder `mcp` nodes use this;
  *  absent → the node records intent. */
-export interface IMcpService {
+export interface IDataProviderService {
   invoke(call: McpInvocation): Promise<string>;
 }
+
+export type IMcpService = IDataProviderService;
 
 // ── Agent transport (unified local + remote dispatch) ─────────────────────────
 
