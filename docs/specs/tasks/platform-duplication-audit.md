@@ -147,7 +147,7 @@ Facts that shape the design:
 
 ### 1.6 Migration order
 
-**Implementation status (2026-11-26).** Platform and Workspace run on `@seanhogg/builderforce-mcp`. Synapse's Rust Workspace MCP and connector host have been removed. VS Code and the headless runtime share a persisted TypeScript index for `workspace__find`, and VS Code can import legacy Synapse connector settings through its native review flow. Platform's opt-in interactive profile sends catalog-change notifications and exposes a guide and a discovery prompt. Memory's shared runtime was verified with co-installed tarballs. Automatic adoption depends on publishing the shared package to npm. Cross-host connector deduplication requires verified remote server and credential identity. See the [MCP gap register](../../roadmap/GAP-REGISTER.md#mcp-consolidation-platform-agents).
+**Implementation status (2026-11-26).** Platform and Workspace run on `@seanhogg/builderforce-mcp`. Synapse's Rust Workspace MCP and connector host have been removed. VS Code and the headless runtime share a persisted TypeScript index for `workspace__find`, and VS Code can import legacy Synapse connector settings through its native review flow. Platform's opt-in interactive profile sends catalog-change notifications and exposes a guide and a discovery prompt. Memory's shared runtime was verified with co-installed tarballs. The shared package passed CI build and tests, but npm returned `E404` on the first publish. Automatic Memory adoption depends on a successful public npm release. Cross-host connector deduplication requires verified remote server and credential identity. See the [MCP gap register](../../roadmap/GAP-REGISTER.md#mcp-consolidation-platform-agents) and the [npm publish job](https://github.com/SeanHogg/Builderforce.ai/actions/runs/45911098176/job/140219614243).
 
 Each step is a separate PR, and existing tests run unchanged as the parity oracle.
 
@@ -288,6 +288,8 @@ Following decision 4 (interface first; Rust only where a benchmark proves a gain
 | `workspace__compress` | LLMLingua (stays optional; it needs a native or ONNX backend) |
 
 **Benchmark gate** (decision 4): before retiring bf-index, time the TS engine on hired.video and Builderforce.ai (cold index, warm query p50/p95, memory). If native is decisively faster, compile `bf-index` to WASM behind the same `parse`/`chunk` interface instead of keeping a Rust sidecar.
+
+**Windows lexical baseline (2026-11-26).** A tracked snapshot of Builderforce.ai took 333 seconds from an empty TS cache to the first result. Its 30 warm queries measured 125 ms p50 and 370 ms p95, with 619 MiB process RSS. On hired.video, reopening and validating an existing TS snapshot took 83 seconds. Warm queries measured 116 ms p50 and 685 ms p95, with 361 MiB RSS. Both searches reported partial coverage. On cold unscoped Workspace MCP calls, the server reports indexing in progress after five seconds while the shared build continues. The native loopback service, with embeddings disabled, was still scanning both repos at the seven-minute cutoff. This run shared the machine with other builds. A controlled comparison with matched coverage, cold measurements for both engines, and dense retrieval quality remains the retirement gate.
 
 ### 2.6 Granular gaps
 
