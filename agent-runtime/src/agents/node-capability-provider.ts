@@ -33,7 +33,7 @@ import { applyStringEdit, editFacts, matchGlobInScope, dirMayContainGlobMatch, n
 // The ONE workspace-containment resolver, shared with the VS Code local provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
 // node-builtin-free for the Worker).
-import { resolveInsideRoot as resolveInside } from "@builderforce/agent-tools/node-path.js";
+import { resolveInsideRootReal as resolveInside } from "@builderforce/agent-tools/node-path.js";
 // The ONE definition index (shared with the VS Code workspace) behind `find_symbol` /
 // `file_outline`, in its one on-prem configuration (tree-sitter, persisted snapshot).
 import { onPremSymbolIndex } from "./on-prem-symbol-index.js";
@@ -206,7 +206,7 @@ export async function searchNodeWorkspaceCode(
 ): Promise<RepoSearchResult> {
   const root = resolvePath(workspaceRoot);
   const scopeDir = normalizeScopeDir(scope);
-  const start = scopeDir ? resolveInside(root, scopeDir) : root;
+  const start = scopeDir ? await resolveInside(root, scopeDir) : root;
   if (!start) return { ok: false, error: `'${scopeDir ?? ""}' is outside the workspace` };
   return searchWorkspace({ root, start, query, ripgrep: await findOnPathRipgrep() });
 }
@@ -226,7 +226,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
   const resolveFile =
     (options.scope ?? "workspace") === "workspace"
       ? (p: string) => resolveInside(root, p)
-      : (p: string) => resolvePath(root, p);
+      : async (p: string) => resolvePath(root, p);
   // Process-wide per root: a provider is built per session, and an index per provider
   // would re-walk the tree every time. Persisted beside the on-prem search index.
   const symbols = onPremSymbolIndex(root);
@@ -282,7 +282,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
     },
     repoRead: {
       async listFiles(sub, glob, opts): Promise<RepoListResult> {
-        const scope = sub ? resolveInside(root, sub) : root;
+        const scope = sub ? await resolveInside(root, sub) : root;
         if (!scope) {
           return { ok: false, error: escaped(sub ?? "") };
         }
@@ -293,7 +293,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         return { ok: true, paths, truncated };
       },
       async readFile(path): Promise<RepoReadResult> {
-        const abs = resolveFile(path);
+        const abs = await resolveFile(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }
@@ -327,7 +327,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
     },
     repoWrite: {
       async writeFile(path, content): Promise<RepoWriteResult> {
-        const abs = resolveFile(path);
+        const abs = await resolveFile(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }
@@ -347,7 +347,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         }
       },
       async editFile(path, oldString, newString, replaceAll): Promise<RepoEditResult> {
-        const abs = resolveFile(path);
+        const abs = await resolveFile(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }
@@ -375,7 +375,7 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         }
       },
       async deleteFile(path): Promise<RepoDeleteResult> {
-        const abs = resolveFile(path);
+        const abs = await resolveFile(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }

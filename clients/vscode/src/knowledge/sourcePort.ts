@@ -11,15 +11,14 @@
  * A refused or missing file answers null; any other failure (permissions, I/O) propagates to the caller's error reply.
  */
 
-import { realpath, stat } from "node:fs/promises";
-import * as path from "node:path";
+import { stat } from "node:fs/promises";
 import * as vscode from "vscode";
 import { runGit, type GitRun } from "@builderforce/agent-tools/node-git-history";
+import { resolveInsideRootReal } from "@builderforce/agent-tools/node-path";
 import { reportExtensionError } from "../diagnostics/errorReporter";
-import { isMissingPath } from "../composerCommands/writeContainment";
 import { COMMIT_SHA } from "./commitSha";
 import { MAX_SOURCE_LINES, type KnowledgeSourceText } from "./knowledgeProtocol";
-import { inside, slash, type KnowledgeRoot } from "./knowledgeRoots";
+import type { KnowledgeRoot } from "./knowledgeRoots";
 import { isSafeRelative } from "./safePath";
 
 /** A larger source file is not read for the code band. */
@@ -33,17 +32,11 @@ export function clampLines(startLine: unknown, endLine: unknown): { startLine: n
   return { startLine: start, endLine: end, truncated: end < asked };
 }
 
-/** The real path of `rel` under `root` when it is a safe name that resolves inside the root's real path; null when refused or missing. */
+/** The path of `rel` under `root` when it is a safe name of an existing file whose real path sits inside the root's real path; null when refused or missing. */
 export async function resolveInsideRoot(root: KnowledgeRoot, rel: unknown): Promise<string | null> {
   if (typeof rel !== "string" || !isSafeRelative(rel)) return null;
-  try {
-    const realRoot = slash(await realpath(root.rootPath));
-    const realFile = await realpath(path.resolve(root.rootPath, rel));
-    return inside(slash(realFile), realRoot) && slash(realFile) !== realRoot ? realFile : null;
-  } catch (error) {
-    if (isMissingPath(error)) return null;
-    throw error;
-  }
+  // The ONE realpath-aware containment check (agent-tools node-path): an existing file strictly inside the root's real path.
+  return resolveInsideRootReal(root.rootPath, rel, { mustExist: true, allowRoot: false });
 }
 
 /** Lines `startLine..endLine` of `rel` in `root`; null when the path is refused, missing, not a file or too large. */

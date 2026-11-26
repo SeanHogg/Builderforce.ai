@@ -27,7 +27,7 @@ import { existsSync, readFileSync, realpathSync } from "fs";
 import { createRequire } from "module";
 import * as path from "path";
 import { anyNodePath, consoleNodePath, needsRunAsNode } from "../process/consoleNode";
-import { killTree } from "../process/killTree";
+import { killTree } from "@builderforce/agent-tools/node-process";
 import { whichOnPathCached } from "../process/programSearch";
 
 /** One command: the program and its arguments, never joined into a shell string. */

@@ -20,7 +20,8 @@ import {
   withTempDir,
 } from "../infra/install-source-utils.js";
 import { validateRegistryNpmSpec } from "../infra/npm-registry-spec.js";
-import { extensionUsesSkippedScannerPath, isPathInside } from "../security/scan-paths.js";
+import { isPathInside } from "@builderforce/agent-tools/node-path.js";
+import { extensionUsesSkippedScannerPath } from "../security/scan-paths.js";
 import * as skillScanner from "../security/skill-scanner.js";
 import { CONFIG_DIR, resolveUserPath } from "../utils.js";
 

@@ -20,7 +20,7 @@ import {
   DEFAULT_MAIN_KEY,
   normalizeAgentId,
 } from "../routing/session-key.js";
-import { isWithinDir } from "./path-safety.js";
+import { isPathInside } from "@builderforce/agent-tools/node-path.js";
 import {
   ensureDir,
   existsDir,
@@ -396,7 +396,7 @@ function isLegacyTreeSymlinkMirror(currentDir: string, realTargetDir: string): b
       } catch {
         return false;
       }
-      if (!isWithinDir(realTargetDir, resolvedRealTarget)) {
+      if (!isPathInside(realTargetDir, resolvedRealTarget)) {
         return false;
       }
       continue;

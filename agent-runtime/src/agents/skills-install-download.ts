@@ -11,7 +11,7 @@ import {
 } from "../infra/archive-path.js";
 import { extractArchive as extractArchiveSafe } from "../infra/archive.js";
 import { fetchWithSsrFGuard } from "../infra/net/fetch-guard.js";
-import { isWithinDir } from "../infra/path-safety.js";
+import { isPathInside } from "@builderforce/agent-tools/node-path.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import { ensureDir, resolveUserPath } from "../utils.js";
 import { formatInstallFailureMessage } from "./skills-install-output.js";
@@ -37,7 +37,7 @@ function resolveDownloadTargetDir(entry: SkillEntry, spec: SkillInstallSpec): st
       ? resolveUserPath(raw)
       : path.resolve(safeRoot, raw);
 
-  if (!isWithinDir(safeRoot, resolved)) {
+  if (!isPathInside(safeRoot, resolved)) {
     throw new Error(
       `Refusing to install outside the skill tools directory. targetDir="${raw}" resolves to "${resolved}". Allowed root: "${safeRoot}".`,
     );

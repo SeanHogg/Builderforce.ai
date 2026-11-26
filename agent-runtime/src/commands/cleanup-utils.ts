@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isPathInside } from "@builderforce/agent-tools/node-path.js";
 import { resolveDefaultAgentWorkspaceDir } from "../agents/workspace.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import type { RuntimeEnv } from "../runtime.js";
@@ -40,15 +41,10 @@ export function buildCleanupPlan(params: {
   workspaceDirs: string[];
 } {
   return {
-    configInsideState: isPathWithin(params.configPath, params.stateDir),
-    oauthInsideState: isPathWithin(params.oauthDir, params.stateDir),
+    configInsideState: isPathInside(params.stateDir, params.configPath),
+    oauthInsideState: isPathInside(params.stateDir, params.oauthDir),
     workspaceDirs: collectWorkspaceDirs(params.cfg),
   };
-}
-
-export function isPathWithin(child: string, parent: string): boolean {
-  const relative = path.relative(parent, child);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
 function isUnsafeRemovalTarget(target: string): boolean {

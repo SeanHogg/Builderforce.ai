@@ -33,7 +33,7 @@ export const TOOL_NAME_ALIASES: Readonly<Record<string, string>> = {
   // Edit / write
   str_replace: 'edit_file',
   search_replace: 'edit_file',
-  apply_patch: 'edit_file',
+  // NOT apply_patch: it carries patch syntax, edit_file is a unique-string replace - an unknown name gets the normal unknown-tool error.
   write_to_file: 'write_file',
   create_file: 'write_file',
   delete: 'delete_file',

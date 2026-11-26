@@ -32,6 +32,11 @@ export default defineConfig({
         replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-posix-shell.ts"),
       },
       {
+        // The ONE process-tree kill (`kill-tree` + the shell/exec callers), same NodeNext `.js` form.
+        find: "@builderforce/agent-tools/node-process.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-process.ts"),
+      },
+      {
         // The ONE exact/regex `search_code` searcher (`node-capability-provider.ts`), same NodeNext `.js` form.
         find: "@builderforce/agent-tools/node-text-search.js",
         replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-text-search.ts"),

@@ -11,11 +11,13 @@
  *     group is signalled with `-pid`; the bare pid is the fallback.
  */
 
-import { execFile, spawn, type ChildProcess, type SpawnOptions } from "child_process";
+import { spawn, type ChildProcess, type SpawnOptions } from "child_process";
 import { toBashNullDevice } from "@builderforce/agent-tools/node-posix-shell";
+import { killTree } from "@builderforce/agent-tools/node-process";
+import { reportExtensionError } from "../diagnostics/errorReporter";
 
 /**
- * Start a command so {@link killProcessTree} reaches everything it starts: in its own
+ * Start a command so {@link killTree} reaches everything it starts: in its own
  * process group on POSIX; on Windows without `detached`, which would open a console
  * window. Always `spawn` — `exec` / `execFile` do not pass `detached` on, so a command
  * they start shares the editor's group, `kill(-pid)` fails, only the shell dies, and the
@@ -42,29 +44,9 @@ const KILL_GRACE_MS = 1_000;
  * settle.
  */
 export function stopCommand(child: ChildProcess): void {
-  void killProcessTree(child.pid);
+  if (child.pid) killTree(child.pid, { onError: (error) => void reportExtensionError(error, { operation: "killTree" }) });
   setTimeout(() => {
     child.stdout?.destroy();
     child.stderr?.destroy();
   }, KILL_GRACE_MS).unref?.();
-}
-
-/** Kill `pid` and its descendants. Resolves once the kill was issued (never rejects). */
-export function killProcessTree(pid: number | undefined): Promise<void> {
-  if (!pid) return Promise.resolve();
-  if (process.platform === "win32") {
-    return new Promise((resolve) => {
-      execFile("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true }, () => resolve());
-    });
-  }
-  try {
-    process.kill(-pid, "SIGKILL");
-  } catch {
-    try {
-      process.kill(pid, "SIGKILL");
-    } catch {
-      /* already gone */
-    }
-  }
-  return Promise.resolve();
 }

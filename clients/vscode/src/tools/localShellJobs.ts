@@ -16,7 +16,8 @@
 
 import type { ChildProcess } from "child_process";
 import type { ShellJobStart, ShellJobStatus } from "@builderforce/agent-tools";
-import { killProcessTree, spawnCommand } from "./processTree";
+import { killTree } from "@builderforce/agent-tools/node-process";
+import { spawnCommand } from "./processTree";
 import { forgetRunOutputs, retainOutput } from "./localShellOutputs";
 import { invalidateRunCache } from "./localShellCache";
 import { isSubAgentHandle } from "../child/childRuns";
@@ -172,7 +173,7 @@ export async function killJob(id: string, owner?: JobOwner): Promise<ShellJobSta
   if (!job) return unknownJob(id);
   if (job.status === "running") {
     job.status = "killed";
-    await killProcessTree(job.child.pid);
+    if (job.child.pid) killTree(job.child.pid);
     let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([job.done, new Promise<void>((r) => { timer = setTimeout(r, 3_000); })]);
     if (timer) clearTimeout(timer);

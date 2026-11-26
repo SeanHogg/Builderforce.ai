@@ -775,6 +775,27 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §6. 
 - `SHELL-G017` **There is no cross-host conformance suite** for file and command tools.
 - `SHELL-G018` **There is one terminal component** (`frontend/src/components/Terminal.tsx`). New hosts reuse it.
 
+### Auth and cloud client consolidation `[platform]`
+
+Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §7. The server side and the TypeScript device flow are shared; the client session code is not.
+
+- `AUTH-G001` **The Rust device flow (`bf-cloud/device.rs`) duplicates `packages/device-auth`,** with no shared contract fixture.
+- `AUTH-G002` **There are three copies of the editor-key session** (VS Code `bfApi/session.ts`, Chrome `auth/session.ts`, Rust `bf-cloud/session.rs`). Extract a host-neutral `packages/editor-session`.
+- `AUTH-G003` **The Chrome client has no 401 forced-refresh retry.**
+- `AUTH-G004` **The Chrome client has no workspace switch.**
+- `AUTH-G005` **agent-runtime has about 56 hand-built Bearer fetches and about 18 `BUILDERFORCE_URL` fallbacks.** Replace them with one `builderforceClient`.
+- `AUTH-G006` **The default base URL is split:** `api.builderforce.ai` (web, agent-runtime, SDK) vs `builderforce.ai/gateway` (VS Code, Chrome, Synapse).
+- `AUTH-G007` **Configuration names and aliases are inconsistent** across hosts. Keep one documented table and deprecate the aliases.
+- `AUTH-G008` **Error flattening is copied four times,** and Rust `CloudError` misses the nested `{error:{message,code}}` form.
+- `AUTH-G009` **The fallback when the server omits `expiresIn` differs:** 3600 s in TypeScript, 900 s in Rust.
+- `AUTH-G010` **The `packages/device-auth` header comment cites stale paths.**
+- `AUTH-G011` **The web has no token refresh,** so an expired token is a hard logout.
+- `AUTH-G012` **Auth-client test gaps:** Chrome `apiClient.test.ts` is 11 lines, Rust has 6 tests, agent-runtime has none.
+- `AUTH-G013` **Rust and VS Code derive the web origin from the API URL by hand.**
+- `AUTH-G014` **Not yet audited:** Chrome SettingsView sign-in, webcontainers `aiGateway`/`hostRelay`, `knowledge-client`, `provider-connect`.
+- `AUTH-G015`–`AUTH-G019` **Security-sensitive client and credential findings.** Details are in the local security findings file. `AUTH-G015` is blocked on a product decision about web session storage.
+- `AUTH-G020` **The workspace-switch route `/api/vscode/tenants/:id/token` is VS Code-named but used by every editor host.** Alias it host-neutrally (expand/contract).
+
 ### Data model — PRD 20 `[platform]`
 
 - `MAINT-G023` **LinkedIn rows retired by 1102** need a reconciler or a drop.

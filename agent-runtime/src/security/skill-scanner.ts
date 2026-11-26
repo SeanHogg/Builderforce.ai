@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { hasErrnoCode } from "../infra/errors.js";
-import { isPathInside } from "./scan-paths.js";
+import { isPathInside } from "@builderforce/agent-tools/node-path.js";
 import { scanText, type FindingSeverity } from "@builderforce/code-shield";
 
 // ---------------------------------------------------------------------------

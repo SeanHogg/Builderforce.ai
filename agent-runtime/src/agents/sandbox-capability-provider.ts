@@ -24,8 +24,8 @@
  * HOST mount via `node:fs` — the same tree the bridge reads, and the same pattern the
  * native sandboxed tools and the test host-bridge already rely on (the bridge exposes
  * stat/path ops, not readdir). Path confinement for per-file ops resolves through
- * {@link resolveInsideRoot}-equivalent logic, so the provider is self-guarding — the
- * same property the disk provider gets from `resolveInsideRoot`.
+ * {@link resolveInsideRootReal} (links followed), so the provider is self-guarding — the
+ * same property the disk provider gets from the same resolver.
  *
  * `read`/`exec`/`process` are NOT routed through this provider (the ticket's explicit
  * constraint): `read` stays on the native sandboxed read tool (image + budget features
@@ -36,6 +36,7 @@
 import { readdir } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import { resolveInsideRootReal } from "@builderforce/agent-tools/node-path.js";
 import {
   applyStringEdit,
   dirMayContainGlobMatch,
@@ -98,18 +99,6 @@ function toPosix(p: string): string {
   return p.split(sep).join("/");
 }
 
-function resolveInsideRoot(root: string, p: string): string | null {
-  const target = isAbsolute(p) ? resolve(p) : resolve(root, p);
-  const rel = relative(resolve(root), target);
-  if (rel === "") {
-    return target;
-  }
-  if (rel.startsWith("..") || isAbsolute(rel)) {
-    return null;
-  }
-  return target;
-}
-
 async function walkFiles(
   root: string,
   scope: string,
@@ -170,15 +159,15 @@ export function buildSandboxCapabilityProvider(
   const escaped = (path: string) => `'${path}' is outside the workspace`;
   const resolveFile =
     (options.scope ?? "workspace") === "workspace"
-      ? (p: string) => resolveInsideRoot(root, p)
-      : (p: string) => (isAbsolute(p) ? resolve(p) : resolve(root, p));
+      ? (p: string) => resolveInsideRootReal(root, p)
+      : async (p: string) => (isAbsolute(p) ? resolve(p) : resolve(root, p));
   const bridge = options.bridge;
 
   return {
     capabilities: SANDBOX_SURFACE_CAPS,
     repoRead: {
       async listFiles(sub, glob): Promise<RepoListResult> {
-        const scope = sub ? resolveInsideRoot(root, sub) : root;
+        const scope = sub ? await resolveInsideRootReal(root, sub) : root;
         if (!scope) {
           return { ok: false, error: escaped(sub ?? "") };
         }
@@ -186,7 +175,7 @@ export function buildSandboxCapabilityProvider(
         return { ok: true, paths, truncated };
       },
       async readFile(path): Promise<RepoReadResult> {
-        const abs = resolveFile(path);
+        const abs = await resolveFile(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }
@@ -220,7 +209,7 @@ export function buildSandboxCapabilityProvider(
     },
     repoWrite: {
       async writeFile(path, content): Promise<RepoWriteResult> {
-        const abs = resolveFile(path);
+        const abs = await resolveFile(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }
@@ -234,7 +223,7 @@ export function buildSandboxCapabilityProvider(
         }
       },
       async editFile(path, oldString, newString, replaceAll): Promise<RepoEditResult> {
-        const abs = resolveFile(path);
+        const abs = await resolveFile(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }
@@ -258,7 +247,7 @@ export function buildSandboxCapabilityProvider(
         }
       },
       async deleteFile(path): Promise<RepoDeleteResult> {
-        const abs = resolveFile(path);
+        const abs = await resolveFile(path);
         if (!abs) {
           return { ok: false, error: escaped(path) };
         }

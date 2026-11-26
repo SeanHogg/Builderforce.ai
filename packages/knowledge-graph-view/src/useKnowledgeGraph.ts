@@ -138,7 +138,10 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     // ONE root's graph, and the host's baseline when it keeps one, read in parallel. The
     // baseline belongs to the root and generation, so a refocus does not fetch it again.
     const loadGraphForRoot = useCallback((root: string, focus: string[] | undefined, gen: number) => {
-        const key = `${root}:${gen}:${(focus ?? []).join(' ')}`;
+        // A run-gated host that is not running this root reads its STORED review (read-only, no live updates): a miss there is the Run card.
+        // Its key differs from a Run's, so Run still loads what a stored read did not find (or refreshes what it did).
+        const storedRead = gatedRef.current && runRootRef.current !== root;
+        const key = `${root}:${gen}:${(focus ?? []).join(' ')}${storedRead ? ':stored' : ''}`;
         if (loadedKey.current?.source === source && loadedKey.current.key === key) return;
         const entry = { source, key };
         loadedKey.current = entry;
@@ -154,8 +157,6 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
         setRefreshFailed(false);
         if (keep) setStale(true);
         else { paint(null); setBaseline(null); setStale(false); setStatus('loading'); }
-        // A run-gated host that is not running this root reads its STORED review (read-only, no live updates): a miss there is the Run card.
-        const storedRead = gatedRef.current && runRootRef.current !== root;
         const before = refocus
             ? Promise.resolve(memo.value)
             : (source.baseline
@@ -180,8 +181,6 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
                 setStale(false);
                 // A scope EXISTS (rootId was picked) but its graph is gone or unreadable: this is
                 // NOT "never reviewed" — say the load failed so the view can offer Retry.
-                // Nothing stored: the Run card — and Run must still load (the dedupe key does not hold it back).
-                if (!g && storedRead) loadedKey.current = null;
                 setStatus(g ? 'ready' : storedRead ? 'idle' : 'load-failed');
             })
             .catch((error: unknown) => {

@@ -22,7 +22,8 @@
  */
 
 import { statSync } from "node:fs";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { lstat, realpath } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 /** Thrown by {@link resolveInsideRootOrThrow} when a path leaves the workspace root. */
 export class PathEscapesRootError extends Error {
@@ -62,6 +63,101 @@ export function resolveInsideRoot(root: string, relPath: string): string | null 
 /** True when `relPath` resolves inside `root` (the boolean form of {@link resolveInsideRoot}). */
 export function isInsideRoot(root: string, relPath: string): boolean {
   return resolveInsideRoot(root, relPath) !== null;
+}
+
+/**
+ * True when `target` (resolved against the process cwd when relative) is `root` or lies under it — the plain
+ * "is X inside Y" check for two paths the caller already holds. Lexical only: see {@link resolveInsideRootReal}
+ * when the target may pass through a link. (`..foo` is a name, not a traversal; Windows case differences are
+ * `path.relative`'s to settle.)
+ */
+export function isPathInside(root: string, target: string): boolean {
+  return isInsideRoot(root, resolve(target));
+}
+
+export interface RealResolveOptions {
+  /** A target that does not exist is refused (default: accepted, so `write_file` can create a new file). */
+  mustExist?: boolean;
+  /** The root itself is a valid target (default true; a caller that wants a FILE under the root passes false). */
+  allowRoot?: boolean;
+}
+
+const isMissing = (error: unknown): boolean => {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return code === "ENOENT" || code === "ENOTDIR";
+};
+
+/** True when `p` is itself a symbolic link / junction (false when it does not exist). */
+async function isLink(p: string): Promise<boolean> {
+  try {
+    return (await lstat(p)).isSymbolicLink();
+  } catch (error) {
+    if (isMissing(error)) return false;
+    throw error;
+  }
+}
+
+/**
+ * The real path of `abs`, or of its nearest EXISTING ancestor with the missing tail re-appended (so a file that
+ * does not exist yet still resolves through the real directory it will be created in). `null` when a missing
+ * component is a dangling link — its destination is unknown, so it cannot be vouched for.
+ */
+async function realOfNearest(abs: string): Promise<{ real: string; exists: boolean } | null> {
+  const tail: string[] = [];
+  let current = abs;
+  for (;;) {
+    try {
+      const real = await realpath(current);
+      return { real: tail.length ? join(real, ...tail.reverse()) : real, exists: tail.length === 0 };
+    } catch (error) {
+      if (!isMissing(error)) throw error;
+      if (await isLink(current)) return null;
+      const parent = dirname(current);
+      if (parent === current) return { real: join(current, ...tail.reverse()), exists: false };
+      tail.push(basename(current));
+      current = parent;
+    }
+  }
+}
+
+/**
+ * {@link resolveInsideRoot} that ALSO follows links: the lexical check first, then the REAL path of the target
+ * (links resolved; for a target that does not exist yet, of its nearest existing ancestor) must sit inside the
+ * REAL path of the root — so a link or junction inside the workspace that points outside it is refused, which no
+ * lexical check can see. Returns the lexical absolute path (the one callers show and compare), `null` when refused.
+ *
+ * A root that does not exist has nothing in it to link out of, so the lexical answer stands. Any other
+ * filesystem error (permissions, I/O) propagates: "could not tell" is never answered "inside".
+ */
+export async function resolveInsideRootReal(root: string, relPath: string, opts: RealResolveOptions = {}): Promise<string | null> {
+  const abs = resolveInsideRoot(root, relPath);
+  if (abs === null) return null;
+  const rootResolved = resolve(root);
+  if (opts.allowRoot === false && abs === rootResolved) return null;
+  let realRoot: string;
+  try {
+    realRoot = await realpath(rootResolved);
+  } catch (error) {
+    if (isMissing(error)) return opts.mustExist ? null : abs;
+    throw error;
+  }
+  const target = await realOfNearest(abs);
+  if (target === null) return null;
+  if (opts.mustExist && !target.exists) return null;
+  if (opts.allowRoot === false && target.real === realRoot) return null;
+  return resolveInsideRoot(realRoot, target.real) === null ? null : abs;
+}
+
+/** {@link resolveInsideRootReal}, throwing {@link PathEscapesRootError} (and the "a 'path' string is required" error) like {@link resolveInsideRootOrThrow}. */
+export async function resolveInsideRootRealOrThrow(root: string, relPath: unknown, opts: RealResolveOptions = {}): Promise<string> {
+  if (typeof relPath !== "string") {
+    throw new Error("a 'path' string is required");
+  }
+  const abs = await resolveInsideRootReal(root, relPath, opts);
+  if (abs === null) {
+    throw new PathEscapesRootError(relPath);
+  }
+  return abs;
 }
 
 /**

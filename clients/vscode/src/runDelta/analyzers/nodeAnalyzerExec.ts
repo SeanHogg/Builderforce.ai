@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import type { AnalyzerExec, ExecResult } from "@builderforce/agent-tools";
 import { consoleNodePath } from "../../process/consoleNode";
-import { runTree } from "../../process/killTree";
+import { runTree } from "@builderforce/agent-tools/node-process";
 import { whichOnPath } from "../../process/programSearch";
 
 /** The most output one tool run may print (a whole-repo JSON report). */
@@ -58,7 +58,7 @@ export const nodeAnalyzerExec: AnalyzerExec = {
   async run(argv, opts): Promise<ExecResult> {
     if (opts.signal?.aborted) return { started: true, exitCode: null, stdout: "", stderr: "", timedOut: true };
     const { file, args, env } = launch(argv, opts.env);
-    // `runTree` (src/process/killTree.ts): on timeout, abort or overflow the WHOLE process tree is killed, not just the child.
+    // `runTree` (agent-tools node-process): on timeout, abort or overflow the WHOLE process tree is killed, not just the child.
     const r = await runTree(file, args, {
       cwd: opts.cwd, env, timeoutMs: opts.timeoutMs, maxBuffer: MAX_BUFFER,
       ...(opts.signal ? { signal: opts.signal } : {}), ...(opts.windowsVerbatimArguments ? { windowsVerbatimArguments: true } : {}),

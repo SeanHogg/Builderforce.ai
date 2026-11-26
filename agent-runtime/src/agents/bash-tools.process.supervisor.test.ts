@@ -26,7 +26,7 @@ vi.mock("../process/supervisor/index.js", () => ({
   getProcessSupervisor: () => supervisorMock,
 }));
 
-vi.mock("../process/kill-tree.js", () => ({
+vi.mock("@builderforce/agent-tools/node-process.js", () => ({
   killProcessTree: (...args: unknown[]) => killProcessTreeMock(...args),
 }));
 

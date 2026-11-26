@@ -12,7 +12,7 @@ Synapse is being rebuilt from the ground up (user, 2026-11-26), so its Rust MCP 
 | 4 | Memory (Evermind), skills, episodes, runs | **audited 2026-11-26** (below) |
 | 5 | Chat composer / view | audited (§5) |
 | 6 | Shell / terminal, file tools | audited (§6) |
-| 7 | Auth / device sign-in / cloud client | queued |
+| 7 | Auth / device sign-in / cloud client | audited (§7) |
 | 8 | Security policy (code-shield vs Shield) | queued |
 
 ---
@@ -764,3 +764,93 @@ Paths are relative to `Builderforce.ai` unless marked I (`builderforce-inference
 | SHELL-G016 | The browser shell has no jobs, background runs or tree cancel | `workspaceShell.ts`, W `packages/browser/src/node/processHost.ts` |
 | SHELL-G017 | No cross-host conformance suite for file and command tools | — |
 | SHELL-G018 | Only one terminal component; new hosts must reuse it, not fork it | `frontend/src/components/Terminal.tsx` |
+
+## 7. Auth, device sign-in and the cloud API client
+
+Paths: BF = `Builderforce.ai`, I = `builderforce-inference`, M = `builderforce-memory`, W = `builderforce-webcontainers`. The audit is read-only; items not opened are marked UNVERIFIED. Security-sensitive observations are kept in the gitignored local security findings file (`AUTH-G015` to `AUTH-G019`) and only referenced here.
+
+### 7.1 Headline
+
+- **The server side is single:**
+  - `authRoutes.ts` (1224 lines), `oauthRoutes.ts`, `passkeyRoutes.ts`, `vscodeRoutes.ts` and `sessionIntrospectRoutes.ts`;
+  - JWTs verified through `packages/hs256-jwt` in both the API and the Worker;
+  - revocation through `packages/session-introspection`.
+- **The device flow is shared in TypeScript** (`packages/device-auth`, RFC 8628).
+- **The client side is not shared.** Three copies of "editor key → base JWT → workspace JWT" exist:
+  - VS Code `bfApi/session.ts`;
+  - Chrome `auth/session.ts`;
+  - Synapse/Spawn `bf-cloud/session.rs`.
+- **The authenticated-fetch and 401 behaviour differs per host,** and the error-flattening helper is copied four times.
+- **agent-runtime hand-builds `Authorization: Bearer` in about 56 files,** and reads `BUILDERFORCE_URL` with an inline fallback in about 18.
+
+### 7.2 Clients
+
+| Host | Sign-in | Credential storage | Session and refresh | Authed fetch and 401 | Tests |
+|---|---|---|---|---|---|
+| Web `frontend/src/lib/{auth.ts, auth/*, apiClient.ts, builderforceApi.ts}` | password, MFA, OAuth, SSO, magic link, passkey | web JWT and tenant JWT (see `AUTH-G015`) | no refresh; tenant JWT through `/api/auth/tenant-token` | `apiRequest`: 401 clears the session and redirects to `/login`; 402 becomes a plan-limit error | `apiClient*.test`, `auth.test`, `AuthContext*.test` |
+| VS Code `clients/vscode/src/{auth/auth.ts, bfApi/session.ts, bfApi/transport.ts}` | `packages/device-auth`, with a paste-key fallback | `bfk_*` key in SecretStorage | key → `/api/auth/tenant-api-key-token` → `/api/vscode/tenants/:id/token`; 60 s margin, single-flight, epoch guard, park/drop workspace | `authed`: 401 forces a re-mint and retries once; 60 s timeout; `asTenant` pin | `session.mint`, `session.park`, `transport`, `gatewayAuth`, `editorKeyGuard` |
+| Chrome `clients/chrome/src/{auth/session.ts, api/apiClient.ts}` | device flow (SettingsView, UNVERIFIED) | key in `chrome.storage.local` (see `AUTH-G016`) | same exchange; 60 s margin; a 400/401 on exchange clears the session; **no workspace switch** | **no 401 retry**; `ApiError{status}`; `Idempotency-Key` | `apiClient.test.ts` (11 lines), `config.test` |
+| Synapse/Spawn `I/crates/bf-cloud/{device.rs, session.rs, account.rs, error.rs}` | **Rust copy of the device flow** | OS keyring (`bf-vault`), no plaintext fallback | same exchange; assumes 900 s when the server omits `expiresIn` (TypeScript hosts assume 3600 s) | `Session::api` retries once on 401 under a Mutex | 6 unit tests |
+| agent-runtime `agent-runtime/src/commands/builderforce-connect.ts`, `infra/builderforce-relay.ts`, `run-context-client.ts` | `BUILDERFORCE_TOKEN` → `POST /api/agent-hosts` → API key | `~/.builderforce/.env` (see `AUTH-G017`) | static key | about 56 hand-built Bearer sites; no shared client | none for auth |
+| SDK `BF/sdk/src/infrastructure/httpClient.ts` | — | caller-supplied key | static | rich `BuilderforceApiError`, 180 s timeout, no 401 refresh | yes |
+| Memory `M/memory/src/wire/chatClient.ts`, `cache/FetchSemanticCacheBackend.ts` | — | static key | static | no 401 logic | — |
+| brain-embedded `createBrainRestPersistence` | — | host-injected `getToken` | host re-mints | the host's request layer | yes |
+
+### 7.3 Duplicate-responsibility matrix
+
+| Capability | Survivor | Other copies |
+|---|---|---|
+| Device flow | `packages/device-auth` | `I/bf-cloud/src/device.rs` (Rust; kept native, but pinned by a shared fixture) |
+| Editor-key session (exchange, margin, single-flight, workspace switch, rejected-key event) | VS Code `bfApi/session.ts`, **extracted** host-neutral into `packages/editor-session` (injected storage, fetch, clock) | Chrome `auth/session.ts`; `I/bf-cloud/session.rs` (Rust; fixture) |
+| Authed fetch with a forced re-mint and one retry on 401 | VS Code `bfApi/transport.ts`, extracted with the session | Chrome `createAuthenticatedFetch`; Rust `Session::api`; the agent-runtime sites |
+| Error flattening (`{error}` vs `{error:{message,code}}`) | `frontend/src/lib/apiClient.ts` `flattenErrorBody`, moved to a shared package | Chrome `flattenErrorMessage` (its comment admits it is a copy); SDK parser; Rust `CloudError::from_ureq`, which misses the nested form |
+| Base URL and web-origin derivation | none; add one resolver | VS Code `appUrl()` and `webUrl`; Rust `web_base_of`; frontend `apiOrigin.ts`; Chrome `PLATFORM_ORIGINS` |
+| Key revoke on sign-out | `device-auth` `revokeKey` | Rust `sign_out` (inline) |
+| JWT verify | `packages/hs256-jwt` | none |
+
+### 7.4 Inconsistencies
+
+- **Default base URL.** VS Code, Chrome and Synapse use `https://builderforce.ai/gateway`; web, agent-runtime, the SDK and the memory docs use `https://api.builderforce.ai`.
+- **Configuration names:**
+  - Synapse: `BUILDERFORCE_URL` and `SYNAPSE_BUILDERFORCE_URL`;
+  - VS Code: `builderforce.baseUrl` and `builderforce.webUrl`;
+  - web: `NEXT_PUBLIC_AUTH_API_URL` and `NEXT_PUBLIC_WORKER_URL`;
+  - agent-runtime: `BUILDERFORCE_URL`, `_API_KEY`, `_TOKEN`, `_WEB_URL`, `_GATEWAY_URL`, `_AGENTS_LINK_URL` and `_AGENTS_GATEWAY_TOKEN`;
+  - memory: `BUILDERFORCE_MEMORY_TOKEN`.
+- **Refresh.** The web has none and signs out on 401. Editor hosts re-mint short JWTs from a long-lived key, but only VS Code has a forced retry plus single-flight.
+- **Rejected key.** VS Code fires an event, Chrome clears the session, and Rust returns `KeyRejected` and signs out.
+- **Workspace switch.** The web uses `/api/auth/tenant-token`. VS Code and Rust use `/api/vscode/tenants/:id/token`, a VS Code-named route used by non-VS Code clients. Chrome has no workspace switch.
+- **Expiry fallback.** 3600 s in TypeScript vs 900 s in Rust.
+- **Stale doc paths** in the `packages/device-auth/src/index.ts` header (`clients/vscode/src/auth.ts`, `bfApi.ts`).
+- **Rust device poll** swallows non-status errors and has no distinct `cancelled` reason.
+
+### 7.5 Target design and order
+
+1. **Fix the doc paths and the expiry constant** (cheap). The server always sends `expiresIn`, and clients share one fallback.
+2. **Extract `packages/editor-session`** from VS Code `bfApi/session.ts` and `transport.ts`, with no `vscode` imports. VS Code consumes it unchanged (its tests are the parity oracle). Chrome adopts it, which brings the 401 retry and the workspace switch.
+3. **Shared error flattening and base-URL resolver.** One helper used by web, Chrome, VS Code and the SDK, plus one table documenting every configuration name; deprecate the aliases.
+4. **One `builderforceClient` for agent-runtime.** Replace the hand-built Bearer sites and the `BUILDERFORCE_URL` fallbacks.
+5. **Rust parity.** `bf-cloud` keeps native code, but a shared JSON fixture (device statuses, exchange responses, error bodies) runs in both the TypeScript and Rust tests. Under the Synapse IDE rebuild, the VS Code extension's session replaces it.
+6. **Workspace-switch route.** Alias `/api/vscode/tenants/:id/token` under a host-neutral name (`/api/auth/workspace-token`), with expand/contract.
+7. **Security items** `AUTH-G015` to `AUTH-G019`: see the local security findings file. `AUTH-G015` needs a product decision.
+
+### 7.6 Gaps
+
+| ID | Gap | Where |
+|---|---|---|
+| AUTH-G001 | Rust device flow duplicates TypeScript; no shared contract fixture | `I/crates/bf-cloud/src/device.rs`, `packages/device-auth` |
+| AUTH-G002 | Three copies of the editor-key session | VS Code `bfApi/session.ts`, Chrome `auth/session.ts`, `I/bf-cloud/session.rs` |
+| AUTH-G003 | Chrome has no 401 forced-refresh retry | `clients/chrome/src/api/apiClient.ts` |
+| AUTH-G004 | Chrome has no workspace switch | `clients/chrome/src/auth/session.ts` |
+| AUTH-G005 | agent-runtime has about 56 hand-built Bearer fetches and about 18 `BUILDERFORCE_URL` fallbacks | `agent-runtime/src/{infra,builderforce,commands}/*` |
+| AUTH-G006 | Default base URL split (`api.` vs `/gateway`) | all clients |
+| AUTH-G007 | Inconsistent configuration names and aliases | see §7.4 |
+| AUTH-G008 | Error flattening copied four times; Rust misses the nested form | `frontend/src/lib/apiClient.ts`, `clients/chrome/src/api/apiClient.ts`, `sdk/src/infrastructure/httpClient.ts`, `I/bf-cloud/src/error.rs` |
+| AUTH-G009 | `expiresIn` fallback differs (3600 vs 900) | VS Code, Chrome, Rust session code |
+| AUTH-G010 | Stale paths in the `device-auth` header comment | `packages/device-auth/src/index.ts` |
+| AUTH-G011 | The web has no refresh; an expired token means a hard logout | `frontend/src/lib/apiClient.ts`, `auth/session.ts` |
+| AUTH-G012 | Auth-client test gaps: Chrome (11 lines), Rust (6), agent-runtime (none) | — |
+| AUTH-G013 | Web origin derived from the API URL by hand in Rust and VS Code | `I/bf-cloud/src/lib.rs` `web_base_of`, VS Code `appUrl()` |
+| AUTH-G014 | Not yet audited: Chrome SettingsView sign-in, W `aiGateway`/`hostRelay`, `packages/knowledge-client`, `packages/provider-connect` | — |
+| AUTH-G015–G019 | Security-sensitive; details in the local security findings file | — |
+| AUTH-G020 | The workspace-switch route is VS Code-named but used by every editor host | `api/src/presentation/routes/vscodeRoutes.ts` |

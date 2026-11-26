@@ -31,7 +31,8 @@ import {
   safeStat,
 } from "./audit-fs.js";
 import { pickSandboxToolPolicy } from "./audit-tool-policy.js";
-import { extensionUsesSkippedScannerPath, isPathInside } from "./scan-paths.js";
+import { isPathInside } from "@builderforce/agent-tools/node-path.js";
+import { extensionUsesSkippedScannerPath } from "./scan-paths.js";
 import type { SkillScanFinding } from "./skill-scanner.js";
 import * as skillScanner from "./skill-scanner.js";
 import type { ExecFn } from "./windows-acl.js";

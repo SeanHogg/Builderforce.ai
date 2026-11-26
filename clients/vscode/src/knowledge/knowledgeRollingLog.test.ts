@@ -22,10 +22,10 @@ describe("knowledgeRollingLog", () => {
 
   it("regression: stays size-capped by rotating to .1, keeping the newest lines readable", async () => {
     const log = createRollingLog(join(dir, "k.log"), { maxBytes: 200, now: () => "T" });
-    for (let i = 0; i < 40; i += 1) log.append(`line ${i}`);
+    for (let i = 0; i < 100; i += 1) log.append(`line ${i}`);
     const lines = await log.tail(1000);
-    expect(lines.at(-1)).toBe("T line 39");
-    expect(lines.length).toBeLessThan(40);
+    expect(lines.at(-1)).toBe("T line 99");
+    expect(lines.length).toBeLessThan(100);
   });
 
   it("reports a failed append instead of throwing", async () => {

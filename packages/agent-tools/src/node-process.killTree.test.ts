@@ -8,6 +8,9 @@ vi.mock("node:child_process", () => ({
   spawn: (...args: unknown[]) => spawnMock(...args),
 }));
 
+/** taskkill comes from `%SystemRoot%\System32`, never PATH — so the tests pin SystemRoot. */
+const TASKKILL = "C:\\Windows\\System32\\taskkill.exe";
+
 async function withPlatform<T>(platform: NodeJS.Platform, run: () => Promise<T> | T): Promise<T> {
   const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform");
   Object.defineProperty(process, "platform", { value: platform, configurable: true });
@@ -25,6 +28,7 @@ describe("killProcessTree", () => {
 
   beforeEach(() => {
     spawnMock.mockReset();
+    vi.stubEnv("SystemRoot", "C:\\Windows");
     killSpy = vi.spyOn(process, "kill");
     vi.useFakeTimers();
   });
@@ -32,6 +36,7 @@ describe("killProcessTree", () => {
   afterEach(() => {
     killSpy.mockRestore();
     vi.useRealTimers();
+    vi.unstubAllEnvs();
     vi.resetModules();
     vi.clearAllMocks();
   });
@@ -45,13 +50,13 @@ describe("killProcessTree", () => {
     }) as typeof process.kill);
 
     await withPlatform("win32", async () => {
-      const { killProcessTree } = await import("./kill-tree.js");
+      const { killProcessTree } = await import("./node-process.js");
       killProcessTree(4242, { graceMs: 25 });
 
       expect(spawnMock).toHaveBeenCalledTimes(1);
       expect(spawnMock).toHaveBeenNthCalledWith(
         1,
-        "taskkill",
+        TASKKILL,
         ["/T", "/PID", "4242"],
         expect.objectContaining({ detached: true, stdio: "ignore" }),
       );
@@ -62,15 +67,10 @@ describe("killProcessTree", () => {
   });
 
   it("on Windows force-kills after grace period only when PID still exists", async () => {
-    killSpy.mockImplementation(((pid: number, signal?: NodeJS.Signals | number) => {
-      if (pid === 5252 && signal === 0) {
-        return true;
-      }
-      return true;
-    }) as typeof process.kill);
+    killSpy.mockImplementation((() => true) as typeof process.kill);
 
     await withPlatform("win32", async () => {
-      const { killProcessTree } = await import("./kill-tree.js");
+      const { killProcessTree } = await import("./node-process.js");
       killProcessTree(5252, { graceMs: 10 });
 
       await vi.advanceTimersByTimeAsync(10);
@@ -78,13 +78,13 @@ describe("killProcessTree", () => {
       expect(spawnMock).toHaveBeenCalledTimes(2);
       expect(spawnMock).toHaveBeenNthCalledWith(
         1,
-        "taskkill",
+        TASKKILL,
         ["/T", "/PID", "5252"],
         expect.objectContaining({ detached: true, stdio: "ignore" }),
       );
       expect(spawnMock).toHaveBeenNthCalledWith(
         2,
-        "taskkill",
+        TASKKILL,
         ["/F", "/T", "/PID", "5252"],
         expect.objectContaining({ detached: true, stdio: "ignore" }),
       );
@@ -103,7 +103,7 @@ describe("killProcessTree", () => {
     }) as typeof process.kill);
 
     await withPlatform("linux", async () => {
-      const { killProcessTree } = await import("./kill-tree.js");
+      const { killProcessTree } = await import("./node-process.js");
       killProcessTree(3333, { graceMs: 10 });
 
       await vi.advanceTimersByTimeAsync(10);
@@ -115,15 +115,10 @@ describe("killProcessTree", () => {
   });
 
   it("on Unix sends SIGKILL after grace period when process is still alive", async () => {
-    killSpy.mockImplementation(((pid: number, signal?: NodeJS.Signals | number) => {
-      if (pid === -4444 && signal === 0) {
-        return true;
-      }
-      return true;
-    }) as typeof process.kill);
+    killSpy.mockImplementation((() => true) as typeof process.kill);
 
     await withPlatform("linux", async () => {
-      const { killProcessTree } = await import("./kill-tree.js");
+      const { killProcessTree } = await import("./node-process.js");
       killProcessTree(4444, { graceMs: 5 });
 
       await vi.advanceTimersByTimeAsync(5);
@@ -131,5 +126,48 @@ describe("killProcessTree", () => {
       expect(killSpy).toHaveBeenCalledWith(-4444, "SIGTERM");
       expect(killSpy).toHaveBeenCalledWith(-4444, "SIGKILL");
     });
+  });
+});
+
+describe("killTree (hard kill)", () => {
+  let killSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    spawnMock.mockReset();
+    killSpy = vi.spyOn(process, "kill").mockImplementation((() => true) as typeof process.kill);
+  });
+
+  afterEach(() => {
+    killSpy.mockRestore();
+    vi.resetModules();
+  });
+
+  it("win32: taskkill /T /F runs from the %SystemRoot%\\System32 path, never the bare PATH name", async () => {
+    const { killTree } = await import("./node-process.js");
+    killTree(777, { platform: "win32", env: { SystemRoot: "C:\\Windows" } });
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    expect(spawnMock).toHaveBeenCalledWith(TASKKILL, ["/T", "/F", "/PID", "777"], expect.objectContaining({ windowsHide: true, stdio: "ignore" }));
+    expect(spawnMock.mock.calls[0]?.[0]).not.toBe("taskkill");
+  });
+
+  it("win32 with no known system folder never spawns a PATH taskkill: it signals the pid directly", async () => {
+    const { killTree } = await import("./node-process.js");
+    killTree(778, { platform: "win32", env: {} });
+    expect(spawnMock).not.toHaveBeenCalled();
+    expect(killSpy).toHaveBeenCalledWith(778, "SIGKILL");
+  });
+
+  it("POSIX: SIGKILLs the process group", async () => {
+    const { killTree } = await import("./node-process.js");
+    killTree(779, { platform: "linux" });
+    expect(killSpy).toHaveBeenCalledWith(-779, "SIGKILL");
+  });
+
+  it("a failure other than 'already gone' is reported, not swallowed", async () => {
+    killSpy.mockImplementation((() => { throw Object.assign(new Error("denied"), { code: "EPERM" }); }) as typeof process.kill);
+    const { killTree } = await import("./node-process.js");
+    const errors: unknown[] = [];
+    killTree(780, { platform: "linux", onError: (e) => errors.push(e) });
+    expect(errors).toHaveLength(2); // group, then the bare pid
   });
 });

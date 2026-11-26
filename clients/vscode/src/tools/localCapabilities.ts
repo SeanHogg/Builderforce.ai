@@ -20,7 +20,7 @@ import { matchGlobInScope, dirMayContainGlobMatch, applyStringEdit, conformToExi
 // The ONE workspace-containment resolver, shared with the agent-runtime Node provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
 // node-builtin-free for the Worker).
-import { resolveInsideRootOrThrow as resolveInRoot } from "@builderforce/agent-tools/node-path";
+import { resolveInsideRootRealOrThrow as resolveInRoot } from "@builderforce/agent-tools/node-path";
 import type {
   Capability,
   CapabilityProvider,
@@ -198,7 +198,7 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
 
   const repoRead = {
     async listFiles(subdir?: string, glob?: string, opts?: RepoListOptions): Promise<RepoListResult> {
-      const start = subdir ? resolveInRoot(rootResolved, subdir) : rootResolved;
+      const start = subdir ? await resolveInRoot(rootResolved, subdir) : rootResolved;
       // A glob is an explicit "find these files" — return the full matches (never the
       // directory summary), so a named file is always surfaced even in a big repo. The
       // glob is applied DURING the walk so the file budget counts MATCHES, not
@@ -218,7 +218,7 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
       return { ok: true, paths, truncated };
     },
     async readFile(p: string): Promise<RepoReadResult> {
-      const abs = resolveInRoot(rootResolved, p);
+      const abs = await resolveInRoot(rootResolved, p);
       const stat = await fs.stat(abs).catch(() => null);
       if (!stat) return { ok: false, path: p, error: "file not found" };
       if (stat.isDirectory()) return { ok: false, path: p, error: "path is a directory, not a file — use list_files to see its contents" };
@@ -244,7 +244,7 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
       const scopeDir = normalizeScopeDir(scope);
       if (scopeDir) {
         try {
-          start = resolveInRoot(rootResolved, scopeDir);
+          start = await resolveInRoot(rootResolved, scopeDir);
         } catch (e) {
           return { ok: false, query, error: messageOf(e) };
         }
@@ -259,7 +259,7 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
 
   const repoWrite = {
     async writeFile(p: string, content: string): Promise<RepoWriteResult> {
-      const abs = resolveInRoot(rootResolved, p);
+      const abs = await resolveInRoot(rootResolved, p);
       const existing = await fs.readFile(abs, "utf-8").catch(() => null);
       await fs.mkdir(path.dirname(abs), { recursive: true });
       // A rewrite keeps the file's line endings (shared rule with the edit core): an LF
@@ -269,7 +269,7 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
       return { ok: true, change: existing !== null ? "modified" : "created" };
     },
     async deleteFile(p: string): Promise<RepoDeleteResult> {
-      const abs = resolveInRoot(rootResolved, p);
+      const abs = await resolveInRoot(rootResolved, p);
       try {
         await fs.rm(abs);
         symbols.markDirty(abs);
@@ -279,7 +279,7 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
       }
     },
     async editFile(p: string, oldString: string, newString: string, replaceAll?: boolean): Promise<RepoEditResult> {
-      const abs = resolveInRoot(rootResolved, p);
+      const abs = await resolveInRoot(rootResolved, p);
       const current = await fs.readFile(abs, "utf-8");
       // EOL-tolerant, EOL-preserving match (shared with the cloud provider): an agent
       // that emits LF `oldString` against a CRLF file still matches, and the file's

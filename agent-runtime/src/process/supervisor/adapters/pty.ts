@@ -1,4 +1,4 @@
-import { killProcessTree } from "../../kill-tree.js";
+import { killProcessTree } from "@builderforce/agent-tools/node-process.js";
 import type { ManagedRunStdin } from "../types.js";
 import { toStringEnv } from "./env.js";
 

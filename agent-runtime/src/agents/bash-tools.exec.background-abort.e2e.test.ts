@@ -5,7 +5,7 @@ import {
   resetProcessRegistryForTests,
 } from "./bash-process-registry.js";
 import { createExecTool } from "./bash-tools.exec.js";
-import { killProcessTree } from "./shell-utils.js";
+import { killTree } from "@builderforce/agent-tools/node-process.js";
 
 afterEach(() => {
   resetProcessRegistryForTests();
@@ -32,7 +32,7 @@ function cleanupRunningSession(sessionId: string) {
   const running = getSession(sessionId);
   const pid = running?.pid;
   if (pid) {
-    killProcessTree(pid);
+    killTree(pid);
   }
   return running;
 }

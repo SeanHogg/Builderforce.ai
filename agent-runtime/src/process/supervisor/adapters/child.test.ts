@@ -12,7 +12,7 @@ vi.mock("../../spawn-utils.js", () => ({
   spawnWithFallback: (...args: unknown[]) => spawnWithFallbackMock(...args),
 }));
 
-vi.mock("../../kill-tree.js", () => ({
+vi.mock("@builderforce/agent-tools/node-process.js", () => ({
   killProcessTree: (...args: unknown[]) => killProcessTreeMock(...args),
 }));
 

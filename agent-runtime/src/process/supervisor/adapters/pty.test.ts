@@ -10,7 +10,7 @@ vi.mock("@lydell/node-pty", () => ({
   spawn: (...args: unknown[]) => spawnMock(...args),
 }));
 
-vi.mock("../../kill-tree.js", () => ({
+vi.mock("@builderforce/agent-tools/node-process.js", () => ({
   killProcessTree: (...args: unknown[]) => killProcessTreeMock(...args),
 }));
 

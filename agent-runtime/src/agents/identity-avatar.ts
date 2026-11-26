@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { isPathInside } from "@builderforce/agent-tools/node-path.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { resolveUserPath } from "../utils.js";
 import { resolveAgentWorkspaceDir } from "./agent-scope.js";
@@ -46,14 +47,6 @@ function resolveExistingPath(value: string): string {
   }
 }
 
-function isPathWithin(root: string, target: string): boolean {
-  const relative = path.relative(root, target);
-  if (!relative) {
-    return true;
-  }
-  return !relative.startsWith("..") && !path.isAbsolute(relative);
-}
-
 function resolveLocalAvatarPath(params: {
   raw: string;
   workspaceDir: string;
@@ -65,7 +58,7 @@ function resolveLocalAvatarPath(params: {
       ? resolveUserPath(raw)
       : path.resolve(workspaceRoot, raw);
   const realPath = resolveExistingPath(resolved);
-  if (!isPathWithin(workspaceRoot, realPath)) {
+  if (!isPathInside(workspaceRoot, realPath)) {
     return { ok: false, reason: "outside_workspace" };
   }
   const ext = path.extname(realPath).toLowerCase();

@@ -11,7 +11,7 @@
  * gates) is the agent's policy.
  *
  * Stop reaches the process: aborting `opts.signal` kills the command's whole tree
- * (`killProcessTree`, the same kill the native exec tool uses) and the result comes back
+ * (`killTree`, the same kill the native exec tool uses) and the result comes back
  * `{ ok: false, aborted: true }`. A command that outlives the foreground ceiling is killed
  * and reported as not finished — never as a pass.
  */
@@ -20,7 +20,8 @@ import { spawn } from "node:child_process";
 import type { ShellCapability, ShellResult, ShellRunOptions } from "@builderforce/agent-tools";
 import { resolveShellCwd } from "@builderforce/agent-tools/node-path.js";
 import { runRouted, toBashNullDevice } from "@builderforce/agent-tools/node-posix-shell.js";
-import { getShellConfig, killProcessTree } from "../agents/shell-utils.js";
+import { killTree } from "@builderforce/agent-tools/node-process.js";
+import { getShellConfig } from "../agents/shell-utils.js";
 
 /** The foreground ceiling: a command that needs longer belongs in a background job. */
 export const SHELL_FOREGROUND_TIMEOUT_MS = 10 * 60 * 1000;
@@ -94,7 +95,7 @@ function runOnce(command: string, bash: string | null, dir: string, options: Nod
       resolve({ ...result, stdout });
     };
     const kill = (): void => {
-      if (child.pid !== undefined) killProcessTree(child.pid);
+      if (child.pid !== undefined) killTree(child.pid);
     };
     const onAbort = (): void => {
       kill();

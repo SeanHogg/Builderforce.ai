@@ -2,7 +2,7 @@ import type { AgentTool, AgentToolResult } from "../builderforce/model/agent-typ
 import { Type } from "@sinclair/typebox";
 import { formatDurationCompact } from "../infra/format-time/format-duration.ts";
 import { getDiagnosticSessionState } from "../logging/diagnostic-session-state.js";
-import { killProcessTree } from "../process/kill-tree.js";
+import { killProcessTree } from "@builderforce/agent-tools/node-process.js";
 import { getProcessSupervisor } from "../process/supervisor/index.js";
 import {
   type ProcessSession,
