@@ -461,7 +461,19 @@ jobs:
             echo "::error::Open VSX version lookup answered $code; cannot tell whether $version is published."
             exit 1
           fi
-          npx --yes ovsx@0.10.12 publish builderforce.vsix -p "$OVSX_PAT"
+          # An earlier run's upload can still be processing (inactive, so the lookup above misses it); ovsx then
+          # answers "already published". That is the same no-op; every other failure still fails the job.
+          # The default shell is `bash -e` without pipefail; without it the publish's status is tee's.
+          set -o pipefail
+          log=$(mktemp)
+          if npx --yes ovsx@0.10.12 publish builderforce.vsix -p "$OVSX_PAT" 2>&1 | tee "$log"; then
+            exit 0
+          fi
+          if grep -qF "is already published" "$log"; then
+            echo "::notice::Open VSX already has $version (not yet active)."
+            exit 0
+          fi
+          exit 1
 
   # ── GitHub Action → GitHub Marketplace ───────────────────────────────────
   # The action is usable from this repo today
