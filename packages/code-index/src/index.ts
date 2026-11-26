@@ -27,6 +27,7 @@ interface SearchInput {
   limit: number;
   wasmDir?: string;
   embedder?: EmbedderPort;
+  waitForIndexMs?: number;
 }
 
 const MAX_SNIPPET_CHARS = 4_000;
@@ -254,11 +255,25 @@ async function readSharedIndex(input: SearchInput, root: string): Promise<CodeSn
   return build;
 }
 
+async function sharedIndexForQuery(input: SearchInput, root: string) {
+  const build = readSharedIndex(input, root);
+  if (input.waitForIndexMs === undefined) return build;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<null>((resolve) => {
+    timer = setTimeout(resolve, input.waitForIndexMs, null);
+  });
+  try {
+    return await Promise.race([build, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Both Node hosts read the same root snapshot, with one writer across processes. */
 export async function searchWorkspaceCodeIndex(input: SearchInput): Promise<SemanticSearchResult> {
   if (input.query.length > 10_000) throw new Error("The workspace search query exceeds 10000 characters");
   const root = await realpath(input.root);
-  const stored = !input.scope ? await readSharedIndex(input, root) : undefined;
+  const stored = !input.scope ? await sharedIndexForQuery(input, root) : undefined;
   if (stored === null) return { ok: true, query: input.query, results: [], total: 0, indexing: true };
   // A scoped search builds its candidate set from the scope before ranking, so
   // global matches cannot crowd out an in-scope hit. It never replaces the root snapshot.

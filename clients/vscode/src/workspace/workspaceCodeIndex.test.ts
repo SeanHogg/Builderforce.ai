@@ -24,6 +24,23 @@ it("persists one root index, ranks code by a warm embedder, and refreshes change
   try {
     await writeFile(join(root, "billing.ts"), "export function book() {\n  return 'ledger';\n}\n");
     await writeFile(join(root, "render.ts"), "export function paint() {\n  return 'color';\n}\n");
+    let releaseListing!: () => void;
+    const listingGate = new Promise<void>((resolve) => { releaseListing = resolve; });
+    try {
+      const pending = await searchWorkspaceCodeIndex({
+        root, query: "invoice", limit: 1, embedder, waitForIndexMs: 0,
+        files: {
+          ...files,
+          async listFiles(...args) {
+            await listingGate;
+            return files.listFiles(...args);
+          },
+        },
+      });
+      expect(pending).toMatchObject({ ok: true, indexing: true, results: [] });
+    } finally {
+      releaseListing();
+    }
     const dense = await search("invoice");
     expect(dense.results?.[0]).toMatchObject({
       path: "billing.ts", source: "embedding", startLine: 1, endLine: 3,

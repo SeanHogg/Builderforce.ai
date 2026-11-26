@@ -19,6 +19,7 @@ import { workspaceRepoMap } from "./repoMap.js";
 import { workspacePath, workspaceRepoRead, workspaceGitHistory } from "./workspaceFiles.js";
 
 export const WORKSPACE_MCP_INFO = { name: "builderforce-workspace", version: "1.0.0" };
+const INDEX_WAIT_MS = 5_000;
 
 interface Workspace {
   root: string;
@@ -79,7 +80,7 @@ async function findWorkspaceCode({ root, caps }: Workspace, args: Record<string,
   const embedder = await (options.embedder ?? workspaceCodeEmbedder)().catch(() => undefined);
   const semantic = {
     search: (query: string, { scope, limit }: { scope?: string; limit?: number } = {}) => searchWorkspaceCodeIndex({
-      root, files: caps.repoRead!, query, limit: limit ?? 8,
+      root, files: caps.repoRead!, query, limit: limit ?? 8, waitForIndexMs: INDEX_WAIT_MS,
       ...(scope ? { scope } : {}), ...(embedder ? { embedder } : {}), ...options.grammar?.(),
     }),
     repoMap: (args: Record<string, unknown>) => workspaceRepoMap({ caps }, args),

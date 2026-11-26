@@ -1,7 +1,7 @@
 ## ✅ RESOLVED 2026-11-26 — Interactive Platform MCP, shared Workspace search, and Synapse connector import
 
 - The authenticated Platform MCP interactive profile sends catalog-change notifications and serves a catalog guide and discovery prompt. The MCP registry uses the stateless profile.
-- VS Code and the headless runtime use one persisted TypeScript code-body index for `workspace__find`. File changes refresh the shared snapshot. Lexical search works on its own, and dense ranking can reuse a resident Ollama embedder.
+- VS Code and the headless runtime use one persisted TypeScript code-body index for `workspace__find`. File changes refresh the shared snapshot. If an unscoped query is still waiting for the index after five seconds, it reports progress while the shared build continues. Lexical search works on its own, and dense ranking can reuse a resident Ollama embedder.
 - Native clients can use the gateway's OpenAI tool schema, approval decision, and protected result text. VS Code can import a Synapse connector into its native review flow using environment references for credentials.
 - The shared package is in the npm release pipeline. A fresh installation of both tarballs verified shared Memory HTTP, stdio, and installer behavior. The [gap register](docs/roadmap/GAP-REGISTER.md#mcp-consolidation-platform-agents) records the work that remains after these cutovers.
 
