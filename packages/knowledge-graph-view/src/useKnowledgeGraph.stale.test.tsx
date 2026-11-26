@@ -227,6 +227,31 @@ describe('useKnowledgeGraph: growth re-reads', () => {
         expect(h.load).toHaveBeenCalledTimes(afterDone);
     });
 
+    it('never overlaps itself: a tick during a slow re-read waits for it to settle, then re-reads once a window later', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+        const g = codeFixture('a');
+        const grow = deferred<KnowledgeGraph | null>();
+        const h = reviewHarness((n) => (n === 1 ? Promise.resolve(g) : n === 2 ? grow.promise : Promise.resolve(g)));
+        const { result } = renderHook(() => useKnowledgeGraph(h.source));
+        await flush(); await flush();
+        act(() => result.current.review.start({ rootId: 'a' }));
+        await h.progress(1);
+        expect(h.load).toHaveBeenCalledTimes(2); // the slow re-read, in flight
+        await h.progress(2);
+        await act(async () => { vi.advanceTimersByTime(120_000); }); // far past the window, still in flight
+        await flush();
+        expect(h.load).toHaveBeenCalledTimes(2);
+        grow.resolve(g);
+        await flush();
+        await act(async () => { vi.advanceTimersByTime(29_000); });
+        await flush();
+        expect(h.load).toHaveBeenCalledTimes(2); // the window runs from the settle
+        await act(async () => { vi.advanceTimersByTime(1_500); });
+        await flush();
+        expect(h.load).toHaveBeenCalledTimes(3);
+    });
+
     it('does not grow while the review names no root, or another root', async () => {
         const g = codeFixture('a');
         const h = reviewHarness(() => Promise.resolve(g));

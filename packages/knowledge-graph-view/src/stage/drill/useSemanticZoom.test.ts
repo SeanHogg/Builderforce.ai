@@ -16,7 +16,7 @@ const [place, reserve, charge] = records.map((r) => r.ref) as [string, string, s
 
 /** No placement and no rig: nothing flies, only the trail moves. */
 const bus = { placement: null, projector: null, tweening: false, slotOf: (k: string | null) => (k ? keys.indexOf(k) : -1), onFrame: () => () => {}, onSettle: () => () => {} } as unknown as StageBus;
-const drill = { stack: [{}, {}], view: null, symbols: records, canEnter: () => ({ can: false }), enter: vi.fn(), out: vi.fn(), climb: vi.fn() } as unknown as DrillModel;
+const drill = { stack: [{}, {}], reanchored: { seq: 0, moves: new Map() }, view: null, symbols: records, canEnter: () => ({ can: false }), enter: vi.fn(), out: vi.fn(), climb: vi.fn() } as unknown as DrillModel;
 const mapAt = (level: string) => ({ drill: level, symbols: records, stations: { stations: [], byId: new Map() }, keyOfStation: () => '' }) as unknown as StageMap;
 
 function setup() {

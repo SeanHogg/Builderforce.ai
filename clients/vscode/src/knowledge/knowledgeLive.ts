@@ -7,7 +7,7 @@
  *     changed facts when it watches the root) becomes a bounded PATCH read from the changed files'
  *     extracted output (`livePatch.ts`) — never a graph rebuild per change;
  *   - the whole graph (importance, communities, findings) refreshes through ONE `loadGraph` at most
- *     every 30 s while something changed (`liveRefresh.ts`); a batch of more than
+ *     every 30 s while something changed (`settledThrottle`); a batch of more than
  *     {@link PATCH_MAX_FILES} files (a branch switch) asks for that refresh instead of a patch, and
  *     so does a review (or indexer pass) landing on the root;
  *   - the working tree's pending changes under the root plus every file the batches saw ride along
@@ -32,8 +32,12 @@ import { rootModules } from "./rootModules";
 import { indexerWatches, onIndexedFacts, onIndexerWatching, trackLiveBatch } from "./indexLevels";
 import { loadGraph, log, onKnowledgeChanged, openRoot, workspaceFolders, type GraphQuery } from "./knowledgeService";
 import { LivePatchBuilder, PATCH_MAX_FILES } from "./livePatch";
-import { throttledRefresh } from "./liveRefresh";
-import { GRAPH_BUILD_ABORTED } from "./graphWorker";
+import { settledThrottle, SKIPPED } from "@builderforce/knowledge-client/settledThrottle";
+import { beginRootLoad, onRootLoadEnd, rootLoading } from "./rootLoads";
+import { GRAPH_BUILD_ABORTED } from "./graphBuildErrors";
+
+/** At most one whole-graph refresh per this many ms while the root runs, measured from when the last one settled. */
+export const FULL_REFRESH_MIN_MS = 30_000;
 
 /** Longest a switch to the background indexer waits for the view's own watcher batch in flight. */
 const IN_FLIGHT_WAIT_MS = 5_000;
@@ -102,29 +106,44 @@ export function subscribeLiveGraph(
   /** Aborted on unlive / dispose: a whole-graph refresh still building drops its result. */
   const refreshAbort = new AbortController();
 
-  const full = throttledRefresh(async () => {
+  let cancelDeferred: (() => void) | undefined;
+  const full = settledThrottle(async () => {
+    // The view's own load of this root is running and brings a fresh graph itself: one build per root, not two.
+    // Nothing is lost: the refresh asks again once that load ends.
+    if (rootLoading(rootId)) {
+      cancelDeferred?.();
+      cancelDeferred = onRootLoadEnd(rootId, () => { cancelDeferred = undefined; full.request(); });
+      return SKIPPED;
+    }
+    // Stopped by an unlive / dispose, or by a newer build of this root (the view's own load).
+    const build = beginRootLoad(rootId);
+    const signal = AbortSignal.any([refreshAbort.signal, build.signal]);
     try {
       // The hashes this build starts from: patches diff against them once it is on screen.
       const base = await patcher.baseNow().catch((error: unknown) => { log("live patch base", error); return undefined; });
-      const graph = await loadGraph(secrets, rootId, queryOf?.(rootId), undefined, undefined, { signal: refreshAbort.signal });
-      if (!graph || !live) return;
+      const graph = await loadGraph(secrets, rootId, queryOf?.(rootId), undefined, undefined, { signal });
+      if (!graph || !live) return undefined;
       if (base) patcher.useBase(base);
       const changed = changedSet();
       const key = pushKeyOf(graph, changed);
       // A provably-identical picture inside the window is not pushed again; a graph without an identity always goes out.
       if (key !== null && key === lastPushKey && Date.now() - lastPushAt < SAME_DIGEST_DROP_MS) {
         log("live refresh", `skipped same-picture push (${key.slice(0, 80)})`);
-        return;
+        return undefined;
       }
       if (key !== null) { lastPushKey = key; lastPushAt = Date.now(); }
       lastChanged = changed.join("\n");
       handlers.onGraph(graph, changed);
     } catch (error: unknown) {
-      // An unlive / dispose aborted the build: nothing to report.
-      if ((error as { code?: unknown } | null)?.code === GRAPH_BUILD_ABORTED) return;
+      // An unlive / dispose / newer build of this root aborted this one: nothing to report. (Returns normally, so the window closes
+      // on purpose: the build that superseded it is the fresh graph; no immediate retry.)
+      if ((error as { code?: unknown } | null)?.code === GRAPH_BUILD_ABORTED) return undefined;
       log("live refresh", error);
+    } finally {
+      build.end();
     }
-  });
+    return undefined;
+  }, FULL_REFRESH_MIN_MS, { onError: (error) => log("live refresh", error) });
 
   /** Batches are patched one after another: each diffs against the hashes the previous one moved forward. */
   let patchChain: Promise<void> = Promise.resolve();
@@ -241,6 +260,7 @@ export function subscribeLiveGraph(
   return () => {
     live = false;
     refreshAbort.abort();
+    cancelDeferred?.();
     full.dispose();
     stopMode();
     stopWatch?.();

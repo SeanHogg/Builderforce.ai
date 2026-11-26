@@ -19,6 +19,7 @@
       "@builderforce/prefetch": ["../prefetch/src/index.ts"],
       "@builderforce/agent-tools/knowledge": ["../agent-tools/src/knowledge/index.ts"],
       "@builderforce/knowledge-client": ["../knowledge-client/src/index.ts"],
+      "@builderforce/knowledge-client/settledThrottle": ["../knowledge-client/src/settledThrottle.ts"],
       "@builderforce/knowledge-graph-view": ["../knowledge-graph-view/src/index.ts"],
       "@builderforce/run-delta/contract": ["../run-delta/src/contract.ts"],
       "@builderforce/run-delta/predict": ["../run-delta/src/predict/index.ts"],

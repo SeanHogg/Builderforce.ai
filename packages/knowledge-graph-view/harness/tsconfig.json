@@ -17,7 +17,7 @@
       "@react-three/drei": ["../../../frontend/node_modules/@react-three/drei"],
       "@testing-library/react": ["../../../frontend/node_modules/@testing-library/react"],
       "vitest": ["../../../frontend/node_modules/vitest"],
-      "@builderforce/knowledge-client": ["../../knowledge-client/src/index.ts"],
+      "@builderforce/knowledge-client/settledThrottle": ["../../knowledge-client/src/settledThrottle.ts"],
       "@builderforce/run-delta": ["../../run-delta/src/index.ts"],
       "@builderforce/code-shield": ["../../code-shield/src/index.ts"],
       "@builderforce/sarif": ["../../sarif/src/index.ts"],

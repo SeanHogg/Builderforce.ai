@@ -47,7 +47,7 @@ export function CallBadges({ labels, onStep }: CallBadgesProps) {
                 const pt = shown(track.from) && shown(to) && to !== track.from ? badgeAt(at(track.from), at(to), nthCallTo(track.to, i)) : null;
                 const on = !!pt && projector.project(pt.x, OVERLAY_LIFT, pt.y, scratch);
                 el.style.display = on ? '' : 'none';
-                if (on) el.style.transform = `translate3d(${Math.round(scratch[0]! - BADGE_PX / 2)}px, ${Math.round(scratch[1]! - BADGE_PX / 2)}px, 0)`;
+                if (on) el.style.transform = `translate3d(${Math.round(scratch[0]! - BADGE_PX / 2)}px, ${Math.round(scratch[1]! - BADGE_PX / 2)}px, 0px)`;
             });
         };
         const tween = (on: boolean) => { if (box.current) box.current.style.visibility = on ? 'hidden' : ''; };

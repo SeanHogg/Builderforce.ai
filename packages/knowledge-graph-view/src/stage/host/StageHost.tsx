@@ -42,6 +42,9 @@ import { StageBusContext, stageBus } from '../anchor/stageBus';
 import type { PlacementCamera } from '../types';
 import { StageFactoryContext } from './StageFactoryContext';
 import { StagePins } from './StagePins';
+import { useDrillIdentity } from './useDrillIdentity';
+import { useHeldFrame } from './useHeldFrame';
+import { holdsForNestBasis, useNestBasis } from './useNestBasis';
 import { useStageStrings } from './stageStrings';
 
 export interface StageHostProps extends SceneProps {
@@ -115,9 +118,20 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
     });
     const map = useComputed('placement', place('map', 1, wiring.map.drill, 0, null), [graph, generation, band, channels, wiring.map.drill, symbols], null, { enabled: !!marks }).value;
     const other = camera === 'map' ? 'graph' : camera;
+    // The zoom's nesting survives a rebuilt world: its entries are re-derived from the ancestor levels' placements of the new generation.
+    const nestBasis = useNestBasis(marks, surface.drill.stack, camera === 'map' && wiring.zoom.nests, (d) => place('map', 1, d, 0, null), [graph, generation, band, channels, symbols]);
+    const setBasis = wiring.zoom.setBasis;
+    useEffect(() => { setBasis(nestBasis.basis); }, [setBasis, nestBasis.basis]);
     const otherPlacement = useComputed('placement', place(other, other === '3d' ? 1 : 0, null, lod, pathId), [graph, generation, band, channels, other, lod, pathId, symbols], null, { enabled: !!marks }).value;
     const placement = camera === 'map' ? wiring.patchMap(map) : otherPlacement;
-    const ready = !!marks && !!placement && placement.generation === marks.generation;
+    // A zoom-entered level whose entry went stale with the rebuilt world waits for the placements it re-nests from (not when they failed: nothing is coming).
+    const nesting = camera === 'map' && !!map && holdsForNestBasis(nestBasis.pending, nestBasis.basis, wiring.zoom.awaitsBasis(map));
+    const ready = !!marks && !!placement && placement.generation === marks.generation && !nesting;
+    // The last ready frame bridges a regeneration of the SAME root, camera and drill depth (a live or growth repaint, a re-anchor);
+    // any navigation (another root, camera or level) drops it. The Stage itself stays mounted on the MarkSet, as before.
+    const drillIdentity = useDrillIdentity(surface.drill.stack, surface.drill.reanchored.moves);
+    const frame = useHeldFrame(`${graph.scope.rootId}|${camera}|${drillIdentity}`, ready ? { marks, paint, placement } : null);
+    const shownMarks = frame?.marks ?? marks;
 
     // The selection: the stage's own (a mark picked here), else the surface's (a search hit, the List).
     const selected = wiring.selected ?? (p.selected && p.selected !== wiring.dismissed ? `node:${p.selected}` : null);
@@ -193,16 +207,16 @@ function StageBody({ renderer, onLost, camera, ...p }: SceneProps & { camera: Pl
                         {levelNote && <p data-level-note style={{ margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'),...TYPE.bodyMuted }}>{levelNote}</p>}
                     </div>
                 )}
-                {marks && (
+                {shownMarks && (
                     <Stage
-                        renderer={renderer} marks={marks} paint={paint} placement={placement ?? null} colors={colors}
+                        renderer={renderer} marks={shownMarks} paint={frame?.paint ?? paint} placement={frame?.placement ?? null} colors={colors}
                         width={width} height={height} reducedMotion={p.reducedMotion} selected={selected} onSelect={wiring.onSelect} onDrill={wiring.onDrill}
-                        depthLabel={labels.surface.scene.depth} nav={nav} description={labels.regionLabel} legend={{ types: legendTypesOf(marks.type), labels, links: camera === 'map' && wiring.zoom.band !== 'system' }}
+                        depthLabel={labels.surface.scene.depth} nav={nav} description={labels.regionLabel} legend={{ types: legendTypesOf(shownMarks.type), labels, links: camera === 'map' && wiring.zoom.band !== 'system' }}
                         onOut={wiring.onEscape} onClear={wiring.clearSelection}
                         {...(camera === 'map' ? { tilt: surface.towers ? 1 : 0, onTilt, resetTilt: resets, onWheelStep: wiring.wheelStep } : {})} onContextLost={onLost}
                     />
                 )}
-                {!ready && <LayingOut labels={labels} />}
+                {!ready && <LayingOut labels={labels} corner={!!frame} />}
                 {ready && wiring.card}
                 {ready && camera === 'map' && !drilled && (
                     <StageBusContext.Provider value={bus}>

@@ -17,6 +17,7 @@
       "@builderforce/agent-skills": ["../../packages/agent-skills/src/index.ts"],
       "@builderforce/agent-tools": ["../../packages/agent-tools/src/index.ts"],
       "@builderforce/knowledge-client": ["../../packages/knowledge-client/src/index.ts"],
+      "@builderforce/knowledge-client/settledThrottle": ["../../packages/knowledge-client/src/settledThrottle.ts"],
       "@seanhogg/builderforce-memory/*": ["./node_modules/@seanhogg/builderforce-memory/dist/*/index.d.ts"],
       "@seanhogg/builderforce-memory-engine/ml/tasks/check-scheduler": ["./node_modules/@seanhogg/builderforce-memory-engine/dist/ml/tasks/check_scheduler.d.ts"],
       "@builderforce/agent-tools/*": ["../../packages/agent-tools/src/*"],

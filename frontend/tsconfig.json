@@ -90,7 +90,8 @@
       "@builderforce/spend-contract": ["../packages/spend-contract/src/index.ts"],
       "@builderforce/voice-provenance": ["../packages/voice-provenance/src/index.ts"],
       "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],
-      "@builderforce/knowledge-client": ["../packages/knowledge-client/src/index.ts"]
+      "@builderforce/knowledge-client": ["../packages/knowledge-client/src/index.ts"],
+      "@builderforce/knowledge-client/settledThrottle": ["../packages/knowledge-client/src/settledThrottle.ts"]
     },
     "target": "ES2017"
   },

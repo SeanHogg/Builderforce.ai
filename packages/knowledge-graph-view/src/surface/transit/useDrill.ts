@@ -16,6 +16,9 @@ import { buildDrillView, hasSymbols, type DrillFrame, type DrillLevel, type Dril
 import { anchorFilesOf, reanchorDrill } from './reanchorDrill';
 import { SYMBOL_FILES, symbolsOf, symbolsOfFile, withSymbolRecords } from './symbols';
 
+/** The package moves of one re-anchor; `seq` changes with every one. */
+export interface Reanchored { seq: number; moves: ReadonlyMap<string, string> }
+
 export type EnterCheck = { can: true; level: DrillLevel } | { can: false; reason: 'noSymbols' | 'leaf' | 'deepest' | 'unknown' };
 
 /** Reads the definitions of some files (the source's `symbolsOf` bound to its root); undefined on a host that cannot. */
@@ -43,6 +46,8 @@ export interface DrillModel {
     notice: string | null;
     /** The definitions read so far, append-only (the stage places a drilled level's symbols from them, PRD 43 B7). */
     symbols: readonly SymbolRecord[];
+    /** The package frames the last rebuilt map moved (old id → new id), numbered so each is seen once: what is keyed by a package id follows it. */
+    reanchored: Reanchored;
 }
 
 const NEXT: Record<string, DrillLevel | undefined> = { world: 'package', package: 'class', class: 'function' };
@@ -53,8 +58,10 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
     const [records, setRecords] = useState<readonly SymbolRecord[]>([]);
     const [pending, setPending] = useState(0);
     const [notice, setNotice] = useState<string | null>(null);
+    const [reanchored, setReanchored] = useState<Reanchored>({ seq: 0, moves: new Map() });
     const rootId = graph?.scope.rootId;
-    // Which packages were asked about (a re-enter does not ask again), and which root's answers still count.
+    // Which FILES were asked about (a re-enter, or a package re-anchored onto a renumbered station, does not ask again: station ids
+    // change between builds, files do not), and which root's answers still count.
     const asked = useRef(new Set<string>());
     const generation = useRef(0);
     useEffect(() => {
@@ -66,16 +73,43 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
     // The graph as the drill reads it: the stored files plus the definitions loaded so far.
     const full = useMemo(() => (graph ? withSymbolRecords(graph, records) : null), [graph, records]);
 
-    // The map can change under the person (a re-review, Live): a package whose station id changed follows its files to the
-    // station that holds them now; a level whose files are gone is left, and said so.
+    // Asks the host for the definitions of those of `files` not asked about yet; never asks for nothing.
+    const requestSymbols = useCallback((files: readonly string[]) => {
+        const refs = files.filter((f) => !asked.current.has(f));
+        if (!load || refs.length === 0) return;
+        for (const f of refs) asked.current.add(f);
+        const mine = generation.current;
+        setPending((n) => n + 1);
+        const settle = (): void => { if (mine === generation.current) setPending((n) => Math.max(0, n - 1)); };
+        load(refs).then((got) => {
+            // An answer for a root the person has left is not for this graph.
+            if (mine !== generation.current) return;
+            setRecords((have) => {
+                const seen = new Set(have.map((r) => r.ref));
+                return [...have, ...got.filter((r) => !seen.has(r.ref))];
+            });
+            settle();
+        }, () => {
+            // A host that fails to read leaves the levels below the package showing files, as a host without the port does; entering again retries.
+            if (mine === generation.current) for (const f of refs) asked.current.delete(f);
+            settle();
+        });
+    }, [load]);
+
+    // The map can change under the person (a re-review, Live): a package that moved follows its files to the station that
+    // holds them now (and reads the definitions of the files of it that have none yet); a level whose files are gone is
+    // left, and said so.
     useEffect(() => {
         if (!full) return;
         const fresh = reanchorDrill(stack, world, (ref) => full.nodes.some((n) => n.ref === ref));
         if (fresh.stack === stack) return;
-        for (const [from, to] of fresh.moved) if (asked.current.has(from)) { asked.current.delete(from); asked.current.add(to); }
+        if (fresh.moved.size > 0) {
+            setReanchored((r) => ({ seq: r.seq + 1, moves: fresh.moved }));
+            for (const to of fresh.moved.values()) requestSymbols((world.byId.get(to)?.refs ?? []).slice(0, SYMBOL_FILES));
+        }
         if (fresh.notice !== null) { setNotice(fresh.notice); setSelected(null); }
         setStack(fresh.stack);
-    }, [world, full, stack]);
+    }, [world, full, stack, requestSymbols]);
     const view = useMemo(() => {
         const top = stack[stack.length - 1];
         return full && top ? buildDrillView(full, world, top) : null;
@@ -102,28 +136,9 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
         setStack((s) => [...s, check.level === 'package' ? { level: check.level, ref: id, name, files: anchorFilesOf(world, id) } : { level: check.level, ref: id, name }]);
         setSelected(null);
         setNotice(null);
-        if (check.level === 'package' && load && !asked.current.has(id)) {
-            asked.current.add(id);
-            const mine = generation.current;
-            setPending((n) => n + 1);
-            const settle = (): void => { if (mine === generation.current) setPending((n) => Math.max(0, n - 1)); };
-            // The most important files first; the HOST applies the one real cap, this only keeps the request small.
-            const refs = (world.byId.get(id)?.refs ?? []).slice(0, SYMBOL_FILES);
-            load(refs).then((got) => {
-                // An answer for a root the person has left is not for this graph.
-                if (mine !== generation.current) return;
-                setRecords((have) => {
-                    const seen = new Set(have.map((r) => r.ref));
-                    return [...have, ...got.filter((r) => !seen.has(r.ref))];
-                });
-                settle();
-            }, () => {
-                // A host that fails to read leaves the levels below the package showing files, as a host without the port does; entering again retries.
-                if (mine === generation.current) asked.current.delete(id);
-                settle();
-            });
-        }
-    }, [canEnter, view, world, load]);
+        // The most important files first; the HOST applies the one real cap, this only keeps the request small.
+        if (check.level === 'package') requestSymbols((world.byId.get(id)?.refs ?? []).slice(0, SYMBOL_FILES));
+    }, [canEnter, view, world, requestSymbols]);
 
     const climb = useCallback((depth: number) => {
         const n = Number.isFinite(depth) ? Math.max(0, Math.floor(depth)) : 0;
@@ -135,6 +150,6 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
     const out = useCallback(() => { setStack((s) => s.slice(0, -1)); setSelected(null); setNotice(null); }, []);
     return {
         stack, view, canOut: stack.length > 0, parent: stack[stack.length - 2] ?? null, selected, select: setSelected, canEnter, enter, climb, out,
-        loading: pending > 0, notice, symbols: records,
+        loading: pending > 0, notice, symbols: records, reanchored,
     };
 }

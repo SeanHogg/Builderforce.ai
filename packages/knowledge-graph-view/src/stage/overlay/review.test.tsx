@@ -67,7 +67,7 @@ describe('appended symbols are selectable (review 1: the stage indexes by the LI
         // Its card opens: the stage wiring opens a card for a key that is a station of the level on show.
         const full = withSymbolRecords(graph, records);
         const view = buildDrillView(full, model.stations, { level: 'class', ref: USE_CASE, name: '' });
-        const drill = { stack: [{ level: 'class', ref: USE_CASE, name: '' }], view, symbols: records } as unknown as DrillModel;
+        const drill = { stack: [{ level: 'class', ref: USE_CASE, name: '' }], view, symbols: records, reanchored: { seq: 0, moves: new Map() } } as unknown as DrillModel;
         const { result } = renderHook(() => useStageMap(model.stations, drill, nodeIndex(full), (k) => stageBus(renderer).slotOf(k)));
         expect(result.current.stationOfKey(key)?.refs).toEqual([CLS]);
     });

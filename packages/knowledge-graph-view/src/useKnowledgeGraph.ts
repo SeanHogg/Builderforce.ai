@@ -6,11 +6,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { settledThrottle, type SettledThrottle } from '@builderforce/knowledge-client';
 import { LENSES, lensApplies, lensFindings, lensesFor, type LensDef } from './lenses';
 import { localSearch } from './graphModel';
 import { useReviewRun, type ReviewRun } from './useReviewRun';
 import { useLiveGraph } from './useLiveGraph';
+import { useGrowthReread } from './useGrowthReread';
 import { isNotReviewedHere, type KnowledgeBaseline, type KnowledgeGraphSource, type KnowledgeScopeSummary, type KnowledgeSearchHit, type LensId, type NotReviewedHere } from './types';
 
 /**
@@ -61,11 +61,7 @@ const newestFirst = (a: KnowledgeScopeSummary, b: KnowledgeScopeSummary): number
 /** The lenses a graph with findings should open on, in preference order (first that applies AND has findings). */
 const FINDINGS_FIRST: readonly LensId[] = ['unused', 'partitions', 'duplication', 'knowledge', 'structure'];
 
-/**
- * The least time between two re-reads of a graph that a running review is growing: the same window as the host's whole-graph
- * refresh of a running root (a re-read is a full build), never one per progress step.
- */
-export const GROW_INTERVAL_MS = 30_000;
+export { GROW_INTERVAL_MS } from './useGrowthReread';
 
 export interface KnowledgeGraphOptions {
     initialLens?: LensId;
@@ -120,6 +116,8 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     const paint = useCallback((g: KnowledgeGraph | null) => { graphRef.current = g; setGraph(g); }, []);
     /** Bumped by anything that supersedes a review-growth re-read (a load, a finished review, a source swap). */
     const growSeq = useRef(0);
+    // The root whose review is growing it now (`useGrowthReread`); a finished review clears it.
+    const growing = useRef<string | null>(null);
     /** The `${rootId}:${generation}:${focus}` already loading/loaded for THIS source — a state-driven rerun never re-reads it. */
     const loadedKey = useRef<{ source: KnowledgeGraphSource; key: string } | null>(null);
     /** The root load in flight: a review-growth re-read waits for it (the host's newer load of a root cancels the older). */
@@ -262,51 +260,7 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     }, []);
     const review = useReviewRun(source, onReviewDone);
 
-    // The open root grows while it is being reviewed: on a progress event that advanced, re-read it
-    // refocus-style (the picture stays) at most once per GROW_INTERVAL_MS. The done path does the final load.
-    // A re-read lands only if nothing newer started meanwhile (`growSeq`: any load, a finished review or a
-    // source swap bumps it) AND the review of THIS root is still running (`growing`). A re-read held back by
-    // the throttle runs once the window opens (trailing), with the latest progress.
-    // The re-read goes through the ONE `settledThrottle`: it never overlaps itself (a build longer than the window would
-    // otherwise be aborted by the next one, forever) and the window runs from when the previous re-read SETTLED; a
-    // progress tick during a re-read yields ONE trailing re-read, with the latest progress.
-    const grown = useRef<{ phase: string; done: number }>({ phase: '', done: -1 });
-    const growing = useRef<string | null>(null);
-    const growTask = useRef<() => Promise<void>>(async () => undefined);
-    const growThrottle = useRef<SettledThrottle | null>(null);
-    useEffect(() => {
-        const throttle = settledThrottle(() => growTask.current(), GROW_INTERVAL_MS, { leading: true });
-        growThrottle.current = throttle;
-        return () => { throttle.dispose(); growThrottle.current = null; };
-    }, []);
-    const reviewState = review.state;
-    const reviewRoot = review.rootId;
-    useEffect(() => {
-        const root = rootIdRef.current;
-        if (held || reviewState.status !== 'running' || !root || !reviewRoot || reviewRoot !== root) {
-            growing.current = null;
-            if (reviewState.status !== 'running') grown.current = { phase: '', done: -1 };
-            return;
-        }
-        growing.current = root;
-        const p = reviewState.progress;
-        if (!p) return;
-        const last = grown.current;
-        if (p.phase === last.phase && p.done <= last.done) return;
-        growTask.current = async () => {
-            // Nothing to grow once the review of this root is over; the root load in flight lands first (the next tick re-reads).
-            if (growing.current !== root || pendingLoad.current) return;
-            grown.current = { phase: p.phase, done: p.done };
-            const seq = growSeq.current;
-            const focus = loadFocusRef.current;
-            try {
-                const g = await source.load(root, focus ? { focus } : undefined);
-                if (!g || isNotReviewedHere(g) || growSeq.current !== seq || growing.current !== root || rootIdRef.current !== root) return;
-                paint(g); setStale(false); setRefreshFailed(false); setStatus('ready');
-            } catch { /* a superseded or failed re-read: the next progress tick re-reads */ }
-        };
-        growThrottle.current?.request();
-    }, [held, reviewState, reviewRoot, source, paint]);
+    useGrowthReread({ held, source, review, paint, growing, growSeq, pendingLoad, rootIdRef, loadFocusRef, setStale, setRefreshFailed, setReady: () => setStatus('ready') });
 
     const shown = held ? held.graph : graph;
     const allowed = opts.lenses;

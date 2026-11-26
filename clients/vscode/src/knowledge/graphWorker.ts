@@ -34,17 +34,14 @@ import {
   type GraphBuildRequest, type GraphWorkerMessage, type GraphWorkerReply, type StoredGraphRequest,
 } from "./graphBuildProtocol";
 import { runGraphBuild, type FolderStores } from "./graphBuildJob";
+import { GRAPH_BUILD_ABORTED, GRAPH_BUILD_TIMEOUT } from "./graphBuildErrors";
 
 /** The bundle entry esbuild writes beside `out/extension.js`. */
 export const GRAPH_WORKER_FILE = "knowledgeGraphWorker.js";
-/** A build the asker stopped answers this; a superseded load is dropped, never a failure. */
-export const GRAPH_BUILD_ABORTED = "graph_build_aborted";
 /** The reused worker's old-generation heap cap: a build that outgrows it dies alone, fast, instead of thrashing GC. */
 export const GRAPH_WORKER_HEAP_MB = 4096;
 /** Longest one build may hold the worker (under the bridge's 300 s call timeout): past it the worker is ended and the queue moves on. */
 export const GRAPH_BUILD_MS = 180_000;
-/** A build ended for holding the worker past {@link GRAPH_BUILD_MS} answers this. */
-export const GRAPH_BUILD_TIMEOUT = "graph_build_timeout";
 
 /** What the host uses of a `worker_threads` Worker (a test hands in its own). */
 export interface GraphWorkerHandle {

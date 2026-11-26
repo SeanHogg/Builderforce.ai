@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  log: vi.fn(),
   loadGraph: vi.fn(async (_s: unknown, _root: string, _q?: unknown) => ({ scope: { rootId: "r" }, nodes: [], edges: [], findings: [] })),
   reviewed: [] as Array<(rootId: string) => void>,
   onEdited: undefined as ((paths: string[]) => void) | undefined,
@@ -9,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./knowledgeService", () => ({
   loadGraph: mocks.loadGraph,
-  log: vi.fn(),
+  log: mocks.log,
   onKnowledgeChanged: (cb: (rootId: string) => void) => { mocks.reviewed.push(cb); return () => undefined; },
   openRoot: () => ({ store: {}, manifest: {} }),
   workspaceFolders: () => [],
@@ -28,8 +29,9 @@ vi.mock("@builderforce/agent-tools/knowledge", () => ({
 }));
 vi.mock("@builderforce/agent-tools/prefetch", () => ({ readPartitions: async () => undefined }));
 
-import { subscribeLiveGraph } from "./knowledgeLive";
-import { FULL_REFRESH_MIN_MS } from "./liveRefresh";
+import { FULL_REFRESH_MIN_MS, subscribeLiveGraph } from "./knowledgeLive";
+import { beginRootLoad } from "./rootLoads";
+import { GRAPH_BUILD_ABORTED } from "./graphBuildErrors";
 import { PATCH_MAX_FILES } from "./livePatch";
 
 const secrets = {} as never;
@@ -51,14 +53,71 @@ async function refreshOnce(queryOf?: (rootId: string) => { focus?: string[]; max
 describe("the editor's Live refresh of a running root", () => {
   it("re-reads the graph by the query the view last loaded the root with", async () => {
     await refreshOnce(() => ({ focus: ["src:r::a.md"], maxNodes: 50 }));
-    expect(mocks.loadGraph).toHaveBeenCalledWith(secrets, "r", { focus: ["src:r::a.md"], maxNodes: 50 });
+    expect(mocks.loadGraph).toHaveBeenCalledWith(secrets, "r", { focus: ["src:r::a.md"], maxNodes: 50 }, undefined, undefined, { signal: expect.any(AbortSignal) });
   });
 
   it("asks that of the root it watches, and falls back to an unfocused read when the view recorded none", async () => {
     const queryOf = vi.fn(() => undefined);
     await refreshOnce(queryOf);
     expect(queryOf).toHaveBeenCalledWith("r");
-    expect(mocks.loadGraph).toHaveBeenCalledWith(secrets, "r", undefined);
+    expect(mocks.loadGraph).toHaveBeenCalledWith(secrets, "r", undefined, undefined, undefined, { signal: expect.any(AbortSignal) });
+  });
+
+  it("aborts the build in flight on unlive, and an aborted build is a quiet return (not an error, no push)", async () => {
+    let signal: AbortSignal | undefined;
+    mocks.loadGraph.mockImplementationOnce((_s: unknown, _r: string, _q?: unknown, _t?: unknown, _n?: unknown, options?: { signal?: AbortSignal }) => {
+      signal = options?.signal;
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(Object.assign(new Error(GRAPH_BUILD_ABORTED), { code: GRAPH_BUILD_ABORTED })));
+      }) as never;
+    });
+    const h = handlers();
+    const stop = subscribeLiveGraph(secrets, "r", h);
+    await vi.advanceTimersByTimeAsync(0);
+    mocks.reviewed[0]!("r");
+    await vi.advanceTimersByTimeAsync(WINDOW);
+    expect(signal?.aborted).toBe(false);
+    stop();
+    expect(signal?.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.log).not.toHaveBeenCalledWith("live refresh", expect.anything());
+    expect(h.onGraph).not.toHaveBeenCalled();
+  });
+
+  it("one build per root: a refresh does not start while the view's own load of the root runs, and runs at once when it is asked again", async () => {
+    const view = beginRootLoad("r");
+    const h = handlers();
+    const stop = subscribeLiveGraph(secrets, "r", h);
+    await vi.advanceTimersByTimeAsync(0);
+    mocks.reviewed[0]!("r");
+    await vi.advanceTimersByTimeAsync(WINDOW);
+    expect(mocks.loadGraph).not.toHaveBeenCalled(); // skipped: the view's load brings a fresh graph
+    view.end(); // the skipped refresh asks again by itself: no top-up is lost
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.loadGraph).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it("a view load of the root stops the refresh building for it (quietly)", async () => {
+    let signal: AbortSignal | undefined;
+    mocks.loadGraph.mockImplementationOnce((_s: unknown, _r: string, _q?: unknown, _t?: unknown, _n?: unknown, options?: { signal?: AbortSignal }) => {
+      signal = options?.signal;
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(Object.assign(new Error(GRAPH_BUILD_ABORTED), { code: GRAPH_BUILD_ABORTED })));
+      }) as never;
+    });
+    const h = handlers();
+    const stop = subscribeLiveGraph(secrets, "r", h);
+    await vi.advanceTimersByTimeAsync(0);
+    mocks.reviewed[0]!("r");
+    await vi.advanceTimersByTimeAsync(WINDOW);
+    expect(signal?.aborted).toBe(false);
+    const view = beginRootLoad("r");
+    expect(signal?.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.onGraph).not.toHaveBeenCalled();
+    view.end();
+    stop();
   });
 
   it("builds nothing on its own: subscribed with nothing changed, no graph is ever re-read", async () => {

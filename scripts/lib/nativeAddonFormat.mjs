@@ -17,6 +17,8 @@ export const { addonFileName } = createRequire(import.meta.url)('../../packages/
 const ADDON_NAME = /^bfi_node\.([a-z0-9]+)-([a-z0-9]+)\.node$/;
 /** Enough of the file to cover every header read below (PE offsets, fat slice lists). */
 const HEAD_BYTES = 4096;
+/** A PE's e_lfanew beyond this is garbage, not a header worth reading toward. */
+const MAX_PE_HEAD = 16 * 1024 * 1024;
 
 const MACHO_THIN = { 0xfeedface: 'be', 0xfeedfacf: 'be', 0xcefaedfe: 'le', 0xcffaedfe: 'le' };
 const MACHO_FAT = { 0xcafebabe: { be: true, entry: 20 }, 0xcafebabf: { be: true, entry: 32 }, 0xbebafeca: { be: false, entry: 20 }, 0xbfbafeca: { be: false, entry: 32 } };
@@ -56,7 +58,8 @@ export function archsOf(bytes) {
   switch (binaryFormatOf(bytes)) {
     case 'pe': {
       const at = bytes.length >= 0x40 ? v.getUint32(0x3c, true) : -1;
-      if (at >= 0 && at + 6 <= bytes.length) add(PE_MACHINE[v.getUint16(at + 4, true)]);
+      const signed = at >= 0 && at + 6 <= bytes.length && bytes[at] === 0x50 && bytes[at + 1] === 0x45 && bytes[at + 2] === 0 && bytes[at + 3] === 0;
+      if (signed) add(PE_MACHINE[v.getUint16(at + 4, true)]);
       break;
     }
     case 'elf':
@@ -78,11 +81,20 @@ export function archsOf(bytes) {
   return found;
 }
 
+/** The file's first bytes — and, for a PE whose `PE\0\0` header sits past them, enough more to reach its machine field. */
 function readHead(filePath) {
-  const head = Buffer.alloc(HEAD_BYTES);
   const fd = openSync(filePath, 'r');
   try {
-    return head.subarray(0, readSync(fd, head, 0, HEAD_BYTES, 0));
+    let head = Buffer.alloc(HEAD_BYTES);
+    head = head.subarray(0, readSync(fd, head, 0, HEAD_BYTES, 0));
+    if (binaryFormatOf(head) === 'pe' && head.length >= 0x40) {
+      const need = head.readUInt32LE(0x3c) + 6;
+      if (need > head.length && need <= MAX_PE_HEAD) {
+        const more = Buffer.alloc(need);
+        head = more.subarray(0, readSync(fd, more, 0, need, 0));
+      }
+    }
+    return head;
   } finally {
     closeSync(fd);
   }

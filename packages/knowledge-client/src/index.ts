@@ -3,7 +3,6 @@
  * (PRD 38 §4.8). Hosts inject an authenticated `fetch`; see `client.ts`.
  */
 export { createKnowledgeClient, DEFAULT_KNOWLEDGE_BASE_PATH } from './client.js';
-export { settledThrottle, type SettledThrottle, type SettledThrottleOptions } from './settledThrottle.js';
 export {
   KnowledgeApiError,
   KnowledgeSyncBadPackError,

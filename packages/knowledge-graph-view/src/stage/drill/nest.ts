@@ -16,7 +16,9 @@
  */
 
 import { NEST_SPREAD } from '../labels/lod';
-import type { LinkBatch, Placement, Vec3 } from '../types';
+import { drillKeyOf } from '../../compute/tasks/placement/request';
+import type { DrillFrame } from '../../surface/transit/drillView';
+import type { LinkBatch, MarkSet, Placement, Vec3 } from '../types';
 
 export interface NestEntry {
     /** The level's drill key (`<level>:<ref>`, `request.ts` `drillKeyOf`). */
@@ -85,4 +87,41 @@ export function nestPlacement(raw: Placement, e: NestEntry): Placement {
         bounds: outer.bounds,
         rig: outer.rig,
     };
+}
+
+/**
+ * What a rebuilt world re-derives its nesting from: ONE MarkSet and the placements of every ancestor level of the
+ * drill, all of ITS generation. `levels[0]` is the world map; `levels[i]` the placement of `stack[i - 1]`'s level.
+ */
+export interface NestBasis { marks: Pick<MarkSet, 'keys' | 'generation'>; levels: readonly Placement[] }
+
+/** The slot of `key` in placement `p` over `marks`: a MarkSet slot, else one the placement appended (a loaded symbol); -1 when none. */
+export function slotInPlacement(marks: Pick<MarkSet, 'keys'>, p: Pick<Placement, 'append'>, key: string): number {
+    const own = marks.keys.indexOf(key);
+    if (own >= 0) return own;
+    const at = p.append?.keys.indexOf(key) ?? -1;
+    return at >= 0 ? p.append!.base + at : -1;
+}
+
+/**
+ * The nest entries of a drill stack again, from a new generation's placements: the frame `i`'s mark is looked up in the
+ * level above (nested into ITS own entry, as the zoom saw it), so the chain stays one continuous zoom. Only frames the
+ * zoom entered (an entry exists under their key) are derived, and the chain stops at the first one that cannot be.
+ */
+export function deriveNestEntries(stack: readonly Pick<DrillFrame, 'level' | 'ref'>[], entries: ReadonlyMap<string, NestEntry>, basis: NestBasis): Map<string, NestEntry> {
+    const out = new Map<string, NestEntry>();
+    // One generation or nothing: a MarkSet's slots mean nothing in another generation's placement.
+    if (!basis.levels.every((l) => l.generation === basis.marks.generation)) return out;
+    let outer: Placement | undefined = basis.levels[0];
+    for (let i = 0; i < stack.length && outer; i++) {
+        const frame = stack[i]!, key = drillKeyOf(frame);
+        if (!key || !entries.has(key)) break;
+        const slot = slotInPlacement(basis.marks, outer, `${i === 0 ? 'st' : 'node'}:${frame.ref}`);
+        const e = nestEntryOf(outer, slot, key);
+        if (!e) break;
+        out.set(key, e);
+        const next: Placement | undefined = basis.levels[i + 1];
+        outer = next ? nestPlacement(next, e) : undefined;
+    }
+    return out;
 }

@@ -6,7 +6,7 @@
  * (`node:<ref>`) and a neighbour (leaf) its world station's (`st:<id>`).
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import type { KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { drillKeyOf } from '../../compute/tasks/placement/request';
 import type { Station, StationModel } from '../../surface/stations';
@@ -36,7 +36,15 @@ export function useStageMap(world: StationModel, drill: DrillModel, index: Reado
     const top = drill.stack[drill.stack.length - 1];
     const key = drillKeyOf(top);
     const [unfold, setUnfold] = useState<{ level: string | null; id: string } | null>(null);
-    // An unfold belongs to the level it was made on.
+    // An unfold belongs to the level it was made on; a package the drill moved onto a rebuilt map's station carries it along.
+    useLayoutEffect(() => {
+        const { moves } = drill.reanchored;
+        if (moves.size === 0) return;
+        setUnfold((cur) => {
+            const to = cur?.level?.startsWith('package:') ? moves.get(cur.level.slice('package:'.length)) : undefined;
+            return cur && to !== undefined ? { ...cur, level: `package:${to}` } : cur;
+        });
+    }, [drill.reanchored]);
     const unfolded = unfold && unfold.level === key && stations.byId.has(unfold.id) ? unfold.id : null;
 
     const keyOfStation = useCallback((s: Station): string => (!view || view.leaves.has(s.id) ? `st:${s.id}` : `node:${s.refs[0] ?? s.id}`), [view]);

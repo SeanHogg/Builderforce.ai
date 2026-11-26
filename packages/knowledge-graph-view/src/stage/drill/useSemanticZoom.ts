@@ -23,7 +23,8 @@ import { bandOf, drawnPx, focusOf, sequenceLodOf, stepBand, zoomForBand } from '
 import { now, TWEEN_MS } from '../tween';
 import type { Placement } from '../types';
 import { codeTargetOf, type CodeTarget } from './codeText';
-import { drillOfPlacement, nestEntryOf, nestPlacement, type NestEntry } from './nest';
+import { nestEntryOf, type NestBasis, type NestEntry } from './nest';
+import { useNestEntries } from './useNestEntries';
 import type { StageMap } from './useStageMap';
 
 export interface SemanticZoom {
@@ -33,6 +34,12 @@ export interface SemanticZoom {
     sequenceLod: number;
     /** The Map placement nested into the mark the zoom entered (the same placement when the zoom did not enter it). */
     nest(p: Placement): Placement;
+    /** The generation-matched placements a rebuilt world re-derives the nesting from (`useNestEntries`). */
+    setBasis(b: NestBasis | null): void;
+    /** An entry of the drill is stale for `p`'s generation and its basis has not landed (nesting now would draw the level un-nested). */
+    awaitsBasis(p: Placement): boolean;
+    /** The zoom entered a level of the current drill (a rebuilt world has nesting to keep). */
+    nests: boolean;
     /** "Go inside": fly to the station at the next band's threshold (the zoom crossing enters it). */
     zoomInto(stationId: string): void;
     /** The Map's ladder: go back out to band `target` (0 system … CODE-1 method). Bands at or past the current one stay. */
@@ -76,34 +83,13 @@ interface ZoomState {
 }
 
 export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap, reducedMotion: boolean): SemanticZoom {
-    const [entries, setEntries] = useState<ReadonlyMap<string, NestEntry>>(() => new Map());
+    const { entries, add, nest, setBasis, awaitsBasis, nests } = useNestEntries(drill);
     const [trail, setTrail] = useState<readonly string[]>([]);
     const codeKey: string | null = trail.at(-1) ?? null;
     const [seqBand, setSeqBand] = useState(0);
     // An enter / out asked for and not yet in the stack: no second step until it lands.
     const pending = useRef(false);
     useEffect(() => { pending.current = false; }, [drill.stack]);
-    // A frame the drill re-anchored onto a rebuilt map's station (same level and depth, new ref): its nest entry follows the
-    // new key, so the zoom stays nested in the mark instead of snapping out.
-    const lastStack = useRef(drill.stack);
-    useEffect(() => {
-        const before = lastStack.current;
-        lastStack.current = drill.stack;
-        if (before === drill.stack) return;
-        const renamed = drill.stack.flatMap((f, i) => {
-            const was = before[i];
-            return was && was.level === f.level && was.ref !== f.ref ? [[`${f.level}:${was.ref}`, `${f.level}:${f.ref}`] as const] : [];
-        });
-        if (renamed.length === 0) return;
-        setEntries((m) => {
-            const next = new Map(m);
-            for (const [from, to] of renamed) {
-                const e = next.get(from);
-                if (e && !next.has(to)) { next.delete(from); next.set(to, { ...e, drill: to }); }
-            }
-            return next;
-        });
-    }, [drill.stack]);
     // The code layer belongs to the level it opened on.
     useEffect(() => { setTrail([]); }, [map.drill]);
 
@@ -153,7 +139,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
             const check = s.drill.canEnter(c.id);
             if (!check.can) return;
             const e = nestEntryOf(p, focus.slot, `${check.level}:${c.id}`);
-            if (e) setEntries((m) => new Map(m).set(e.drill, e));
+            if (e) add(e);
             pending.current = true;
             s.drill.enter(c.id);
         } else if (next < s.band) {
@@ -284,15 +270,6 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         if (!stepIn(prefer)) { goal.current = -1; onBlocked(); }
     }, [outToBand, stepIn]);
 
-    const nested = useMemo(() => new WeakMap<Placement, Placement>(), [entries]);
-    const nest = useCallback((p: Placement): Placement => {
-        const e = entries.get(drillOfPlacement(p));
-        if (!e || e.outer.generation !== p.generation) return p;
-        let out = nested.get(p);
-        if (!out) { out = nestPlacement(p, e); nested.set(p, out); }
-        return out;
-    }, [entries, nested]);
-
     const code = useMemo(() => {
         const target = codeKey ? codeTargetOf(codeKey.slice('node:'.length), drill.symbols) : null;
         return codeKey && target ? { key: codeKey, target } : null;
@@ -304,7 +281,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
     }), [trail, drill.symbols]);
 
     return {
-        band: bandOf(band), sequenceLod: sequenceLodOf(seqBand), nest, zoomInto, zoomToBand, outToBand, stepIn, toBand, code, closeCode, leaveCode, enterCode,
+        band: bandOf(band), sequenceLod: sequenceLodOf(seqBand), nest, setBasis, awaitsBasis, nests, zoomInto, zoomToBand, outToBand, stepIn, toBand, code, closeCode, leaveCode, enterCode,
         trail: crumbs, codeBack,
     };
 }

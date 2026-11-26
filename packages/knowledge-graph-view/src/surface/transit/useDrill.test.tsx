@@ -155,4 +155,33 @@ describe('useDrill', () => {
         act(() => result.current.out());
         expect(result.current.selected).toBeNull();
     });
+
+    it('follows its files to the renumbered station of a rebuilt map and asks only for files it never asked about', async () => {
+        const a = surfaceFixture();
+        const worldA = buildStations(a);
+        const apiId = worldA.stations.find((s) => s.name === 'API')!.id;
+        const fresh = 'src:sys::api/fresh.ts';
+        const stations = worldA.stations.map((s) => (s.id === apiId ? { ...s, id: 'community:renumbered', refs: [...s.refs, fresh] } : s));
+        const worldB = {
+            ...worldA, stations, byId: new Map(stations.map((s) => [s.id, s] as const)),
+            stationOf: new Map([...[...worldA.stationOf].map(([f, id]) => [f, id === apiId ? 'community:renumbered' : id] as const), [fresh, 'community:renumbered'] as const]),
+        };
+        const load = vi.fn(async (_refs: string[]) => []);
+        const { result, rerender } = renderHook(({ w }) => useDrill(a, w, load), { initialProps: { w: worldA } });
+        act(() => result.current.enter(apiId));
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(load).toHaveBeenCalledTimes(1);
+        rerender({ w: worldB });
+        expect(result.current.stack).toHaveLength(1);
+        expect(result.current.stack[0]).toMatchObject({ level: 'package', ref: 'community:renumbered' });
+        expect(result.current.notice).toBeNull();
+        expect(result.current.view?.level).toBe('package');
+        expect(result.current.reanchored.moves.get(apiId)).toBe('community:renumbered');
+        // Only the file it never asked about is read, once; never an empty read.
+        await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+        expect(load.mock.calls[1]![0]).toEqual([fresh]);
+        rerender({ w: { ...worldB } });
+        expect(load).toHaveBeenCalledTimes(2);
+        expect(load.mock.calls.every((c) => c[0].length > 0)).toBe(true);
+    });
 });

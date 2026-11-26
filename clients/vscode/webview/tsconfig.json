@@ -63,6 +63,7 @@
       // states every edge either project can reach.
       "@builderforce/agent-tools/knowledge": ["../../../packages/agent-tools/src/knowledge/index.ts"],
       "@builderforce/knowledge-client": ["../../../packages/knowledge-client/src/index.ts"],
+      "@builderforce/knowledge-client/settledThrottle": ["../../../packages/knowledge-client/src/settledThrottle.ts"],
       "@builderforce/knowledge-browser": ["../../../packages/knowledge-browser/src/index.ts"],
       "@builderforce/agent-tools/knowledge-index": ["../../../packages/agent-tools/src/knowledge-index.ts"],
       "@builderforce/agent-tools/prefetch": ["../../../packages/agent-tools/src/prefetch/index.ts"],

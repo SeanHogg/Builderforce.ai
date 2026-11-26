@@ -12,7 +12,12 @@
  * run schedules exactly ONE trailing run, `windowMs` after that run settled.
  */
 
+/** What a run returns (or resolves) to say it did nothing: the window is not closed, so the next request may run at once. */
+export const SKIPPED = Symbol('settledThrottle.skipped');
+
 export interface SettledThrottleOptions {
+  /** Called with what a run threw or rejected with, before the run settles. Absent: the error is dropped (the caller's run reports its own). */
+  onError?: (error: unknown) => void;
   /** The first request runs at once (the window starts closed only after a run). Default: it waits one window from creation. */
   leading?: boolean;
 }
@@ -31,13 +36,18 @@ export function settledThrottle(run: () => unknown, windowMs: number, options: S
   let trailing = false; // a request arrived while a run was in flight
   let disposed = false;
 
-  const settle = (): void => {
+  const settle = (value?: unknown): void => {
     running = false;
-    lastSettled = Date.now();
-    if (trailing && !disposed) {
+    const skipped = value === SKIPPED;
+    if (!skipped) lastSettled = Date.now();
+    if (trailing) {
       trailing = false;
-      timer = setTimeout(start, windowMs);
+      if (!disposed && !skipped) timer = setTimeout(start, windowMs); // a skipped run leaves nothing to follow up
     }
+  };
+
+  const fail = (error: unknown): void => {
+    try { options.onError?.(error); } finally { settle(); }
   };
 
   function start(): void {
@@ -45,9 +55,9 @@ export function settledThrottle(run: () => unknown, windowMs: number, options: S
     if (disposed) return;
     running = true;
     try {
-      Promise.resolve(run()).then(settle, settle);
-    } catch {
-      settle();
+      Promise.resolve(run()).then(settle, fail);
+    } catch (error) {
+      fail(error);
     }
   }
 
@@ -55,8 +65,14 @@ export function settledThrottle(run: () => unknown, windowMs: number, options: S
     request(): void {
       if (disposed) return;
       if (running) { trailing = true; return; } // exactly ONE trailing run, after this one settles
+      const wait = windowMs - (Date.now() - lastSettled);
+      if (wait <= 0) { // the window is open (also when the clock moved past a scheduled run): run now
+        if (timer) clearTimeout(timer);
+        start();
+        return;
+      }
       if (timer) return; // a run is already scheduled for when the window opens
-      timer = setTimeout(start, Math.max(0, windowMs - (Date.now() - lastSettled)));
+      timer = setTimeout(start, wait);
     },
     dispose(): void {
       disposed = true;

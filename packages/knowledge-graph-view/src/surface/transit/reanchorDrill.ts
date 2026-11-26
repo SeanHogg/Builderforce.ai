@@ -28,13 +28,18 @@ export function anchorFilesOf(world: StationModel, stationId: string): string[] 
     return (world.byId.get(stationId)?.refs ?? []).slice(0, ANCHOR_FILES);
 }
 
-/** The station of `world` that holds most of `files`; null when none of them is on the map. */
-function stationHolding(world: StationModel, files: readonly string[]): string | null {
+/** How many of `files` each station of `world` holds. */
+function holdings(world: StationModel, files: readonly string[]): Map<string, number> {
     const counts = new Map<string, number>();
     for (const f of files) {
         const id = world.stationOf.get(f);
-        if (id !== undefined) counts.set(id, (counts.get(id) ?? 0) + 1);
+        if (id !== undefined && world.byId.has(id)) counts.set(id, (counts.get(id) ?? 0) + 1);
     }
+    return counts;
+}
+
+/** The station holding most of the counted files (ties: the lowest id); null when none is on the map. */
+function mostHeld(counts: ReadonlyMap<string, number>): string | null {
     let best: string | null = null;
     for (const [id, n] of counts) {
         if (best === null || n > counts.get(best)! || (n === counts.get(best)! && cmp(id, best) < 0)) best = id;
@@ -49,15 +54,21 @@ export function reanchorDrill(stack: readonly DrillFrame[], world: StationModel,
     for (const frame of stack) {
         let kept = frame;
         if (frame.level === 'package') {
-            if (!world.byId.has(frame.ref)) {
-                const to = stationHolding(world, frame.files ?? []);
-                if (to === null) return { stack: stack.slice(0, next.length), notice: frame.name, moved };
+            // An id that survives is no proof the station is the same one: community ids are renumbered per build and usually
+            // come back holding other files. So the frame follows its files whenever another station holds more of them
+            // than its own id does (an id that is gone holds none).
+            const counts = holdings(world, frame.files ?? []);
+            const exists = world.byId.has(frame.ref);
+            const to = (frame.files?.length ?? 0) > 0 ? mostHeld(counts) : null;
+            // Nothing of it is on the map any more (its id gone, or kept by a station holding none of its files): it is left, and said so.
+            if (to === null && (!exists || (frame.files?.length ?? 0) > 0)) return { stack: next, notice: frame.name, moved };
+            if (to !== null && to !== frame.ref && (!exists || (counts.get(to) ?? 0) > (counts.get(frame.ref) ?? 0))) {
                 kept = { ...frame, ref: to, name: world.byId.get(to)?.name ?? frame.name, files: anchorFilesOf(world, to) };
                 moved.set(frame.ref, to);
                 changed = true;
             }
         } else if (frame.level === 'class' ? !world.stationOf.has(frame.ref) : !hasNode(frame.ref)) {
-            return { stack: stack.slice(0, next.length), notice: frame.name, moved };
+            return { stack: next, notice: frame.name, moved };
         }
         next.push(kept);
     }

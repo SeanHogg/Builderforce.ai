@@ -44,6 +44,7 @@ import { assertWritable, packRootGraph, packScopeRows, readOnlyPack } from "./pa
 import { linkedKnowledgeClient, linkedProject, loadGraph, log, openRoot, rootKnowledgeFiles, workspaceFolders, type GraphQuery } from "./knowledgeService";
 import { getRun, listRuns } from "./review/reviewRuns";
 import { createAgentRuns, type AgentRuns } from "./agentRuns";
+import { beginRootLoad } from "./rootLoads";
 import { localBrainApplication } from "../localFirst/localFirstStore";
 import { messageOf } from "../shared/messageOf";
 
@@ -83,8 +84,6 @@ export class KnowledgeBridge implements vscode.Disposable {
   private readonly trace = createLoadTrace({ log: (line) => log("timing", line) });
   /** How the view last loaded each root; Live's refresh repeats it. */
   private readonly loadedBy = new Map<string, GraphQuery>();
-  /** Each root's load in flight: a newer load of the same root aborts it, so loads never queue up in the graph worker. */
-  private readonly loading = new Map<string, AbortController>();
   /** The counts of the last graph built per root: the sync status reads them instead of building one. */
   private readonly built = new LastBuiltCounts();
   /** Delete rights per root, read once per graph version (the facts endpoint's viewer + authors). */
@@ -238,16 +237,15 @@ export class KnowledgeBridge implements vscode.Disposable {
     this.loadedBy.set(call.rootId, query);
     const pack = readOnlyPack(call.rootId);
     traced.set({ via: pack ? "pack" : "local" });
-    this.loading.get(call.rootId)?.abort();
-    const ctl = new AbortController();
-    this.loading.set(call.rootId, ctl);
+    // A newer load of the same root stops the one running (`rootLoads.ts`), so loads never queue up in the graph worker.
+    const build = beginRootLoad(call.rootId);
     let graph: KnowledgeGraph | null;
     try {
       graph = pack
         ? await traced.timer.phase("pack", () => packRootGraph(pack, query))
-        : await loadGraph(this.secrets, call.rootId, query, traced.timer, undefined, { signal: ctl.signal });
+        : await loadGraph(this.secrets, call.rootId, query, traced.timer, undefined, { signal: build.signal });
     } finally {
-      if (this.loading.get(call.rootId) === ctl) this.loading.delete(call.rootId);
+      build.end();
     }
     this.rights.loaded(call.rootId, graph?.scope.digest);
     // Only a FULL load is what the next open paints first (a focus load is a partial picture), and what the sync status counts.

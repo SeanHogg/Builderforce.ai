@@ -90,6 +90,7 @@
       "@builderforce/agent-tools/gateway-error": ["../../../packages/agent-tools/src/knowledge/gatewayError.ts"],
       "@builderforce/agent-tools/gate-lowering": ["../../../packages/agent-tools/src/gate-lowering.ts"],
       "@builderforce/knowledge-client": ["../../../packages/knowledge-client/src/index.ts"],
+      "@builderforce/knowledge-client/settledThrottle": ["../../../packages/knowledge-client/src/settledThrottle.ts"],
       "@builderforce/knowledge-graph-view": ["../../../packages/knowledge-graph-view/src/index.ts"],
       "@builderforce/knowledge-graph-view/testing": ["../../../packages/knowledge-graph-view/src/testing.ts"],
       "@builderforce/knowledge-graph-view/tokens.css": ["../../../packages/knowledge-graph-view/src/tokens.css"],

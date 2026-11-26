@@ -99,7 +99,7 @@ describe('the call numbers on the stage', () => {
         expect(badges[1]!.getAttribute('aria-label')).toBe('Call 2 of 3');
         // On its arc (the badge point projected, centred), and hidden where the callee is not drawn.
         const at = badgeAt({ x: 0, y: 0 }, { x: 10, y: 0 }, 0);
-        expect(badges[0]!.style.transform).toBe(`translate3d(${Math.round(at.x - 10)}px, ${Math.round(at.y - 10)}px, 0)`);
+        expect(badges[0]!.style.transform).toBe(`translate3d(${Math.round(at.x - 10)}px, ${Math.round(at.y - 10)}px, 0px)`);
         expect(badges[2]!.style.display).toBe('none');
         fireEvent.click(badges[0]!);
         expect(onStep).toHaveBeenCalledWith(0);

@@ -8,13 +8,13 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { addonFileName, addonTagOf, archsOf, assertAddonFile, binaryFormatOf, expectedFormatFor } from './nativeAddonFormat.mjs';
 
-/** A PE header: MZ, e_lfanew = 0x80, "PE\0\0", machine. */
-function pe(machine) {
-  const b = Buffer.alloc(0x100);
+/** A PE header: MZ, e_lfanew (default 0x80), "PE\0\0", machine. */
+function pe(machine, lfanew = 0x80, signature = 'PE\0\0') {
+  const b = Buffer.alloc(lfanew + 0x80);
   b.write('MZ', 0, 'latin1');
-  b.writeUInt32LE(0x80, 0x3c);
-  b.write('PE\0\0', 0x80, 'latin1');
-  b.writeUInt16LE(machine, 0x84);
+  b.writeUInt32LE(lfanew, 0x3c);
+  b.write(signature, lfanew, 'latin1');
+  b.writeUInt16LE(machine, lfanew + 4);
   return b;
 }
 /** An ELF header with the given EI_DATA (1 = LE, 2 = BE) and e_machine. */
@@ -115,6 +115,10 @@ test('assertAddonFile accepts matching binaries and rejects every mismatch', () 
     assert.throws(check('bfi_node.darwin-arm64.node', fat([X64])), /arm64.*x64/);
     assert.throws(check('bfi_node.linux-x64.node', Uint8Array.from([0x7f, 0x45])), /unknown/);
     assert.throws(check('bfi_node.node', pe(0x8664)), /not named/);
+
+    assert.throws(check('bfi_node.win32-x64.node', pe(0x8664, 0x80, 'XX\0\0')), /no x64\/arm64/);
+    assert.doesNotThrow(check('bfi_node.win32-x64.node', pe(0x8664, 100000)));
+    assert.throws(check('bfi_node.win32-arm64.node', pe(0x8664, 100000)), /arm64.*x64/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

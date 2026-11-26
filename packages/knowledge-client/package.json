@@ -5,7 +5,8 @@
   "type": "module",
   "description": "The ONE typed HTTP client for the knowledge API (PRD 38 §4.8): a KnowledgeStore and JudgementPort over /api/projects/:id/knowledge*, plus graph, scopes, search and analysis-snapshot calls. Every host (web, VS Code, Rovr, on-prem) injects its own authenticated fetch; this package holds no auth and no I/O of its own.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./settledThrottle": "./src/settledThrottle.ts"
   },
   "types": "./src/index.ts",
   "scripts": {

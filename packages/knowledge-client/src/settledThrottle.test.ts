@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { settledThrottle } from './settledThrottle';
+import { SKIPPED, settledThrottle } from './settledThrottle';
 
 const WINDOW = 1000;
 
@@ -134,6 +134,36 @@ describe('settledThrottle', () => {
     await vi.advanceTimersByTimeAsync(WINDOW - 1);
     expect(refresh).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
+    expect(refresh).toHaveBeenCalledTimes(2);
+    t.dispose();
+  });
+
+  it('reports what a run rejected or threw with to onError, then settles', async () => {
+    const seen: unknown[] = [];
+    const boom = new Error('rejected'), bang = new Error('threw');
+    const refresh = vi.fn().mockRejectedValueOnce(boom).mockImplementationOnce(() => { throw bang; }).mockResolvedValue(undefined);
+    const t = settledThrottle(refresh, WINDOW, { onError: (e) => seen.push(e) });
+
+    t.request();
+    await vi.advanceTimersByTimeAsync(WINDOW);
+    t.request();
+    await vi.advanceTimersByTimeAsync(WINDOW);
+    t.request();
+    await vi.advanceTimersByTimeAsync(WINDOW);
+    expect(seen).toEqual([boom, bang]);
+    expect(refresh).toHaveBeenCalledTimes(3);
+    t.dispose();
+  });
+
+  it('a run that answers SKIPPED leaves the window open: the next request runs at once, a trailing one is not scheduled', async () => {
+    const refresh = vi.fn().mockResolvedValueOnce(SKIPPED).mockResolvedValue(undefined);
+    const t = settledThrottle(refresh, WINDOW, { leading: true });
+
+    t.request();
+    t.request(); // during the (skipped) run: a trailing request that must not follow it
+    await vi.advanceTimersByTimeAsync(WINDOW * 3);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    t.request();
     expect(refresh).toHaveBeenCalledTimes(2);
     t.dispose();
   });

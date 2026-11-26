@@ -1,3 +1,12 @@
+## ✅ RESOLVED 2026-11-25 — VSIX "Bad Image" on Windows; Knowledge Visualizer drill reset and flash (VSIX 2026.11.219)
+
+- **Native addon per platform.** The CI universal VSIX (built on ubuntu) shipped the Linux `bfi_node` addon as `out/bfi_node.node`, which Windows refused to load with a "Bad Image 0xc000012f" dialog. Every vendored addon now ships under its own tag (`bfi_node.<platform>-<arch>.node`). The host loads only the file for its own platform, through `addonFileName` from `@seanhogg/bfi-node`; a platform with no addon runs the wasm. `scripts/lib/nativeAddonFormat.mjs` checks each addon's binary format and CPU architecture (PE, ELF, Mach-O, fat) at build and vendor time, and is registered as `check:native-addon-format`. `vsce-platform.mjs` passes `BFI_NATIVE_TARGET`, so a single-platform package ships only its own addon.
+- **Visualizer: Classes no longer resets to Systems.**
+  - **One rebuild at a time.** The overlapping 30-second whole-graph re-reads now share one settle-based throttle that never overlaps itself: `@builderforce/knowledge-client/settledThrottle`, with `onError` and `SKIPPED`. The view's growth re-read (`useGrowthReread`) and the host's live refresh both use it. They are coordinated through `rootLoads.ts`, so only one build per root runs. A refresh skipped during a view load re-runs when that load ends.
+  - **The drill follows its files.** A drilled level whose community station was renumbered moves to the station that now holds most of its files (`reanchorDrill`). Symbol loads track file refs, and the nest entries at every level are rebuilt from layout data of a single generation (`deriveNestEntries`, `useNestEntries`, `useNestBasis`).
+  - **No flash.** `useHeldFrame` keeps the last ready frame on screen during a same-view rebuild, keyed by `useDrillIdentity`, and the stage stays mounted.
+- Covered by: nativeAddonFormat 5 tests, the vendor check, the source-package-graph guard; settledThrottle 10; knowledge-graph-view 49 files / 310 tests; vscode knowledgeLive, graphWorker, hostBfi and vsce-platform (77 tests); clean typecheck for vscode (including webview, harness and test-integration), knowledge-client and knowledge-graph-view.
+
 ## ✅ RESOLVED 2026-11-25 — `qa-e2e` made advisory (REL-03)
 
 - `release.yml` `qa-e2e` has job-level `continue-on-error: true` with a stated fail-open reason; a failure adds a warning and job-summary line and still uploads the report, but does not fail the release.
