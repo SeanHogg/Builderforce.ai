@@ -37,6 +37,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    # No auto-rebase when main moves: every push to main otherwise re-ran CI on every open
+    # Dependabot PR. Rebase one on demand with an "@dependabot rebase" comment.
+    rebase-strategy: disabled
     groups:
       actions:
         patterns: ['*']
@@ -119,6 +122,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
+    # No auto-rebase when main moves: every push to main otherwise re-ran CI on every open
+    # Dependabot PR. Rebase one on demand with an "@dependabot rebase" comment.
+    rebase-strategy: disabled
     groups:
       # One PR per directory for the low-risk churn.
       safe-updates:
@@ -171,5 +177,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    # No auto-rebase when main moves: every push to main otherwise re-ran CI on every open
+    # Dependabot PR. Rebase one on demand with an "@dependabot rebase" comment.
+    rebase-strategy: disabled
     commit-message:
       prefix: 'build(deps)'
