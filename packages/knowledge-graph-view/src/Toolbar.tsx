@@ -36,7 +36,10 @@ export interface ToolbarProps {
     /** The Panels button: whether the drawer is open, and its toggle. */
     drawerOpen: boolean;
     onToggleDrawer(): void;
-    /** The Code | Picture switch (shown only while `wrapped`): `code` is whether the code pane is the one on show. */
+    /**
+     * The Code | Picture switch: present exactly while the stage shows one of the two (its box too narrow to split: always at ≤900px, and wider with the
+     * Lines dock and the drawer open). `code` is whether the code pane is the one on show.
+     */
     panes?: { code: boolean; onPane(code: boolean): void } | undefined;
     /**
      * Wraps the ask input so the pinpoint input catches a paste or a drop anywhere on it and puts
@@ -87,12 +90,12 @@ export function Toolbar({ labels, onSearch, question, askName, wrapped, outTo, o
     return (
         <div data-testid="kg-header" style={{ ...row, boxSizing: 'border-box', flex: 'none', minWidth: 0, borderBottom: `1px solid ${cssVar('border')}`, background: cssVar('panel') }}>
             <button
-                type="button" data-testid="kg-out" disabled={!outTo || !onOut} onClick={onOut} {...iconBtn(outLabel, false)}
+                type="button" data-testid="kg-out" disabled={!outTo || !onOut} onClick={onOut} aria-label={outLabel} title={outLabel}
                 style={{ ...ghostButtonStyle(false, true), opacity: !outTo || !onOut ? 0.45 : 1, cursor: !outTo || !onOut ? 'default' : 'pointer' }}
             >{icon('out')}</button>
             <div style={wrapped ? { order: 3, flexBasis: '100%', minWidth: 0, display: 'flex' } : { minWidth: 0, display: 'flex', flex: '0 1 auto' }}>{spine}</div>
             <div style={right}>
-                {wrapped && panes && (
+                {panes && (
                     <Seg
                         label={s.header.panesLabel} value={panes.code ? 'code' : 'picture'} onPick={(id) => panes.onPane(id === 'code')}
                         items={[{ id: 'code', label: s.header.paneCode, labelled: true }, { id: 'picture', label: s.header.panePicture, labelled: true }]}

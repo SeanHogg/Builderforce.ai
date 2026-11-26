@@ -308,6 +308,16 @@ describe('the wrapped (<=900px) layout', () => {
         fireEvent.click(screen.getByTestId('kg-panels-button'));
         expect(screen.getByTestId('kg-drawer').getAttribute('data-sheet')).toBeNull();
     });
+
+    it('offers Code | Picture on a wide container too once the drawer column leaves the stage too narrow to split (ONE rule: the stage box)', async () => {
+        vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 1200, height: 800, top: 0, left: 0, right: 1200, bottom: 800, x: 0, y: 0, toJSON: () => ({}) } as DOMRect);
+        await mount(sourceOf());
+        expect(screen.getByTestId('kg-header').style.flexWrap).toBe('nowrap');
+        // 1200px (950 beside a Lines rail): code and picture side by side.
+        expect(screen.queryByRole('group', { name: h.panesLabel })).toBeNull();
+        fireEvent.click(screen.getByTestId('kg-panels-button')); // the 340px drawer column: 860 (610) left, too narrow to split
+        expect(screen.getByRole('group', { name: h.panesLabel })).toBeTruthy();
+    });
 });
 
 describe('the toolbar', () => {

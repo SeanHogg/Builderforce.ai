@@ -36,7 +36,7 @@ export interface ActLabels {
         string
     >;
     /** The path strip. `{line}`, `{entry}`, `{count}`. */
-    path: Record<'title' | 'journey' | 'reset' | 'step' | 'runToEnd' | 'simulate' | 'sequence' | 'noTests' | 'stops' | 'enlarge', string>;
+    path: Record<'title' | 'journey' | 'reset' | 'step' | 'runToEnd' | 'simulate' | 'sequence' | 'noTests' | 'stops', string>;
     /**
      * Plain-language walkthrough of a journey. A door is an entry point or an endpoint, a hallway
      * is a call between rooms, and a room is a module or a class.
@@ -134,7 +134,6 @@ export const ACT_DEFAULTS: ActLabels = {
         sequence: 'Sequence',
         noTests: 'no tests',
         stops: 'Stops',
-        enlarge: 'Enlarge',
     },
     walk: {
         doorIn: 'Start at the door {name}, where this journey begins.',

@@ -10,7 +10,6 @@ import { stageBus } from '../anchor/stageBus';
 import { frameProjector, PickIndex } from '../pick';
 import { createNoopStage } from '../renderer';
 import { FLAG, type Placement } from '../types';
-import { callSiteLeft, callSiteTop } from './CallSiteCard';
 import { useStageWiring } from './useStageWiring';
 
 const site: CallSite = { path: 'api/routes.ts', line: 42, column: 4, order: 0 };
@@ -23,7 +22,7 @@ describe('picking a Sequence message reveals its call site', () => {
         expect(index.pick(200, 103)).toMatchObject({ kind: 'link', group: 0, site });
     });
 
-    it('opens a path:line card whose "Open at line" goes through the host\'s open port, and fits a 360 px stage', () => {
+    it('opens a path:line note card, docked, whose "Open at line" goes through the host\'s open port', () => {
         const graph = surfaceFixture();
         const model = buildStageModel(graph);
         const onOpenSource = vi.fn();
@@ -35,22 +34,28 @@ describe('picking a Sequence message reveals its call site', () => {
         render(<div style={{ position: 'relative', width: 360 }}>{result.current.card}</div>);
 
         const card = screen.getByRole('dialog', { name: `${L.surface.map.card.callSite} api/routes.ts:42` });
-        expect(card.querySelector('[data-call-site-where]')!.textContent).toBe('api/routes.ts:42');
-        // Inside a 360 px stage: left edge ≥ 8 px and right edge ≤ 352 px.
-        const left = parseFloat(card.style.left), width = parseFloat(card.style.width);
-        expect(left).toBeGreaterThanOrEqual(8);
-        expect(left + width).toBeLessThanOrEqual(352);
-        expect(callSiteLeft(340, 360)).toBe(left);
+        expect(card.getAttribute('data-note-card')).toBe('call-site');
+        expect(card.querySelector('[data-note-name]')!.textContent).toBe('api/routes.ts:42');
+        // Docked in the stage's top-left corner like every note card (not beside the pick).
+        expect([card.style.left, card.style.top]).toEqual(['10px', '10px']);
 
         fireEvent.click(screen.getByRole('button', { name: 'Open at line 42' }));
         expect(onOpenSource).toHaveBeenCalledWith({ path: 'api/routes.ts', startLine: 42, endLine: 42 });
     });
 
-    it('stays inside the box vertically: below the pick when it fits, flipped above when the box ends first', () => {
-        expect(callSiteTop(40, 100, 400)).toBe(48);                // fits below
-        expect(callSiteTop(380, 100, 400)).toBe(272);              // flipped above: 380 − 8 − 100
-        expect(callSiteTop(60, 300, 320)).toBe(8);                 // taller than the room either side: pinned to the top
-        expect(callSiteTop(500, 100, 0)).toBe(508);                // an unmeasured box: below
+    it('closes from its × button', () => {
+        const graph = surfaceFixture();
+        const model = buildStageModel(graph);
+        const drill = { stack: [], view: null, canOut: false, parent: null, selected: null, select: vi.fn(), canEnter: () => ({ can: false, reason: 'noSymbols' as const }), enter: vi.fn(), out: vi.fn(), loading: false, notice: null, symbols: [], reanchored: { seq: 0, moves: new Map() } };
+        const p = { graph, labels: L, onSelect: vi.fn(), surface: { stations: model.stations, drill, line: null, selectLine: vi.fn(), selectStation: vi.fn(), setQuestion: vi.fn(), openPanel: vi.fn() } } as unknown as SceneProps;
+        const renderer = createNoopStage();
+        const { result } = renderHook(() => useStageWiring(p, renderer, null, 1200));
+        act(() => stageBus(renderer).options.onLink?.({ kind: 'link', batch: 0, segment: 0, group: 0, slot: -1, line: null, site }, { x: 10, y: 10 }));
+        const { unmount } = render(<div>{result.current.card}</div>);
+        fireEvent.click(screen.getByRole('button', { name: L.surface.map.card.close }));
+        unmount();
+        render(<div>{result.current.card}</div>);
+        expect(document.querySelector('[data-note-card="call-site"]')).toBeNull();
     });
 
     it('closes when another placement comes on show (camera, band, drill, generation) and when a mark is selected', () => {
@@ -62,7 +67,7 @@ describe('picking a Sequence message reveals its call site', () => {
         const bus = stageBus(renderer);
         const { result } = renderHook(() => useStageWiring(p, renderer, null, 800));
         const pick = () => act(() => bus.options.onLink?.({ kind: 'link', batch: 0, segment: 0, group: 0, slot: -1, line: null, site }, { x: 10, y: 10 }));
-        const open = () => { const { container, unmount } = render(<div>{result.current.card}</div>); const on = !!container.querySelector('[data-call-site]'); unmount(); return on; };
+        const open = () => { const { container, unmount } = render(<div>{result.current.card}</div>); const on = !!container.querySelector('[data-note-card="call-site"]'); unmount(); return on; };
 
         pick();
         expect(open()).toBe(true);

@@ -19,10 +19,14 @@
 import { RESTING_DEPTH } from '../depth';
 import { now as clock, Tween, TWEEN_MS } from '../tween';
 import type { Projector, ScreenFrame } from '../pick';
-import {
-    groundScreenMatrix, orbitBasis, orbitDistanceFor, orbitFitDistance, orbitPxPerWorld, projectGround, projectOrbit, type GroundView, type OrbitPose,
-} from '../projection';
+import { orbitBasis, orbitDistanceFor, orbitFitDistance, orbitPxPerWorld, projectGround, projectOrbit, type GroundView, type OrbitPose } from '../projection';
 import type { CameraRig } from '../types';
+import {
+    CAMERA_DISTANCE, clamp, DEFAULT_FOV, DOLLY_MAX, DOLLY_MIN, FLAT_PITCH, groundProjector, lerp, lerpAngle, MAX_ZOOM_FACTOR, MIN_ZOOM_FACTOR,
+    ORBIT_DEG_PER_PX, orbitProjector,
+} from './rigMath';
+
+export { CAMERA_DISTANCE, DEFAULT_FOV, FLAT_PITCH, MAX_ZOOM_FACTOR, MIN_ZOOM_FACTOR, ORBIT_DEG_PER_PX, ORBIT_KEY_DEG } from './rigMath';
 
 export interface RigView { cx: number; cz: number; zoom: number }
 export interface RigPose {
@@ -35,26 +39,6 @@ export interface RigPose {
 }
 /** An orbit view in world terms (no box size). */
 export type OrbitState = Omit<OrbitPose, 'width' | 'height'>;
-
-export const MIN_ZOOM_FACTOR = 0.2;
-/** Deep: the semantic zoom (B1a rule 9) nests each band inside its parent mark, down to a method's code. */
-export const MAX_ZOOM_FACTOR = 4096;
-/** The ortho camera's distance from its target: far enough that a tilted, tall placement stays inside near/far. */
-export const CAMERA_DISTANCE = 4000;
-/** The fov a cross-projection tween uses when neither end names one. */
-export const DEFAULT_FOV = 35;
-/** Degrees of orbit per CSS px of drag, and per arrow-key press. */
-export const ORBIT_DEG_PER_PX = 0.3;
-export const ORBIT_KEY_DEG = 5;
-/** An orbit pitched straight down (the Flat view of a 3D placement). */
-export const FLAT_PITCH = 90;
-/** Dolly limits relative to the home distance. */
-const DOLLY_MIN = 0.1, DOLLY_MAX = 6;
-
-const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
-/** Shortest-way yaw interpolation (degrees). */
-const lerpAngle = (a: number, b: number, t: number): number => a + ((((b - a) % 360) + 540) % 360 - 180) * t;
-const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
 export class RigController {
     private view: RigView = { cx: 0, cz: 0, zoom: 1 };

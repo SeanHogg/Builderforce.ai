@@ -18,7 +18,8 @@ import { DRAWER_ORDER, PANELS } from './panels';
 import type { PanelDef, PanelProps, SurfaceEnv } from './registry';
 import { ACT_TAB, type DrawerState } from './useDrawer';
 import type { SurfaceModel } from './useSurface';
-import { chromeGlyph } from './ui/glyphs';
+import { DRAWER_WIDTH } from '../layout';
+import { actionGlyph, chromeGlyph } from './ui/glyphs';
 import { TYPE } from './ui/type';
 
 export interface DrawerProps {
@@ -94,14 +95,14 @@ export function Drawer(p: DrawerProps) {
                     type="button" aria-label={labels.close} title={labels.close} data-testid="kg-drawer-close" onClick={drawer.close}
                     style={{ marginInlineStart: 'auto', width: 28, height: 28, padding: 0, border: 0, background: 'transparent', color: cssVar('muted'), cursor: 'pointer', display: 'grid', placeItems: 'center', flex: 'none' }}
                 >
-                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style={{ fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' }}><path d="M4 4l8 8M12 4L4 12" /></svg>
+                    <span aria-hidden="true" style={{ display: 'inline-flex' }}>{actionGlyph('close')}</span>
                 </button>
             </div>
             <div
-                id="kg-drawer-body" role="tabpanel" aria-labelledby={`kg-drawer-tab-${drawer.tab}`}
+                id="kg-drawer-body" role="tabpanel" aria-labelledby={`kg-drawer-tab-${tabId}`}
                 style={open?.fill ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } : { flex: 1, minHeight: 0, overflow: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}
             >
-                {drawer.tab === ACT_TAB ? p.act : Body && (
+                {tabId === ACT_TAB ? p.act : Body && (
                     <>
                         {!open?.fill && (
                             <h3 style={{ ...TYPE.sectionHeading, flex: 'none' }}>

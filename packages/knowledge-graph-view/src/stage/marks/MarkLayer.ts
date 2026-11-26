@@ -15,6 +15,7 @@ import { DASHED_SHAPES, MARK_TYPE_ORDER, SHAPE_OUTLINES } from '../../shapes';
 import { outlineShape, TYPE_FORM } from './forms';
 import { SlotTable } from '../slots';
 import { uploadRange, type StageStats } from '../stats';
+import { staggerAt, type StaggerClock } from '../tween';
 import { FLAG, type MarkPaint, type MarkSet, type Placement, type SlotAppend } from '../types';
 import { markGeometry } from './geometry';
 import { markMaterial, type SharedMarkUniforms } from './shader';
@@ -128,12 +129,12 @@ export class MarkLayer {
      * where they are NOW — the stale set gets the current mix — and `p` goes into the target set, so the next tween
      * continues from the marks' on-screen positions instead of snapping to the old target first. 3 uploads per batch.
      */
-    setPlacement(p: Placement, midTween?: number): number {
+    setPlacement(p: Placement, midTween?: number, stagger?: StaggerClock): number {
         const table = this.table;
         if (!table) return this.target === 1 ? 0 : 1;
         this.ghost = p.ghost ?? null;
         if (this.lastPaint) this.setPaint(this.lastPaint);
-        if (this.placed && midTween !== undefined && midTween < 1) return this.retarget(p, midTween, table);
+        if (this.placed && midTween !== undefined && midTween < 1) return this.retarget(p, midTween, table, stagger);
         const into: 0 | 1 = this.placed ? (this.target === 1 ? 0 : 1) : 1;
         const writeSets: Array<0 | 1> = this.placed ? [into] : [0, 1];
         this.batches.forEach((b, bi) => {
@@ -151,20 +152,24 @@ export class MarkLayer {
             }
             uploadRange(this.stats, b.extrude, 0, count, bi);
         });
-        for (const w of writeSets) this.setFloor(w, p.minMarkPx ?? 0);
+        for (const w of writeSets) { this.setFloor(w, p.minMarkPx ?? 0); this.setLift(w, p); }
         this.placed = true;
         this.target = into;
         // uFlip = 0 tweens A → B (target B); 1 tweens B → A (target A).
         return into === 1 ? 0 : 1;
     }
 
-    /** Mid-tween replacement: stale ← mix(stale, target, t) (where the marks are), target ← `p`; the target set stays. */
-    private retarget(p: Placement, t: number, table: SlotTable): number {
+    /**
+     * Mid-tween replacement: stale ← mix(stale, target, t) (where the marks are), target ← `p`; the target set stays.
+     * `stagger`: the running tween's clock — each instance bakes at its OWN eased progress (`staggerAt`, the shader's).
+     */
+    private retarget(p: Placement, tAll: number, table: SlotTable, stagger?: StaggerClock): number {
         const to = this.target, from: 0 | 1 = to === 1 ? 0 : 1;
         this.batches.forEach((b, bi) => {
             const slots = table.batchSlots[bi]!, count = table.batchCount[bi]!;
             const a = b.place[from].array as Float32Array, z = b.place[to].array as Float32Array, ex = b.extrude.array as Float32Array;
             for (let i = 0; i < count; i++) {
+                const t = stagger ? staggerAt(stagger, i) : tAll;
                 for (let c = 0; c < 4; c++) a[i * 4 + c] = a[i * 4 + c]! + (z[i * 4 + c]! - a[i * 4 + c]!) * t;
                 ex[i * 2 + from] = ex[i * 2 + from]! + (ex[i * 2 + to]! - ex[i * 2 + from]!) * t;
                 const s = slots[i]!;
@@ -179,13 +184,20 @@ export class MarkLayer {
         // The floor bakes like the sets: the stale set's becomes the blend reached at `t`, the target takes `p`'s. (One
         // value per set: a mark only one of the old sets showed bakes with the blended floor, not its own partial one.)
         const floors = this.uniforms.uMinMarkPx.value, fa = floors.getComponent(from), fz = floors.getComponent(to);
-        this.setFloor(from, fa + (fz - fa) * t);
+        this.setFloor(from, fa + (fz - fa) * tAll);
         this.setFloor(to, p.minMarkPx ?? 0);
+        // The baked set keeps the lift of the placement it was heading to; the target takes `p`'s.
+        const lifts = this.uniforms.uLiftDepth.value;
+        lifts.setComponent(from, lifts.getComponent(to));
+        this.setLift(to, p);
         return to === 1 ? 0 : 1;
     }
 
     /** Set `w`'s drawn floor (CSS px across): the shader's `uMinMarkPx`, A in x, B in y. */
     private setFloor(w: 0 | 1, px: number): void { this.uniforms.uMinMarkPx.value.setComponent(w, px); }
+
+    /** Set `w`'s height mode (`Placement.liftWithDepth`): the shader's `uLiftDepth`, A in x, B in y. */
+    private setLift(w: 0 | 1, p: Placement): void { this.uniforms.uLiftDepth.value.setComponent(w, p.liftWithDepth ? 1 : 0); }
 
     /**
      * Appends a placement's run of slots into the batches' headroom (B1a rule 1: a drill appends, ranged; no mesh is

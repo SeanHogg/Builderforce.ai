@@ -39856,8 +39856,7 @@
         "simulate": "用输入值模拟",
         "sequence": "时序图",
         "noTests": "无测试",
-        "stops": "站点",
-        "enlarge": "放大"
+        "stops": "站点"
       },
       "sync": {
         "skippedRowNoSize": "{path} · {reason}",
@@ -40091,14 +40090,14 @@
         "errorBack": "返回",
         "view3d": "3D",
         "viewFlat": "平面",
-        "flatToggle": "平面视图"
+        "flatToggle": "平面视图",
+        "legendRisk": "风险",
+        "legendTests": "测试",
+        "legendActivity": "活跃度",
+        "legendOwner": "负责人"
       },
       "nav": {
         "group": "移动视图",
-        "panUp": "上移",
-        "panDown": "下移",
-        "panLeft": "左移",
-        "panRight": "右移",
         "rotateLeft": "向左旋转",
         "rotateRight": "向右旋转",
         "tiltUp": "向上倾斜",
@@ -40119,8 +40118,14 @@
         "class": "类",
         "method": "方法",
         "code": "代码",
+        "levelSystem": "系统",
+        "levelComponent": "组件",
+        "levelClass": "类",
+        "levelMethod": "方法",
+        "levelLine": "行",
         "hintIn": "放大到某个形状即可进入其内部",
         "hintInto": "继续放大 · 正在进入 {name}",
+        "hintBack": "继续缩小 · 返回 {name}",
         "hintDeepest": "已是最深一层 · 缩小即可返回"
       },
       "code": {
@@ -40155,7 +40160,6 @@
         "lensCallers": "{count} 个调用方",
         "lensCaller": "{count} 个调用方",
         "referencesToast": "知识图谱中有 {count} 个对 {name} 的引用。",
-        "resetView": "重置视图",
         "calledBy": "调用方：{names}",
         "showInMap": "在地图中显示",
         "drillIn": "深入 ⤓",
@@ -40193,9 +40197,6 @@
         "levelNoSource": "此处无法获取源码：正在显示大纲。",
         "rowNoTest": "无测试",
         "rowAntiPattern": "反模式：{name}",
-        "rowGoInside": "进入 {name}",
-        "rowRestructure": "重构 {name}",
-        "paneSwitchAria": "显示代码或图示",
         "paneCode": "代码",
         "panePicture": "图示",
         "lensOut": "输出",

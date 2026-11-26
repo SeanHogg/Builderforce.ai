@@ -2,7 +2,11 @@
 
 export interface SceneLabels {
     /** The scenes draw only part of the links: `{shown}`, `{total}` (already formatted for the locale). */
-    scene: Record<'edgesCapped' | 'stationsCapped' | 'layingOut' | 'errorTitle' | 'errorRetry' | 'errorBack' | 'view3d' | 'viewFlat' | 'flatToggle', string>;
+    scene: Record<
+        | 'edgesCapped' | 'stationsCapped' | 'layingOut' | 'errorTitle' | 'errorRetry' | 'errorBack' | 'view3d' | 'viewFlat' | 'flatToggle'
+        | 'legendRisk' | 'legendTests' | 'legendActivity' | 'legendOwner',
+        string
+    >;
     /**
      * The mind map's "+N folders" leaf and its accessible name, in One and Other forms (`{count}`); a language with no
      * plural form repeats the one. Read through `isOne` (surface/plural.ts), like `counted()`.
@@ -34,17 +38,17 @@ export interface SceneLabels {
         | 'outline' | 'outlineAria' | 'tabsAria'
         | 'followsEditor'
         | 'stateSelected' | 'stateReading' | 'statePinned' | 'methodsCount' | 'fieldsCount' | 'callsCount' | 'imported' | 'drillInAction' | 'showCode' | 'openFile'
-        | 'status' | 'following' | 'pinnedStatus' | 'statusLine' | 'resetView'
-        | 'dockAria' | 'dockHide' | 'dockShow' | 'levelAria' | 'levelEmpty' | 'levelNoSource' | 'rowNoTest' | 'rowAntiPattern' | 'rowGoInside' | 'rowRestructure'
-        | 'paneSwitchAria' | 'paneCode' | 'panePicture' | 'lensOut' | 'lensSimulate' | 'lensRestructure' | 'gutterWarn'
+        | 'status' | 'following' | 'pinnedStatus' | 'statusLine'
+        | 'dockAria' | 'dockHide' | 'dockShow' | 'levelAria' | 'levelEmpty' | 'levelNoSource' | 'rowNoTest' | 'rowAntiPattern'
+        | 'paneCode' | 'panePicture' | 'lensOut' | 'lensSimulate' | 'lensRestructure' | 'gutterWarn'
         | 'samePlace' | 'sayLead' | 'sayHint' | 'fileLines' | 'fileLine',
         string
     >;
     /**
-     * The stage's navigation control (bottom-right): its group name, the pan pad (on 3D, up / down move through the
-     * plane stack) and the orbit buttons shown on the 3D camera. Zoom in / out and Fit reuse `zoomIn`, `zoomOut`, `zoomReset`.
+     * The stage's camera column (bottom-right): its group name, the orbit buttons shown on an orbit camera, Look from above
+     * and the help tooltip. Zoom in / out and Fit reuse `zoomIn`, `zoomOut`, `zoomReset`.
      */
-    nav: Record<'group' | 'panUp' | 'panDown' | 'panLeft' | 'panRight' | 'rotateLeft' | 'rotateRight' | 'tiltUp' | 'tiltDown' | 'top' | 'help' | 'helpText', string>;
+    nav: Record<'group' | 'rotateLeft' | 'rotateRight' | 'tiltUp' | 'tiltDown' | 'top' | 'help' | 'helpText', string>;
 }
 
 export const SCENE_DEFAULTS: SceneLabels = {
@@ -60,6 +64,11 @@ export const SCENE_DEFAULTS: SceneLabels = {
         view3d: '3D',
         viewFlat: 'Flat',
         flatToggle: 'Flat view',
+        /** The Colour-by legend's short preset words (the design's mini segment); the overlay menu keeps the presets' full names. */
+        legendRisk: 'Risk',
+        legendTests: 'Tests',
+        legendActivity: 'Activity',
+        legendOwner: 'Owner',
     },
     mind: {
         moreFoldersOne: '+{count} folder',
@@ -73,8 +82,14 @@ export const SCENE_DEFAULTS: SceneLabels = {
         class: 'Classes',
         method: 'Methods',
         code: 'Code',
+        levelSystem: 'System',
+        levelComponent: 'Component',
+        levelClass: 'Class',
+        levelMethod: 'Method',
+        levelLine: 'Line',
         hintIn: 'Zoom into a shape to go inside it',
         hintInto: 'Keep zooming · going inside {name}',
+        hintBack: 'Keep zooming out · back to {name}',
         hintDeepest: 'Deepest level · zoom out to come back',
     },
     code: {
@@ -148,7 +163,6 @@ export const SCENE_DEFAULTS: SceneLabels = {
         following: 'following {file}',
         pinnedStatus: 'pinned',
         statusLine: 'Ln {line}',
-        resetView: 'Reset view',
         /** The docked pane (PRD 43 Part C1): its name, its hide / show control, and the outline of the level (`{name}`, the marks on a member). */
         dockAria: 'Code and outline',
         dockHide: 'Hide code',
@@ -158,10 +172,7 @@ export const SCENE_DEFAULTS: SceneLabels = {
         levelNoSource: 'The source is not available here: showing the outline.',
         rowNoTest: 'No test',
         rowAntiPattern: 'Anti-pattern: {name}',
-        rowGoInside: 'Go inside {name}',
-        rowRestructure: 'Restructure {name}',
-        /** A box too narrow to split: the switch between the code and the picture of the same location. */
-        paneSwitchAria: 'Show the code or the picture',
+        /** The pane's heading, and (a box too narrow to split) the picture it trades places with. */
         paneCode: 'Code',
         panePicture: 'Picture',
         /** The lens line's added actions (PRD 43 Part C2): out of the level, simulate an untested symbol, restructure by its anti-pattern (`{name}`); the gutter's warning. */
@@ -178,10 +189,6 @@ export const SCENE_DEFAULTS: SceneLabels = {
     },
     nav: {
         group: 'Move the view',
-        panUp: 'Move up',
-        panDown: 'Move down',
-        panLeft: 'Move left',
-        panRight: 'Move right',
         rotateLeft: 'Rotate left',
         rotateRight: 'Rotate right',
         tiltUp: 'Tilt up',

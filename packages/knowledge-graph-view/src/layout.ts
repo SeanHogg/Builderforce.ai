@@ -5,8 +5,10 @@
  *
  *  - below PHONE_WIDTH   the phone: the Lines list is a sheet, the node a bottom sheet.
  *  - below COMPACT_WIDTH  compact: the 60-node focus, the node is a bottom sheet.
- *  - at or under DRAWER_SHEET_WIDTH  the design prototype's `max-width: 900px` rules: the header wraps (the spine on its own row, the search button gone,
- *    a Code | Picture switch appears) and the drawer is a bottom sheet over the stage.
+ *  - at or under DRAWER_SHEET_WIDTH  the design prototype's `max-width: 900px` rules: the header wraps (the spine on its own row, the search button gone)
+ *    and the drawer is a bottom sheet over the stage.
+ *  - a STAGE box under CODE_SPLIT_WIDTH (`stageWidthOf`: always at ≤900px, and on a wider container with the Lines dock and the drawer column open)
+ *    shows the code pane or the picture, and the header's Code | Picture switch picks which (`onePaneStage`).
  *  - below LINES_STACK_WIDTH  the 250px Lines rail stacks: its list sits above the path strip.
  */
 

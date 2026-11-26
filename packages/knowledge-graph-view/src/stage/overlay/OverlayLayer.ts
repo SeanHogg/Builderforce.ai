@@ -234,12 +234,14 @@ function place(m: Mesh, p: Placement, s: number, depth: number, pxPerWorld: numb
     m.visible = shown(p, s);
     if (!m.visible) return;
     const r = Math.max(RING_MIN, (slotHalfPx(p, s, pxPerWorld) / Math.max(pxPerWorld, 1e-6)) * RING_GROW);
+    // The mark's foot as the shader draws it: a placement that lifts with the depth lowers its heights with it.
+    const foot = p.position[s * 3 + 1]! * (p.liftWithDepth ? depth : 1);
     if (m.name === 'overlay:selection') {
         // The torus rings the shape at its foot (the design's: just off the floor), uniformly scaled so its tube stays round.
-        m.position.set(p.position[s * 3]!, p.position[s * 3 + 1]! + TORUS_TUBE * r, p.position[s * 3 + 2]!);
+        m.position.set(p.position[s * 3]!, foot + TORUS_TUBE * r, p.position[s * 3 + 2]!);
         m.scale.set(r, r, r);
         return;
     }
-    m.position.set(p.position[s * 3]!, p.position[s * 3 + 1]! + (p.extrude[s] ?? 0) * depth + OVERLAY_LIFT, p.position[s * 3 + 2]!);
+    m.position.set(p.position[s * 3]!, foot + (p.extrude[s] ?? 0) * depth + OVERLAY_LIFT, p.position[s * 3 + 2]!);
     m.scale.set(r, 1, r);
 }

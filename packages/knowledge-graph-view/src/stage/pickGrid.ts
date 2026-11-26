@@ -18,7 +18,7 @@ export interface GridOptions {
     extrudeScale: number;
 }
 
-export type GridMarks = Pick<Placement, 'position' | 'scale'> & { extrude?: Float32Array };
+export type GridMarks = Pick<Placement, 'position' | 'scale' | 'liftWithDepth'> & { extrude?: Float32Array };
 
 export interface Segments { x0: Float64Array; y0: Float64Array; x1: Float64Array; y1: Float64Array; batch: Int32Array; seg: Int32Array; group: Int32Array; slot: Int32Array }
 
@@ -86,10 +86,12 @@ export class PickGrid {
         // The flat mark's cull and cell, inlined (the common case); a raised body goes through `classify`.
         const t = this.opts.targetPx, minX = -t, minY = -t, maxX = this.projector.width + t, maxY = this.projector.height + t;
         const cell = this.cell, lastC = cols - 1, lastR = rows - 1, n = this.n;
+        // A placement whose heights lower with the depth (roof miniatures) is picked where the shader draws it.
+        const yk = this.marks.liftWithDepth ? k : 1;
         let projected = 0;
         for (let s = 0; s < n; s++) {
             if (!(scale[s]! > 0)) continue;
-            const i3 = s * 3, x = pos[i3]!, y = pos[i3 + 1]!, z = pos[i3 + 2]!;
+            const i3 = s * 3, x = pos[i3]!, y = pos[i3 + 1]! * yk, z = pos[i3 + 2]!;
             const w = m3 * x + m7 * y + m11 * z + m15;
             if (w <= 1e-9) continue;
             const nx = m0 * x + m4 * y + m8 * z + m12, ny = m1 * x + m5 * y + m9 * z + m13;
@@ -118,11 +120,11 @@ export class PickGrid {
     /** A projector with no matrix (a perspective one that only `project`s): one call per point. */
     private projectEach(): void {
         const { position: pos, scale } = this.marks, ext = this.marks.extrude, k = this.opts.extrudeScale;
-        const out = new Float64Array(2);
+        const out = new Float64Array(2), yk = this.marks.liftWithDepth ? k : 1;
         let projected = 0;
         for (let s = 0; s < this.n; s++) {
             if (!(scale[s]! > 0)) continue;
-            const x = pos[s * 3]!, y = pos[s * 3 + 1]!, z = pos[s * 3 + 2]!;
+            const x = pos[s * 3]!, y = pos[s * 3 + 1]! * yk, z = pos[s * 3 + 2]!;
             if (!this.projector.project(x, y, z, out)) continue;
             this.ok[s] = 1; this.ax[s] = out[0]!; this.ay[s] = out[1]!; projected++;
             const h = ext ? ext[s]! * k : 0;

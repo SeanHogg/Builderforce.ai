@@ -7,10 +7,12 @@
 
 import type { CSSProperties, ReactNode, Ref } from 'react';
 import { cssVar } from '../../scene/themeColors';
+import { actionGlyph } from '../ui/glyphs';
 import { FONT_MONO, TYPE } from '../ui/type';
 
-/** The card's column inside a narrow stage (the design's `calc(100% - 120px)`) and a wide one (`calc(100% - 130px)`). */
+/** The card's widest column; inside the stage it leaves the level rail its room (`calc(100% - 120px)` narrow, `- 130px` wide). */
 export const NOTE_WIDTH = 360;
+/** A stage box this wide or narrower is narrow (the design's `max-width: 900px`). */
 export const NARROW_STAGE_PX = 900;
 
 export interface NoteAnswer {
@@ -38,21 +40,25 @@ export interface NoteCardProps {
     boxRef?: Ref<HTMLElement> | undefined;
     /** `data-*` role of this card (`station`, `symbol`, `call-site`). */
     role: string;
+    /** A transient card (the call site): a focusable dialog with a × in its header. Absent ⇒ no close (the pick owns the card). */
+    close?: { label: string; onClose(): void } | undefined;
 }
 
 const shell = (narrow: boolean): CSSProperties => ({
     position: 'absolute', zIndex: 3, left: 10, top: 10, width: `min(${NOTE_WIDTH}px, calc(100% - ${narrow ? 120 : 130}px))`, boxSizing: 'border-box',
     display: 'flex', flexDirection: 'column', borderRadius: 6, background: cssVar('panel'), color: cssVar('muted'), border: `1px solid ${cssVar('border')}`,
-    boxShadow: '0 4px 14px rgba(0,0,0,.18)', pointerEvents: 'auto', ...TYPE.body,
+    boxShadow: '0 4px 14px color-mix(in srgb, currentColor 18%, transparent)', pointerEvents: 'auto', ...TYPE.body,
 });
+const closeButton: CSSProperties = { border: 0, background: 'transparent', color: cssVar('muted'), cursor: 'pointer', minHeight: 24, minWidth: 24, padding: 0, font: 'inherit' };
 
-export function NoteCard({ ariaLabel, glyph, name, kind, meta, facts, acts, answer, narrow = false, boxRef, role }: NoteCardProps) {
+export function NoteCard({ ariaLabel, glyph, name, kind, meta, facts, acts, answer, narrow = false, boxRef, role, close }: NoteCardProps) {
     return (
-        <section ref={boxRef} aria-label={ariaLabel} data-note-card={role} style={shell(narrow)}>
+        <section ref={boxRef} aria-label={ariaLabel} data-note-card={role} style={shell(narrow)} {...(close ? { role: 'dialog', tabIndex: -1 } : null)}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px 0', color: cssVar('text') }}>
                 {glyph}
-                <b title={name} style={{ fontFamily: FONT_MONO, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{name}</b>
+                <b data-note-name title={name} style={{ fontFamily: FONT_MONO, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{name}</b>
                 <span style={{ marginInlineStart: 'auto', ...TYPE.meta, whiteSpace: 'nowrap' }}>{kind}</span>
+                {close && <button type="button" aria-label={close.label} title={close.label} onClick={close.onClose} style={closeButton}><span aria-hidden="true">{actionGlyph('close')}</span></button>}
             </div>
             {meta && <div style={{ padding: '2px 12px 0', minWidth: 0, overflowWrap: 'anywhere' }}>{meta}</div>}
             {facts && <div data-note-facts style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', padding: '6px 12px 0' }}>{facts}</div>}

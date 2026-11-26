@@ -30,7 +30,7 @@ import { isSmall } from './compute/size';
 import type { VisibleGraph } from './graphModel';
 import { useStableGraph } from './stableGraph';
 import { useContainerWidth, useRenderEnvironment } from './environment';
-import { layoutOf, SCENE_TOP_FALLBACK } from './layout';
+import { layoutOf, onePaneStage, SCENE_TOP_FALLBACK, stageWidthOf } from './layout';
 import { useReviewTargets } from './ReviewLauncher';
 import { ViewSurface } from './ViewSurface';
 import { LensPanel } from './LensPanel';
@@ -43,6 +43,7 @@ import { CAMERAS } from './surface/cameras';
 import { ActPanel } from './surface/ActPanel';
 import { partnersOf } from './surface/coChange';
 import { SceneOverlay } from './surface/SceneOverlay';
+import { ScaleLine } from './surface/ScaleLine';
 import { useSyncStatus } from './surface/useSyncStatus';
 import { useReviewsPanel } from './surface/run/useReviewsPanel';
 import { RetryUploadContext } from './surface/run/useRetryUpload';
@@ -258,6 +259,12 @@ export function KnowledgeGraphView({
     );
     const leftDock = hasLines && !layout.phone && !layout.linesStacked;
     const stackLines = hasLines && layout.linesStacked && !layout.phone;
+    // The Code | Picture switch shows exactly when the stage shows ONE of the two: a stage camera whose box (what the Lines dock and the drawer column
+    // leave) is too narrow to split. Its state is the code slot the stage reads, so the switch and the stage never disagree.
+    const stageWidth = stageWidthOf(width, { lines: leftDock ? (panels.visibility.left ? 'shown' : 'rail') : 'none', drawerColumn: !!real && drawer.open && !layout.drawerSheet });
+    const panes = real && CAMERAS.find((c) => c.id === mode)?.placement && onePaneStage(stageWidth)
+        ? { code: panels.visibility.code, onPane: (code: boolean) => { if (code !== panels.visibility.code) toggleCode(); } }
+        : undefined;
 
     return (
         <FlatViewContext.Provider value={flatView.setFlat}><RestructureContext.Provider value={actions.restructureFinding}><RetryUploadContext.Provider value={retryUpload}>
@@ -265,7 +272,7 @@ export function KnowledgeGraphView({
             <SurfaceHeader
                 kg={kg} source={source} labels={labels} graph={graph} surface={surface} env={surfaceEnv} wrapped={layout.drawerSheet} sync={sync.status}
                 run={runRead.live} onOpenReviews={openReviews} outTo={chrome.out.to} onOut={chrome.out.onOut} drawerOpen={drawer.open} onToggleDrawer={drawer.toggle}
-                panes={{ code: panels.visibility.code, onPane: (code) => { if (code !== panels.visibility.code) toggleCode(); } }}
+                panes={panes}
                 spine={<Spine labels={labels} items={chrome.spineItems} roots={{ scopes: kg.scopes, rootId: kg.rootId, onRoot: kg.selectRoot }} onPick={chrome.onSpinePick} />}
                 askName={chrome.askName}
                 linesToggle={layout.phone && hasLines ? <Pill on={linesOpen} aria-expanded={linesOpen} onClick={() => setLinesOpen((v) => !v)}>{s.linesButton}</Pill> : undefined}
@@ -291,6 +298,7 @@ export function KnowledgeGraphView({
                                             selected={selected} focus={kg.focus} reducedMotion={env.reducedMotion} surface={surface} onSelect={select} onShow={show} onCamera={setMode}
                                             onCompose={onCompose} evidence={evidenceOf} onOpenSource={onOpenSource}
                                             codeShown={panels.visibility.code} onToggleCode={toggleCode} onSimulate={actions.onSimulate} onRestructure={actions.onRestructure} restructureLoading={actions.restructureStatus === 'loading'} compare={compare.view} flat={flatView.flat}
+                                            scale={<span data-testid="kg-scale-note"><ScaleLine {...chrome.scaleProps} /></span>}
                                         />
                                     </ZoomProvider>
                                 ) : (

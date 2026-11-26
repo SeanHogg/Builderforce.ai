@@ -9,13 +9,13 @@
 
 import {
     BoxGeometry, DoubleSide, DynamicDrawUsage, GLSL3, Group, InstancedBufferAttribute, InstancedBufferGeometry, InstancedMesh,
-    ShaderMaterial, SphereGeometry, type IUniform, type Vector3,
+    ShaderMaterial, SphereGeometry, Vector2, type IUniform, type Vector3,
 } from 'three';
 import { capacityFor } from '../slots';
 import { LIGHT_GLSL } from '../lighting';
 import { uploadRange, type StageStats } from '../stats';
 import { PALETTE_SIZE, toneIndex } from '../tones';
-import { FLAG, type LinkBatch } from '../types';
+import { DASH_PATTERNS, FLAG, type LinkBatch } from '../types';
 import { HALL_STYLE } from './families';
 import { fillSegments, segmentsOf } from './pack';
 
@@ -43,13 +43,15 @@ mat3 basis(vec3 f) {
 const VERTEX = /* glsl */ `
 ${BASIS}
 uniform float uLitTone;
-out vec3 vColor;
+out vec3 vColor; out float vRun; out float vDash;
 ${LIGHT_GLSL}
 void main() {
     vec3 d = aB.xyz - aA.xyz;
     float len = max(length(d), 1e-4), width = max(aB.w, 1e-4), thick = width * uThick;
     mat3 m = basis(dirOf());
     vec3 local = vec3(position.x * len, position.y * thick + thick * 0.5, position.z * width);
+    // Running length along the polyline (the box spans -0.5..0.5 along x): an untested / cycle hall dashes, never colour alone.
+    vRun = aA.w + (position.x + 0.5) * len; vDash = aStyle.y;
     vec3 p = (aA.xyz + aB.xyz) * 0.5 + m * local;
     vec3 n = normalize(m * normal);
     bool lit = mod(floor(aStyle.z / ${FLAG.PULSE.toFixed(1)}), 2.0) > 0.5;
@@ -74,9 +76,14 @@ void main() {
 
 const FRAGMENT = /* glsl */ `
 precision highp float;
-in vec3 vColor;
+uniform vec2 uDash[${DASH_PATTERNS.length}];
+in vec3 vColor; in float vRun; in float vDash;
 out vec4 fragColor;
-void main() { fragColor = vec4(vColor, 1.0); }`;
+void main() {
+    int pattern = int(vDash + 0.5);
+    if (pattern > 0) { vec2 pat = uDash[pattern]; if (mod(vRun, pat.x + pat.y) > pat.x) discard; }
+    fragColor = vec4(vColor, 1.0);
+}`;
 
 const BALL_FRAGMENT = /* glsl */ `
 precision highp float;
@@ -133,7 +140,10 @@ export class HallLayer {
         const { uPalette, uBg, uTime, uMotion } = this.uniforms;
         const bars = new InstancedMesh(instanced(new BoxGeometry(1, 1, 1), true), new ShaderMaterial({
             glslVersion: GLSL3, vertexShader: VERTEX, fragmentShader: FRAGMENT, side: DoubleSide,
-            uniforms: { uPalette, uBg, uThick: { value: HALL_STYLE.thickness }, uLitTone: { value: toneIndex('lit') } },
+            uniforms: {
+                uPalette, uBg, uThick: { value: HALL_STYLE.thickness }, uLitTone: { value: toneIndex('lit') },
+                uDash: { value: DASH_PATTERNS.map(([on, off]) => new Vector2(on, off)) },
+            },
         }), capacity);
         const balls = new InstancedMesh(instanced(new SphereGeometry(0.5, 10, 8), false), new ShaderMaterial({
             glslVersion: GLSL3, vertexShader: PULSE_VERTEX, fragmentShader: BALL_FRAGMENT,

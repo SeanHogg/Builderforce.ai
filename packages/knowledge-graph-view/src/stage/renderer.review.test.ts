@@ -11,6 +11,7 @@ import { surfaceFixture } from '../testing';
 import type { SymbolRecord } from '../types';
 import { bindContextLoss } from './contextLoss';
 import { uploadRange } from './stats';
+import { staggerAt } from './tween';
 import type { LabelText, TextPort } from './labels/LabelLayer';
 import { createNoopStage, createWebGLStage, type StageRenderer } from './renderer';
 import type { Placement } from './types';
@@ -114,7 +115,9 @@ describe('mid-tween replacement', () => {
         const b = model.marks.batches.findIndex((x) => x.slots.length > 0);
         const mesh = markMeshes(root)[b]!;
         const u = (mesh.material as unknown as { uniforms: Record<string, { value: number }> }).uniforms;
-        const t = u.uT!.value, flip = u.uFlip!.value;
+        const flip = u.uFlip!.value;
+        // Instance 0's OWN staggered progress (the shader's per-instance clock), not the unstaggered uT.
+        const t = staggerAt({ lin: u.uLin!.value, span: u.uSpan!.value, dur: u.uDur!.value }, 0);
         expect(t).toBeGreaterThan(0); expect(t).toBeLessThan(1);
         // On screen now: mix(from, to, t), with from/to picked by uFlip (0: A → B).
         const [fromSet, toSet] = flip === 0 ? ['placeA', 'placeB'] : ['placeB', 'placeA'];

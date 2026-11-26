@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
 import { CAMERAS } from './cameras';
-import { counted } from './plural';
 import { SCENE_TOP_VAR, SceneOverlay, type SceneOverlayProps } from './SceneOverlay';
 import { syncGap } from './drawers/syncModel';
 import { lenses, model } from './testFixtures';
@@ -12,8 +11,7 @@ import { lenses, model } from './testFixtures';
 function overlayProps(over: Partial<SceneOverlayProps> = {}): SceneOverlayProps {
     return {
         labels: L, cameras: CAMERAS, mode: 'transit', onMode: vi.fn(), stations: model.stations, question: 'where', onQuestion: vi.fn(),
-        lenses, lens: 'structure', onLens: vi.fn(), stats: { nodes: 452, edges: 67, sources: 3 }, truncated: true, compact: false, showAll: false,
-        drawn: 100, total: 452, onShowAll: vi.fn(), ...over,
+        lenses, lens: 'structure', onLens: vi.fn(), ...over,
     };
 }
 
@@ -47,18 +45,10 @@ describe('SceneOverlay', () => {
         expect(within(screen.getByTestId('kg-scene-controls')).getByTestId('kg-bar-slot')).toBeTruthy();
     });
 
-    it('draws the scale note, with Show all on a compact screen', () => {
-        const onShowAll = vi.fn();
-        render(<SceneOverlay {...overlayProps({ compact: true, onShowAll, truncated: false })} />);
-        const note = within(screen.getByTestId('kg-scale-note'));
-        expect(note.getByText(new RegExp(fillTemplate(L.statsLine, { nodes: 452, edges: 67, sources: 3 })))).toBeTruthy();
-        fireEvent.click(note.getByRole('button', { name: L.showAll }));
-        expect(onShowAll).toHaveBeenCalled();
-    });
-
-    it('says how many stations stand for how many files when the station model was capped', () => {
-        render(<SceneOverlay {...overlayProps({ capped: { shown: 3000, total: 16000 } })} />);
-        expect(screen.getByTestId('kg-map-capped').textContent).toBe(fillTemplate(L.surface.scaleSummary, { stations: counted(L, 'station', model.stations.length, { count: model.stations.length.toLocaleString() }), files: '16,000 files', nodes: '100' }));
+    it('draws no scale note: the stage draws it under its Colour-by legend (StageHost `scale`; ScaleLine.test covers its words)', () => {
+        render(<SceneOverlay {...overlayProps()} />);
+        expect(screen.queryByTestId('kg-scale-note')).toBeNull();
+        expect(screen.queryByText(fillTemplate(L.statsLine, { nodes: 452, edges: 67, sources: 3 }))).toBeNull();
     });
 
     it('draws no sync banner: the files not stored and the upload queue live in the Reviews panel', () => {

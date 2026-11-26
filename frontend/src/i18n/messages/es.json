@@ -39856,8 +39856,7 @@
         "simulate": "Simular con valores",
         "sequence": "Secuencia",
         "noTests": "sin pruebas",
-        "stops": "Paradas",
-        "enlarge": "Ampliar"
+        "stops": "Paradas"
       },
       "sync": {
         "skippedRowNoSize": "{path} · {reason}",
@@ -40091,14 +40090,14 @@
         "errorBack": "Volver",
         "view3d": "3D",
         "viewFlat": "Plano",
-        "flatToggle": "Vista plana"
+        "flatToggle": "Vista plana",
+        "legendRisk": "Riesgo",
+        "legendTests": "Pruebas",
+        "legendActivity": "Actividad",
+        "legendOwner": "Responsable"
       },
       "nav": {
         "group": "Mover la vista",
-        "panUp": "Mover arriba",
-        "panDown": "Mover abajo",
-        "panLeft": "Mover a la izquierda",
-        "panRight": "Mover a la derecha",
         "rotateLeft": "Girar a la izquierda",
         "rotateRight": "Girar a la derecha",
         "tiltUp": "Inclinar hacia arriba",
@@ -40119,8 +40118,14 @@
         "class": "Clases",
         "method": "Métodos",
         "code": "Código",
+        "levelSystem": "Sistema",
+        "levelComponent": "Componente",
+        "levelClass": "Clase",
+        "levelMethod": "Método",
+        "levelLine": "Línea",
         "hintIn": "Acércate a una forma para entrar en ella",
         "hintInto": "Sigue acercando · entrando en {name}",
+        "hintBack": "Sigue alejando · de vuelta a {name}",
         "hintDeepest": "Nivel más profundo · aleja para volver"
       },
       "code": {
@@ -40155,7 +40160,6 @@
         "lensCallers": "{count} llamadores",
         "lensCaller": "{count} llamador",
         "referencesToast": "{count} referencias a {name} en el grafo de conocimiento.",
-        "resetView": "Restablecer vista",
         "calledBy": "Llamado por {names}",
         "showInMap": "Mostrar en el mapa",
         "drillIn": "Entrar ⤓",
@@ -40193,9 +40197,6 @@
         "levelNoSource": "El código fuente no está disponible aquí: se muestra el esquema.",
         "rowNoTest": "Sin prueba",
         "rowAntiPattern": "Antipatrón: {name}",
-        "rowGoInside": "Entrar en {name}",
-        "rowRestructure": "Reestructurar {name}",
-        "paneSwitchAria": "Mostrar el código o la imagen",
         "paneCode": "Código",
         "panePicture": "Imagen",
         "lensOut": "Salida",

@@ -25,7 +25,7 @@ import { sharedMarkUniforms } from './marks/shader';
 import { PlaneLayer } from './planes/PlaneLayer';
 import { createStats, type StageStats } from './stats';
 import { TONE_ORDER } from './tones';
-import { spanOf, Tween } from './tween';
+import { spanOf, Tween, type StaggerClock } from './tween';
 import { FLAG, type Caption, type MarkPaint, type MarkSet, type Placement, type SlotAppend } from './types';
 import { LiveKeys } from './liveKeys';
 import { AppendedSlots, withAppended } from './drill/appended';
@@ -183,6 +183,8 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
         setPlacement(next, now, tweenMs) {
             // A placement arriving mid-tween continues from where the marks ARE (baked at the current eased t).
             const midTween = tween.active ? uniforms.uT.value : undefined;
+            // Each mark is on its own staggered clock: the bake reads it per instance.
+            const stagger: StaggerClock = { lin: uniforms.uLin.value, span: uniforms.uSpan.value, dur: uniforms.uDur.value };
             if (tween.active) tween.finish();
             // A drill appends its symbols into the headroom (ranged); only an overflow rebuilds the meshes (and jumps).
             let rebuilt = false;
@@ -196,7 +198,7 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
             const first = placement === null;
             placement = p;
             overlay.follow(null);
-            uniforms.uFlip.value = marksLayer.setPlacement(p, first || rebuilt || tweenMs <= 0 ? undefined : midTween);
+            uniforms.uFlip.value = marksLayer.setPlacement(p, first || rebuilt || tweenMs <= 0 ? undefined : midTween, stagger);
             const jump = first || tweenMs <= 0;
             labels.setPlacement(p, now, !jump);
             if (jump) { land(now, false); labels.place(labelView()); return; }

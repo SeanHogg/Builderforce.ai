@@ -38961,8 +38961,7 @@
         "simulate": "Simulate with values",
         "sequence": "Sequence",
         "noTests": "no tests",
-        "stops": "Stops",
-        "enlarge": "Enlarge"
+        "stops": "Stops"
       },
       "sync": {
         "skippedRowNoSize": "{path} · {reason}",
@@ -39178,14 +39177,14 @@
         "errorBack": "Back",
         "view3d": "3D",
         "viewFlat": "Flat",
-        "flatToggle": "Flat view"
+        "flatToggle": "Flat view",
+        "legendRisk": "Risk",
+        "legendTests": "Tests",
+        "legendActivity": "Activity",
+        "legendOwner": "Owner"
       },
       "nav": {
         "group": "Move the view",
-        "panUp": "Move up",
-        "panDown": "Move down",
-        "panLeft": "Move left",
-        "panRight": "Move right",
         "rotateLeft": "Rotate left",
         "rotateRight": "Rotate right",
         "tiltUp": "Tilt up",
@@ -39206,8 +39205,14 @@
         "class": "Classes",
         "method": "Methods",
         "code": "Code",
+        "levelSystem": "System",
+        "levelComponent": "Component",
+        "levelClass": "Class",
+        "levelMethod": "Method",
+        "levelLine": "Line",
         "hintIn": "Zoom into a shape to go inside it",
         "hintInto": "Keep zooming · going inside {name}",
+        "hintBack": "Keep zooming out · back to {name}",
         "hintDeepest": "Deepest level · zoom out to come back"
       },
       "code": {
@@ -39242,7 +39247,6 @@
         "lensCallers": "{count} callers",
         "lensCaller": "{count} caller",
         "referencesToast": "{count} references to {name} in the knowledge graph.",
-        "resetView": "Reset view",
         "calledBy": "Called by {names}",
         "showInMap": "Show in map",
         "drillIn": "Drill in ⤓",
@@ -39280,9 +39284,6 @@
         "levelNoSource": "The source is not available here: showing the outline.",
         "rowNoTest": "No test",
         "rowAntiPattern": "Anti-pattern: {name}",
-        "rowGoInside": "Go inside {name}",
-        "rowRestructure": "Restructure {name}",
-        "paneSwitchAria": "Show the code or the picture",
         "paneCode": "Code",
         "panePicture": "Picture",
         "lensOut": "Out",

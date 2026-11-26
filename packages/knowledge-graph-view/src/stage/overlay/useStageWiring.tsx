@@ -130,9 +130,10 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     // highlight then follows the selected line's stops.
     // A Sequence message pick (its batch names the call site) opens the call-site card instead.
     const selectLine = surface.selectLine;
-    const [site, setSite] = useState<{ site: CallSite; at: { x: number; y: number } } | null>(null);
-    const onLink = useCallback((hit: { line: string | null; site: CallSite | null }, at: { x: number; y: number }) => {
-        if (hit.site) { setCardKey(null); setSite({ site: hit.site, at }); return; }
+    // The card is docked (the note-card shell), so where the message was picked is not kept.
+    const [site, setSite] = useState<CallSite | null>(null);
+    const onLink = useCallback((hit: { line: string | null; site: CallSite | null }) => {
+        if (hit.site) { setCardKey(null); setSite(hit.site); return; }
         if (drill.view || !hit.line) return;
         setCardKey(null); setSelected(null);
         selectLine(hit.line);
@@ -251,8 +252,8 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
                 onCode={d.openCode} facts={d.facts} onSimulate={actOn(dock.onSimulate, cardRefs[0])}
                 onRestructure={actOn(dock.onRestructure, stationRestructure.ref)} restructureReady={stationRestructure.ready}
             />
-            {symbolCard}
-            {site && <CallSiteCard site={site.site} at={site.at} boxWidth={d.mapWidth} labels={p.labels} onOpenSource={p.onOpenSource} onClose={closeSite} />}
+            {/* One docked card at a time: the call site, while open, stands in for the symbol card. */}
+            {site ? <CallSiteCard site={site} labels={p.labels} narrow={narrow} onOpenSource={p.onOpenSource} onClose={closeSite} /> : symbolCard}
             {d.reading && !dock.sequence && <CallBadges labels={p.labels} onStep={reader.goStep} />}
             {d.reading && methodTarget && (
                 <StepCard method={methodTarget} reading={reader} records={records} labels={p.labels} onDrill={d.drillTo} onOut={out} side={d.split ? 'right' : 'left'} />

@@ -34,7 +34,7 @@ function chipStyle(risky: boolean, on: boolean, ghost: boolean): CSSProperties {
         background: on ? cssVar('text') : cssVar('panel'),
         color: on ? cssVar('bg') : ghost ? cssVar('muted') : cssVar('text'),
         opacity: ghost ? 0.62 : 1,
-        border: `1px solid ${risky ? cssVar('cycle') : on ? cssVar('text') : cssVar('border')}`,
+        border: `1px solid ${risky ? cssVar('warnTop') : on ? cssVar('text') : cssVar('border')}`,
         visibility: 'hidden',
     };
 }
@@ -47,28 +47,43 @@ export const ChipLayer = memo(function ChipLayer({ bus, chips, selected, hidden,
     const out = useRef(new Float64Array(2));
 
     useEffect(() => {
+        // Sizes and the box are read ONCE per chip set (and on a resize), never inside the frame loop: a read after the
+        // previous chip's style write would force a layout per chip per frame.
+        const sizes: [number, number][] = [];
+        let W = 0, H = 0;
+        const measure = (): void => {
+            const box = layer.current;
+            W = box?.clientWidth ?? 0; H = box?.clientHeight ?? 0;
+            sizes.length = 0;
+            for (const el of els.current) sizes.push(el ? [el.offsetWidth, el.offsetHeight] : [0, 0]);
+        };
+        measure();
+        const resize = typeof ResizeObserver === 'undefined' || !layer.current ? null : new ResizeObserver(() => { measure(); move(); });
+        if (resize && layer.current) resize.observe(layer.current);
         const move = (): void => {
             const box = layer.current, pr = bus.projector;
             if (!box || !pr) return;
             const { chips: list, hidden: off } = live.current;
             const selSlot = bus.slotOf(live.current.selected);
-            const W = box.clientWidth, H = box.clientHeight, o = out.current;
+            const o = out.current;
             list.forEach((c, i) => {
                 const el = els.current[i];
                 if (!el) return;
                 if (off || !pr.project(c.position[0], c.position[1], c.position[2], o)) { el.style.visibility = 'hidden'; return; }
-                const w = el.offsetWidth, h = el.offsetHeight;
+                const [w, h] = sizes[i] ?? [0, 0];
                 // Centred over the mark's top, floating RISE_PX above it, then kept inside the stage box.
                 const x = Math.min(Math.max(o[0]! - w / 2, GUTTER_PX), Math.max(GUTTER_PX, W - w - GUTTER_PX));
                 const y = Math.min(Math.max(o[1]! - h - RISE_PX, GUTTER_PX), Math.max(GUTTER_PX, H - h - GUTTER_PX));
                 el.style.transform = `translate(${x}px, ${y}px)`;
                 el.style.visibility = 'visible';
                 const on = c.slot === selSlot;
-                if (el.dataset.on !== String(on)) { el.dataset.on = String(on); Object.assign(el.style, chipStyle(c.risky, on, c.ghost), { visibility: 'visible', transform: `translate(${x}px, ${y}px)` }); }
+                // A selection flip restyles (bolder) the one chip and re-reads its size: once per flip, not per frame.
+                if (el.dataset.on !== String(on)) { el.dataset.on = String(on); Object.assign(el.style, chipStyle(c.risky, on, c.ghost), { visibility: 'visible', transform: `translate(${x}px, ${y}px)` }); sizes[i] = [el.offsetWidth, el.offsetHeight]; }
             });
         };
         move();
-        return bus.onFrame(move);
+        const off = bus.onFrame(move);
+        return () => { off(); resize?.disconnect(); };
     }, [bus, chips, hidden, selected]);
 
     return (

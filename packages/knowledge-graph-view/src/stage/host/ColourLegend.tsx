@@ -1,6 +1,6 @@
 /**
  * The Colour-by legend (the design's `#legend`), bottom-left of the stage: "Colour by" with a mini segment of the overlay
- * presets (Risk, Quality, Activity, Ownership; Custom opens the overlay editor as a popover) and a fold chevron, a row of
+ * presets (Risk, Tests, Activity, Owner; Custom opens the overlay editor as a popover) and a fold chevron, a row of
  * swatches describing the active preset's colours and, unfolded, the shapes. While a comparison is open it reads "Showing
  * changes" with the new / changed / goes-away swatches. Swatches and shapes wrap; colours are theme tokens only.
  */
@@ -37,6 +37,12 @@ function swatchesOf(preset: PresetId | 'custom', comparing: boolean, surface: Su
     }
 }
 
+/** The mini segment's short word per preset (the design's Risk / Tests / Activity / Owner). */
+function presetWord(id: PresetId, labels: KnowledgeGraphLabels): string {
+    const w = labels.surface.scene;
+    return { risk: w.legendRisk, quality: w.legendTests, activity: w.legendActivity, ownership: w.legendOwner }[id];
+}
+
 const mini: CSSProperties = { display: 'inline-flex', border: `1px solid ${cssVar('border')}`, borderRadius: 4, overflow: 'hidden' };
 const miniButton = (on: boolean): CSSProperties => ({
     height: 22, padding: '0 8px', border: 0, borderInlineEnd: `1px solid ${cssVar('border')}`, cursor: 'pointer', fontSize: 11.5, font: 'inherit',
@@ -58,7 +64,7 @@ export interface ColourLegendProps {
 
 export function ColourLegend({ labels, surface, types, comparing, narrow, scale }: ColourLegendProps) {
     const [open, setOpen] = useState(false);
-    const l = labels.legend, s = labels.surface;
+    const l = labels.legend;
     const swatches = swatchesOf(surface.preset, comparing, surface, labels);
     const fold = open ? l.shapesHide! : l.shapesShow!;
     return (
@@ -71,7 +77,7 @@ export function ColourLegend({ labels, surface, types, comparing, narrow, scale 
                             <span style={TYPE.sectionHeading}>{l.colourBy}</span>
                             <span role="group" aria-label={l.colourBy} style={mini}>
                                 {PRESET_ORDER.map((id) => (
-                                    <button key={id} type="button" aria-pressed={surface.preset === id} onClick={() => surface.setPreset(id)} style={miniButton(surface.preset === id)}>{s.presets[id]}</button>
+                                    <button key={id} type="button" aria-pressed={surface.preset === id} onClick={() => surface.setPreset(id)} style={miniButton(surface.preset === id)}>{presetWord(id, labels)}</button>
                                 ))}
                             </span>
                             <OverlayMenu

@@ -37,7 +37,8 @@ export function PathStrip({ path, step, labels, onStep, pathTitle, stations }: P
     const at = Math.min(Math.max(step, 0), Math.max(last, 0));
     const mermaid = pathMermaid(path, labels);
     const cap = <h2 style={{ ...TYPE.sectionHeading, flex: 'none' }}>{s.path.journey}</h2>;
-    const bar = { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', minWidth: 0, borderTop: `1px solid ${cssVar('border')}`, background: cssVar('panel') } as const;
+    // Wraps (the numbered stops then take their own line) so the row never overflows a 360px container.
+    const bar = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '6px 10px', minWidth: 0, borderTop: `1px solid ${cssVar('border')}`, background: cssVar('panel') } as const;
     if (path.stops.length === 0) {
         return <section aria-label={s.pathTitle} data-testid="kg-path" style={bar}>{cap}<p style={{ ...TYPE.bodyMuted, margin: 0 }}>{s.pathEmpty}</p></section>;
     }
@@ -49,10 +50,10 @@ export function PathStrip({ path, step, labels, onStep, pathTitle, stations }: P
     return (
         <section aria-label={s.pathTitle} data-testid="kg-path" style={bar}>
             {cap}
-            <strong style={{ ...TYPE.subtitle, whiteSpace: 'nowrap', flex: 'none', maxWidth: '40%', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pathTitle || s.pathTitle}</strong>
+            <strong style={{ ...TYPE.subtitle, whiteSpace: 'nowrap', flex: '0 1 auto', minWidth: 0, maxWidth: '40%', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pathTitle || s.pathTitle}</strong>
             {arrow(s.pathBack, at - 1, at <= 0, '‹')}
             {arrow(s.pathNext, at + 1, at >= last, '›')}
-            <ol aria-label={s.path.stops} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', gap: 2, minWidth: 0, overflowX: 'auto', flex: 1 }}>
+            <ol aria-label={s.path.stops} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', gap: 2, minWidth: 0, overflowX: 'auto', flex: '1 1 160px' }}>
                 {path.stops.map((stop, i) => (
                     <li key={stop.id} style={{ display: 'flex', flex: 'none' }}>
                         <button type="button" aria-current={i === at ? 'step' : undefined} title={stations?.get(stop.id)?.path} style={chip(i === at)} onClick={() => onStep(i)}>

@@ -50,7 +50,7 @@ describe('partnersOf', () => {
 
 describe('"What changed?" partners card', () => {
     const act = (graph: KnowledgeGraph, changedPartners: ReturnType<typeof partnersOf> | undefined) => render(
-        <ActPanel graph={graph} findings={[]} labels={L} station={null} stations={model.stations} scopeName={null} compact={false} onClearScope={vi.fn()} onShow={vi.fn()} changedPartners={changedPartners} />,
+        <ActPanel graph={graph} findings={[]} labels={L} station={null} stations={model.stations} scopeName={null} onClearScope={vi.fn()} onShow={vi.fn()} changedPartners={changedPartners} />,
     );
 
     it('shows the untouched partners of the changed files, each with its confidence', () => {
@@ -101,7 +101,7 @@ describe('"This path is done when…" partners', () => {
 
     it('the Act rail feeds the drawn path\'s partners to the footer', () => {
         const path = pathOfLine(lines.lines[0]!, model.byId);
-        render(<ActPanel graph={plain} findings={[]} labels={L} station={null} stations={model.stations} scopeName={null} compact={false} onClearScope={vi.fn()} onShow={vi.fn()} path={path} />);
+        render(<ActPanel graph={plain} findings={[]} labels={L} station={null} stations={model.stations} scopeName={null} onClearScope={vi.fn()} onShow={vi.fn()} path={path} />);
         expect(document.querySelector('[data-testid="kg-done-partners"] [data-partners="not-set-up"]')).toBeTruthy();
     });
 });

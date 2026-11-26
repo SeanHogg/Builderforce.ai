@@ -16,6 +16,8 @@ export const MINIS_MAX = 12;
 export const MINIS_LEVEL_MAX = 80;
 /** A mini is this share of its parent's half-size across, and this share tall. */
 const MINI_SHARE = 0.22, MINI_RISE = 0.14;
+/** A mini's half-size at most this share of its grid cell, so neighbours keep a gap. */
+const MINI_CELL_FILL = 0.4;
 
 export function roofMinis(model: StageModel, d: Draft, drawn: readonly string[]): void {
     if (drawn.length > MINIS_LEVEL_MAX) return;
@@ -32,10 +34,12 @@ export function roofMinis(model: StageModel, d: Draft, drawn: readonly string[])
         const list = slot === undefined ? undefined : kids.get(slot);
         if (slot === undefined || !list || d.scale[slot]! <= 0) continue;
         const size = d.scale[slot]!, cols = Math.ceil(Math.sqrt(list.length)), cell = (size * 1.5) / cols;
+        // A mini never outgrows its grid cell (a full roof of 12 would otherwise overlap its neighbours).
+        const half = Math.min(size * MINI_SHARE, cell * MINI_CELL_FILL);
         const roof = d.extrude[slot]!;
         list.forEach((child, k) => {
             const cx = (k % cols) - (cols - 1) / 2, cz = Math.floor(k / cols) - (Math.ceil(list.length / cols) - 1) / 2;
-            show(d, child, d.position[slot * 3]! + cx * cell, roof, d.position[slot * 3 + 2]! + cz * cell, size * MINI_SHARE, size * MINI_RISE);
+            show(d, child, d.position[slot * 3]! + cx * cell, roof, d.position[slot * 3 + 2]! + cz * cell, half, size * MINI_RISE);
         });
     }
 }

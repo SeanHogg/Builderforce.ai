@@ -51,7 +51,7 @@ export function Seg({ label, items, value, onPick, trailing, style }: SegProps) 
                 return (
                     <button
                         key={item.id} type="button" data-seg={item.id} data-testid={item.testId} aria-pressed={on} aria-label={item.label} title={item.title ?? item.label} disabled={item.disabled}
-                        style={{ ...segButtonStyle(on, i === items.length - 1 && !trailing), ...(item.dashed ? { borderStyle: 'dashed' } : null), ...(item.disabled ? { opacity: 0.5, cursor: 'default' } : null) }}
+                        style={{ ...segButtonStyle(on, i === items.length - 1 && !trailing), ...(item.dashed ? { outline: `1px dashed ${cssVar('muted')}`, outlineOffset: -3 } : null), ...(item.disabled ? { opacity: 0.5, cursor: 'default' } : null) }}
                         onClick={() => onPick(item.id)}
                     >
                         {item.glyph}
