@@ -1,5 +1,20 @@
 [
   {
+    "slug": "see-your-code-as-a-3d-picture",
+    "title": "See your code as a 3D picture, with the code beside it",
+    "date": "2026-11-26",
+    "description": "The knowledge view now puts the code and a 3D picture of the system side by side at one shared location. Click a shape to read its code, click a method to fly into it, and preview a restructure before anyone changes a line.",
+    "tags": [
+      "knowledge-view",
+      "code-understanding",
+      "visualization",
+      "refactoring",
+      "idea-to-real",
+      "product"
+    ],
+    "author": "Sean Hogg"
+  },
+  {
     "slug": "agents-that-run-inside-your-app",
     "title": "Agents that run inside your app",
     "date": "2026-11-24",

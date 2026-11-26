@@ -354,9 +354,9 @@ export function syntaxLight(lines: readonly string[]): Token[][] {
 export const VIRTUAL_AFTER = 200;
 const OVERSCAN = 8;
 
-/** The rows `[from, to)` a panel of `viewRows` rows renders at `scrollTop` (px) with rows `rowPx` tall. */
-export function visibleWindow(total: number, scrollTop: number, rowPx: number, viewRows: number): { from: number; to: number } {
-    if (total <= VIRTUAL_AFTER) return { from: 0, to: total };
+/** The rows `[from, to)` a panel of `viewRows` rows renders at `scrollTop` (px) with rows `rowPx` tall; every row up to `after` rows. */
+export function visibleWindow(total: number, scrollTop: number, rowPx: number, viewRows: number, after: number = VIRTUAL_AFTER): { from: number; to: number } {
+    if (total <= after) return { from: 0, to: total };
     const first = Math.max(0, Math.floor(scrollTop / rowPx) - OVERSCAN);
     return { from: first, to: Math.min(total, first + viewRows + 2 * OVERSCAN) };
 }
