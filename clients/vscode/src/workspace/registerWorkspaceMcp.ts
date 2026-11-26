@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 import { createWorkspaceMcpTools, WORKSPACE_MCP_INFO } from "@builderforce/workspace-mcp";
 import { hostLog } from "../host/hostLog";
 import { buildLocalCapabilityProvider } from "../tools/localCapabilities";
-import { resolveRipgrep } from "../tools/ripgrep";
+import { findRipgrep } from "../tools/ripgrep";
 import { startWorkspaceMcpListener } from "./workspaceMcpListener";
 
 function trustedWorkspaceRoots(): string[] {
@@ -22,7 +22,7 @@ export function registerWorkspaceMcp(context: vscode.ExtensionContext): void {
       ? roots.find((folder) => relative(folder, requestedRoot) === "")
       : requestedRoot === undefined && roots.length === 1 ? roots[0] : undefined;
     if (!root) throw new Error("Choose an open, trusted workspace folder as projectRoot");
-    return { root, caps: buildLocalCapabilityProvider(root, { ripgrep: resolveRipgrep }) };
+    return { root, caps: buildLocalCapabilityProvider(root, { ripgrep: findRipgrep }) };
   });
 
   let listener: ReturnType<typeof startWorkspaceMcpListener> | undefined;
@@ -44,7 +44,7 @@ export function registerWorkspaceMcp(context: vscode.ExtensionContext): void {
           )];
         } catch (error) {
           listener = undefined;
-          hostLog("workspaceMcp.error", { message: error instanceof Error ? error.message : String(error) });
+          hostLog(`Workspace MCP could not start: ${error instanceof Error ? error.message : String(error)}`);
           return [];
         }
       },

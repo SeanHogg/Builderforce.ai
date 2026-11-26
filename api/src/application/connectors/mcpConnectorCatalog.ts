@@ -1,34 +1,15 @@
+import type { ConnectorOffer, StdioConnectorInput } from '@seanhogg/builderforce-mcp';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { listPublishedConnectors } from './connectorRegistry';
 
-type StdioInput =
-  | { kind: 'folder'; required: true }
-  | { kind: 'secret' | 'text'; key: string; required: true };
-
-type ConnectorTransport =
-  | { transport: 'http'; connectorKey: string }
-  | {
-      transport: 'stdio';
-      /** Package and fixed arguments following `npx -y`. The host owns process launch. */
-      npx: readonly string[];
-      inputs: readonly StdioInput[];
-      docsUrl: string;
-    };
-
-interface ConnectorOffer {
-  id: string;
-  name: string;
-  transports: ConnectorTransport[];
-}
-
-const secret = (key: string): StdioInput => ({ kind: 'secret', key, required: true });
+const secret = (key: string): StdioConnectorInput => ({ kind: 'secret', key, required: true });
 
 const LOCAL_MCP: readonly {
   id: string;
   name: string;
   npx: readonly string[];
-  inputs: readonly StdioInput[];
+  inputs: readonly StdioConnectorInput[];
   docsUrl: string;
 }[] = [
   {
@@ -71,6 +52,7 @@ export async function listMcpConnectorCatalog(db: Db, tenantId: number, env: Env
   const offers = new Map<string, ConnectorOffer>();
   for (const { manifest } of await listPublishedConnectors(db, tenantId, env)) {
     const id = manifest.key;
+    if (offers.has(id)) continue;
     offers.set(id, { id, name: manifest.name, transports: [{ transport: 'http', connectorKey: id }] });
   }
   for (const { id, name, ...local } of LOCAL_MCP) {

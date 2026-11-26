@@ -48,6 +48,7 @@ const CreateMcpExtensionBody = z.object({
   name: z.string().nullish(),
   serverUrl: z.string().nullish(),
   secret: z.string().nullish(),
+  allowedTools: z.unknown().optional(),
 });
 
 /**
@@ -100,6 +101,7 @@ export function createMcpExtensionRoutes(db: Db): Hono<HonoEnv> {
         name,
         serverUrl,
         secret: body.secret ?? null,
+        ...(body.allowedTools === undefined ? {} : { allowedTools: normalizeAllowedTools(body.allowedTools) }),
         createdByUserId: userId,
         keyMaterial: c.env.JWT_SECRET,
       });

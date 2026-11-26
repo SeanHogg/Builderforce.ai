@@ -28,13 +28,13 @@ export function workspaceRepoRead(root: string, read?: RepoReadCapability): Repo
       if (!resolved) return { ok: false, path, error: "File is unavailable in the workspace" };
       const info = await stat(resolved);
       if (!info.isFile() || info.size > 1_000_000) return { ok: false, path, error: "File is not a supported source file" };
-      return read.readFile(path);
+      return read.readFile(relative(await realpath(root), resolved));
     },
     async searchCode(query, path, options) {
-      if (path && !await workspacePath(root, path)) {
-        return { ok: false, query, error: "Search path is unavailable in the workspace" };
-      }
-      return read.searchCode(query, path, options);
+      if (!path) return read.searchCode(query, undefined, options);
+      const resolved = await workspacePath(root, path);
+      if (!resolved) return { ok: false, query, error: "Search path is unavailable in the workspace" };
+      return read.searchCode(query, relative(await realpath(root), resolved), options);
     },
   };
 }

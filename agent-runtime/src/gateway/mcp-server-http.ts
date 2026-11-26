@@ -188,8 +188,8 @@ export async function handleMcpHttpRequest(
       return true;
     }
 
-    const tool = LEGACY_ENTRIES.find((entry) => entry.legacyName === toolName || entry.name === toolName)
-      ?? WORKSPACE_TOOLS.find((entry) => entry.name === toolName);
+    const tool = WORKSPACE_TOOLS.find((entry) => entry.name === toolName)
+      ?? LEGACY_ENTRIES.find((entry) => entry.legacyName === toolName || entry.name === toolName);
     if (!tool) {
       sendJson(res, 404, { ok: false, error: `Tool not found: ${toolName}` });
       return true;

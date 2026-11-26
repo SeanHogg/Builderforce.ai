@@ -76,6 +76,10 @@ async function checkWorkspaceReferences({ root, caps }: Workspace, args: Record<
     for (const reference of references) {
       const key = `${reference.kind}:${reference.reference}`;
       let check = checks.get(key);
+      if (!check && checks.size === 50) {
+        unverified.push(reference);
+        continue;
+      }
       if (!check) {
         check = reference.kind === "path"
           ? workspacePath(root, reference.reference).then((path) => path ? "found" : "missing")

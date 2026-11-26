@@ -359,8 +359,9 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     const startReview = review.start;
     const run = useCallback(() => {
         const root = rootIdRef.current;
+        source.decision?.({ kind: 'run', reason: root ? 'Run pressed: load once, then track changes live' : 'Run pressed with no reviewed root: starts the review plan', rootId: root ?? undefined });
         if (root) setRunRoot(root); else startReview({ pick: true });
-    }, [startReview]);
+    }, [startReview, source]);
     // Retry, or a change the person made (a fact, a fix): on a gated host that is a Run of the open root too.
     const reload = useCallback(() => {
         if (gated && rootIdRef.current) setRunRoot(rootIdRef.current);

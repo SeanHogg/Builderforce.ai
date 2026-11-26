@@ -1,4 +1,5 @@
 {
+  "BuilderForce Workspace": "Área de trabajo de BuilderForce",
   " on {target}": " en {target}",
   " — {bytes} so far": " — {bytes} hasta ahora",
   "$(cloud-offline) BuilderForce offline": "$(cloud-offline) BuilderForce sin conexión",
@@ -11,6 +12,7 @@
   "Unavailable until it recovers: cloud models and sync (your changes are queued and sent later).": "No disponible hasta que se recupere: modelos en la nube y sincronización (tus cambios se ponen en cola y se envían después).",
   "$(add) Register external MCP server…": "$(add) Registrar servidor MCP externo…",
   "$(gear) Manage local MCP servers": "$(gear) Administrar servidores MCP locales",
+  "Add a local MCP server": "Añadir un servidor MCP local",
   "$(credit-card) Add a card to unlock premium models": "$(credit-card) Añade una tarjeta para desbloquear los modelos premium",
   "$(rocket) Upgrade to unlock premium models": "$(rocket) Mejora tu plan para desbloquear los modelos premium",
   "(the model produced nothing)": "(el modelo no produjo nada)",

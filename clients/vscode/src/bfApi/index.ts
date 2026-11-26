@@ -108,7 +108,7 @@ export type { BfProjectDiagnostic } from "./diagnostics";
 export { joinMeeting, listMeetings } from "./meetings";
 export type { BfMeetingDetail, BfMeetingJoin } from "./meetings";
 
-export { beginMcpOAuthConnect, createMcpExtension, listMcpExtensions } from "./mcpExtensions";
+export { beginMcpOAuthConnect, createMcpExtension, listMcpConnectorCatalog, listMcpExtensions } from "./mcpExtensions";
 export type { BfMcpExtension } from "./mcpExtensions";
 
 export { fetchPolicyGates, fetchProjectShipPolicy, fetchRunContextSection } from "./runContext";

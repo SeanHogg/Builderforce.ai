@@ -20,7 +20,7 @@
  * auth state and nothing else.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
 import { tenantMcpExtensions } from '../../../infrastructure/database/schema';
@@ -37,6 +37,18 @@ import { reportCaughtError } from '../../observability/caughtErrorReporter';
 import { refreshMcpToken, type McpOAuthPendingConsent, type McpOAuthRegistration } from './mcpOAuth';
 
 type ExtensionRow = typeof tenantMcpExtensions.$inferSelect;
+type AuthorizationSnapshot = Pick<ExtensionRow, 'id' | 'tenantId' | 'serverUrl' | 'oauthEnc' | 'tokenEnc'>;
+
+/** Retain a grant only if neither its endpoint nor the authorization it replaces changed. */
+export function unchangedMcpAuthorization(row: AuthorizationSnapshot) {
+  return and(
+    eq(tenantMcpExtensions.id, row.id),
+    eq(tenantMcpExtensions.tenantId, row.tenantId),
+    eq(tenantMcpExtensions.serverUrl, row.serverUrl),
+    row.oauthEnc == null ? isNull(tenantMcpExtensions.oauthEnc) : eq(tenantMcpExtensions.oauthEnc, row.oauthEnc),
+    row.tokenEnc == null ? isNull(tenantMcpExtensions.tokenEnc) : eq(tenantMcpExtensions.tokenEnc, row.tokenEnc),
+  );
+}
 
 /** How a server's requests are currently being authenticated. */
 export type McpAuthKind = 'none' | 'secret' | 'oauth';
@@ -88,25 +100,33 @@ export async function openRegistration(
 export async function storeGrant(
   db: Db,
   env: Env,
-  args: { tenantId: number; extensionId: string; tokens: SealedOAuthTokens },
-): Promise<void> {
-  const sealed = await sealOAuthTokens(env, args.tenantId, args.tokens);
-  await db
+  args: { current: AuthorizationSnapshot; tokens: SealedOAuthTokens; registration?: { enc: string; iv: string } },
+): Promise<boolean> {
+  const sealed = await sealOAuthTokens(env, args.current.tenantId, args.tokens);
+  const [updated] = await db
     .update(tenantMcpExtensions)
-    .set({ tokenEnc: sealed.enc, tokenIv: sealed.iv, oauthConnectedAt: new Date() })
-    .where(and(eq(tenantMcpExtensions.id, args.extensionId), eq(tenantMcpExtensions.tenantId, args.tenantId)));
+    .set({
+      tokenEnc: sealed.enc,
+      tokenIv: sealed.iv,
+      oauthConnectedAt: new Date(),
+      ...(args.registration ? { oauthEnc: args.registration.enc, oauthIv: args.registration.iv } : {}),
+    })
+    .where(unchangedMcpAuthorization(args.current))
+    .returning({ id: tenantMcpExtensions.id });
+  return updated !== undefined;
 }
 
 /** Drop a grant (disconnect). The registration is kept, so reconnecting does not
  *  re-register a second client with the authorization server. */
 export async function clearGrant(
   db: Db,
-  args: { tenantId: number; extensionId: string },
+  args: { tenantId: number; extensionId: string; current?: AuthorizationSnapshot },
 ): Promise<void> {
   await db
     .update(tenantMcpExtensions)
     .set({ tokenEnc: null, tokenIv: null, oauthConnectedAt: null })
-    .where(and(eq(tenantMcpExtensions.id, args.extensionId), eq(tenantMcpExtensions.tenantId, args.tenantId)));
+    .where(args.current ? unchangedMcpAuthorization(args.current)
+      : and(eq(tenantMcpExtensions.id, args.extensionId), eq(tenantMcpExtensions.tenantId, args.tenantId)));
 }
 
 /**
@@ -138,7 +158,7 @@ export async function resolveAuthorization(
       );
       if (refresh.ok) {
         if (refresh.refreshed) {
-          await storeGrant(db, env, { tenantId: row.tenantId, extensionId: row.id, tokens: refresh.tokens });
+          if (!await storeGrant(db, env, { current: row, tokens: refresh.tokens })) return null;
         }
         return `Bearer ${refresh.tokens.accessToken}`;
       }
@@ -148,7 +168,7 @@ export async function resolveAuthorization(
         case 'unconfigured':
           return `Bearer ${tokens.accessToken}`;
         case 'revoked':
-          await clearGrant(db, { tenantId: row.tenantId, extensionId: row.id });
+          await clearGrant(db, { tenantId: row.tenantId, extensionId: row.id, current: row });
           return null;
         case 'failed':
           reportCaughtError(refresh.error, {

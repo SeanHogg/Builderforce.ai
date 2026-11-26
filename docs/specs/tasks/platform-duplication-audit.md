@@ -10,7 +10,7 @@ Synapse is being rebuilt from the ground up (user, 2026-11-26), so its Rust MCP 
 | 2 | Code index / search / context | **audited 2026-11-26** (below) |
 | 3 | Local inference + model catalog + routing | **audited 2026-11-26** (below) |
 | 4 | Memory (Evermind), skills, episodes, runs | **audited 2026-11-26** (below) |
-| 5 | Chat composer / view | queued |
+| 5 | Chat composer / view | audited (§5) |
 | 6 | Shell / terminal, file tools | queued |
 | 7 | Auth / device sign-in / cloud client | queued |
 | 8 | Security policy (code-shield vs Shield) | queued |

@@ -24,9 +24,9 @@ const WORKSPACE_MCP_CONFIGS = [
 ] as const satisfies readonly { host: McpConfigHost; segments: readonly string[] }[];
 
 type McpServerPick = vscode.QuickPickItem & (
-  | { kind: "register" | "native" }
-  | { kind: "remote"; server: bfApi.BfMcpExtension }
-  | { kind: "local"; config: vscode.Uri }
+  | { action: "register" | "native" | "catalog" }
+  | { action: "remote"; server: bfApi.BfMcpExtension }
+  | { action: "local"; config: vscode.Uri }
 );
 
 async function workspaceMcpPicks(): Promise<McpServerPick[]> {
@@ -52,7 +52,7 @@ async function workspaceMcpPicks(): Promise<McpServerPick[]> {
         if (seen.has(identity)) continue;
         seen.add(identity);
         picks.push({
-          kind: "local",
+          action: "local",
           label: `$(terminal) ${name}`,
           description: vscode.workspace.asRelativePath(file.config),
           config: file.config,
@@ -62,6 +62,34 @@ async function workspaceMcpPicks(): Promise<McpServerPick[]> {
     return picks;
   }));
   return workspacePicks.flat();
+}
+
+async function installCatalogServer(secrets: vscode.SecretStorage): Promise<void> {
+  const catalog = await bfApi.listMcpConnectorCatalog(secrets);
+  const options = catalog.flatMap((offer) => offer.transports.flatMap((transport) =>
+    transport.transport === "stdio" ? [{ label: offer.name, id: offer.id, transport }] : [],
+  ));
+  const pick = await vscode.window.showQuickPick(options, {
+    title: vscode.l10n.t("Add a local MCP server"),
+  });
+  if (!pick) return;
+
+  const args = ["-y", ...pick.transport.npx];
+  const env: Record<string, string> = {};
+  for (const input of pick.transport.inputs) {
+    if (input.kind === "folder") {
+      const folder = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false });
+      if (!folder?.[0]) return;
+      args.push(folder[0].fsPath);
+    } else {
+      env[input.key] = "${env:" + input.key + "}";
+    }
+  }
+
+  // The native installer shows the command for review before saving or activating it.
+  const definition = { name: pick.id, command: "npx", args, env };
+  const uri = vscode.Uri.parse(`${vscode.env.uriScheme}:mcp/install?${encodeURIComponent(JSON.stringify(definition))}`);
+  await vscode.env.openExternal(uri);
 }
 
 function describe(server: bfApi.BfMcpExtension): string {
@@ -143,7 +171,10 @@ export async function manageMcpServers(
   ]);
   const picks: McpServerPick[] = [...local];
   if (commands.includes(NATIVE_MCP_LIST)) {
-    picks.unshift({ kind: "native", label: vscode.l10n.t("$(gear) Manage local MCP servers") });
+    picks.unshift(
+      { action: "catalog", label: `$(add) ${vscode.l10n.t("Add a local MCP server")}` },
+      { action: "native", label: vscode.l10n.t("$(gear) Manage local MCP servers") },
+    );
   }
   if (!remote.ok) {
     const message = messageOf(remote.error);
@@ -155,9 +186,9 @@ export async function manageMcpServers(
     );
   } else {
     picks.unshift(
-      { kind: "register", label: vscode.l10n.t("$(add) Register external MCP server…") },
+      { action: "register", label: vscode.l10n.t("$(add) Register external MCP server…") },
       ...remote.servers.map((server): McpServerPick => ({
-        kind: "remote",
+        action: "remote",
         label: `${server.authKind === "oauth" && !server.oauthConnectedAt ? "$(warning) " : "$(plug) "}${server.name}`,
         description: describe(server),
         server,
@@ -176,15 +207,19 @@ export async function manageMcpServers(
   if (!pick) return;
 
   try {
-    if (pick.kind === "native") {
+    if (pick.action === "native") {
       await vscode.commands.executeCommand(NATIVE_MCP_LIST);
       return;
     }
-    if (pick.kind === "local") {
+    if (pick.action === "local") {
       await vscode.window.showTextDocument(pick.config);
       return;
     }
-    if (pick.kind === "register") {
+    if (pick.action === "catalog") {
+      if (await ensureSignedIn()) await installCatalogServer(secrets);
+      return;
+    }
+    if (pick.action === "register") {
       if (!(await ensureSignedIn())) return;
       const created = await registerFlow(secrets);
       if (!created) return;
@@ -197,7 +232,7 @@ export async function manageMcpServers(
       if (!created.hasSecret) await offerConnect(secrets, created);
       return;
     }
-    if (pick.kind === "remote" && await ensureSignedIn()) await offerConnect(secrets, pick.server);
+    if (pick.action === "remote" && await ensureSignedIn()) await offerConnect(secrets, pick.server);
   } catch (e) {
     const message = messageOf(e);
     void vscode.window.showErrorMessage(

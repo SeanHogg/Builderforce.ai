@@ -420,6 +420,17 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
   - The journey then starts at `frontend/lib/data-manager.ts` and lists it twice.
   - Fix: extend the one manifest seam (HTML module script, wrangler main, literal Vite input), ignore config-file targets, de-duplicate path stops, and add a regression test per case.
   - Fixing this makes every line start where the app really starts. [make.md › PRD 43](../../docs/specs/make.md)
+- `AE-G063` **The visualizer crashes VS Code on large repos when a load finishes** (user, 2026-11-26, VSIX .224, hired.video: 6315 files).
+  - Cause: the graph payload is unbounded. Nodes are capped at 2000, but edges and findings are not:
+    - 123,843 edges, of which 110,968 are `references`;
+    - 24,674 per-edge `partition-violation` findings.
+  - The payload is copied from the worker to the host, written as JSON for `lastSeen` (7.7 s on the host main thread; event-loop lag up to 10 s), then posted to the webview, which draws 75,796 edges.
+  - Two Crashpad dumps were written at the moment the load completed. That also explains AE-G062: `lastSeen` was never written, because earlier runs crashed first.
+  - Fix (in progress):
+    - in the worker build, keep only edges between kept nodes, merge parallel edges into one weighted edge, and cap edges by weight and kind;
+    - aggregate `partition-violation` findings per area pair;
+    - add a size budget where the payload crosses from the worker to the host, and record what was trimmed in the trace;
+    - make `rememberLastSeen` stop blocking the host main thread.
 - `AE-G062` **The VS Code visualizer opens on "Ready to run" although reviews exist** (user, 2026-11-26, VSIX .224, hired.video).
   - Cause: on a run-gated host, only the `lastSeen` cache can paint without Run. It misses in three cases:
     - it was never written, or was over `LAST_SEEN_MAX_BYTES`;

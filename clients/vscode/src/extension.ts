@@ -25,6 +25,7 @@ import { afterWorkspaceScan, syncWorkspaceFacts } from "./workspace/workspaceFac
 import { watchWorkspaceSymbols } from "./workspace/workspaceSymbolWatch";
 import { workspaceSymbolIndex } from "./workspace/workspaceSymbols";
 import { activateLocalLevers } from "./models/localLevers";
+import { registerWorkspaceMcp } from "./workspace/registerWorkspaceMcp";
 import { getModels, getWebBaseUrl, getKimiCodeUnavailableReason, getLocalModelsConfig, SECRET_KEY, invalidateKimiInstallMemo } from "./gateway/gateway";
 import { clearPersonalityBlockCache } from "./memory/personalityLimbic";
 import { listLocalModels, localModelOptions, type LocalModel } from "./models/localModels";
@@ -155,6 +156,7 @@ export function activate(context: vscode.ExtensionContext): void {
   setShipCatalogSecrets(context.secrets);
   // Lever bucketing by install id, the symbol index's grammars, the local research model.
   activateLocalLevers(context);
+  registerWorkspaceMcp(context);
   // Installs the fetch guard now; the policy RESOLVES after the signed-in read —
   // `platformPolicyResolved()`, which every platform call started below waits on.
   void bindPlatformPolicy(context, SECRET_KEY);

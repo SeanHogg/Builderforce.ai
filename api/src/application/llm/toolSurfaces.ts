@@ -33,6 +33,7 @@
 // (which re-exports them): a registry that only reads ids must not drag the whole
 // catalog — and its dependency graph — into every consumer, including the routes.
 import { BUILTIN_EXTENSION_ID } from './toolNaming';
+import { requiresWriteApproval } from '@seanhogg/builderforce-mcp';
 import { CLOUD_AGENT_PLATFORM_TOOLS } from './cloudAgentToolset';
 import { CONNECTOR_EXTENSION_ID } from '../connectors/connectorTools';
 import type { McpToolEntry } from './mcpExtensionService';
@@ -158,7 +159,7 @@ function builtinMatches(entry: McpToolEntry, selection: BuiltinSelection): boole
     case 'tools':
       return selection.tools.includes(entry.tool);
     case 'readOnly':
-      return entry.mutates === false;
+      return !requiresWriteApproval(entry);
   }
 }
 
@@ -183,7 +184,7 @@ export function applyToolSurface(
           : 'extensions';
     if (!surface.sources.includes(source)) return false;
     if (source === 'builtin') return builtinMatches(entry, surface.builtin);
-    return surface.builtin.kind === 'readOnly' ? entry.mutates === false : true;
+    return surface.builtin.kind !== 'readOnly' || !requiresWriteApproval(entry);
   });
 }
 

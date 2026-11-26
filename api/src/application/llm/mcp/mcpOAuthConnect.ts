@@ -38,7 +38,7 @@ import {
   registerClient,
   type McpOAuthRegistration,
 } from './mcpOAuth';
-import { openRegistration, sealRegistration, storeGrant } from './mcpExtensionAuth';
+import { openRegistration, sealRegistration, storeGrant, unchangedMcpAuthorization } from './mcpExtensionAuth';
 import { listRemoteTools, McpAuthChallenge } from './mcpWireClient';
 import type { McpProtocol } from './mcpWireClient';
 
@@ -124,10 +124,12 @@ export async function beginMcpOAuthConnect(
   const registration: McpOAuthRegistration = { resource, ...endpoints, ...client };
   const { codeVerifier, codeChallenge } = await createPkcePair();
   const sealed = await sealRegistration(env, args.tenantId, { ...registration, codeVerifier });
-  await db
+  const [updated] = await db
     .update(tenantMcpExtensions)
     .set({ oauthEnc: sealed.enc, oauthIv: sealed.iv })
-    .where(and(eq(tenantMcpExtensions.id, row.id), eq(tenantMcpExtensions.tenantId, args.tenantId)));
+    .where(unchangedMcpAuthorization(row))
+    .returning({ id: tenantMcpExtensions.id });
+  if (!updated) return { ok: false, reason: 'not_found', message: 'The extension changed while authorization was starting' };
 
   const state = await signProviderConnectState(env, {
     providerName: MCP_STATE_PROVIDER,
@@ -171,18 +173,17 @@ export async function completeMcpOAuthConnect(
 
   try {
     const tokens = await exchangeMcpCode(consent, args.code, args.redirectUri);
-    await storeGrant(db, env, {
-      tenantId: state.tenantId,
-      extensionId: row.id,
-      tokens: grantFromTokenResponse(tokens),
-    });
-    // Burn the verifier: the consent it proves has been spent.
+    // Persist the grant and burn the verifier in the same conditional update.
     const { codeVerifier: _spent, ...registration } = consent;
     const sealed = await sealRegistration(env, state.tenantId, { ...registration, codeVerifier: '' });
-    await db
-      .update(tenantMcpExtensions)
-      .set({ oauthEnc: sealed.enc, oauthIv: sealed.iv })
-      .where(and(eq(tenantMcpExtensions.id, row.id), eq(tenantMcpExtensions.tenantId, state.tenantId)));
+    const stored = await storeGrant(db, env, {
+      current: row,
+      tokens: grantFromTokenResponse(tokens),
+      registration: sealed,
+    });
+    if (!stored) {
+      return { ok: false, reason: 'no_pending_consent', returnTo, message: 'The extension changed during authorization' };
+    }
     return { ok: true, returnTo };
   } catch (error) {
     return {

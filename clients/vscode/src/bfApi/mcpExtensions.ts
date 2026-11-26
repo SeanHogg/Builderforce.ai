@@ -1,4 +1,5 @@
 import type * as vscode from "vscode";
+import type { ConnectorOffer } from "@seanhogg/builderforce-mcp";
 import { authed, authedRaw } from "./transport";
 import { getCurrentWorkspace } from "./workspace";
 
@@ -21,6 +22,11 @@ export async function listMcpExtensions(secrets: vscode.SecretStorage): Promise<
   if (!ws) return [];
   const r = await authed<{ extensions?: BfMcpExtension[] }>(secrets, `/api/tenants/${ws.id}/mcp-extensions`);
   return r?.extensions ?? [];
+}
+
+export async function listMcpConnectorCatalog(secrets: vscode.SecretStorage): Promise<ConnectorOffer[]> {
+  const response = await authed<{ connectors?: ConnectorOffer[] }>(secrets, "/api/connectors/mcp/catalog");
+  return response?.connectors ?? [];
 }
 
 /** Register an external MCP server for the active workspace (owner-only server-side). */

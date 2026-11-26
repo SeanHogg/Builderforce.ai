@@ -50,7 +50,9 @@ export interface McpExtensionView {
   serverUrl: string;
   enabled: boolean;
   hasSecret: boolean;
-  /** Transport this server speaks: `auto` until a probe settles it (mig 1116). */
+  /** Registered extensions run through the remote HTTPS relay. */
+  transport: 'http';
+  /** Protocol this server speaks: `auto` until a probe settles it (mig 1116). */
   protocol: string;
   /** Tool names the tenant approved; null = every tool the server advertises. */
   allowedTools: string[] | null;
@@ -89,6 +91,7 @@ function toView(row: typeof tenantMcpExtensions.$inferSelect): McpExtensionView 
     serverUrl: row.serverUrl,
     enabled: row.enabled,
     hasSecret: row.secretEnc != null,
+    transport: 'http',
     protocol: row.protocol,
     allowedTools: row.allowedTools ?? null,
     authKind: authKindOf(row),
@@ -100,7 +103,15 @@ function toView(row: typeof tenantMcpExtensions.$inferSelect): McpExtensionView 
 
 export async function createMcpExtension(
   db: Db,
-  args: { tenantId: number; name: string; serverUrl: string; secret?: string | null; createdByUserId: string; keyMaterial: string },
+  args: {
+    tenantId: number;
+    name: string;
+    serverUrl: string;
+    secret?: string | null;
+    allowedTools?: string[] | null;
+    createdByUserId: string;
+    keyMaterial: string;
+  },
 ): Promise<McpExtensionView> {
   assertSafeServerUrl(args.serverUrl);
   const secretEnc = args.secret
@@ -113,6 +124,7 @@ export async function createMcpExtension(
       name: args.name,
       serverUrl: args.serverUrl,
       secretEnc,
+      allowedTools: args.allowedTools,
       createdByUserId: args.createdByUserId,
     })
     .returning();
@@ -145,14 +157,29 @@ export async function updateMcpExtension(
   },
 ): Promise<McpExtensionView | null> {
   const patch: Partial<typeof tenantMcpExtensions.$inferInsert> = {};
+  const scope = and(eq(tenantMcpExtensions.id, args.id), eq(tenantMcpExtensions.tenantId, args.tenantId));
+  let currentUrl: string | undefined;
   if (args.name !== undefined) patch.name = args.name;
   if (args.serverUrl !== undefined) {
     assertSafeServerUrl(args.serverUrl);
+    const [current] = await db.select({ serverUrl: tenantMcpExtensions.serverUrl })
+      .from(tenantMcpExtensions).where(scope).limit(1);
+    if (!current) return null;
+    currentUrl = current.serverUrl;
     patch.serverUrl = args.serverUrl;
-    // A server that MOVED is a different server: its transport must be re-probed
-    // rather than inherited, or a legacy pin would follow the URL to a real MCP
-    // endpoint and fail every call with a 404 nobody could explain.
-    patch.protocol = 'auto';
+    if (args.serverUrl !== currentUrl) {
+      // Credentials, grants, and consent were issued to the old endpoint.
+      Object.assign(patch, {
+        protocol: 'auto',
+        secretEnc: null,
+        oauthEnc: null,
+        oauthIv: null,
+        tokenEnc: null,
+        tokenIv: null,
+        oauthConnectedAt: null,
+        allowedTools: [],
+      });
+    }
   }
   if (args.enabled !== undefined) patch.enabled = args.enabled;
   if (args.allowedTools !== undefined) patch.allowedTools = args.allowedTools;
@@ -166,7 +193,7 @@ export async function updateMcpExtension(
   const [row] = await db
     .update(tenantMcpExtensions)
     .set(patch)
-    .where(and(eq(tenantMcpExtensions.id, args.id), eq(tenantMcpExtensions.tenantId, args.tenantId)))
+    .where(currentUrl === undefined ? scope : and(scope, eq(tenantMcpExtensions.serverUrl, currentUrl)))
     .returning();
   return row ? toView(row) : null;
 }
@@ -238,7 +265,10 @@ export async function listToolsForTenant(
             fetchImpl,
           });
           await rememberProtocol(db, row, listed.protocol);
+          const seen = new Set<string>();
           for (const tool of filterConsentedTools(row.allowedTools, listed.tools)) {
+            if (seen.has(tool.name)) continue;
+            seen.add(tool.name);
             all.push({
               extensionId: row.id,
               tool: tool.name,
@@ -273,7 +303,11 @@ async function rememberProtocol(
   await db
     .update(tenantMcpExtensions)
     .set({ protocol: resolved })
-    .where(scopedToTenant(tenantMcpExtensions, row.tenantId, eq(tenantMcpExtensions.id, row.id)));
+    .where(scopedToTenant(tenantMcpExtensions, row.tenantId, and(
+      eq(tenantMcpExtensions.id, row.id),
+      eq(tenantMcpExtensions.serverUrl, row.serverUrl),
+      eq(tenantMcpExtensions.protocol, row.protocol),
+    )));
 }
 
 /**

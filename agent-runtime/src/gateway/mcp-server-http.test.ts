@@ -16,7 +16,10 @@ it("serves the SDK workspace catalog and searches only the requested file", asyn
     }).catch(() => { res.statusCode = 500; res.end(); });
   });
   try {
-    await Promise.all(data.map((file) => writeFile(join(root, file), "const exactMarker = true;\n")));
+    await Promise.all([
+      writeFile(join(root, "match.ts"), "export function exactMarker() { return true; }\n"),
+      writeFile(join(root, "excluded.ts"), "import { exactMarker } from './match';\nexactMarker();\n"),
+    ]);
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", resolve);
@@ -43,16 +46,33 @@ it("serves the SDK workspace catalog and searches only the requested file", asyn
       name: "workspace__search",
       annotations: { readOnlyHint: true },
     }));
-    expect(catalog.result.tools.map((tool: { name: string }) => tool.name)).not.toContain("workspace__tickets_from_delta");
+    expect(catalog.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
+      "workspace__search", "workspace__symbol", "workspace__outline", "workspace__map", "workspace__references", "workspace__git_history",
+    ]);
 
     const result = await (await send("tools/call", {
       name: "workspace__search",
       arguments: { projectRoot: root, path: "match.ts", query: "exactMarker" },
     })).json();
     expect(result.result.structuredContent).toMatchObject({ ok: true, total: 1, matches: [{ path: "match.ts" }] });
+
+    const call = async (name: string, args: Record<string, unknown>) =>
+      (await send("tools/call", { name, arguments: { projectRoot: root, ...args } })).json();
+    const outline = await call("workspace__outline", { path: "match.ts" });
+    expect(outline.result.structuredContent).toMatchObject({ path: "match.ts", total: 1 });
+    const symbol = await call("workspace__symbol", { query: "exactMarker" });
+    expect(symbol.result.structuredContent.matches).toEqual([expect.stringContaining("match.ts:1")]);
+    const map = await call("workspace__map", {});
+    expect(map.result.structuredContent.map).toContain("match.ts");
+    const refs = await call("workspace__references", { texts: ["Use `exactMarker()` from `match.ts`, not `missing.ts`."] });
+    expect(refs.result.structuredContent.results).toEqual([
+      { index: 0, missing: [{ kind: "path", reference: "missing.ts" }] },
+    ]);
   } finally {
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
     await Promise.all(data.map((file) => rm(join(root, file), { force: true })));
+    await rm(join(root, ".builderForceAgents", "symbols.json"), { force: true });
+    await rmdir(join(root, ".builderForceAgents")).catch(() => undefined);
     await rmdir(root);
   }
 });

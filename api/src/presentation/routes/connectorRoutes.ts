@@ -117,7 +117,7 @@ export function createConnectorRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ connectors: await connectorActionCatalog(db, c.env as Env, tenantId) });
   });
 
-  router.get('/mcp-catalog', async (c) => {
+  router.get('/mcp/catalog', async (c) => {
     const tenantId = c.get('tenantId') as number;
     return c.json({ connectors: await listMcpConnectorCatalog(db, tenantId, c.env as Env) });
   });
