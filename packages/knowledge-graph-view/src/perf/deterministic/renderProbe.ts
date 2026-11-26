@@ -68,7 +68,7 @@ export interface RenderReport {
 
 /** The order the views are visited in (fixed: a view's cost depends on what the views before it left memoised).
  * Only cameras the switcher actually offers — `4plus1` was removed from the registry, so it is not probed. */
-export const VIEW_ORDER = ['system', 'graph', 'map', '3d', 'heat', 'list', 'transit', 'style', 'features'] as const;
+export const VIEW_ORDER = ['system', 'graph', 'map', '3d', 'heat', 'list', 'transit', 'style', 'features', 'flow', 'sequence'] as const;
 /** Bounds loopback rounds AND virtual timer fires together (each fire costs at least three calm rounds). */
 const MAX_ROUNDS = 400;
 /**
@@ -140,7 +140,6 @@ export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise
         const bar = (): Element | null => container.querySelector(`[role="radiogroup"][aria-label="${L.viewModesLabel}"]`);
         const seg = (id: string): HTMLButtonElement | null => bar()?.querySelector<HTMLButtonElement>(`[data-seg="${id}"]`) ?? null;
         const current = (): string | null | undefined => bar()?.querySelector('[data-seg][aria-checked="true"]')?.getAttribute('data-seg');
-        const button = (text: string): HTMLButtonElement | undefined => [...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === text && !b.disabled);
 
         await visit('boot', () => { container = host.render(tree); });
         const first = current();
@@ -149,23 +148,6 @@ export async function probeViews(graph: KnowledgeGraph, host: ViewHost): Promise
             if (id === first) continue; // the boot record is this view's
             if (!target || target.disabled) { skipped.push(id); continue; }
             await visit(id, () => { host.click(target); });
-        }
-        // Sequence has no button in the bar: the path strip's toggle opens it, its "enlarge" switches the view to it. The strip is
-        // the transit map's, so go back there first (unrecorded) when the loop ended elsewhere (the boot view was transit).
-        const transit = seg('transit');
-        if (current() !== 'transit' && transit && !transit.disabled) {
-            host.click(transit);
-            await settled();
-        }
-        if (button(L.surface.path.sequence)) {
-            await visit('sequence', () => {
-                host.click(button(L.surface.path.sequence)!);
-                const enlarge = button(L.surface.path.enlarge);
-                if (enlarge) host.click(enlarge);
-            });
-            if (!container.querySelector('[data-testid="kg-sequence"]')) skipped.push('sequence');
-        } else {
-            skipped.push('sequence');
         }
         // Copies: the unmount below still posts (cancels) into the live ledger, and the report is what the views did.
         return { views, skipped, wire: loop.ledger.summary(), wireEntries: [...loop.ledger.entries], tasks: [...loop.tasks], probe };

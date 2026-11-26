@@ -13,7 +13,7 @@
  * available here, and still offers "Open at line" when the host can open one.
  */
 
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
 import { CONTROL } from '../../styles';
@@ -22,12 +22,13 @@ import { actionGlyph, type ActionGlyphName } from '../../surface/ui/glyphs';
 import { TYPE } from '../../surface/ui/type';
 import type { SourceLocation, SourceReader, SourceText, SymbolRecord } from '../../types';
 import {
-    codeRows, drillRefForName, railShape, readingLineAt, scrollTopForLine, syntaxLight, visibleWindow, VIRTUAL_AFTER,
+    codeRows, drillRefForName, railShape, readingLineAt, scrollTopForLine, syntaxLight,
     type CallStep, type CodeTarget, type Lens, type RailKind, type TokenKind,
 } from './codeText';
 import type { CodeMarks } from './codeDiff';
 import { LINK_BUTTON } from './linkButton';
 import { visibleLensActions, type LensActionId, type LensCtx } from './lensActions';
+import { useVirtualRows } from './useVirtualRows';
 
 export interface CodeLayerProps {
     target: CodeTarget;
@@ -88,9 +89,8 @@ export interface CodeLayerProps {
 /** A lens link (`LENS_ACTIONS`): a class's references, Show in map; a method's callers, Drill in; and Out, Simulate, Restructure. */
 export type LensAction = LensActionId;
 
-/** One code row's height (px), and the rows a virtualized panel renders before it has measured itself. */
+/** One code row's height (px). */
 export const ROW_PX = 18;
-const VIEW_ROWS = 16;
 // The mockup's tints: the reading line a faint neutral band, a hovered symbol's lines the stronger accent, the rest of the file dimmed.
 const READING_TINT = `color-mix(in srgb, ${cssVar('text')} 5%, transparent)`;
 const MARKED_TINT = `color-mix(in srgb, ${cssVar('accent')} 14%, transparent)`;
@@ -178,26 +178,22 @@ export function CodeLayer({
     onViewport, onText, onPickLine, cursorLine, rails, railSpan, lens, onLens, lensCtx = null, sticky, onJump, marks, diffNote, movedTo,
 }: CodeLayerProps) {
     const t = labels.surface.code, card = labels.surface.map.card;
-    const linesRef = useRef<HTMLDivElement | null>(null);
     const read = useSourceLines(reader, target);
     const lines = read.state === 'ready' ? read.text.lines : [];
     const first = read.state === 'ready' ? read.text.startLine : target.startLine;
     const tokens = useMemo(() => syntaxLight(lines), [lines]);
     // Source rows with a lens row above each lens line; every row is ROW_PX, so scrolling works in rows and maps to lines.
     const layout = useMemo(() => codeRows(lines.length, first, lens), [lines.length, first, lens]);
-    const [scrollTop, setScrollTop] = useState(0);
-    const [viewPx, setViewPx] = useState(0);
-    useLayoutEffect(() => { setViewPx(linesRef.current?.clientHeight ?? 0); }, [read.state]);
+    const total = layout.rows.length;
+    const { ref: linesRef, onScroll, scrollTop, viewPx, from, to, virtual, scrollTo } = useVirtualRows(total, ROW_PX, { measureKey: read.state });
     useEffect(() => { if (read.state === 'ready') onText?.(read.text); }, [read, onText]);
     // Only a following panel has a reading line below the top; the anchored layer keeps scrolling lines to the top.
     const lead = onReadingLine ? viewPx : 0;
     // Selection and the journey step both hand a source line; the panel scrolls so that line is the one on show.
     useEffect(() => {
         if (scrollLine == null) return;
-        const top = scrollTopForLine(layout.rowOfLine(scrollLine), 0, ROW_PX, lead);
-        setScrollTop(top);
-        if (linesRef.current && linesRef.current.scrollTop !== top) linesRef.current.scrollTop = top;
-    }, [scrollLine, layout, lead]);
+        scrollTo(scrollTopForLine(layout.rowOfLine(scrollLine), 0, ROW_PX, lead));
+    }, [scrollLine, layout, lead, scrollTo]);
     const reading = layout.lineAtRow(readingLineAt(scrollTop, lead, 0, ROW_PX));
     // Reported when the line moves, not when a handler is new (a re-run would drop a clicked line or a pinned step).
     const reported = useRef<number | null>(null);
@@ -214,9 +210,6 @@ export function CodeLayer({
         return m;
     }, [steps]);
     const stepCount = steps?.length ?? 0;
-    const total = layout.rows.length;
-    const { from, to } = visibleWindow(total, scrollTop, ROW_PX, viewPx > 0 ? Math.ceil(viewPx / ROW_PX) : VIEW_ROWS);
-    const virtual = total > VIRTUAL_AFTER;
     // The lines on screen: the rows the panel's height shows (before it has measured, the rows it renders).
     const viewFirst = layout.lineAtRow(Math.floor(scrollTop / ROW_PX));
     const viewLast = layout.lineAtRow(viewPx > 0 ? Math.ceil((scrollTop + viewPx) / ROW_PX) - 1 : to - 1);
@@ -283,7 +276,7 @@ export function CodeLayer({
             {read.state === 'none' && <div role="note" data-code-unavailable style={TYPE.monoMeta}>{t.unavailable}</div>}
             {read.state === 'ready' && (
                 <div
-                    ref={linesRef} data-code-lines tabIndex={0} onScroll={(e) => { setScrollTop(e.currentTarget.scrollTop); setViewPx(e.currentTarget.clientHeight); }}
+                    ref={linesRef} data-code-lines tabIndex={0} onScroll={onScroll}
                     onKeyDown={onOut ? (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onOut(); } } : undefined}
                     style={{ ...TYPE.mono, minHeight: 0, overflow: 'auto', background: cssVar('panel'), borderRadius: 6, padding: '4px 0' }}
                 >
