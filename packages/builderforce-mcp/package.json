@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Builderforce MCP contracts, tool policy, SDK transports, and platform relay",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SeanHogg/Builderforce.ai.git",
+    "directory": "packages/builderforce-mcp"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./policy": "./src/policy.ts",
@@ -23,7 +29,9 @@
   },
   "scripts": {
     "build": "tsc6 && node build.mjs",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "type-check": "tsc6 --noEmit --emitDeclarationOnly false",
+    "test": "pnpm run build && node --test test/package.test.mjs"
   },
   "files": ["dist"],
   "publishConfig": {

@@ -14,6 +14,8 @@ public struct PlatformTool: Decodable, Sendable, Equatable {
     public let parameters: AnyCodable?
     /// Whether it changes anything. Absent (a tenant's own MCP server) counts as yes.
     public let mutates: Bool?
+    private let modelTool: CompletionTool?
+    private let approvalRequired: Bool?
 
     enum CodingKeys: String, CodingKey {
         case extensionId
@@ -22,6 +24,8 @@ public struct PlatformTool: Decodable, Sendable, Equatable {
         case description
         case parameters
         case mutates
+        case modelTool
+        case approvalRequired
     }
 
     public init(
@@ -38,6 +42,8 @@ public struct PlatformTool: Decodable, Sendable, Equatable {
         self.description = description
         self.parameters = parameters
         self.mutates = mutates
+        self.modelTool = nil
+        self.approvalRequired = nil
     }
 
     public init(from decoder: any Decoder) throws {
@@ -45,14 +51,19 @@ public struct PlatformTool: Decodable, Sendable, Equatable {
         self.extensionId = try container.decode(String.self, forKey: .extensionId)
         self.tool = try container.decode(String.self, forKey: .tool)
         self.name = try container.decode(String.self, forKey: .name)
-        self.description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+        let modelTool = try container.decodeIfPresent(CompletionTool.self, forKey: .modelTool)
+        self.description = try container.decodeIfPresent(String.self, forKey: .description)
+            ?? modelTool?.function.description ?? ""
         self.parameters = try container.decodeIfPresent(AnyCodable.self, forKey: .parameters)
+            ?? modelTool?.function.parameters
         self.mutates = try container.decodeIfPresent(Bool.self, forKey: .mutates)
+        self.modelTool = modelTool
+        self.approvalRequired = try container.decodeIfPresent(Bool.self, forKey: .approvalRequired)
     }
 
     /// Whether running it needs the person's go-ahead.
     public var writes: Bool {
-        self.mutates != false
+        self.approvalRequired ?? (self.mutates != false)
     }
 
     /// A tool's name as a person reads it: `builtin_tasks_create` → `tasks create`.
@@ -67,7 +78,7 @@ public struct PlatformTool: Decodable, Sendable, Equatable {
 
     /// The tool as a completion request offers it to the model.
     var asFunction: CompletionTool {
-        CompletionTool(function: CompletionTool.Function(
+        self.modelTool ?? CompletionTool(function: CompletionTool.Function(
             name: self.name,
             description: self.description,
             parameters: self.parameters ?? AnyCodable(["type": "object", "properties": [String: Any]()])))
@@ -87,7 +98,7 @@ struct PlatformToolsClient: Sendable {
         struct Listing: Decodable { let tools: [PlatformTool]? }
         let request = try self.session.gatewayRequest(
             method: "GET",
-            path: "/mcp/tools?surface=\(surface)",
+            path: "/mcp/tools?surface=\(surface)&format=openai",
             body: nil,
             timeout: CloudSession.apiTimeout)
         let data = try await Self.body(self.session.http.send(request))
@@ -104,7 +115,7 @@ struct PlatformToolsClient: Sendable {
         let body = try CloudJSON.encode(Call(extensionId: tool.extensionId, tool: tool.tool, arguments: arguments))
         let request = try self.session.gatewayRequest(
             method: "POST",
-            path: "/mcp/call",
+            path: "/mcp/call?format=openai",
             body: body,
             timeout: Self.callTimeout)
         let data = try await Self.body(self.session.http.send(request))
@@ -116,7 +127,9 @@ struct PlatformToolsClient: Sendable {
         guard let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
             return String(decoding: data, as: UTF8.self)
         }
-        let result = (object as? [String: Any])?["result"] ?? object
+        let envelope = object as? [String: Any]
+        if let text = envelope?["modelText"] as? String { return text }
+        let result = envelope?["result"] ?? object
         if let text = result as? String { return text }
         guard JSONSerialization.isValidJSONObject(result),
               let encoded = try? JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])

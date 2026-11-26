@@ -47,7 +47,7 @@ export function packScopeRows(): KnowledgeScopeRow[] {
 export async function packRootGraph(entry: KnowledgePackEntry, query: PackGraphQuery): Promise<KnowledgeGraph | null> {
   if (!entry.path) return null;
   // Built in the graph worker, which reads the pack file itself: nothing of the pack is parsed on this thread.
-  return buildOffThread({ kind: "pack", file: entry.path, ...(query.focus?.length ? { focus: query.focus } : {}), ...(query.maxNodes ? { maxNodes: query.maxNodes } : {}) });
+  return buildOffThread({ kind: "pack", file: entry.path, view: true,...(query.focus?.length ? { focus: query.focus } : {}), ...(query.maxNodes ? { maxNodes: query.maxNodes } : {}) });
 }
 
 /** The root a call would write to or review, when it names one. */

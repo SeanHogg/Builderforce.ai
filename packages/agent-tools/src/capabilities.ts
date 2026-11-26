@@ -729,6 +729,8 @@ export interface SemanticSearchResult {
   results?: SemanticSearchHit[];
   /** True when the index is still being built — results may be incomplete. */
   indexing?: boolean;
+  /** A scan budget, concurrent refresh, or file change limited the searchable snapshot. */
+  partial?: boolean;
   error?: string;
 }
 

@@ -30,6 +30,7 @@ import {
   getStoredTenantToken,
   getStoredWebToken,
 } from './auth';
+import { renewAfterUnauthorized } from './auth/tokenRenewal';
 import { tenantIdFromToken } from './tokenClaims';
 import { planLimitErrorFromResponse } from './planLimitError';
 import { dispatchApiError } from './errors/apiErrorEvent';
@@ -488,11 +489,20 @@ async function sendRequest(
   // raises no toast and files no report; best-effort callers read it as "nothing".
   await assertPlatformAllows(url, method, hadToken || !!optHeaders?.Authorization);
 
-  const res = await fetchWithTransportReport(
+  const send = (headers: Record<string, string>) => fetchWithTransportReport(
     url,
-    { ...init, headers: { ...authHeaders, ...optHeaders } as HeadersInit },
+    { ...init, headers: { ...headers, ...optHeaders } as HeadersInit },
     { silent: expectedErrors?.includes(TRANSPORT_FAILURE_STATUS) ?? false },
   );
+  let res = await send(authHeaders);
+
+  // A lapsed token is renewed in the background; ONE retry with the fresh token before
+  // the 401 is treated as a real sign-out. Never for a caller-supplied credential or a
+  // body that cannot be sent twice.
+  if (res.status === 401 && hadToken && !optHeaders?.Authorization && !(typeof ReadableStream !== 'undefined' && init.body instanceof ReadableStream)
+    && await renewAfterUnauthorized(authHeaders.Authorization)) {
+    res = await send(getAuthHeaders(wantsJson ? { 'Content-Type': 'application/json' } : {}, auth));
+  }
 
   checkUnauthorizedAndRedirect(res, hadToken);
   if (res.status === 402) throw await planLimitErrorFromResponse(res);

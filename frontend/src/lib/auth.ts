@@ -161,6 +161,14 @@ export function persistSession(
   if (tenant) localStorage.setItem(TENANT_KEY, JSON.stringify(tenant));
 }
 
+/** Replace ONLY the stored web token (a background renewal) — user and workspace stay as they are. */
+export function persistWebToken(webToken: string): void {
+  if (!isBrowser()) return;
+  const secure = window.location?.protocol === 'https:' ? '; Secure' : '';
+  localStorage.setItem(WEB_TOKEN_KEY, webToken);
+  document.cookie = `bf_web_token=${webToken}; path=/; SameSite=Lax${secure}`;
+}
+
 export function persistTenantSession(tenantToken: string, tenant: Tenant): void {
   if (!isBrowser()) return;
   const secure = window.location?.protocol === 'https:' ? '; Secure' : '';

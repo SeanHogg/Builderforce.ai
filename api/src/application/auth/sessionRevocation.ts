@@ -63,7 +63,13 @@ export interface ActiveTokenRow {
  * and an INNER JOIN would make it indistinguishable from a revoked session. The
  * caller separates the two cases via {@link assertActiveToken}.
  */
-export async function findActiveToken(db: Db, userId: string, jti: string): Promise<ActiveTokenRow | null> {
+export async function findActiveToken(
+  db: Db,
+  userId: string,
+  jti: string,
+  /** Treat a token that lapsed up to this many seconds ago as still live (renewal only). */
+  expiredGraceSeconds = 0,
+): Promise<ActiveTokenRow | null> {
   const [row] = await db
     .select({
       jti: authTokens.jti,
@@ -92,7 +98,7 @@ export async function findActiveToken(db: Db, userId: string, jti: string): Prom
         eq(authTokens.jti, jti),
         eq(authTokens.userId, userId),
         isNull(authTokens.revokedAt),
-        gt(authTokens.expiresAt, new Date()),
+        gt(authTokens.expiresAt, new Date(Date.now() - expiredGraceSeconds * 1000)),
       ),
     )
     .limit(1);

@@ -1,4 +1,4 @@
-import type { RelayToolEntry } from "./tool.js";
+import { requiresWriteApproval, toOpenAI, type RelayToolEntry } from "./tool.js";
 
 export const PLATFORM_EXTENSION_ID = "builtin";
 export const MCP_CATALOG_TTL_MS = 60_000;
@@ -31,6 +31,26 @@ export interface RelayCallResult {
   error?: string;
 }
 
+/** Optional projection for hosts consuming the relay from a native runtime. */
+export function toRelayModelTool(entry: RelayToolEntry) {
+  const { extensionId, tool, name } = entry;
+  return { extensionId, tool, name, modelTool: toOpenAI(entry), approvalRequired: requiresWriteApproval(entry) };
+}
+
+export function relayModelText(value: unknown): string {
+  if (typeof value === "string") return value;
+  return JSON.stringify(value) ?? "{}";
+}
+
+export async function readMcpRelayCatalog(
+  response: Response,
+  failure?: (status: number) => string,
+): Promise<RelayToolEntry[]> {
+  if (!response.ok) throw new Error(failure?.(response.status) ?? `tool catalog unavailable (HTTP ${response.status})`);
+  const body = (await response.json()) as RelayCatalog;
+  return Array.isArray(body.tools) ? body.tools : [];
+}
+
 export function createMcpRelay(options: {
   baseUrl: string;
   token?: string | null;
@@ -53,12 +73,8 @@ export function createMcpRelay(options: {
   }
 
   return {
-    async list(surface?: string, failure?: (status: number) => string): Promise<RelayToolEntry[]> {
-      const response = await request(mcpCatalogPath(surface));
-      if (!response.ok) throw new Error(failure?.(response.status) ?? `tool catalog unavailable (HTTP ${response.status})`);
-      const body = (await response.json()) as RelayCatalog;
-      return Array.isArray(body.tools) ? body.tools : [];
-    },
+    list: async (surface?: string, failure?: (status: number) => string) =>
+      readMcpRelayCatalog(await request(mcpCatalogPath(surface)), failure),
     call: (call: RelayToolCall) => request(MCP_CALL_PATH, mcpCallRequest(call)),
   };
 }

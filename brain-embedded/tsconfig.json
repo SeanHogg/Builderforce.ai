@@ -28,6 +28,7 @@
     "paths": {
       "@seanhogg/builderforce-mcp": ["../packages/builderforce-mcp/src/index.ts"],
       "@builderforce/code-shield": ["../packages/code-shield/src/index.ts"],
+      "@builderforce/secret-redaction": ["../packages/secret-redaction/src/index.ts"],
       "@builderforce/sarif": ["../packages/sarif/src/index.ts"],
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-run": ["../packages/agent-run/src/index.ts"],

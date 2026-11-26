@@ -48,7 +48,7 @@ it("serves the SDK workspace catalog and searches only the requested file", asyn
       annotations: { readOnlyHint: true },
     }));
     expect(catalog.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
-      "workspace__search", "workspace__symbol", "workspace__outline", "workspace__map", "workspace__references", "workspace__git_history",
+      "workspace__search", "workspace__symbol", "workspace__outline", "workspace__map", "workspace__references", "workspace__git_history", "workspace__find",
     ]);
 
     const result = await (await send("tools/call", {
@@ -69,6 +69,10 @@ it("serves the SDK workspace catalog and searches only the requested file", asyn
     expect(refs.result.structuredContent.results).toEqual([
       { index: 0, missing: [{ kind: "path", reference: "missing.ts" }] },
     ]);
+    const found = await call("workspace__find", { query: "exactMarker", path: "match.ts" });
+    expect(found.result.structuredContent).toMatchObject({
+      ok: true, results: [{ at: "match.ts:1-1", snippet: expect.stringContaining("return true") }],
+    });
   } finally {
     vi.unstubAllEnvs();
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));

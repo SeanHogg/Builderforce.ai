@@ -1,0 +1,9 @@
+{
+  "name": "@seanhogg/builderforce-code-index",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared local code-body indexing for Workspace MCP, built on the Memory knowledge index",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@seanhogg/builderforce-memory": "^2026.10.85" }
+}

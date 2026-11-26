@@ -40,7 +40,7 @@ it("resolves the Workspace MCP contribution's label in each extension locale", a
   }
 });
 
-it("advertises hybrid search and compression only while their backend is reachable", async () => {
+it("finds code bodies without Desktop and enables compression only with its backend", async () => {
   const root = await mkdtemp(join(tmpdir(), "bf-workspace-mcp-desktop-"));
   const discovery = join(root, "desktop.json");
   vi.stubEnv("BUILDERFORCE_DESKTOP_DISCOVERY", discovery);
@@ -48,22 +48,16 @@ it("advertises hybrid search and compression only while their backend is reachab
   const requests = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.endsWith("/health")) return Response.json(compressorReady ? { compress: "ready" } : {});
     const args = JSON.parse(String(init?.body));
-    if (url.endsWith("/search")) {
-      expect(args).toMatchObject({ root, query: "where do we verify paths" });
-      return Response.json({
-        status: { phase: { state: "ready" } },
-        results: [{ path: "test.ts", startLine: 4, endLine: 9, snippet: "function verifyPath() {}", source: "hybrid" }],
-      });
-    }
     expect(url).toMatch(/\/compress$/);
     expect(args.text.length).toBeGreaterThan(4000);
     return Response.json({ text: "Concise prose.", originalTokens: 1800, keptTokens: 8 });
   });
   setDesktopFetchForTests(requests);
   try {
+    await writeFile(join(root, "test.ts"), "export function verifyPath() {\n  return 'coordinate bounds';\n}\n");
     const server = await startWorkspaceMcpListener(createWorkspaceMcpTools(() => ({
       root, caps: buildLocalCapabilityProvider(root),
-    })));
+    }), { embedder: async () => undefined }));
     try {
       const rpc = async (method: string, params = {}) => (await fetch(server.url, {
         method: "POST",
@@ -71,22 +65,19 @@ it("advertises hybrid search and compression only while their backend is reachab
         body: JSON.stringify({ jsonrpc: "2.0", id: "test", method, params }),
       })).json();
       const list = async () => (await rpc("tools/list")).result.tools.map((tool: { name: string }) => tool.name);
-      expect(await list()).not.toContain("workspace__find");
+      expect(await list()).toContain("workspace__find");
       expect(await list()).not.toContain("workspace__compress");
       expect(requests).not.toHaveBeenCalled();
 
-      await writeFile(discovery, JSON.stringify({ port: 4321, token: "test", pid: 1, version: "test" }));
-      forgetDesktopProbe();
-      expect(await list()).toContain("workspace__find");
-      expect(await list()).not.toContain("workspace__compress");
       const found = await rpc("tools/call", {
         name: "workspace__find",
-        arguments: { query: "where do we verify paths" },
+        arguments: { query: "coordinate bounds", path: "test.ts" },
       });
       expect(found.result.structuredContent.results[0]).toMatchObject({
-        at: "test.ts:4-9", via: "hybrid",
+        at: "test.ts:1-3", via: "keyword", snippet: expect.stringContaining("coordinate bounds"),
       });
-
+      expect(requests).not.toHaveBeenCalled();
+      await writeFile(discovery, JSON.stringify({ port: 4321, token: "test", pid: 1, version: "test" }));
       compressorReady = true;
       forgetDesktopProbe();
       expect(await list()).toContain("workspace__compress");
@@ -109,6 +100,7 @@ it("advertises hybrid search and compression only while their backend is reachab
     setDesktopFetchForTests(null);
     vi.unstubAllEnvs();
     await rm(discovery, { force: true });
+    await rm(join(root, "test.ts"), { force: true });
     await rmdir(root);
   }
 });

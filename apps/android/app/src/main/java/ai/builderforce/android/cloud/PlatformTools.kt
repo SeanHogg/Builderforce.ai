@@ -25,14 +25,16 @@ data class PlatformTool(
   val parameters: JsonElement?,
   /** Whether it changes anything. Absent (a tenant's own MCP server) counts as yes. */
   val mutates: Boolean?,
+  private val modelTool: JsonObject? = null,
+  private val approvalRequired: Boolean? = null,
 ) {
   /** Whether running it needs the person's go-ahead. */
   val writes: Boolean
-    get() = mutates != false
+    get() = approvalRequired ?: (mutates != false)
 
   /** The tool as a completion request offers it to the model. */
   fun asFunction(): JsonObject =
-    buildJsonObject {
+    modelTool ?: buildJsonObject {
       put("type", JsonPrimitive("function"))
       put(
         "function",
@@ -59,16 +61,20 @@ fun toolLabel(name: String): String = name.removePrefix("builtin_").replace('_',
 class PlatformTools(private val session: CloudSession) {
   /** The tools of one catalog surface (`delivery`, `readonly`, …). */
   suspend fun list(surface: String): List<PlatformTool> {
-    val v = readJson(session.gateway("GET", "/mcp/tools?surface=$surface", null, CloudHttp.client))
+    val v = readJson(session.gateway("GET", "/mcp/tools?surface=$surface&format=openai", null, CloudHttp.client))
     return v.objOrNull()?.get("tools").arrOrEmpty().mapNotNull { el ->
       val o = el.objOrNull() ?: return@mapNotNull null
+      val modelTool = o["modelTool"].objOrNull()
+      val function = modelTool?.get("function").objOrNull()
       PlatformTool(
         extensionId = o["extensionId"].textOrNull() ?: return@mapNotNull null,
         tool = o["tool"].textOrNull() ?: return@mapNotNull null,
         name = o["name"].textOrNull() ?: return@mapNotNull null,
-        description = o["description"].textOrNull().orEmpty(),
-        parameters = o["parameters"],
+        description = (o["description"].textOrNull() ?: function?.get("description").textOrNull()).orEmpty(),
+        parameters = o["parameters"] ?: function?.get("parameters"),
         mutates = o["mutates"].boolOrNull(),
+        modelTool = modelTool,
+        approvalRequired = o["approvalRequired"].boolOrNull(),
       )
     }
   }
@@ -81,7 +87,8 @@ class PlatformTools(private val session: CloudSession) {
         put("tool", JsonPrimitive(tool.tool))
         put("arguments", arguments)
       }
-    val v = readJson(session.gateway("POST", "/mcp/call", body, CloudHttp.toolClient))
+    val v = readJson(session.gateway("POST", "/mcp/call?format=openai", body, CloudHttp.toolClient))
+    v.objOrNull()?.get("modelText").textOrNull()?.let { return it }
     val result = v.objOrNull()?.get("result") ?: v
     return if (result is JsonPrimitive && result.isString) result.content else result.toString()
   }

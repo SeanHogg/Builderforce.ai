@@ -12,6 +12,7 @@ import { protectToolOutput } from "@seanhogg/builderforce-mcp/policy";
 import { ErrorCode, mcpRejection, safeToolError } from "@seanhogg/builderforce-mcp/protocol";
 import { serveStatelessMcp } from "@seanhogg/builderforce-mcp/server";
 import { buildNodeCapabilityProvider } from "../agents/node-capability-provider.js";
+import { onPremTreeSitterDir } from "../agents/on-prem-symbol-index.js";
 import { agentFleetTool } from "../builderforce/tools/agent-fleet-tool.js";
 import { codebaseSearchTool } from "../builderforce/tools/codebase-search-tool.js";
 import { gitHistoryTool } from "../builderforce/tools/git-history-tool.js";
@@ -75,7 +76,13 @@ const WORKSPACE_TOOLS = createWorkspaceMcpTools((projectRoot) => {
   if (!projectRoot || !isAbsolute(projectRoot)) throw new Error("An absolute projectRoot is required");
   const root = resolve(projectRoot);
   return { root, caps: buildNodeCapabilityProvider({ workspaceRoot: root }) };
-}, { requireRoot: true });
+}, {
+  requireRoot: true,
+  grammar: () => {
+    const wasmDir = onPremTreeSitterDir();
+    return wasmDir ? { wasmDir } : {};
+  },
+});
 
 function nodeRequestHeaders(req: IncomingMessage): Headers {
   const headers = new Headers();

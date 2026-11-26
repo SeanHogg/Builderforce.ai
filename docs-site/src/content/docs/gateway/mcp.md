@@ -76,8 +76,24 @@ your registered MCP servers, or feature-gated tools. `tools/call` always
 requires the key, and a presented-but-invalid key is a `401` challenge even on
 discovery (it is never silently downgraded to the anonymous catalog).
 
-Because the server is stateless, `GET /mcp` and `DELETE /mcp` return `405`: there
-is no stream to open and no session to end. Send everything as `POST`.
+The default profile handles MCP requests as `POST`. Its `GET` and `DELETE`
+methods return `405`.
+
+### Catalog notifications, resources, and prompts
+
+Configure an MCP client with Streamable HTTP notification support to use
+`https://api.builderforce.ai/mcp?profile=interactive` and the same Bearer header
+on every request. Combine it with `&surface=readonly` or another tool surface when
+you need a narrower catalog.
+
+- Open the optional `GET` stream with `Accept: text/event-stream`. The server
+  checks the authorized tool catalog every 30 seconds and sends
+  `notifications/tools/list_changed` when the catalog changes. Fetch `tools/list`
+  again when you receive it. The stream closes after four minutes or when the
+  credential loses access. Reopen the stream and refresh the catalog if it closes.
+- Use `resources/list` and `resources/read` to read the catalog guide at
+  `builderforce://mcp/catalog`.
+- Use `prompts/list` and `prompts/get` to load the `discover_tools` prompt.
 
 ## Verify it by hand
 

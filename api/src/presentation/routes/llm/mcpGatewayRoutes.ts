@@ -1,5 +1,6 @@
 import { protectToolOutput } from "@seanhogg/builderforce-mcp/policy";
 import { safeToolError } from "@seanhogg/builderforce-mcp/protocol";
+import { relayModelText, toRelayModelTool } from "@seanhogg/builderforce-mcp";
 /**
  * The gateway's REST MCP transport — the tenant's MCP extension tools, advertised to
  * the client-side Brain tool loop and relayed server-to-server. The customer's MCP
@@ -50,7 +51,10 @@ export function mountMcpGatewayRoutes(router: Hono<HonoEnv>): void {
         // loops: 5 refused mutating calls in one run).
         role: access.role,
       });
-      return c.json({ tools, surface: c.req.query('surface')?.trim() || DEFAULT_TOOL_SURFACE });
+      return c.json({
+        tools: c.req.query('format') === 'openai' ? tools.map(toRelayModelTool) : tools,
+        surface: c.req.query('surface')?.trim() || DEFAULT_TOOL_SURFACE,
+      });
     } catch (e) {
       if (e instanceof UnknownToolSurfaceError) {
         return c.json(
@@ -97,7 +101,10 @@ export function mountMcpGatewayRoutes(router: Hono<HonoEnv>): void {
           executionCtx: c.executionCtx,
         },
       );
-      return c.json({ result: protectToolOutput(body.tool, result) });
+      const safe = protectToolOutput(body.tool, result);
+      return c.req.query('format') === 'openai'
+        ? c.json({ modelText: relayModelText(safe) })
+        : c.json({ result: safe });
     } catch (e) {
       // Recoverable: hand the model a tool-error result, don't 500 the loop — but the
       // STATUS has to say which KIND of failure it was. Every throw used to become a

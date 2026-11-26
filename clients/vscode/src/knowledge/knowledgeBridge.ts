@@ -20,9 +20,8 @@ import {
 } from "./knowledgeProtocol";
 import { KnowledgeFixSession } from "./knowledgeFixSession";
 import { createLoadTrace, type TracedCall, type TraceFields } from "./knowledgeLoadTrace";
-import { join } from "node:path";
-import { LAST_SEEN_MAX_BYTES, readLastSeen, workspaceKey, writeLastSeen } from "./knowledgeLastSeen";
-import { createRollingLog, type RollingLog } from "./knowledgeRollingLog";
+import { workspaceKey } from "./knowledgeLastSeen";
+import { KnowledgeLastSeenHost } from "./knowledgeLastSeenHost";
 import { vscodeFixPorts } from "./knowledgeFixesHost";
 import { rootHistory } from "./knowledgeHistory";
 import { pinpointRoot } from "./knowledgePinpointHost";
@@ -52,8 +51,6 @@ import { messageOf } from "../shared/messageOf";
 
 /** Search hits the view shows at most. */
 const SEARCH_HITS = 20;
-/** Lines of the persisted rolling log a `loadTrace` answer carries. */
-const LOG_TAIL_LINES = 80;
 
 const isGraph = (answer: unknown): answer is KnowledgeGraph =>
   !!answer && typeof answer === "object" && Array.isArray((answer as KnowledgeGraph).nodes) && Array.isArray((answer as KnowledgeGraph).edges);
@@ -85,9 +82,9 @@ export class KnowledgeBridge implements vscode.Disposable {
   /** The scopes the view last listed: written beside the graph the next open paints first. */
   private lastScopes: KnowledgeScopeRow[] | undefined;
   /** The timings of the calls the view's first paint waits on (the Diagnostics' First load section, `loadTrace`). */
-  private readonly trace = createLoadTrace({ log: (line) => this.note("timing", line) });
-  /** The persisted rolling log (global storage): survives a reload or a crash; its tail rides `loadTrace` into Copy diagnostics. */
-  private readonly rolling: RollingLog;
+  private readonly trace = createLoadTrace({ log: (line) => this.seen.note("timing", line) });
+  /** The last-seen file and the persisted rolling log (global storage): its tail rides `loadTrace` into Copy diagnostics. */
+  private readonly seen: KnowledgeLastSeenHost;
   /** How the view last loaded each root; Live's refresh repeats it. */
   private readonly loadedBy = new Map<string, GraphQuery>();
   /** The counts of the last graph built per root: the sync status reads them instead of building one. */
@@ -114,14 +111,8 @@ export class KnowledgeBridge implements vscode.Disposable {
   });
 
   constructor(private readonly host: KnowledgeBridgeHost) {
-    this.rolling = createRollingLog(join(host.ctx.globalStorageUri.fsPath, "knowledge-log", "knowledge.log"), { onError: (error) => log("log file", messageOf(error)) });
+    this.seen = new KnowledgeLastSeenHost(host.ctx.globalStorageUri.fsPath, () => this.lastSeenKey());
     this.reviews = new KnowledgeReviewSessions(host.ctx.secrets, (e) => this.event(e), `BuilderForce for VS Code ${host.ctx.extension.packageJSON.version as string}`);
-  }
-
-  /** ONE line to the BuilderForce output channel AND the persisted rolling log. */
-  private note(tag: string, line: string): void {
-    log(tag, line);
-    this.rolling.append(`${tag}: ${line}`);
   }
 
   private event(event: KnowledgeEvent): void {
@@ -139,17 +130,13 @@ export class KnowledgeBridge implements vscode.Disposable {
     switch (call.op) {
       case "scopes": return this.trace.run("scopes", undefined, async () => (this.lastScopes = await this.scopes()), (rows) => ({ count: rows.length }));
       case "lastSeen": return this.trace.run("lastSeen", undefined, async (traced) => {
-        const key = this.lastSeenKey();
-        const seen = await readLastSeen(this.host.ctx.globalStorageUri.fsPath, key, (reason) => {
-          traced.set({ via: reason });
-          this.note("lastSeen", `read missed (${reason}); key=${key}`);
-        });
+        const seen = await this.seen.read((f) => traced.set(f));
         // The snapshot is the last graph built for its root: the sync status counts from it until a fresher one is built.
         if (seen) this.built.noteSnapshot(seen.rootId, seen.graph);
         return seen;
       }, (seen) => graphFields(seen.graph));
       case "load": return this.trace.run("load", call.rootId, (traced) => this.load(call, traced), (answer) => (isGraph(answer) ? graphFields(answer) : {}));
-      case "loadTrace": return { ...this.trace.snapshot(), log: await this.rolling.tail(LOG_TAIL_LINES) };
+      case "loadTrace": return { ...this.trace.snapshot(), log: await this.seen.logTail() };
       case "targets": return this.targets();
       case "plan": this.reviews.planOver(call.req, call.stream); return null;
       case "run": return { started: this.reviews.start(call.reviewId) };
@@ -164,7 +151,7 @@ export class KnowledgeBridge implements vscode.Disposable {
         // the background indexer for its folder and its save re-seed — and the view hears deltas only.
         this.live.get(call.stream)?.();
         const { rootId, stream } = call;
-        this.note("run", `live start root=${rootId} stream=${stream}`);
+        this.seen.note("run", `live start root=${rootId} stream=${stream}`);
         // Only a root an open workspace folder holds runs: a stale or root-less id subscribes to nothing and never
         // starts a session or an L3 request (no knowledge work starts for a folder that is not here).
         if (!rootById(rootId, workspaceFolders())) return null;
@@ -262,7 +249,7 @@ export class KnowledgeBridge implements vscode.Disposable {
     try {
       graph = pack
         ? await traced.timer.phase("pack", () => packRootGraph(pack, query))
-        : await loadGraph(this.secrets, call.rootId, query, traced.timer, undefined, { signal: build.signal });
+        : await loadGraph(this.secrets, call.rootId, query, traced.timer, undefined, { signal: build.signal, view: true });
     } finally {
       build.end();
     }
@@ -295,19 +282,10 @@ export class KnowledgeBridge implements vscode.Disposable {
       await this.trace.run("rememberLastSeen", rootId, async (traced) => {
         const scopes = this.lastScopes ?? await this.scopes();
         // Serialised in slices that release the thread (`knowledgeLastSeen.ts`), so a huge graph never blocks the host for seconds.
-        const written = await writeLastSeen(this.host.ctx.globalStorageUri.fsPath, this.lastSeenKey(), { scopes, rootId, graph }, (r) => {
-          const mb = (n: number): string => `${(n / 1048576).toFixed(1)}MB`;
-          traced.set({ via: `${r.outcome} ${mb(r.bytes)}` });
-          this.note("lastSeen", r.outcome === "written"
-            ? `written root=${rootId} ${r.bytes}B (${mb(r.bytes)}) in ${r.ms}ms`
-            : r.outcome === "oversize"
-              ? `NOT written root=${rootId}: over the ${mb(LAST_SEEN_MAX_BYTES)} cap (at least ${r.bytes}B counted, ${r.ms}ms); the next open shows no last graph and reads the stored review`
-              : `NOT written root=${rootId}: ${r.error ?? "write failed"} (${r.ms}ms)`);
-        });
-        return written;
+        return this.seen.write(rootId, scopes, graph, (f) => traced.set(f));
       }, () => graphFields(graph));
     } catch (error) {
-      this.note("lastSeen", `rememberLastSeen failed: ${messageOf(error)}`);
+      this.seen.note("lastSeen", `rememberLastSeen failed: ${messageOf(error)}`);
     }
   }
 

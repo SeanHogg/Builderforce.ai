@@ -205,7 +205,17 @@ jobs:
       - name: Publish if the version is new
         if: github.event_name != 'pull_request'
         working-directory: ${{ matrix.dir }}
-        run: bash "$GITHUB_WORKSPACE/.github/scripts/npm-publish-if-new.sh" "${{ matrix.package }}"
+        env:
+          PACKAGE_NAME: ${{ matrix.package }}
+          PACK_WITH_PNPM: ${{ matrix.pack-with-pnpm }}
+        run: |
+          args=()
+          if [ "$PACK_WITH_PNPM" = "true" ]; then
+            pack_dir=$(mktemp -d)
+            pnpm pack --pack-destination "$pack_dir"
+            args+=("$pack_dir"/*.tgz)
+          fi
+          bash "$GITHUB_WORKSPACE/.github/scripts/npm-publish-if-new.sh" "$PACKAGE_NAME" "${args[@]}"
 
   # Session-replay CDN (PRD 33 D5): cdn.builderforce.ai/replay/v1/loader.js, the hashed
   # recorder, replay/manifest.json and embed/v1.js, from a public R2 bucket with no Worker.

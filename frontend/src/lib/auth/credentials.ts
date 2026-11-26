@@ -229,6 +229,39 @@ export async function getTenantToken(
 }
 
 /**
+ * What `POST /api/auth/web/renew` said.
+ *  - `renewed`     a fresh short-lived web token;
+ *  - `refused`     a 401 — the session is over (`code`: `session_expired` past its
+ *                  maximum age, `token_revoked`, `invalid_token`, `account_unavailable`);
+ *  - `unavailable` no answer we can act on (offline, 5xx) — try again later, never sign out.
+ */
+export type WebRenewResponse =
+  | { kind: 'renewed'; token: string }
+  | { kind: 'refused'; code?: string }
+  | { kind: 'unavailable' };
+
+/**
+ * Background renewal of the web token. Here, not on `apiRequest`: it must send the
+ * token it was handed, and a 401 is an ANSWER to be interpreted by the renewal
+ * module, not a reason to clear the session and redirect on the spot.
+ */
+export async function renewWebToken(webToken: string): Promise<WebRenewResponse> {
+  try {
+    const res = await fetchWithTransportReport(
+      `${AUTH_API_URL}/api/auth/web/renew`,
+      { method: 'POST', headers: { Authorization: `Bearer ${webToken}` } },
+      { silent: true },
+    );
+    const body = await res.json().catch(() => ({})) as { token?: string; code?: string };
+    if (res.ok && body.token) return { kind: 'renewed', token: body.token };
+    if (res.status === 401) return { kind: 'refused', code: body.code };
+  } catch {
+    // Offline or unreachable: the same "try again later" as a server error.
+  }
+  return { kind: 'unavailable' };
+}
+
+/**
  * Fetch the user's tenants, auto-select one if unambiguous (single workspace or default set),
  * persist the tenant session, and return the selected tenant — or null if the user must pick.
  *

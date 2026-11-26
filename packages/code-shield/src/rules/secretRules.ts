@@ -1,37 +1,55 @@
+import { SECRET_SHAPES, type SecretShape } from '@builderforce/secret-redaction';
 import type { Rule } from './rule.js';
 
-/** Committed credentials. Never path-excluded: a credential is a credential wherever it sits. */
+/**
+ * Committed credentials. Never path-excluded: a credential is a credential wherever it sits.
+ *
+ * The recognisable-prefix rules are DERIVED from `SECRET_SHAPES` in `@builderforce/secret-redaction`, the ONE
+ * secret detector: a new provider shape there is a new rule here with no edit to this file. Only the generic
+ * `hardcoded-credential` assignment rule is code-shield's own (an assignment is not a prefix shape).
+ */
+
+/** Shapes whose rule id predates the derivation. Stored `ruleId`s (PR-gate findings) keep matching. */
+const LEGACY_SHAPE_RULE_IDS: Readonly<Record<string, string>> = {
+  'openai-key': 'secret.provider-api-key',
+  'google-api-key': 'secret.provider-api-key',
+  'stripe-key': 'secret.provider-api-key',
+};
+
+/** Shapes that are reported below CRITICAL: a chat/app token or a bare JWT is less often a deploy credential. */
+const HIGH_SHAPES: ReadonlySet<string> = new Set([
+  'slack-token', 'slack-rotating-token', 'slack-app-token', 'jwt', 'telegram-bot-url', 'telegram-bot-token', 'stripe-webhook-secret',
+]);
+
+const ATTACK_PRIVATE_KEY = 'T1552.004';
+const ATTACK_CREDENTIALS = 'T1552.001';
+
+/** The shape's regex without `g`/`y`: the engine calls `exec` per line, and a global regex carries `lastIndex` between calls. */
+const stateless = (re: RegExp): RegExp => new RegExp(re.source, re.flags.replace(/[gy]/g, ''));
+
+export function secretRuleFor(shape: SecretShape): Rule {
+  const critical = !HIGH_SHAPES.has(shape.id);
+  return {
+    id: LEGACY_SHAPE_RULE_IDS[shape.id] ?? `secret.${shape.id}`,
+    category: 'secret',
+    severity: critical ? 'CRITICAL' : 'HIGH',
+    weight: critical ? 50 : 30,
+    cwe: 'CWE-798',
+    attack: shape.id === 'private-key' ? ATTACK_PRIVATE_KEY : ATTACK_CREDENTIALS,
+    scope: 'line',
+    paths: 'secret',
+    title: shape.id === 'private-key' ? 'Private key committed' : `${shape.label} committed`,
+    pattern: stateless(shape.re),
+    remediation: shape.id === 'private-key'
+      ? 'Remove the key from the repository, rotate it, and load it from the secret store.'
+      : 'Revoke and rotate the credential with its provider; never commit it, load it from the secret store.',
+  };
+}
+
+const SHAPE_RULES: readonly Rule[] = SECRET_SHAPES.map(secretRuleFor);
+
 export const SECRET_RULES: readonly Rule[] = [
-  {
-    id: 'secret.private-key', category: 'secret', severity: 'CRITICAL', weight: 50, cwe: 'CWE-798', attack: 'T1552.004', scope: 'line', paths: 'secret',
-    title: 'Private key committed',
-    pattern: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY(?: BLOCK)?-----/,
-    remediation: 'Remove the key from the repository, rotate it, and load it from the secret store.',
-  },
-  {
-    id: 'secret.aws-access-key', category: 'secret', severity: 'CRITICAL', weight: 50, cwe: 'CWE-798', attack: 'T1552.001', scope: 'line', paths: 'secret',
-    title: 'AWS access key id committed',
-    pattern: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/,
-    remediation: 'Rotate the key in IAM and read credentials from the environment or a secret store.',
-  },
-  {
-    id: 'secret.github-token', category: 'secret', severity: 'CRITICAL', weight: 50, cwe: 'CWE-798', attack: 'T1552.001', scope: 'line', paths: 'secret',
-    title: 'GitHub token committed',
-    pattern: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b|\bgithub_pat_[A-Za-z0-9_]{50,}\b/,
-    remediation: 'Revoke the token on GitHub and use the integration credential store.',
-  },
-  {
-    id: 'secret.slack-token', category: 'secret', severity: 'HIGH', weight: 30, cwe: 'CWE-798', attack: 'T1552.001', scope: 'line', paths: 'secret',
-    title: 'Slack token committed',
-    pattern: /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/,
-    remediation: 'Revoke the token in Slack and store it as a secret.',
-  },
-  {
-    id: 'secret.provider-api-key', category: 'secret', severity: 'CRITICAL', weight: 50, cwe: 'CWE-798', attack: 'T1552.001', scope: 'line', paths: 'secret',
-    title: 'Provider API key committed',
-    pattern: /\b(?:sk-(?:live|proj|ant)-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{35})\b/,
-    remediation: 'Revoke and rotate the key with its provider; never commit it.',
-  },
+  ...SHAPE_RULES,
   {
     id: 'secret.hardcoded-credential', category: 'secret', severity: 'HIGH', weight: 30, cwe: 'CWE-798', attack: 'T1552.001', scope: 'line', paths: 'secret',
     title: 'Hard-coded credential assignment',

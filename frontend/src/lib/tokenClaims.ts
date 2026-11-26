@@ -20,6 +20,12 @@ export interface TokenClaims {
   tid?: string | number;
   /** The user the token was minted for. */
   sub?: string;
+  /** Issued-at and expiry, unix seconds. */
+  iat?: number;
+  exp?: number;
+  /** Web tokens: session start and the session's maximum age in seconds. */
+  sat?: number;
+  sma?: number;
 }
 
 export function decodeTokenClaims(token: string | null | undefined): TokenClaims {

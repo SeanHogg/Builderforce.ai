@@ -96,8 +96,12 @@ function signClaims(claims: Record<string, unknown>, secret: string): Promise<st
  * matters: a verifier that reads claims first has already acted on attacker-
  * controlled JSON by the time it decides the token was forged.
  */
-async function verifyClaims<T extends { exp: number }>(token: string, secret: string): Promise<T> {
-  const verdict = await verifyHs256<T>(token, requireSecret(secret));
+async function verifyClaims<T extends { exp: number }>(
+  token: string,
+  secret: string,
+  options?: { nowSeconds?: number },
+): Promise<T> {
+  const verdict = await verifyHs256<T>(token, requireSecret(secret), options);
   if (!verdict.ok) throw new Error(FAILURE_MESSAGE[verdict.reason]);
   return verdict.claims;
 }
@@ -156,29 +160,62 @@ export interface WebJwtPayload {
   mfa?:     boolean;
   mfaPending?: boolean;
   amr?:     string[];
+  /** Session start (unix seconds) — fixed for the life of a session, carried across renewals. */
+  sat?:     number;
+  /** The session's maximum age in seconds, counted from `sat`. */
+  sma?:     number;
   iat:      number;
   exp:      number;
 }
 
+/** How long one web access token is valid. Renewed in the background before it lapses. */
+export const WEB_ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+
+/** How far past `exp` a web token may still be presented to `/web/renew`. */
+export const WEB_RENEW_GRACE_SECONDS = 60 * 60;
+
+/**
+ * Sign a web session token.
+ *
+ * `sessionMaxAgeSeconds` is the length of the SESSION (24 h, or 30 days for a trusted
+ * device), not of this token: the token itself lives {@link WEB_ACCESS_TOKEN_TTL_SECONDS}
+ * and never past the session's end. A renewal passes the original `sat`/`sma` in the
+ * payload so the session end never moves. A pending-MFA token is a one-step challenge
+ * and keeps its own short lifetime.
+ */
 export async function signWebJwt(
-  payload:          Omit<WebJwtPayload, 'iat' | 'exp'>,
-  secret:           string,
-  expiresInSeconds: number = 86_400, // 24 hours for web sessions
+  payload:                Omit<WebJwtPayload, 'iat' | 'exp'>,
+  secret:                 string,
+  sessionMaxAgeSeconds:   number = 86_400, // 24 hours for web sessions
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
+  let session: { sat?: number; sma?: number; exp: number };
+  if (payload.mfaPending) {
+    session = { exp: now + sessionMaxAgeSeconds };
+  } else {
+    const sat = payload.sat ?? now;
+    const sma = payload.sma ?? sessionMaxAgeSeconds;
+    session = { sat, sma, exp: Math.min(now + WEB_ACCESS_TOKEN_TTL_SECONDS, sat + sma) };
+  }
   const full: WebJwtPayload = {
     ...payload,
+    sat: session.sat,
+    sma: session.sma,
     jti: payload.jti ?? crypto.randomUUID(),
     sid: payload.sid ?? (payload.mfaPending ? undefined : crypto.randomUUID()),
     iat: now,
-    exp: now + expiresInSeconds,
+    exp: session.exp,
   };
 
   return signClaims(full as unknown as Record<string, unknown>, secret);
 }
 
-export async function verifyWebJwt(token: string, secret: string): Promise<WebJwtPayload> {
-  return verifyClaims<WebJwtPayload>(token, secret);
+export async function verifyWebJwt(
+  token: string,
+  secret: string,
+  options?: { nowSeconds?: number },
+): Promise<WebJwtPayload> {
+  return verifyClaims<WebJwtPayload>(token, secret, options);
 }
 
 // ---------------------------------------------------------------------------

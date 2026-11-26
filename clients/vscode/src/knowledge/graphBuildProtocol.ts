@@ -33,6 +33,8 @@ export interface StoredGraphRequest {
   maxNodes?: number;
   /** A run-delta side: root-relative path → the content hash to read instead (`null`: absent on this side). */
   hashOverrides?: Map<string, string | null>;
+  /** The graph is for the knowledge VIEW (host → webview): bounded (`graphBudget.ts`) before it leaves the build. */
+  view?: boolean;
 }
 
 /** The code actions' graph over an analysis the host holds (`codeGraphFindings`). */
@@ -50,6 +52,8 @@ export interface PackGraphRequest {
   file: string;
   focus?: string[];
   maxNodes?: number;
+  /** The graph is for the knowledge VIEW: bounded before it leaves the build. Absent for the pack's cards and index. */
+  view?: boolean;
 }
 
 export type GraphBuildRequest = StoredGraphRequest | ExtractedGraphRequest | PackGraphRequest;

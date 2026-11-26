@@ -114,15 +114,20 @@ public struct CompletionAccumulator: Sendable {
 // MARK: - Request shapes
 
 /// A tool as a completion request offers it.
-struct CompletionTool: Encodable, Sendable, Equatable {
-    struct Function: Encodable, Sendable, Equatable {
+struct CompletionTool: Codable, Sendable, Equatable {
+    struct Function: Codable, Sendable, Equatable {
         let name: String
         let description: String
         let parameters: AnyCodable
     }
 
-    let type = "function"
+    let type: String
     let function: Function
+
+    init(function: Function) {
+        self.type = "function"
+        self.function = function
+    }
 }
 
 /// One message of a completion request.

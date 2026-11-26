@@ -32,6 +32,8 @@ export interface TreeSitterNode {
   readonly startIndex: number;
   readonly endIndex: number;
   readonly startPosition: { row: number };
+  readonly endPosition: { row: number; column: number };
+  readonly parent: TreeSitterNode | null;
   readonly hasError: boolean;
   readonly children: TreeSitterNode[];
   readonly namedChildren: TreeSitterNode[];
@@ -261,6 +263,7 @@ export async function parseSource<T>(
 export function treeSitterSymbolExtractor(opts: TreeSitterExtractorOptions = {}): {
   readonly id: string;
   extract(relPath: string, content: string): Promise<CodeSymbol[]>;
+  extractSpans(relPath: string, content: string): Promise<DefinitionSpan[]>;
 } {
   const maxParseBytes = opts.maxParseBytes ?? 400_000;
   // One parser per grammar, reused: parsing is synchronous, so concurrent extracts never
@@ -280,9 +283,7 @@ ${g.query}`, async () => {
       return { parser, query: lang.query(g.query) };
     });
 
-  return {
-    id: "tree-sitter-1",
-    async extract(relPath: string, content: string): Promise<CodeSymbol[]> {
+  async function extractSpans(relPath: string, content: string): Promise<DefinitionSpan[]> {
       const grammar = GRAMMAR_BY_EXT[extOf(relPath)];
       if (!grammar || content.length > maxParseBytes) return extractSymbols(relPath, content);
       const loaded = await language(grammar);
@@ -291,7 +292,7 @@ ${g.query}`, async () => {
       try {
         tree = loaded.parser.parse(content);
         const lines = content.split(/\r?\n/);
-        const byNode = new Map<string, CodeSymbol>();
+        const byNode = new Map<string, DefinitionSpan>();
         for (const { name: kind, node } of loaded.query.captures(tree.rootNode)) {
           if (!KINDS.has(kind as SymbolKind)) continue;
           const line = node.startPosition.row + 1;
@@ -300,7 +301,10 @@ ${g.query}`, async () => {
           const prior = byNode.get(key);
           if (prior && (KIND_PRIORITY[kind as SymbolKind] ?? 2) <= (KIND_PRIORITY[prior.kind] ?? 2)) continue;
           const lineText = lines[line - 1] ?? "";
-          byNode.set(key, { name, kind: kind as SymbolKind, line, exported: isExported(grammar.family, name, lineText) });
+          const span = definitionNode(node);
+          const startLine = span.startPosition.row + 1;
+          const endLine = Math.max(startLine, span.endPosition.row + (span.endPosition.column > 0 ? 1 : 0));
+          byNode.set(key, { name, kind: kind as SymbolKind, line, startLine, endLine, exported: isExported(grammar.family, name, lineText) });
         }
         if (grammar.family === "js") {
           for (const symbol of extractSymbols(relPath, content)) {
@@ -314,6 +318,29 @@ ${g.query}`, async () => {
       } finally {
         tree?.delete();
       }
+  }
+  return {
+    id: "tree-sitter-1",
+    extractSpans,
+    async extract(relPath, content) {
+      return (await extractSpans(relPath, content)).map(({ startLine: _start, endLine: _end, ...symbol }) => symbol);
     },
   };
+}
+
+export interface DefinitionSpan extends CodeSymbol {
+  /** Undefined when only the fallback can identify the definition. */
+  startLine?: number;
+  endLine?: number;
+}
+
+function definitionNode(name: TreeSitterNode): TreeSitterNode {
+  let node = name.parent ?? name;
+  // Include an exported variable's declaration and the decorators or exports wrapping it.
+  while (node.parent && (
+    node.type === "variable_declarator" ||
+    node.parent.type === "export_statement" ||
+    node.parent.type === "decorated_definition"
+  )) node = node.parent;
+  return node;
 }

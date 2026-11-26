@@ -60,6 +60,8 @@ export const semanticSearchTool: ToolDefinition = defineTool({
     const data: Record<string, unknown> = { ok: true, query, total: results.length, results };
     if (r.indexing) {
       data.note = "The index is still being built — these results cover only the files scanned so far. A miss is not proof of absence yet; fall back to search_code if needed.";
+    } else if (r.partial) {
+      data.note = "The workspace search covered part of the repository. Narrow the path or use search_code for an exact string.";
     } else if (results.length === 0) {
       data.note = `Nothing matched "${query}"${scope ? ` under "${scope}"` : ""}. Rephrase with likely identifier words, drop \`path\`, or use search_code for an exact string.`;
     }

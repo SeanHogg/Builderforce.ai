@@ -40,6 +40,40 @@ function stringMap(value: unknown): Record<string, string> | undefined {
   ));
 }
 
+function launchSpec(entry: Record<string, unknown>): LaunchSpec | undefined {
+  const { command, args, cwd } = entry;
+  if (typeof command !== "string" || !command.trim()) return;
+  if (args !== undefined && (!Array.isArray(args) || !args.every((arg) => typeof arg === "string"))) return;
+  const env = stringMap(entry.env);
+  return { command, args, ...(env ? { env } : {}), ...(typeof cwd === "string" ? { cwd } : {}) };
+}
+
+export function readSynapseConnectors(document: string): Array<{ id: string; name: string; launch: LaunchSpec }> {
+  let rows: unknown;
+  try {
+    rows = JSON.parse(document);
+  } catch {
+    throw new Error("Invalid Synapse connector configuration");
+  }
+  if (!Array.isArray(rows)) throw new Error("Invalid Synapse connector configuration");
+  return rows.flatMap((row) => {
+    const entry = record(row);
+    if (!entry || entry.enabled === false || typeof entry.id !== "string" || !entry.id.trim()
+      || typeof entry.name !== "string" || !entry.name.trim()) return [];
+    if (!/^[A-Za-z0-9_-]+$/.test(entry.id) || ["__proto__", "constructor", "prototype"].includes(entry.id)) return [];
+    const launch = launchSpec(entry);
+    if (!launch) return [];
+    // The old desktop credential store holds the values. Carry forward references only.
+    const secretKeys = Array.isArray(entry.secretKeys) ? entry.secretKeys : [];
+    const references = Object.fromEntries(secretKeys.flatMap((key: unknown) =>
+      typeof key === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(key)
+        ? [[key, "${env:" + key + "}"]]
+        : [],
+    ));
+    return [{ id: entry.id, name: entry.name, launch: { ...launch, env: { ...launch.env, ...references } } }];
+  });
+}
+
 function readServerMap(document: string, host: McpConfigHost): Record<string, unknown> {
   if (!document.trim()) return {};
   const errors: ParseError[] = [];
@@ -64,14 +98,8 @@ export function readMcpConfig(document: string, host: McpConfigHost): Map<string
     const entry = record(value);
     if (!entry || entry.disabled === true || entry.enabled === false) continue;
     if (typeof entry.command === "string" && entry.command.trim()) {
-      const args = entry.args;
-      if (args !== undefined && (!Array.isArray(args) || !args.every((arg) => typeof arg === "string"))) continue;
-      const env = stringMap(entry.env);
-      servers.set(name, {
-        transport: "stdio", command: entry.command, args,
-        ...(env ? { env } : {}),
-        ...(typeof entry.cwd === "string" ? { cwd: entry.cwd } : {}),
-      });
+      const launch = launchSpec(entry);
+      if (launch) servers.set(name, { transport: "stdio", ...launch });
       continue;
     }
     const url = entry.url ?? entry.httpUrl ?? entry.serverUrl;

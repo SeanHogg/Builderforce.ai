@@ -29,6 +29,7 @@ import {
   type AuthStepResult,
 } from './auth/credentials';
 import { profileApi } from './auth/session';
+import { SESSION_RENEWED_EVENT, startTokenRenewal } from './auth/tokenRenewal';
 import { signInWithPasskey } from './passkeys';
 
 // ---------------------------------------------------------------------------
@@ -118,8 +119,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (isSessionStorageKey(event.key)) rehydrate();
     };
     window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    // A background renewal in THIS tab replaced the stored tokens (the `storage` event
+    // is for other windows only); state must follow or it keeps sending a revoked token.
+    window.addEventListener(SESSION_RENEWED_EVENT, rehydrate);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener(SESSION_RENEWED_EVENT, rehydrate);
+    };
   }, []);
+
+  // Keep the short-lived web token renewed while signed in. Re-armed whenever the stored
+  // token changes (sign-in, a renewal here, a renewal in another tab).
+  useEffect(() => {
+    if (!initialized || !webToken) return;
+    return startTokenRenewal();
+  }, [initialized, webToken]);
 
   // The voice-embedding cache registers its per-user wipe on sign-out when it loads. Loaded
   // once at mount (lazily, so the voice stack stays out of the root closure) so a sign-out

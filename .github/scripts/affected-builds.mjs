@@ -12,6 +12,12 @@ const npmPackages = [
   { dir: 'studio-embedded', package: '@seanhogg/builderforce-studio-embedded', 'builds-first': 'studio' },
   { dir: 'voice', package: '@seanhogg/builderforce-voice' },
   { dir: 'replay-sdk', package: '@seanhogg/builderforce-replay' },
+  {
+    dir: 'packages/builderforce-mcp',
+    package: '@seanhogg/builderforce-mcp',
+    'pack-with-pnpm': true,
+    sources: ['packages/secret-redaction', 'packages/tool-output-policy'],
+  },
 ];
 
 function dependencyDirs(roots) {
@@ -57,7 +63,9 @@ export function affectedBuilds(files, full = false) {
     dotnet: sharedBuild || touches('frontend/package.json', 'frontend/pnpm-lock.yaml', 'infra/cdn'),
     action: sharedBuild || distribution || touches('actions'),
     help: sharedBuild || touches('docs-site'),
-    npm: { include: npmPackages.filter(({ dir }) => sharedBuild || touches(...dependencyDirs([dir]))) },
+    npm: {
+      include: npmPackages.filter(({ dir, sources = [] }) => sharedBuild || touches(...dependencyDirs([dir]), ...sources)),
+    },
   };
 }
 

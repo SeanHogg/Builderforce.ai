@@ -7,8 +7,10 @@
  *   1. edges: dropped when an endpoint is not a kept node, parallel (from, to, kind) edges merged into ONE (`weight` summed,
  *      the worst `verdict`, `cycle` kept), then capped at {@link MAX_GRAPH_EDGES} — calls/uses/extends/implements/composes/
  *      contains first, `references` last, the heaviest first within a class;
- *   2. findings: `partition-violation` is per-edge noise, so it folds into ONE finding per (verdict, layer pair, source area →
- *      target area) with `params.count` (the true number) and its first {@link PARTITION_SAMPLES} file pairs as `nodes`;
+ *   2. findings: `partition-violation` is per-edge noise, so each (verdict, layer pair, source area → target area) group keeps
+ *      only its first {@link PARTITION_SAMPLES} REAL findings (each still one `[from, to]` pair with its own id, so the
+ *      highlight, the anti-pattern block, restructure and fix flows read them unchanged); the first carries `params.count`,
+ *      the number of violations it stands for, so the kept ones sum to the group's true number;
  *   3. payload: a count-based size estimate ({@link estimatedPayloadBytes}, never a JSON of the graph); over
  *      {@link MAX_GRAPH_PAYLOAD_BYTES} the edges, then the findings, are halved again until it fits.
  *
@@ -24,7 +26,7 @@ export const MAX_GRAPH_EDGES = 12_000;
 export const MAX_GRAPH_FINDINGS = 5_000;
 /** Most aggregated `partition-violation` findings: the heaviest (area → area) groups. */
 export const MAX_PARTITION_GROUPS = 400;
-/** File pairs a folded `partition-violation` keeps as `nodes` (the examples a drawer lists). */
+/** Real `partition-violation` findings (file pairs) a folded group keeps (the examples a drawer lists). */
 export const PARTITION_SAMPLES = 3;
 /** The estimated size of one graph payload (the host holds it, the webview receives it); past it the graph is trimmed further. */
 export const MAX_GRAPH_PAYLOAD_BYTES = 24 * 1024 * 1024;
@@ -64,7 +66,7 @@ function merge(into: KEdge, e: KEdge): void {
   if (e.verdict && (VERDICT_RANK[e.verdict] ?? 0) > (VERDICT_RANK[into.verdict ?? "allowed"] ?? 0)) into.verdict = e.verdict;
   if (e.cycle) into.cycle = true;
   if (e.stale) into.stale = true;
-  if (e.sites && into.sites && into.sites.length < MAX_SITES) into.sites = [...into.sites, ...e.sites].slice(0, MAX_SITES);
+  if (e.sites && (into.sites?.length ?? 0) < MAX_SITES) into.sites = [...(into.sites ?? []), ...e.sites].slice(0, MAX_SITES);
 }
 
 interface EdgeOutcome { edges: KEdge[]; dangling: number; merged: number }
@@ -101,34 +103,54 @@ export function areaPathOf(ref: string): string {
 
 const text = (v: unknown): string => (typeof v === "string" ? v : "");
 
-/** Folds every `partition-violation` into one finding per (verdict, layer pair, source area → target area); the rest stay as they are. */
-export function foldPartitionViolations(findings: readonly Finding[], maxGroups: number): { findings: Finding[]; violations: number; groups: number } {
-  const groups = new Map<string, { first: Finding; count: number; nodes: Finding["nodes"]; fromArea: string; toArea: string }>();
+/** How many violations one finding stands for: its `params.count` once folded, else itself. */
+const weightOf = (f: Finding): number => Number(f.params.count) || 1;
+
+/**
+ * What a fold kept: `violations` the true number, `violationFindings` the findings that held them, `carried` the ones kept;
+ * `groups` every (area → area) group found, `keptGroups` the heaviest carried, `droppedViolations` the rest's total.
+ */
+export interface FoldOutcome {
+  findings: Finding[]; violations: number; violationFindings: number; carried: number; groups: number; keptGroups: number; droppedViolations: number;
+}
+
+/**
+ * Folds the `partition-violation` findings per (verdict, layer pair, source area → target area): each kept group carries its
+ * first {@link PARTITION_SAMPLES} REAL findings unchanged (one `[from, to]` pair, own id and anchor), the first of them with
+ * `params.count` = the violations it stands for (itself and the ones not carried), so the carried counts sum to the group's
+ * true number. Only the heaviest `maxGroups` groups are kept. The rest stay as they are. Idempotent.
+ */
+export function foldPartitionViolations(findings: readonly Finding[], maxGroups: number): FoldOutcome {
+  const groups = new Map<string, { count: number; samples: Finding[]; fromArea: string; toArea: string }>();
   const rest: Finding[] = [];
   let violations = 0;
   for (const f of findings) {
     if (f.kind !== PARTITION_VIOLATION) { rest.push(f); continue; }
-    violations += Number(f.params.count) || 1; // an already-folded finding carries its own count
+    const w = weightOf(f);
+    violations += w;
     const [from, to] = f.nodes;
     const fromArea = from ? areaPathOf(from) : "", toArea = to ? areaPathOf(to) : "";
     const key = `${f.params.verdict === "upward" ? "upward" : "skips"}:${text(f.params.from)}>${text(f.params.to)}:${fromArea}>${toArea}`;
     let g = groups.get(key);
-    if (!g) { g = { first: f, count: 0, nodes: [], fromArea, toArea }; groups.set(key, g); }
-    g.count += Number(f.params.count) || 1;
-    if (g.nodes.length < PARTITION_SAMPLES * 2) g.nodes = [...g.nodes, ...f.nodes.slice(0, 2)];
+    if (!g) { g = { count: 0, samples: [], fromArea, toArea }; groups.set(key, g); }
+    g.count += w;
+    if (g.samples.length < PARTITION_SAMPLES) g.samples.push(f);
   }
-  const folded = [...groups.entries()]
-    .sort((a, b) => b[1].count - a[1].count || (a[0] < b[0] ? -1 : 1))
-    .slice(0, maxGroups)
-    .map(([key, g]): Finding => ({
-      ...g.first,
-      id: `${PARTITION_VIOLATION}:${key}`,
-      nodes: g.nodes,
-      params: { ...g.first.params, count: g.count, fromArea: g.fromArea, toArea: g.toArea },
-      anchor: `${text(g.first.params.from)}->${text(g.first.params.to)}@${g.fromArea}>${g.toArea}`,
-      anchorKind: "group",
-    }));
-  return { findings: [...rest, ...folded], violations, groups: groups.size };
+  const ranked = [...groups.entries()].sort((a, b) => b[1].count - a[1].count || (a[0] < b[0] ? -1 : 1));
+  const kept = ranked.slice(0, Math.max(0, maxGroups));
+  const droppedViolations = ranked.slice(kept.length).reduce((n, [, g]) => n + g.count, 0);
+  const folded: Finding[] = [];
+  for (const [, g] of kept) {
+    const others = g.samples.slice(1).reduce((n, f) => n + weightOf(f), 0);
+    g.samples.forEach((f, i) => {
+      const params = { ...f.params, fromArea: g.fromArea, toArea: g.toArea };
+      folded.push({ ...f, params: i === 0 && g.count - others > 1 ? { ...params, count: g.count - others } : params });
+    });
+  }
+  return {
+    findings: [...rest, ...folded], violations, violationFindings: findings.length - rest.length, carried: folded.length,
+    groups: groups.size, keptGroups: kept.length, droppedViolations,
+  };
 }
 
 const SEVERITY_RANK: Record<string, number> = { error: 0, warn: 1, info: 2 };
@@ -172,13 +194,15 @@ export function boundGraph(graph: KnowledgeGraph, limits: GraphLimits = DEFAULT_
       ? `edges capped (${edges.length} of ${totalEdges} kept: ${dangling} ended outside the drawn nodes, ${capped} lightest dropped)`
       : `edges outside the drawn nodes dropped (${edges.length} of ${totalEdges} kept)`);
   }
-  if (folded.violations > folded.groups) reasons.push(`partition violations folded (${folded.violations} into ${Math.min(folded.groups, limits.partitionGroups)} area pairs)`);
+  if (folded.carried < folded.violationFindings) {
+    reasons.push(`partition violations folded (${folded.violations} into ${folded.keptGroups} area pairs, ${folded.carried} example findings carried${folded.droppedViolations > 0 ? `; ${folded.groups - folded.keptGroups} smallest area pairs (${folded.droppedViolations} violations) not carried` : ""})`);
+  }
   if (findings.length < folded.findings.length) reasons.push(`findings capped (${findings.length} of ${folded.findings.length} kept, errors first)`);
   if (trimmed) reasons.push(`payload trimmed to fit ${Math.round(limits.payloadBytes / (1024 * 1024))} MB (estimated ${Math.round(bytes / 1024)} KB)`);
 
   const bounds: GraphBounds = {
     edges: { total: totalEdges, kept: edges.length, dangling, merged, capped },
-    findings: { total: totalFindings, kept: findings.length, partitionViolations: folded.violations, partitionGroups: folded.groups },
+    findings: { total: totalFindings, kept: findings.length, partitionViolations: folded.violations, partitionGroups: folded.keptGroups },
     payload: { estimatedBytes: bytes, budgetBytes: limits.payloadBytes, trimmed },
     reasons,
   };

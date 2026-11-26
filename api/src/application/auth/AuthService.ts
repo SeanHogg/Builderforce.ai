@@ -2,7 +2,7 @@ import { IUserRepository } from '../../domain/user/IUserRepository';
 import { User } from '../../domain/user/User';
 import { AuditEventType, UserId, asTenantId } from '../../domain/shared/types';
 import { UnauthorizedError, ConflictError, ForbiddenError } from '../../domain/shared/errors';
-import { signJwt } from '../../infrastructure/auth/JwtService';
+import { signJwt, WEB_ACCESS_TOKEN_TTL_SECONDS } from '../../infrastructure/auth/JwtService';
 import { hashSecret, generateApiKey } from '../../infrastructure/auth/HashService';
 import { IAuditRepository } from '../../domain/audit/IAuditRepository';
 import { AuditEvent } from '../../domain/audit/AuditEvent';
@@ -139,7 +139,7 @@ export class AuthService {
     const member = tenant.getMember(userId);
     if (!member) throw new UnauthorizedError('User is not a member of this tenant');
 
-    const expiresIn = 3600;
+    const expiresIn = WEB_ACCESS_TOKEN_TTL_SECONDS;
     const token = await signJwt(
       { sub: userId, tid: tenantId, role: member.role, sid: sessionId },
       this.jwtSecret,

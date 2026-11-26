@@ -13,6 +13,7 @@
   "$(add) Register external MCP server…": "$(add) 注册外部 MCP 服务器…",
   "$(gear) Manage local MCP servers": "$(gear) 管理本地 MCP 服务器",
   "Add a local MCP server": "添加本地 MCP 服务器",
+  "Import a Synapse connector": "导入 Synapse 连接器",
   "$(credit-card) Add a card to unlock premium models": "$(credit-card) 添加银行卡以解锁高级模型",
   "$(rocket) Upgrade to unlock premium models": "$(rocket) 升级以解锁高级模型",
   "(the model produced nothing)": "（模型没有产生任何输出）",

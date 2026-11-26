@@ -32,11 +32,11 @@ export async function runGraphBuild<R extends GraphBuildRequest>(request: R, sto
 
 /**
  * A graph the knowledge VIEW reads (and so crosses to the host and the webview): bounded before it leaves the build
- * (`graphBudget.ts`). A run-delta side (`hashOverrides`) is compared finding-by-finding, never drawn: it stays whole.
+ * (`graphBudget.ts`). Only a request that says so (`view`): a run-delta side, a pack's cards and index, and the domain
+ * proposal's whole graph read every edge and finding, so they stay whole.
  */
 function isViewGraph(request: GraphBuildRequest, built: KnowledgeGraph | CodeGraphFindings | null): built is KnowledgeGraph {
-  if (built === null || request.kind === "extracted") return false;
-  return !(request.kind === "stored" && request.hashOverrides);
+  return built !== null && request.kind !== "extracted" && request.view === true;
 }
 
 async function buildOf(request: GraphBuildRequest, stores: FolderStores): Promise<KnowledgeGraph | CodeGraphFindings | null> {

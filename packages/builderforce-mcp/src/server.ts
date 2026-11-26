@@ -3,11 +3,18 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import {
   CallToolRequestSchema,
   ErrorCode,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ListToolsRequestSchema,
   McpError,
+  ReadResourceRequestSchema,
   SUPPORTED_PROTOCOL_VERSIONS,
   type CallToolResult,
   type Implementation,
+  type Prompt,
+  type Resource,
 } from "@modelcontextprotocol/sdk/types.js";
 import { canCallTool, type ToolGate } from "./policy.js";
 import { mcpToolError, mcpToolResult, protectMcpToolResult } from "./protocol.js";
@@ -21,14 +28,49 @@ type ToolCatalog<Entry> = {
   | { callPrepared(entry: Entry, args: Record<string, unknown>): Promise<CallToolResult> }
 );
 
+export interface McpServerOptions {
+  info: Implementation;
+  instructions?: string;
+  gate: ToolGate;
+  listChanged?: boolean;
+  textResources?: readonly { descriptor: Resource; text: string }[];
+  textPrompts?: readonly { descriptor: Prompt; text: string }[];
+}
+
 export function createMcpServer<Entry extends McpToolEntry | RelayToolEntry>(
   catalog: ToolCatalog<Entry>,
-  options: { info: Implementation; instructions?: string; gate: ToolGate; listChanged?: boolean },
+  options: McpServerOptions,
 ): Server {
+  const resources = options.textResources;
+  const prompts = options.textPrompts;
   const server = new Server(options.info, {
-    capabilities: { tools: { listChanged: options.listChanged ?? false } },
+    capabilities: {
+      tools: { listChanged: options.listChanged ?? false },
+      ...(resources?.length ? { resources: {} } : {}),
+      ...(prompts?.length ? { prompts: {} } : {}),
+    },
     instructions: options.instructions,
   });
+  if (resources?.length) {
+    server.setRequestHandler(ListResourcesRequestSchema, () => ({ resources: resources.map(({ descriptor }) => descriptor) }));
+    server.setRequestHandler(ListResourceTemplatesRequestSchema, () => ({ resourceTemplates: [] }));
+    server.setRequestHandler(ReadResourceRequestSchema, ({ params: { uri } }) => {
+      const resource = resources.find(({ descriptor }) => descriptor.uri === uri);
+      if (!resource) throw new McpError(ErrorCode.InvalidParams, "Unknown resource");
+      return { contents: [{ uri, mimeType: resource.descriptor.mimeType, text: resource.text }] };
+    });
+  }
+  if (prompts?.length) {
+    server.setRequestHandler(ListPromptsRequestSchema, () => ({ prompts: prompts.map(({ descriptor }) => descriptor) }));
+    server.setRequestHandler(GetPromptRequestSchema, ({ params: { name } }) => {
+      const prompt = prompts.find(({ descriptor }) => descriptor.name === name);
+      if (!prompt) throw new McpError(ErrorCode.InvalidParams, "Unknown prompt");
+      return {
+        description: prompt.descriptor.description,
+        messages: [{ role: "user" as const, content: { type: "text" as const, text: prompt.text } }],
+      };
+    });
+  }
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const entries = await catalog.list();
     const tools = [];
@@ -56,6 +98,64 @@ export function createMcpServer<Entry extends McpToolEntry | RelayToolEntry>(
     }
   });
   return server;
+}
+
+/**
+ * Open the 2025 Streamable HTTP notification channel without retaining a session.
+ * The watcher and SDK transport live only as long as this response.
+ */
+export async function serveMcpCatalogStream(
+  server: Server,
+  request: Request,
+  watch: (signal: AbortSignal, changed: () => Promise<void>) => Promise<void>,
+  lifetimeMs: number,
+): Promise<Response> {
+  const transport = new WebStandardStreamableHTTPServerTransport();
+  await server.connect(transport);
+  let response: Response;
+  try {
+    response = await transport.handleRequest(request);
+  } catch (error) {
+    await server.close();
+    throw error;
+  }
+  if (!response.ok || !response.body) {
+    await server.close();
+    return response;
+  }
+
+  const reader = response.body.getReader();
+  const lifetime = new AbortController();
+  const deadline = AbortSignal.any([request.signal, AbortSignal.timeout(lifetimeMs)]);
+  const stop = async () => {
+    if (lifetime.signal.aborted) return;
+    lifetime.abort();
+    deadline.removeEventListener("abort", disconnect);
+    await server.close();
+  };
+  const disconnect = () => { void stop().catch(() => undefined); };
+  deadline.addEventListener("abort", disconnect, { once: true });
+  if (deadline.aborted) disconnect();
+  void Promise.resolve()
+    .then(() => watch(lifetime.signal, () => server.sendToolListChanged()))
+    .finally(stop)
+    .catch(() => undefined);
+
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) controller.close();
+      else controller.enqueue(value);
+    },
+    async cancel(reason) {
+      await stop();
+      await reader.cancel(reason);
+    },
+  });
+  return new Response(body, {
+    status: response.status,
+    headers: response.headers,
+  });
 }
 
 /** Compatibility for older Builderforce discovery callers with a partial initialize request. */

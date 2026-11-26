@@ -38,8 +38,12 @@ export function createRollingLog(file: string, opts: RollingLogOptions = {}): Ro
       const text = `${now()} ${line.replace(/\r?\n/g, " ⏎ ")}\n`;
       chain = chain.then(async () => {
         await mkdir(dirname(file), { recursive: true });
-        const size = await stat(file).then((s) => s.size, () => 0);
-        if (size + text.length > maxBytes) await rename(file, `${file}.1`);
+        const size = await stat(file).then((s) => s.size, (error: NodeJS.ErrnoException) => {
+          if (error.code !== "ENOENT") opts.onError?.(error);
+          return 0;
+        });
+        // Bytes, not UTF-16 units; an empty or absent file is never rotated (a rename of nothing would fail the append).
+        if (size > 0 && size + Buffer.byteLength(text) > maxBytes) await rename(file, `${file}.1`);
         await appendFile(file, text, "utf8");
       }).catch((error: unknown) => opts.onError?.(error));
     },

@@ -121,7 +121,7 @@ export function subscribeLiveGraph(
     try {
       // The hashes this build starts from: patches diff against them once it is on screen.
       const base = await patcher.baseNow().catch((error: unknown) => { log("live patch base", error); return undefined; });
-      const graph = await loadGraph(secrets, rootId, queryOf?.(rootId), undefined, undefined, { signal });
+      const graph = await loadGraph(secrets, rootId, queryOf?.(rootId), undefined, undefined, { signal, view: true });
       if (!graph || !live) return undefined;
       if (base) patcher.useBase(base);
       const changed = changedSet();

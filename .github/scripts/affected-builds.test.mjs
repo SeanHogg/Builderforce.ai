@@ -30,10 +30,22 @@ test('Chrome oracle changes do not queue a frontend deployment', () => {
 
 test('manual runs include every scope and docs-only changes select docs', () => {
   const { npm, ...all } = affectedBuilds([], true);
-  assert.equal(npm.include.length, 6);
+  assert.equal(npm.include.length, 7);
   assert.ok(Object.values(all).every(Boolean));
   const { help, npm: docsNpm, ...other } = affectedBuilds(['docs-site/src/content/docs/index.md']);
   assert.equal(help, true);
   assert.deepEqual(docsNpm.include, []);
   assert.ok(Object.values(other).every((selected) => !selected));
+});
+
+test('changes to the MCP package or its bundled policy select its packed npm release', () => {
+  for (const path of [
+    'packages/builderforce-mcp/src/index.ts',
+    'packages/secret-redaction/src/index.ts',
+    'packages/tool-output-policy/src/index.ts',
+  ]) {
+    const [job] = affectedBuilds([path]).npm.include;
+    assert.equal(job.package, '@seanhogg/builderforce-mcp');
+    assert.equal(job['pack-with-pnpm'], true);
+  }
 });

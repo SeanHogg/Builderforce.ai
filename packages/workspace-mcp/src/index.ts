@@ -8,12 +8,11 @@ import {
   type ToolDefinition,
 } from "@builderforce/agent-tools";
 import {
-  catalogDesktopSemantic,
   desktopCompressAvailable,
   desktopCompressProse,
-  liveDesktop,
 } from "@builderforce/agent-tools/node-desktop";
 import { extractCodeRefs } from "@builderforce/repo-map";
+import { searchWorkspaceCodeIndex, workspaceCodeEmbedder, type EmbedderPort } from "@seanhogg/builderforce-code-index";
 import { advertiseName, normalizeInputSchema, type McpToolEntry } from "@seanhogg/builderforce-mcp";
 import { createMcpServer } from "@seanhogg/builderforce-mcp/server";
 import { workspaceRepoMap } from "./repoMap.js";
@@ -70,12 +69,21 @@ function scopedTool(
   };
 }
 
-async function findWorkspaceCode({ root, caps }: Workspace, args: Record<string, unknown>) {
-  const semantic = await catalogDesktopSemantic(root);
-  if (!semantic) throw new Error("The workspace hybrid search backend is unavailable");
-  if (typeof args.path === "string" && args.path.trim() && !await workspacePath(root, args.path.trim())) {
-    return { ok: false, error: "Search path is unavailable in the workspace" };
-  }
+interface WorkspaceMcpOptions {
+  requireRoot?: boolean;
+  grammar?: () => { wasmDir?: string };
+  embedder?: () => Promise<EmbedderPort | undefined>;
+}
+
+async function findWorkspaceCode({ root, caps }: Workspace, args: Record<string, unknown>, options: WorkspaceMcpOptions) {
+  const embedder = await (options.embedder ?? workspaceCodeEmbedder)().catch(() => undefined);
+  const semantic = {
+    search: (query: string, { scope, limit }: { scope?: string; limit?: number } = {}) => searchWorkspaceCodeIndex({
+      root, files: caps.repoRead!, query, limit: limit ?? 8,
+      ...(scope ? { scope } : {}), ...(embedder ? { embedder } : {}), ...options.grammar?.(),
+    }),
+    repoMap: (args: Record<string, unknown>) => workspaceRepoMap({ caps }, args),
+  };
   return fromDefinition(semanticSearchTool)({ root, caps: { ...caps, semantic } }, args);
 }
 
@@ -135,7 +143,7 @@ async function checkWorkspaceReferences({ root, caps }: Workspace, args: Record<
   return { results };
 }
 
-export function createWorkspaceMcpTools(resolve: ResolveWorkspace, options: { requireRoot?: boolean } = {}): readonly WorkspaceMcpTool[] {
+export function createWorkspaceMcpTools(resolve: ResolveWorkspace, options: WorkspaceMcpOptions = {}): readonly WorkspaceMcpTool[] {
   const fromTool = (name: string, tool: ToolDefinition, run = fromDefinition(tool)) => {
     const { description, parameters } = tool.schema.function;
     return scopedTool(name, description, parameters, resolve, run);
@@ -158,10 +166,8 @@ export function createWorkspaceMcpTools(resolve: ResolveWorkspace, options: { re
         limit: { type: "number", description: "Maximum commits to return (default 20, maximum 50)" },
       },
     }, resolve, workspaceGitHistory),
-    {
-      ...fromTool("find", semanticSearchTool, findWorkspaceCode),
-      available: async () => (await liveDesktop()) !== null,
-    },
+    scopedTool("find", "Find code definitions and surrounding source by name or intent. Uses a local code index with keyword ranking and embeddings when a local embedder is ready.",
+      semanticSearchTool.schema.function.parameters, resolve, (workspace, args) => findWorkspaceCode(workspace, args, options)),
     {
       ...scopedTool("compress", "Compress prose with the optional workspace compressor. Code remains verbatim.", {
         type: "object",

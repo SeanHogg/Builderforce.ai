@@ -13,6 +13,7 @@
   "$(add) Register external MCP server…": "$(add) Register external MCP server…",
   "$(gear) Manage local MCP servers": "$(gear) Manage local MCP servers",
   "Add a local MCP server": "Add a local MCP server",
+  "Import a Synapse connector": "Import a Synapse connector",
   "$(credit-card) Add a card to unlock premium models": "$(credit-card) Add a card to unlock premium models",
   "$(rocket) Upgrade to unlock premium models": "$(rocket) Upgrade to unlock premium models",
   "(the model produced nothing)": "(the model produced nothing)",

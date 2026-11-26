@@ -10,6 +10,7 @@
     "types": ["node", "vscode"],
     "paths": {
       "@builderforce/workspace-mcp": ["../../packages/workspace-mcp/src/index.ts"],
+      "@seanhogg/builderforce-code-index": ["../../packages/code-index/src/index.ts"],
       "@seanhogg/builderforce-mcp/policy": ["../../packages/builderforce-mcp/src/policy.ts"],
       "@seanhogg/builderforce-mcp/protocol": ["../../packages/builderforce-mcp/src/protocol.ts"],
       "@seanhogg/builderforce-mcp/server": ["../../packages/builderforce-mcp/src/server.ts"],

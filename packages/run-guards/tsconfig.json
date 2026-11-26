@@ -17,6 +17,7 @@
     "noEmit": true,
     "paths": {
       "@builderforce/code-shield": ["../code-shield/src/index.ts"],
+      "@builderforce/secret-redaction": ["../secret-redaction/src/index.ts"],
       "@builderforce/sarif": ["../sarif/src/index.ts"],
       "@builderforce/agent-tools": ["../agent-tools/src/index.ts"]
     }

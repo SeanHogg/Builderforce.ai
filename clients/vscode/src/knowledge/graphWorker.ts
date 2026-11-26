@@ -248,13 +248,16 @@ export function storedGraphOffThread(
     nearDuplicates?: import("@seanhogg/builderforce-memory/knowledge").SimilarPair[];
     focus?: string[]; maxNodes?: number;
     hashOverrides?: ReadonlyMap<string, string | null>;
+    /** For the knowledge view: bounded in the build (`graphBudget.ts`). */
+    view?: boolean;
   },
   _store?: unknown,
   signal?: AbortSignal,
 ): Promise<KnowledgeGraph | null> {
-  const { folderPath, rootId, partitions, nearDuplicates, focus, maxNodes, hashOverrides } = args;
+  const { folderPath, rootId, partitions, nearDuplicates, focus, maxNodes, hashOverrides, view } = args;
   const request: StoredGraphRequest = {
     kind: "stored", folderPath, rootId,
+    ...(view ? { view: true } : {}),
     ...(partitions ? { partitions } : {}),
     ...(nearDuplicates ? { nearDuplicates } : {}),
     ...(focus ? { focus } : {}),

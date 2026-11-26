@@ -25,6 +25,9 @@
     "useDefineForClassFields": false,
     "paths": {
       "@builderforce/workspace-mcp": ["../packages/workspace-mcp/src/index.ts"],
+      "@seanhogg/builderforce-code-index": ["../packages/code-index/src/index.ts"],
+      "@builderforce/agent-tools/node-tree-sitter": ["../packages/agent-tools/src/node-tree-sitter.ts"],
+      "@builderforce/agent-tools/node-git-ignore": ["../packages/agent-tools/src/node-git-ignore.ts"],
       "@builderforce/agent-tools/knowledge": ["../packages/agent-tools/src/knowledge/index.ts"],
       "@builderforce/agent-tools/node-git-history": ["../packages/agent-tools/src/node-git-history.ts"],
       "@builderforce/agent-tools/node-path": ["../packages/agent-tools/src/node-path.ts"],

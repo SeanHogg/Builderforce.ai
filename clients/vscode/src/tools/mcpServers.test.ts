@@ -9,10 +9,11 @@ const stubs = vi.hoisted(() => ({
   command: vi.fn(),
   openExternal: vi.fn(),
   showError: vi.fn(),
+  openDialog: vi.fn(),
 }));
 
 vi.mock("vscode", () => ({
-  Uri: { joinPath: (...parts: string[]) => parts.join("/"), parse: (uri: string) => uri },
+  Uri: { joinPath: (...parts: string[]) => parts.join("/"), parse: (uri: string) => uri, file: (path: string) => path },
   workspace: {
     workspaceFolders: [{ uri: "/workspace" }],
     asRelativePath: (uri: string) => uri.slice("/workspace/".length),
@@ -24,7 +25,12 @@ vi.mock("vscode", () => ({
   },
   l10n: { t: (text: string) => text },
   env: { uriScheme: "vscode", openExternal: stubs.openExternal },
-  window: { showQuickPick: stubs.pick, showTextDocument: stubs.open, showErrorMessage: stubs.showError },
+  window: {
+    showQuickPick: stubs.pick,
+    showTextDocument: stubs.open,
+    showErrorMessage: stubs.showError,
+    showOpenDialog: stubs.openDialog,
+  },
 }));
 vi.mock("../bfApi", () => ({
   listMcpExtensions: stubs.listRemote,
@@ -91,5 +97,34 @@ it("passes the chosen connector to native review with environment references", a
     args: ["-y", "@modelcontextprotocol/server-github"],
     env: { GITHUB_PERSONAL_ACCESS_TOKEN: "${env:GITHUB_PERSONAL_ACCESS_TOKEN}" },
   });
+  expect(stubs.command).not.toHaveBeenCalled();
+});
+
+it("imports the selected Synapse launch into native review without asking for credentials", async () => {
+  stubs.openDialog.mockResolvedValueOnce(["/workspace/connectors.json"]);
+  stubs.readFile.mockImplementation(async (uri) => {
+    if (!uri.endsWith("/connectors.json")) throw new Error("file not found");
+    return Buffer.from(JSON.stringify([
+      { id: "github-12", name: "GitHub", command: "node", args: ["server.js"], env: { MODE: "local" }, secretKeys: ["GITHUB_TOKEN"] },
+      { id: "disabled-01", name: "Disabled", command: "node", enabled: false },
+    ]));
+  });
+  stubs.pick
+    .mockImplementationOnce(async (picks: Array<{ action: string }>) => picks.find((pick) => pick.action === "import"))
+    .mockImplementationOnce(async (picks: unknown[]) => {
+      expect(picks).toHaveLength(1);
+      return picks[0];
+    });
+  const ensureSignedIn = vi.fn();
+  await manageMcpServers({} as never, ensureSignedIn);
+
+  const uri = stubs.openExternal.mock.calls[0]?.[0] as string;
+  expect(JSON.parse(decodeURIComponent(uri.split("?")[1]!))).toEqual({
+    name: "github-12",
+    command: "node",
+    args: ["server.js"],
+    env: { MODE: "local", GITHUB_TOKEN: "${env:GITHUB_TOKEN}" },
+  });
+  expect(ensureSignedIn).not.toHaveBeenCalled();
   expect(stubs.command).not.toHaveBeenCalled();
 });

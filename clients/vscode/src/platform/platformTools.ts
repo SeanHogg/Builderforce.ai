@@ -1,4 +1,4 @@
-import { createMcpRelay, createMcpCatalogCache, type RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
+import { createMcpRelay, createMcpCatalogCache, readMcpRelayCatalog, type RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
 import type * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "../gateway/gateway";
 import { GATEWAY_WORKSPACE_HEADER, gatewayAuthHeaders, gatewayWorkspaceHeaders, observeGatewayResponse } from "../auth/gatewayAuth";
@@ -150,9 +150,7 @@ export async function listPlatformTools(
     entries = await catalogCache.get(catalogKey, async () => {
       const headers = gatewayAuthHeaders(key, { "content-type": "application/json" });
       const response = observeGatewayResponse(await retryOnConnectFailure(() => fetch(`${url}/llm/v1/mcp/tools`, { headers })), headers);
-      if (!response.ok) throw new Error(`tool catalog unavailable (HTTP ${response.status})`);
-      const body = (await response.json()) as { tools?: McpToolEntry[] };
-      return Array.isArray(body.tools) ? body.tools : [];
+      return readMcpRelayCatalog(response);
     });
   } catch {
     return [];

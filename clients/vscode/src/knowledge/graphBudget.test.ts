@@ -119,6 +119,23 @@ describe("edges", () => {
 });
 
 describe("foldPartitionViolations", () => {
+  it("regression: carries REAL findings, each one [from, to] pair with its own id, so [from, to] consumers read them unchanged", () => {
+    const input = syntheticGraph().findings;
+    const byId = new Map(input.map((f) => [f.id, f]));
+    const out = foldPartitionViolations(input, 400);
+    const pv = out.findings.filter((f) => f.kind === "partition-violation");
+    expect(pv.every((f) => f.nodes.length === 2 && byId.get(f.id)?.nodes.join() === f.nodes.join())).toBe(true);
+    expect(pv.reduce((n, f) => n + (Number(f.params.count) || 1), 0)).toBe(20_000);
+    expect(out.carried).toBe(pv.length);
+  });
+
+  it("drops only the smallest groups past the cap, and counts what it dropped", () => {
+    const out = foldPartitionViolations(syntheticGraph().findings, 5);
+    expect(out.keptGroups).toBe(5);
+    const carried = out.findings.filter((f) => f.kind === "partition-violation").reduce((n, f) => n + (Number(f.params.count) || 1), 0);
+    expect(carried + out.droppedViolations).toBe(20_000);
+  });
+
   it("is idempotent: a folded finding keeps its count when folded again", () => {
     const once = foldPartitionViolations(syntheticGraph().findings, 400);
     const twice = foldPartitionViolations(once.findings, 400);

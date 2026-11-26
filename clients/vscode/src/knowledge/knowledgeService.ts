@@ -302,6 +302,7 @@ export async function loadGraph(
     ...(nearDuplicates ? { nearDuplicates } : {}),
     ...(q.focus ? { focus: q.focus } : {}),
     ...(q.maxNodes ? { maxNodes: q.maxNodes } : {}),
+    ...(options?.view ? { view: true } : {}),
   }, open.local, options?.signal));
   // What the bound cut (graphBudget.ts) goes in the load's trace entry, so Copy diagnostics says why edges/findings are fewer.
   const bounds = graph ? boundsOf(graph) : undefined;
@@ -312,4 +313,6 @@ export async function loadGraph(
 export interface LoadGraphOptions {
   /** Aborted when a newer load supersedes this one: the worker drops its result. */
   signal?: AbortSignal;
+  /** The graph goes to the knowledge VIEW (its load, a live push): bounded in the build. Absent ⇒ the whole graph (a domain proposal). */
+  view?: boolean;
 }

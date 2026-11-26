@@ -23,6 +23,7 @@ import { useKnowledgeGraph } from './useKnowledgeGraph';
 import { currentLoadPhase, loadRunning, useFirstPaint, useHostLoadTrace, useTimedSource } from './useLoadTiming';
 import { graphDiagnostics } from './graphDiagnostics';
 import type { LoadTrace } from './loadTraceTypes';
+import { errorText } from './firstLoadGate';
 import { lensFindings } from './lenses';
 import { PHONE_FOCUS_NODES, lensGraph, nodeIndex } from './graphModel';
 import { useGraphResident } from './compute/useGraphResident';
@@ -191,7 +192,10 @@ export function KnowledgeGraphView({
         } : {}),
     });
     // The header's Copy diagnostics, in every status: reads the host's trace (and its persisted log) at the moment of the press.
-    const copyDiagnostics = async (): Promise<string> => diagnostics(source.loadTrace ? await source.loadTrace().catch(() => null) : undefined).text;
+    // A failed host read is recorded in the timeline (the copy says it), never dropped.
+    const copyDiagnostics = async (): Promise<string> => diagnostics(source.loadTrace
+        ? await source.loadTrace().catch((error: unknown) => { timing.timeline.decide({ kind: 'error', reason: `host loadTrace failed: ${errorText(error)}` }); return null; })
+        : undefined).text;
     const titleOf = (rootId: string) => kg.scopes.find((s) => s.rootId === rootId)?.title ?? rootId;
     // The ONE 3D / Flat switch (PRD 43 C4); Show in tower goes to 3D through it.
     const flatView = useFlatView();

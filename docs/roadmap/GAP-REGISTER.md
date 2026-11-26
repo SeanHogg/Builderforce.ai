@@ -591,16 +591,16 @@ Source: [platform-duplication-audit.md §1](../specs/tasks/platform-duplication-
 | MCP-G001–G002 | **Partial.** Platform, Workspace, outbound HTTP, and the marketplace probe use the SDK. The private Evermind stdio client in Synapse still owns its framing and protocol revision. |
 | MCP-G003 | **Resolved.** The TypeScript relay consumers share the package's tool contract. |
 | MCP-G004–G006 | **Partial.** Shared OpenAI and Anthropic adapters, canonical Platform and Workspace names, effect classification, and a shared gate are in code. Native adapters and host-specific approvals remain. |
-| MCP-G007 | **Partial.** Platform and Workspace apply shared output limits and redaction. Memory's default transports still need the shared package cutover. |
+| MCP-G007 | **Partial.** Platform and Workspace apply shared output limits and redaction. Memory uses the same policy when the shared package is installed. Automatic acquisition still needs the npm release. |
 | MCP-G008–G012 | **Resolved for the implemented transports.** Memory reports its package version and binds to loopback. Agent-runtime uses the SDK and no longer advertises duplicate Platform write tools. Standard MCP calls use `arguments`. The legacy REST compatibility route still accepts its original payload. |
-| MCP-G013 | **Open.** Catalog-change notifications, resources, and prompts are still pending. |
+| MCP-G013 | **Resolved for Platform.** The authenticated interactive profile exposes catalog-change notifications, a catalog guide resource, and a discovery prompt. Registry clients use the stateless default profile. |
 | MCP-G014–G016 | **Resolved.** The outbound client reuses sessions, marketplace review uses the shared client, and the VS Code example points to `/mcp`. |
-| MCP-G017 | **Partial.** TypeScript consumers share relay plumbing and catalog caching. Rust and mobile retain native REST adapters. |
-| MCP-G018–G019 | **Partial.** The API has a shared connector catalog with HTTP and stdio offers. VS Code reads workspace MCP configs and uses native setup. Legacy Synapse config migration and Memory installer adoption remain open. |
+| MCP-G017 | **Shared model projection implemented.** TypeScript consumers share relay plumbing and catalog caching. Rust and mobile use the gateway's model tool schema, approval decision, and protected result text. Each native client uses its platform HTTP transport and supports the legacy response during rollout. |
+| MCP-G018–G019 | **Partial.** The API has a shared connector catalog with HTTP and stdio offers. VS Code reads workspace configs and imports Synapse connector launch settings through native review. Imports carry environment references for credentials. Memory uses the shared config codec when the package is installed. |
 | MCP-G020 | **Partial.** The Memory installer and Claude plugin share a launch spec. Synapse's private Evermind client still has a Rust launcher. |
-| MCP-G021 | **Partial.** VS Code and the headless runtime share the Workspace catalog. The TypeScript chunk and dense index, persisted snapshot reuse, and benchmark remain tracked under code index consolidation. |
-| MCP-G022 | **Partial.** The Memory adapter supports canonical names and legacy aliases. Publishing the shared package is required for the default Memory transport and installer cutover. Other agent memory vocabularies still exist. |
-| MCP-G023 | **Partial.** The Platform catalog and VS Code config reader deduplicate entries within their own scope. Cross-host deduplication still needs reliable server and credential identity. |
+| MCP-G021 | **Workspace MCP cutover implemented.** VS Code and the headless runtime share a persisted TypeScript code-body index for `workspace__find`. Lexical search works without a model. Dense ranking can use a resident loopback Ollama embedder. Broader index migration and the native retirement benchmark remain tracked in Area 2. |
+| MCP-G022 | **Partial.** The Memory adapter supports canonical names and legacy aliases. The shared package has a release pipeline entry. Its publication and automatic acquisition by Memory still remain. Other agent memory vocabularies still exist. |
+| MCP-G023 | **Partial.** The old combined Rust catalog was removed. Platform and VS Code each deduplicate within their own scope. Coalescing live tools across hosts still requires verified server and credential identity. |
 | MCP-G024 | **Resolved.** Workflow execution uses data-provider handlers, with compatibility for saved `mcp` nodes. |
 
 Findings from the original audit:
@@ -777,7 +777,7 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §6. 
 
 - `SHELL-G001` **The sandbox provider's containment check wrongly rejects names like `..foo`** (`sandbox-capability-provider.ts:101`, which uses `startsWith("..")`). Fix in progress.
 - `SHELL-G002` **The shared path resolver needs a symlink-aware variant**, used by every read/write/edit provider. Details are in the local security findings file. Fix in progress.
-- `SHELL-G003` **There are four process-tree kill implementations.** Make one shared `node-process` helper. Fix in progress.
+- `SHELL-G003` **There are four process-tree kill implementations.** Make one shared `node-process` helper. The Node hosts are done: `packages/agent-tools/src/node-process.ts`, awaiting review. Still open: `clients/vscode/src/process/killTree.ts` stays as a re-export until `knowledge/knowledgeShell.ts` imports `node-process` directly; the container JS (`api/container/sandboxJobs.mjs`, `sandboxCore.mjs`, `previewProcess.mjs`) has its own kill logic and needs the container generator (`scripts/gen-container-shared.mjs`).
 - `SHELL-G004` **Some Windows tree-kills resolve `taskkill` unsafely.** Details are in the local security findings file. Fix in progress.
 - `SHELL-G005` **Output caps are hard-coded per host** (VS Code 60,000 characters and 4 MB, browser 16,000, native 50 KB, 2 MB reads). Take them from `tool-output-policy`.
 - `SHELL-G006` **Command timeout defaults and units differ** (seconds vs ms; 5 vs 10 min). Add one `DEFAULT_COMMAND_TIMEOUT_MS`.

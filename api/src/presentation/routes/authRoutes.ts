@@ -48,6 +48,7 @@ import { revokeSessionTokens } from '../../application/auth/sessionRevocation';
 import { listUserSessions } from '../../application/auth/sessionDirectory';
 import { beginMfaSetup, confirmMfaEnable, disableMfa, regenerateRecoveryCodes, verifyMfaChallenge } from '../../application/auth/mfaChallenge';
 import { createSessionIntrospectRoutes } from './sessionIntrospectRoutes';
+import { createWebRenewRoutes } from './webRenewRoutes';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import { coerceJsonArray } from '../../domain/shared/jsonColumn';
 import { LIST_ROW_CAP } from '../../domain/shared/boundedInt';
@@ -202,6 +203,9 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
 
   // GET /api/auth/introspect — the legacy worker's session check; own module.
   router.route('/', createSessionIntrospectRoutes());
+
+  // POST /api/auth/web/renew — background renewal of the short-lived web token; own module.
+  router.route('/', createWebRenewRoutes(db, canUseSuperAdmin));
 
   // The newsletter (`/newsletter/subscribers`) and the privacy/DSR channel
   // (`/privacy-requests`, `/me/privacy-*`) are mounted at this same `/api/auth`

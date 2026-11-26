@@ -1,5 +1,7 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import * as vscode from "vscode";
-import { readMcpConfig, type McpConfigHost } from "@seanhogg/builderforce-mcp/config";
+import { readMcpConfig, readSynapseConnectors, type LaunchSpec, type McpConfigHost } from "@seanhogg/builderforce-mcp/config";
 import * as bfApi from "../bfApi";
 import { clearPlatformToolsCache } from "../platform/platformTools";
 import { messageOf } from "../shared/messageOf";
@@ -24,7 +26,7 @@ const WORKSPACE_MCP_CONFIGS = [
 ] as const satisfies readonly { host: McpConfigHost; segments: readonly string[] }[];
 
 type McpServerPick = vscode.QuickPickItem & (
-  | { action: "register" | "native" | "catalog" }
+  | { action: "register" | "native" | "catalog" | "import" }
   | { action: "remote"; server: bfApi.BfMcpExtension }
   | { action: "local"; config: vscode.Uri }
 );
@@ -86,10 +88,29 @@ async function installCatalogServer(secrets: vscode.SecretStorage): Promise<void
     }
   }
 
-  // The native installer shows the command for review before saving or activating it.
-  const definition = { name: pick.id, command: "npx", args, env };
+  await reviewLocalInstall(pick.id, { command: "npx", args, env });
+}
+
+async function reviewLocalInstall(name: string, launch: LaunchSpec): Promise<void> {
+  const definition = { name, ...launch };
   const uri = vscode.Uri.parse(`${vscode.env.uriScheme}:mcp/install?${encodeURIComponent(JSON.stringify(definition))}`);
   await vscode.env.openExternal(uri);
+}
+
+async function importSynapseConnector(): Promise<void> {
+  const root = process.env.BUILDERFORCE_DESKTOP_HOME || join(homedir(), ".builderforce", "desktop");
+  const title = vscode.l10n.t("Import a Synapse connector");
+  const files = await vscode.window.showOpenDialog({
+    title,
+    filters: { JSON: ["json"] },
+    defaultUri: vscode.Uri.file(join(root, "connectors.json")),
+    canSelectMany: false,
+  });
+  if (!files?.[0]) return;
+  const source = new TextDecoder().decode(await vscode.workspace.fs.readFile(files[0]));
+  const choices = readSynapseConnectors(source).map((connector) => ({ label: connector.name, connector }));
+  const pick = await vscode.window.showQuickPick(choices, { title });
+  if (pick) await reviewLocalInstall(pick.connector.id, pick.connector.launch);
 }
 
 function describe(server: bfApi.BfMcpExtension): string {
@@ -173,6 +194,7 @@ export async function manageMcpServers(
   if (commands.includes(NATIVE_MCP_LIST)) {
     picks.unshift(
       { action: "catalog", label: `$(add) ${vscode.l10n.t("Add a local MCP server")}` },
+      { action: "import", label: `$(import) ${vscode.l10n.t("Import a Synapse connector")}` },
       { action: "native", label: vscode.l10n.t("$(gear) Manage local MCP servers") },
     );
   }
@@ -217,6 +239,10 @@ export async function manageMcpServers(
     }
     if (pick.action === "catalog") {
       if (await ensureSignedIn()) await installCatalogServer(secrets);
+      return;
+    }
+    if (pick.action === "import") {
+      await importSynapseConnector();
       return;
     }
     if (pick.action === "register") {
