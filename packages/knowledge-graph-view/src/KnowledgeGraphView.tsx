@@ -106,12 +106,14 @@ export interface KnowledgeGraphViewProps {
     onOpenSource?(location: SourceLocation): void;
     /** What the host's editor shows of a file of the root on show: the code band follows it. */
     editorView?: EditorView | null;
+    /** The host's own header tools (the VS Code view switch), drawn first in the header's right group. */
+    headerTools?: ReactNode;
 }
 
 const EMPTY_VISIBLE: VisibleGraph = { nodes: [], edges: [] };
 
 export function KnowledgeGraphView({
-    source, labels: partial, onCompose, initialFocus, openReview, initialLens, renderPanel, confirm, lenses: lensSubset, onOpenSource, editorView,
+    source, labels: partial, onCompose, initialFocus, openReview, initialLens, renderPanel, confirm, lenses: lensSubset, onOpenSource, editorView, headerTools,
 }: KnowledgeGraphViewProps) {
     const labels = useMemo(() => resolveLabels(partial), [partial]);
     // First-load triage: the graph's calls are timed (one wrapper per source), and the host's trace is read while a load runs.
@@ -272,7 +274,7 @@ export function KnowledgeGraphView({
             <SurfaceHeader
                 kg={kg} source={source} labels={labels} graph={graph} surface={surface} env={surfaceEnv} wrapped={layout.drawerSheet} sync={sync.status}
                 run={runRead.live} onOpenReviews={openReviews} outTo={chrome.out.to} onOut={chrome.out.onOut} drawerOpen={drawer.open} onToggleDrawer={drawer.toggle}
-                panes={panes}
+                panes={panes} headerTools={headerTools}
                 spine={<Spine labels={labels} items={chrome.spineItems} roots={{ scopes: kg.scopes, rootId: kg.rootId, onRoot: kg.selectRoot }} onPick={chrome.onSpinePick} />}
                 askName={chrome.askName}
                 linesToggle={layout.phone && hasLines ? <Pill on={linesOpen} aria-expanded={linesOpen} onClick={() => setLinesOpen((v) => !v)}>{s.linesButton}</Pill> : undefined}

@@ -97,6 +97,7 @@ export function Toolbar({ labels, onSearch, question, askName, wrapped, outTo, o
             >{icon('out')}</button>
             <div style={wrapped ? { order: 3, flexBasis: '100%', minWidth: 0, display: 'flex' } : { minWidth: 0, display: 'flex', flex: '0 1 auto' }}>{spine}</div>
             <div style={right}>
+                {headerTools}
                 {panes && (
                     <Seg
                         label={s.header.panesLabel} value={panes.code ? 'code' : 'picture'} onPick={(id) => panes.onPane(id === 'code')}

@@ -91,14 +91,14 @@ describe('StationCard (the note-card shell)', () => {
     });
 
     it('states risk in words, test reach, the owner and the anti-pattern name in the facts row', () => {
-        card({ ...withFacts({ tests: 'none', antiPattern: finding }), owner: 'Payments' });
+        card({ ...withFacts({ tests: 'none', antiPattern: finding }), owner: 'Payments', risk: { level: 'high', tone: 'sev3' } });
         const row = document.querySelector('[data-note-facts]')!;
-        expect(row.querySelector('[data-fact="risk"]')?.textContent).toBe(fillTemplate(t.riskWord, { level: 'high' }));
+        expect(row.querySelector('[data-fact="risk"]')?.textContent).toBe('High risk');
         expect(row.querySelector('[data-fact="tests"]')?.textContent).toBe(t.testNone);
         expect(row.querySelector('[data-fact="owner"]')?.textContent).toBe(fillTemplate(t.ownerIs, { name: 'Payments' }));
         expect(row.querySelector('[data-fact="anti"]')?.textContent).toBe('God module');
         document.body.innerHTML = '';
-        card({ ...withFacts({ tests: 'reached' }), stats: base.stats.map((s) => (s.key === 'issues' ? { ...s, tone: null } : s)) });
+        card({ ...withFacts({ tests: 'reached' }), risk: null });
         expect(document.querySelector('[data-fact="risk"]')?.textContent).toBe(t.noRisk);
         expect(document.querySelector('[data-fact="tests"]')?.textContent).toBe(t.testReached);
         expect(document.querySelector('[data-fact="anti"]')).toBeNull();

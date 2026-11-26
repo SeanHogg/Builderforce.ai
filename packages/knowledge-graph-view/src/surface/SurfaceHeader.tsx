@@ -47,6 +47,8 @@ export interface SurfaceHeaderProps {
     /** What `{name}` is in the ask bar's sentence. */
     askName: string;
     linesToggle?: ReactNode;
+    /** The host's own tools, first in the right group (the VS Code view switch). */
+    headerTools?: ReactNode;
     onSearch(q: string): void;
     onSelect(ref: string): void;
     onMatches(refs: string[]): void;
@@ -65,7 +67,7 @@ export function SurfaceHeader(p: SurfaceHeaderProps) {
     return (
         <Toolbar
             labels={labels} wrapped={wrapped} onSearch={p.onSearch} question={surface.question} askName={p.askName} outTo={p.outTo} onOut={p.onOut}
-            spine={p.spine} linesToggle={p.linesToggle} drawerOpen={p.drawerOpen} onToggleDrawer={p.onToggleDrawer} panes={p.panes}
+            spine={p.spine} linesToggle={p.linesToggle} headerTools={p.headerTools} drawerOpen={p.drawerOpen} onToggleDrawer={p.onToggleDrawer} panes={p.panes}
             action={<ReviewAction labels={labels} narrow={wrapped} pill={pill} {...(reviewsOpen ? { onOpen: p.onOpenReviews } : {})} />}
             askWrap={(bar) => (
                 <PinpointInput

@@ -80,7 +80,7 @@ describe('SymbolCard', () => {
         expect(screen.queryByRole('button', { name: t.simulate })).toBeNull();
         expect(screen.getByRole('button', { name: t.restructure })).toBeTruthy();
         expect(document.querySelector('[data-fact="anti"]')?.textContent).toBe(L.findingKinds.godModule);
-        expect(document.querySelector('[data-fact="risk"]')?.textContent).toBe(fillTemplate(t.riskWord, { level: L.surface.map.statWords.anti.high }));
+        expect(document.querySelector('[data-fact="risk"]')?.textContent).toBe('High risk');
         document.body.innerHTML = '';
         // No coverage reading: the facts row says nothing about tests. A kind with no proposer keeps Simulate.
         mount({ onSimulate: vi.fn(), onRestructure: vi.fn(), facts: { antiPatternOf: () => ({ kind: 'cycle', findingId: 'f', restructurable: false }), testReach: () => 'unknown', untested: () => false } });
