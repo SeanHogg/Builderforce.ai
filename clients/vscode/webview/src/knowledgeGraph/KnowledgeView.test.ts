@@ -13,12 +13,14 @@ import { KnowledgeView } from './KnowledgeView';
  */
 describe('the Visualization panel Knowledge view', () => {
   it('mounts the graph view on a fake source and paints its graph', () => {
-    const graph = codeFixture('ws');
-    const source = { ...fixtureSource([graph]), snapshot: { graph, title: 'ws' } };
-    const html = renderToStaticMarkup(createElement(KnowledgeView, { source, labels: DEFAULT_KNOWLEDGE_GRAPH_LABELS, focus: ['src:ws::app/page.tsx'] }));
+    const graph = codeFixture('fixture-root');
+    const source = { ...fixtureSource([graph]), snapshot: { graph, title: 'fixture-root' } };
+    const html = renderToStaticMarkup(createElement(KnowledgeView, { source, labels: DEFAULT_KNOWLEDGE_GRAPH_LABELS, focus: ['src:fixture-root::app/page.tsx'] }));
     expect(html).toContain('data-testid="viz-knowledge"');
     expect(html).toContain(DEFAULT_KNOWLEDGE_GRAPH_LABELS.regionLabel);
-    expect(html).toContain('domain/invoice.ts');
+    // The first paint is the header, the camera row and the scene box (stage, code pane and the findings drawer are lazy or closed
+    // by default, so no file name is in the markup). The spine ("Where you are") names the root of the graph the source held.
+    expect(html).toMatch(/data-testid="kg-spine"[^]*>fixture-root<\/button>/);
   });
 
   it('forwards onCompose to the graph view (the Agent runs drawer Fix action seeds a new chat through it)', () => {

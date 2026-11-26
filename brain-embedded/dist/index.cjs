@@ -15394,6 +15394,15 @@ var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
 // ../packages/agent-tools/src/knowledge/reviewRunner.ts
 var import_knowledge39 = require("@seanhogg/builderforce-memory/knowledge");
 
+// ../packages/agent-tools/src/knowledge/codeEntryPoints.ts
+var LITERAL = String.raw`(?:"[^"\n]*"|'[^'\n]*'|\x60[^\x60\n$]*\x60)`;
+var LITERAL_RE = new RegExp(LITERAL, "g");
+var INPUT_FORMS = [
+  new RegExp(String.raw`^${LITERAL}`),
+  new RegExp(String.raw`^\[\s*(?:${LITERAL}\s*,?\s*)*\]`),
+  new RegExp(String.raw`^\{\s*(?:(?:[\w$-]+|${LITERAL})\s*:\s*${LITERAL}\s*,?\s*)*\}`)
+];
+
 // ../packages/agent-tools/src/knowledge/codeGraph.ts
 var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
 

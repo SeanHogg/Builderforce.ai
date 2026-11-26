@@ -48,11 +48,13 @@ export interface ToolbarProps {
     askWrap?: ((bar: (picker: ReactNode) => ReactNode) => ReactNode) | undefined;
     /** Opens the lines as a sheet where the left panel has collapsed. */
     linesToggle?: ReactNode;
+    /** The host's own tools (the VS Code panel's view switch): the first of the right group, left of the search. */
+    headerTools?: ReactNode;
 }
 
 const icon = (id: string): ReactNode => chromeGlyph(id);
 
-export function Toolbar({ labels, onSearch, question, askName, wrapped, outTo, onOut, spine, action, drawerOpen, onToggleDrawer, panes, askWrap, linesToggle }: ToolbarProps) {
+export function Toolbar({ labels, onSearch, question, askName, wrapped, outTo, onOut, spine, action, drawerOpen, onToggleDrawer, panes, askWrap, linesToggle, headerTools }: ToolbarProps) {
     // null = nothing typed. The input is in the row only while asking (the search button expands it), except where the row wraps: the button is gone there, so the input stays.
     const [typed, setTyped] = useState<string | null>(null);
     const [asking, setAsking] = useState(false);

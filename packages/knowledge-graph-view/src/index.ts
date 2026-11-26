@@ -25,6 +25,8 @@ export { FIX_CHECK_IDS, HOST_CHECK_IDS, FixStepError, type FixCheckId, type FixC
 export { findingDetail, findingRequest, findingBatchRequest, findingTitle } from './findingText';
 export { edgeKindLabel, kindLabel, packLabel } from './names';
 export { layout3d, planeOrder, type Layout3D, type LayoutOptions } from './scene/layout3d';
+export { Seg, type SegItem, type SegProps } from './surface/ui/Seg';
+export { chromeGlyph, cameraGlyph } from './surface/ui/glyphs';
 export { KG_TOKENS, cssVar, readThemeColors, useThemeColors, type ThemeTone, type ThemeColors } from './scene/themeColors';
 export type {
     KnowledgeGraphSource, KnowledgeReviewEvent, KnowledgeScopeSummary, KnowledgeSearchHit, ReviewControl,

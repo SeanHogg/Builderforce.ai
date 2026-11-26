@@ -8265,6 +8265,15 @@ import {
   srcRef as srcRef8
 } from "@seanhogg/builderforce-memory/knowledge";
 
+// ../packages/agent-tools/src/knowledge/codeEntryPoints.ts
+var LITERAL = String.raw`(?:"[^"\n]*"|'[^'\n]*'|\x60[^\x60\n$]*\x60)`;
+var LITERAL_RE = new RegExp(LITERAL, "g");
+var INPUT_FORMS = [
+  new RegExp(String.raw`^${LITERAL}`),
+  new RegExp(String.raw`^\[\s*(?:${LITERAL}\s*,?\s*)*\]`),
+  new RegExp(String.raw`^\{\s*(?:(?:[\w$-]+|${LITERAL})\s*:\s*${LITERAL}\s*,?\s*)*\}`)
+];
+
 // ../packages/agent-tools/src/knowledge/codeGraph.ts
 import {
   buildGraph
@@ -21633,4 +21642,4 @@ export {
   computeBrainDiagnostics,
   buildBrainTriageReport
 };
-//# sourceMappingURL=chunk-4GO2XHR5.mjs.map
+//# sourceMappingURL=chunk-YHJLXV7C.mjs.map

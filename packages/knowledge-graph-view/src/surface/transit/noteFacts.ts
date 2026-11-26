@@ -10,15 +10,16 @@ import type { ThemeTone } from '../../scene/themeColors';
 import { answerFor, answerLine, type QuestionId } from '../questions';
 import type { Station } from '../stations';
 import type { RiskFact } from './CardActions';
+import type { AntiLevel } from './cardModel';
 import type { NoteAnswer } from './NoteCard';
 
 /**
- * The risk row: the level's localized word (`statWords.anti`) when something is flagged (in its severity tone), else
- * "No risk flags". The word goes in as it is; `riskWord` carries any capitalisation its language needs.
+ * The risk row: `riskWord` with the level's own word (`statWords.riskLevel`, already in the form the template needs: "High
+ * risk", "Riesgo alto") when something is flagged, in its severity tone; else "No risk flags". Nothing is re-cased in code.
  */
-export function riskFactOf(flag: { word: string; tone: ThemeTone } | null, labels: KnowledgeGraphLabels): RiskFact {
-    const t = labels.surface.map.card;
-    return flag ? { text: fillTemplate(t.riskWord, { level: flag.word }), tone: flag.tone } : { text: t.noRisk, tone: null };
+export function riskFactOf(flag: { level: AntiLevel; tone: ThemeTone } | null | undefined, labels: KnowledgeGraphLabels): RiskFact {
+    const m = labels.surface.map, t = m.card;
+    return flag ? { text: fillTemplate(t.riskWord, { level: m.statWords.riskLevel[flag.level] }), tone: flag.tone } : { text: t.noRisk, tone: null };
 }
 
 /** The answer row's words. `icon` is the caller's (the question's glyph). */

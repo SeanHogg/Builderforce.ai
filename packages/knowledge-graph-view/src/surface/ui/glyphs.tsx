@@ -79,6 +79,9 @@ export function chromeGlyph(id: string): ReactNode {
         case 'resolve': return <Glyph><path d="M10.5 2.5a3 3 0 0 0-3.2 4L2.5 11.3l2.2 2.2 4.8-4.8a3 3 0 0 0 4-3.2l-1.9 1.1-1.6-1.6z" /></Glyph>;
         case 'run': return <Glyph><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8s-2.5 4.5-6.5 4.5S1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" /></Glyph>;
         case 'agentRuns': return <Glyph><rect x="3.5" y="5.5" width="9" height="7" rx="1.5" /><path d="M8 5.5V3.3M6 8.5v1M10 8.5v1" /><circle cx="8" cy="2.5" r="0.8" /></Glyph>;
+        // A host's view switch (the VS Code visualization panel): the canvas is a board of cards, the changes a diff.
+        case 'canvas': return <Glyph><rect x="2" y="2.5" width="12" height="11" rx="1" /><rect x="4" y="4.5" width="3.5" height="3" /><path d="M9.5 5h2M9.5 7h2M4 10.5h7.5" /></Glyph>;
+        case 'diff': return <Glyph><path d="M5 2.5v7M2.5 5h5M8.5 11.5h5" /><path d="M11 2.5v3M9.5 4h3" /></Glyph>;
         case 'domains': return <Glyph><path d="M2.5 4.5c0-.6.4-1 1-1h3l1.5 1.5h4.5c.6 0 1 .4 1 1v5.5c0 .6-.4 1-1 1h-9c-.6 0-1-.4-1-1z" /></Glyph>;
         default: return undefined;
     }

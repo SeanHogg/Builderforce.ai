@@ -50,9 +50,7 @@ export interface StationCardProps extends CardActions {
 export function StationCard({ card, labels, type, answer, narrow, boxRef, loading, onEnter, onUnfold, onCallers, onApi, onPatterns, onCode, onSimulate, onRestructure }: StationCardProps) {
     const t = labels.surface.map.card;
     const noSymbols = !card.enter.can && card.enter.reason === 'noSymbols';
-    const issues = card.stats.find((k) => k.key === 'issues');
     const complexity = card.stats.find((k) => k.key === 'complexity');
-    const flagged = issues?.tone ? { word: issues.value, tone: issues.tone } : null;
     return (
         <NoteCard
             role="station" ariaLabel={card.name} name={card.name} kind={kindLabel(labels, typeLegendKey(type))} narrow={narrow} boxRef={boxRef} answer={answer}
@@ -60,7 +58,7 @@ export function StationCard({ card, labels, type, answer, narrow, boxRef, loadin
             meta={<span style={TYPE.meta}>{card.meta}{card.leaf ? ` · ${t.leaf}` : ''}</span>}
             facts={(
                 <CardFacts
-                    labels={labels} facts={card.facts ?? null} risk={riskFactOf(flagged, labels)} owner={card.owner}
+                    labels={labels} facts={card.facts ?? null} risk={riskFactOf(card.risk, labels)} owner={card.owner}
                     complexity={complexity && complexity.value !== '—' ? `${labels.surface.map.stats.complexity}: ${complexity.value}` : null}
                 />
             )}

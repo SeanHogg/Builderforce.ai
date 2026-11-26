@@ -46,6 +46,8 @@ export interface CardModel {
     owner?: string | undefined;
     /** Restructure is shown but disabled while false (see `CardInput.restructureReady`). */
     restructureReady?: boolean;
+    /** The station's risk when something is flagged (its level and the issues stat's tone); null or absent = no risk flags. */
+    risk?: { level: AntiLevel; tone: ThemeTone } | null;
 }
 
 /** What the selection's facts row and its Restructure action read: computed once by `symbolFacts`, only named here. */
@@ -128,5 +130,6 @@ export function buildCard(i: CardInput): CardModel {
         facts: selectionFacts(i.facts, s.refs, labels),
         owner: s.owner,
         restructureReady: i.restructureReady ?? true,
+        risk: s.findingIds.length > 0 ? { level: antiWord(s.anti), tone: level(s.anti) } : null,
     };
 }
