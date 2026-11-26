@@ -7,7 +7,7 @@ import type { KnowledgeEvent, KnowledgeStoredRun } from "./knowledgeProtocol";
 const root = { rootId: "ws", rootPath: "/ws", folderPath: "/ws", rel: "", title: "ws" };
 
 vi.mock("vscode", () => ({ l10n: { t: (m: string) => m }, window: {}, Uri: {} }));
-vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn() }));
+vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn(), reportExtensionError: vi.fn() }));
 vi.mock("./knowledgeFailureLog", () => ({ logReviewFailure: (_sink: unknown, _where: unknown, error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }) }));
 // The replica host's process-wide "reviewing" count, as the real one keeps it.
 const held = vi.hoisted(() => ({ reviewing: new Map<string, number>() }));

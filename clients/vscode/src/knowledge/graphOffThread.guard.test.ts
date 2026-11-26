@@ -31,7 +31,7 @@ vi.mock("vscode", () => ({
 vi.mock("../bfApi", () => ({ fetchAuthed: async () => { throw new Error("offline"); } }));
 vi.mock("../project/projectState", () => ({ getSelectedProject: () => undefined }));
 vi.mock("../tools/capabilityContext", () => ({ currentCapabilityInputs: () => ({ signedIn: false, synchronize: false, gatewayInference: false, connectedFeatures: false }) }));
-vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn() }));
+vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn(), reportExtensionError: vi.fn() }));
 vi.mock("../tools/localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
 vi.mock("../workspace/workspaceSymbols", () => ({ workspaceSymbolIndex: () => ({ filesUnder: async () => [] }), symbolGrammarOptions: () => ({}) }));
 vi.mock("./index/hostKnowledgeIndex", () => ({

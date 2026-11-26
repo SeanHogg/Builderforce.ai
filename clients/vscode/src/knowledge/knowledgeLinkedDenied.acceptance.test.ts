@@ -34,7 +34,7 @@ vi.mock("../bfApi", () => ({
 vi.mock("../project/projectState", () => ({ getSelectedProject: () => (mocks.linked ? { id: 7, name: "linked" } : undefined) }));
 // Linked means selected + signed in + `synchronize` granted (PRD 41 A2): this scenario is the granted one.
 vi.mock("../tools/capabilityContext", () => ({ currentCapabilityInputs: () => ({ signedIn: true, synchronize: true, gatewayInference: true, connectedFeatures: true }) }));
-vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn() }));
+vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn(), reportExtensionError: vi.fn() }));
 vi.mock("../tools/localCapabilities", () => ({ buildLocalCapabilityProvider: () => ({}) }));
 vi.mock("../workspace/workspaceSymbols", () => ({ workspaceSymbolIndex: () => ({ filesUnder: async () => [] }) }));
 vi.mock("./index/hostKnowledgeIndex", () => ({ getHostKnowledgeIndex: async () => undefined }));

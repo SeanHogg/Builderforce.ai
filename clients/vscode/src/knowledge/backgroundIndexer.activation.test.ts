@@ -38,7 +38,7 @@ vi.mock("vscode", () => {
   };
 });
 vi.mock("../telemetry/productEvents", () => ({ emitProductEvent: vi.fn() }));
-vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn() }));
+vi.mock("../diagnostics/errorReporter", () => ({ logLine: vi.fn(), reportExtensionError: vi.fn() }));
 vi.mock("../power/powerSource", () => ({ osPowerSource: () => ({ current: async () => "mains" }) }));
 vi.mock("./indexHostPorts", () => ({ hostIndexPorts: vi.fn() }));
 vi.mock("./activeRuns", () => ({ onRunStarted: () => () => undefined }));

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const editor = vi.hoisted(() => ({ shown: [] as { path: string; options: unknown }[] }));
 
+vi.mock("../diagnostics/errorReporter", () => ({ reportExtensionError: vi.fn() }));
 vi.mock("vscode", () => ({
   Uri: { file: (fsPath: string) => ({ fsPath }) },
   workspace: { fs: { readFile: async (uri: { fsPath: string }) => new Uint8Array(await readFile(uri.fsPath)) } },
