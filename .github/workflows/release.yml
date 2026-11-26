@@ -1353,10 +1353,10 @@ jobs:
           NEXT_SKIP_BUILD_CHECKS: '1'
         run: |
           pnpm install --frozen-lockfile
-          # next-on-pages' chunk dedup is patched (frontend/patches/@cloudflare__next-on-pages@1.13.16.patch):
-          # upstream rebuilt each function file once per deduped chunk (quadratic, ~440s of CPU here). The patch
-          # logs `[nop-patch]` lines: the dedup phase's time, and how many functions took the fast path and were
-          # verified byte-identical to the original algorithm (a mismatch fails this step).
+          # ~250s of this step is next-on-pages' chunk dedup (processFunctionIdentifiers rebuilds each edge-function
+          # file once per shared chunk). An offset-splice patch was tried and reverted: 172/175 functions hold a
+          # second identical copy of a shared chunk, where upstream's lastIndexOf replaces the LATER copy, so a
+          # faster splice is not byte-identical. The real fix is fewer/smaller edge functions or OpenNext.
           pnpm run cf-build
 
       # Exactly what wrangler.toml deploys: the worker (`_worker.js/`) and the static
