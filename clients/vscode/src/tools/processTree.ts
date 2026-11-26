@@ -14,7 +14,6 @@
 import { spawn, type ChildProcess, type SpawnOptions } from "child_process";
 import { toBashNullDevice } from "@builderforce/agent-tools/node-posix-shell";
 import { killTree } from "@builderforce/agent-tools/node-process";
-import { reportExtensionError } from "../diagnostics/errorReporter";
 
 /**
  * Start a command so {@link killTree} reaches everything it starts: in its own
@@ -44,7 +43,7 @@ const KILL_GRACE_MS = 1_000;
  * settle.
  */
 export function stopCommand(child: ChildProcess): void {
-  if (child.pid) killTree(child.pid, { onError: (error) => void reportExtensionError(error, { operation: "killTree" }) });
+  if (child.pid) killTree(child.pid);
   setTimeout(() => {
     child.stdout?.destroy();
     child.stderr?.destroy();

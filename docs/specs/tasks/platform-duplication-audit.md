@@ -13,7 +13,7 @@ Synapse is being rebuilt from the ground up (user, 2026-11-26), so its Rust MCP 
 | 5 | Chat composer / view | audited (§5) |
 | 6 | Shell / terminal, file tools | audited (§6) |
 | 7 | Auth / device sign-in / cloud client | audited (§7) |
-| 8 | Security policy (code-shield vs Shield) | queued |
+| 8 | Security policy (code-shield vs Shield) | audited (§8) |
 
 ---
 
@@ -854,3 +854,91 @@ Paths: BF = `Builderforce.ai`, I = `builderforce-inference`, M = `builderforce-m
 | AUTH-G014 | Not yet audited: Chrome SettingsView sign-in, W `aiGateway`/`hostRelay`, `packages/knowledge-client`, `packages/provider-connect` | — |
 | AUTH-G015–G019 | Security-sensitive; details in the local security findings file | — |
 | AUTH-G020 | The workspace-switch route is VS Code-named but used by every editor host | `api/src/presentation/routes/vscodeRoutes.ts` |
+
+## 8. Security policy engines
+
+Paths: BF = `Builderforce.ai`, W = `builderforce-webcontainers`, I = `builderforce-inference`, M = `builderforce-memory`. The audit is read-only; items not opened are marked UNVERIFIED. Exploitable observations are in the gitignored local security findings file (`SEC-G011`, `SEC-G013` to `SEC-G015`, and the memory part of `SEC-G004`) and are only referenced here.
+
+### 8.1 Headline
+
+Three good shared cores already exist:
+
+- **`packages/code-shield`**, the scanner:
+  - secret, SAST, behaviour and obfuscation rules, plus a signature set and manifest/typosquat heuristics;
+  - profiles `pr-diff`, `skill-install`, `runtime` and `visualizer`;
+  - a 0–100 risk score mapped to an action;
+  - runs in the browser, Node and the API Worker.
+- **`packages/secret-redaction`**, the redactor: about 25 `SECRET_SHAPES`, used by about 10 consumers.
+- **`packages/sarif`**, the finding format: `NormalizedFinding`, `normalizeSeverity`, SARIF emit and parse.
+
+There is one incident writer: `findingIncidentKinds.ts` writes `security_incidents`, deduped on `source_ref`, and records a governance audit entry.
+
+The duplication sits around these cores:
+
+- secret regexes outside `secret-redaction`;
+- about 8 severity scales;
+- a reason-code list mirrored by hand between W and the API;
+- run-delta security rules that re-implement code-shield SAST;
+- 3 sets of prompt-injection patterns;
+- 6 unrelated egress mechanisms;
+- 2 hosts with no policy at all (I, and M's fact storage).
+
+### 8.2 Engines
+
+| Engine | Path | Runs in | Output | Goes to |
+|---|---|---|---|---|
+| code-shield | `BF/packages/code-shield` | browser worker, Node, API Worker | `ScanFinding` (CRITICAL..LOW, category, weight, ATT&CK id); `ScanReport.complete` | PR gate `api/src/domain/security/diffScanRules.ts`; agent-runtime `security/skill-scanner.ts`; frontend `browserRuntime/codeScanner.ts`; knowledge badges `agent-tools/src/knowledge/{codeFileBadges.ts, rules/securityRisk.ts}` |
+| secret-redaction | `BF/packages/secret-redaction` | everywhere | redacted text and JSON; `findSecretShapes` | api `redactSecrets.ts`, `contentTrust.ts`, `packageReview.ts`; agent-runtime `logging/redact.ts`; `interaction-contract`; `builderforce-mcp/policy.ts`; VS Code `childCoverage.ts`; run-delta `secretAdded`; `agent-env` |
+| Runtime Shield | `W/packages/browser/src/security/{shieldRules, securityEvent, shieldTelemetry, ingressLimit}.ts`, `W/packages/core/src/system/{securityContext, codeScanner}.ts` | browser tab | `SecurityEvent` with 26 `ShieldReasonCode`s → severity and action | `POST /api/security/shield-incidents` (`runtimeShieldRoutes.ts`, `runtimeShieldEvent.ts`, `runtimeShieldIncidents.ts`) → `security_incidents` |
+| API pipeline | `prSecurityGate.ts`, `securityMergeGate.ts`, `prSecurityScan.ts`, `prSecurityReview.ts`, `prSecurityOverride.ts`, `osvScaScan.ts`, `advisoryFeed.ts`, `githubAlerts.ts`, `WebSecurityScanner.ts`, `SecurityAuditService.ts`, `vulnerabilityFindings.ts`, `criticalFindingIncidents.ts`, `governanceAuditor.ts`, `policyPackService.ts` | API | `vulnerability_findings`, `security_incidents` | Security UI and incidents |
+| agent-runtime policy | `security/{audit*, dangerous-tools, external-content, instruction-firewall, skill-scanner}.ts`, `gateway/node-command-policy.ts`, `infra/{exec-approvals*, host-egress}.ts`, `agents/tools/governance-audit/matchers.ts` | local gateway and agent | `SecurityAuditFinding` (info/warn/critical); approvals; deny-lists | local UI and logs |
+| run-delta rules | `BF/packages/run-delta/src/rules/*` (`secretAdded`, `rmRf`, `tlsVerifyDisabled`, `weakCrypto`, `corsPermissive`, `cspPermissive`, `cookieInsecure`, `installScriptAdded`, `workflowPermissive`) | VS Code and API | run-delta findings (error/warn) | run-delta records |
+| Egress and CSP | api `workerEgressPolicy.ts` (signed, per app), `workerEgressGrant.ts`, `workerEgressDeclarations.ts`, `runtime/sandbox/egressAllowlist.ts`, `api/container/egressTrust.mjs`, `workerCsp.ts`, `cspReports.ts`; W `previewEgress.ts`, `previewCsp.ts`; agent-runtime `infra/host-egress.ts`; frontend `middleware.ts` CSP (UNVERIFIED) | various | — | — |
+| Other | VS Code `models/modelFallbackDetail.ts` (its own redactor); M `cognition/sanitize.ts` (recall injection only); I `crates/bf-vault`, `src-tauri/src/agents/secrets.rs`, `bf-teach` password redaction | — | — | — |
+
+### 8.3 Duplicate-responsibility matrix
+
+| Capability | Survivor | Other copies |
+|---|---|---|
+| Secret detection | `secret-redaction` `SECRET_SHAPES` | `code-shield/src/rules/secretRules.ts` (6 rules, own regexes); agent-runtime `governance-audit/matchers.ts` `SECRET_PATTERNS`; W `securityEvent.ts` `SECRET_ASSIGNMENT`/`SECRET_KEY`; VS Code `modelFallbackDetail.ts` |
+| Redaction | `secret-redaction` (`redactDeep`, `redactThenCap`) | W `scrubCredentials` and `redactEvidence` (W is published separately: keep, with a parity test); VS Code `redactFallbackText`; agent-runtime `config/redact-snapshot.ts` and `logging/redact-identifier.ts` (UNVERIFIED overlap) |
+| Dangerous commands | none; build one ruleset | run-delta `rmRf`; `dangerous-tools.ts`; `node-command-policy.ts`; `exec-approvals-analysis.ts`; `agent-tools/src/policyGateCallKey.ts` (UNVERIFIED); W `agent.tool_not_allowed` |
+| Code-vulnerability rules | `code-shield` SAST and behaviour | run-delta `tlsVerifyDisabled`, `weakCrypto`, `corsPermissive`, `cspPermissive`, `cookieInsecure` (parallel regexes, different severity) |
+| Severity | `sarif` `FindingSeverity` (CRITICAL..LOW) with one mapper | Shield and incidents lower-case; `SecurityAuditService` 5-level (adds `info`); agent-runtime info/warn/critical; run-delta and knowledge error/warn; `packageReview` pass/warn/fail; `auditDeepPass` `FINDING_SEVERITIES`; two action scales (allow..block, allow..quarantine) |
+| Finding and incident shape | `sarif` `NormalizedFinding`, `security_incidents` | `SecurityAuditFinding`, `SkillScanFinding`, W `SecurityEvent`, `CodeScanVerdict`, run-delta findings, `packageReview` verdicts |
+| Reason codes | W `ShieldReasonCode` / `SHIELD_RULES` | api `runtimeShieldEvent.ts` `SHIELD_REASON_CODES` and `SHIELD_REASON_POLICY` (hand mirror); code-shield rule ids in mixed styles |
+| Egress | signed per-app policy (`workerEgressPolicy`) plus `previewCsp` | `sandbox/egressAllowlist.ts`; `host-egress.ts`; W `previewEgress.ts`; frontend and Control UI CSP |
+| Policy config | none | signed egress JSON; `gateway.nodes.allowCommands`/`denyCommands`; `exec-approvals.json`; `governance_policy_packs`; `logging.redactPatterns`; W `SHIELD_RULES` |
+| Prompt-injection patterns | none; build one package | `external-content.ts`; `instruction-firewall.ts`; M `cognition/sanitize.ts` |
+| Dependency vulnerabilities | OSV (`osvScaScan.ts`) → `vulnerability_findings` | code-shield manifest heuristics (keep: a different signal); run-delta `installScriptAdded`; `advisoryFeed`; `githubAlerts` |
+
+### 8.4 Target design and order
+
+1. **One secret detector.** code-shield `secretRules` becomes a view derived from `SECRET_SHAPES`. Delete `governance-audit/matchers.ts` `SECRET_PATTERNS`. Move VS Code `modelFallbackDetail.ts` onto the shared redactor. Add a parity test between W `scrubCredentials` and `secret-redaction`.
+2. **One severity mapper** in `sarif`, covering every scale in §8.3; consumers map at their edge.
+3. **Shield reason codes from one source.** Generate the API's `SHIELD_REASON_CODES`, and the default for `SHIELD_REASON_POLICY`, from W `SHIELD_RULES`. The API keeps its own trusted severity, but a test fails on drift.
+4. **Server-side value redaction on Shield evidence.**
+5. **run-delta security rules call code-shield** (one rule set; run-delta keeps its error/warn mapping through the mapper).
+6. **One dangerous-command ruleset** in `agent-tools`, used by exec approvals, run-delta `rmRf` and the command gate. This joins `SHELL-G009`.
+7. **One prompt-injection package**, consumed by agent-runtime and memory recall.
+8. **Egress registry.** One documented list and format; sandbox enforcement on by default.
+9. **Memory.** Redact before facts are stored. **I.** Decide the inference host's policy; under the IDE rebuild it inherits the VS Code extension's.
+10. **Rule-ID naming.** Namespace every code-shield id and remove the duplicate `obfuscated-code`.
+
+### 8.5 Gaps
+
+| ID | Gap | Where |
+|---|---|---|
+| SEC-G001 | Secret regexes outside `secret-redaction` | `code-shield/src/rules/secretRules.ts`, `agent-runtime/src/agents/tools/governance-audit/matchers.ts`, W `securityEvent.ts`, VS Code `modelFallbackDetail.ts` |
+| SEC-G002 | About 8 severity scales; no shared mapper | `sarif`, `SecurityAuditService.ts`, `auditDeepPass.ts`, `skill-scanner.ts`, `agent-runtime/src/security/audit.ts`, `packageReview.ts`, run-delta, Shield |
+| SEC-G003 | Shield reason codes mirrored by hand | `api/src/application/security/runtimeShieldEvent.ts`, W `shieldRules.ts` |
+| SEC-G004 | Memory has no secret redaction before storage (details in the local security findings file) | M `packages/memory/src/storage/*` (UNVERIFIED) |
+| SEC-G005 | No single dangerous-command ruleset | `exec-approvals-analysis.ts`, run-delta `rmRf.ts`, `agent-tools/src/policyGateCallKey.ts`, `dangerous-tools.ts`, `node-command-policy.ts` |
+| SEC-G006 | run-delta security rules re-implement code-shield SAST | `run-delta/src/rules/{tlsVerifyDisabled, weakCrypto, corsPermissive, cspPermissive, cookieInsecure}.ts` |
+| SEC-G007 | Three prompt-injection pattern sets | `agent-runtime/src/security/{external-content, instruction-firewall}.ts`, M `cognition/sanitize.ts` |
+| SEC-G008 | W scrubber parity test; VS Code fallback redactor | W `securityEvent.ts`, VS Code `models/modelFallbackDetail.ts` |
+| SEC-G009 | Egress has no single registry; six mechanisms | §8.2 egress row |
+| SEC-G010 | The inference host (I) has no scanner or egress policy | `I/crates/*` |
+| SEC-G011 | Shield evidence values are not redacted server-side (details in the local security findings file) | `runtimeShieldEvent.ts` |
+| SEC-G012 | code-shield rule ids are inconsistent; `obfuscated-code` is duplicated | `packages/code-shield/src/rules/*` |
+| SEC-G013–G015 | Security-sensitive defaults and coverage gaps; details in the local security findings file | — |

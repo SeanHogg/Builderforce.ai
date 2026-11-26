@@ -793,8 +793,26 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §7. 
 - `AUTH-G012` **Auth-client test gaps:** Chrome `apiClient.test.ts` is 11 lines, Rust has 6 tests, agent-runtime has none.
 - `AUTH-G013` **Rust and VS Code derive the web origin from the API URL by hand.**
 - `AUTH-G014` **Not yet audited:** Chrome SettingsView sign-in, webcontainers `aiGateway`/`hostRelay`, `knowledge-client`, `provider-connect`.
-- `AUTH-G015`–`AUTH-G019` **Security-sensitive client and credential findings.** Details are in the local security findings file. `AUTH-G015` is blocked on a product decision about web session storage.
+- `AUTH-G015`–`AUTH-G019` **Security-sensitive client and credential findings.** Details are in the local security findings file. `AUTH-G015` decided (user, 2026-11-26): shorter-lived web tokens with silent background renewal; queued behind the running fixes.
 - `AUTH-G020` **The workspace-switch route `/api/vscode/tenants/:id/token` is VS Code-named but used by every editor host.** Alias it host-neutrally (expand/contract).
+
+### Security policy consolidation `[platform]`
+
+Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §8. The shared cores are `code-shield`, `secret-redaction`, `sarif` and the single incident writer `findingIncidentKinds.ts`.
+
+- `SEC-G001` **Secret regexes exist outside `secret-redaction`:** code-shield `secretRules.ts`, governance-audit `matchers.ts`, W `securityEvent.ts`, VS Code `modelFallbackDetail.ts`. Derive them all from `SECRET_SHAPES`. Fix in progress.
+- `SEC-G002` **There are about 8 severity scales and no shared mapper.** Put one in `sarif`.
+- `SEC-G003` **The API mirrors W's Shield reason codes by hand** (`runtimeShieldEvent.ts`). Generate them, or add a drift test.
+- `SEC-G004` **Memory has no secret redaction before facts are stored.** Details are in the local security findings file.
+- `SEC-G005` **There is no single dangerous-command ruleset** (exec approvals, run-delta `rmRf`, `policyGateCallKey`, `dangerous-tools`, `node-command-policy`). Joins `SHELL-G009`.
+- `SEC-G006` **The run-delta security rules re-implement code-shield SAST** (`tlsVerifyDisabled`, `weakCrypto`, `corsPermissive`, `cspPermissive`, `cookieInsecure`).
+- `SEC-G007` **There are three prompt-injection pattern sets** (`external-content.ts`, `instruction-firewall.ts`, M `cognition/sanitize.ts`).
+- `SEC-G008` **The W credential scrubber has no parity test with `secret-redaction`.** Fix in progress.
+- `SEC-G009` **Egress has six mechanisms and no single registry.**
+- `SEC-G010` **The inference host (builderforce-inference) has no scanner or egress policy.** Under the Synapse IDE rebuild it inherits the VS Code extension's.
+- `SEC-G011` **Shield evidence values are not redacted server-side.** Details are in the local security findings file. Fix in progress.
+- `SEC-G012` **code-shield rule ids are inconsistent,** and `obfuscated-code` is duplicated.
+- `SEC-G013`–`SEC-G015` **Security-sensitive defaults and coverage gaps.** Details are in the local security findings file.
 
 ### Data model — PRD 20 `[platform]`
 
