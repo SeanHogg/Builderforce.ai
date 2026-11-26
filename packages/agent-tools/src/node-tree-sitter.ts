@@ -284,40 +284,40 @@ ${g.query}`, async () => {
     });
 
   async function extractSpans(relPath: string, content: string): Promise<DefinitionSpan[]> {
-      const grammar = GRAMMAR_BY_EXT[extOf(relPath)];
-      if (!grammar || content.length > maxParseBytes) return extractSymbols(relPath, content);
-      const loaded = await language(grammar);
-      if (!loaded) return extractSymbols(relPath, content);
-      let tree: TsTree | null = null;
-      try {
-        tree = loaded.parser.parse(content);
-        const lines = content.split(/\r?\n/);
-        const byNode = new Map<string, DefinitionSpan>();
-        for (const { name: kind, node } of loaded.query.captures(tree.rootNode)) {
-          if (!KINDS.has(kind as SymbolKind)) continue;
-          const line = node.startPosition.row + 1;
-          const name = node.text;
-          const key = `${line}:${name}`;
-          const prior = byNode.get(key);
-          if (prior && (KIND_PRIORITY[kind as SymbolKind] ?? 2) <= (KIND_PRIORITY[prior.kind] ?? 2)) continue;
-          const lineText = lines[line - 1] ?? "";
-          const span = definitionNode(node);
-          const startLine = span.startPosition.row + 1;
-          const endLine = Math.max(startLine, span.endPosition.row + (span.endPosition.column > 0 ? 1 : 0));
-          byNode.set(key, { name, kind: kind as SymbolKind, line, startLine, endLine, exported: isExported(grammar.family, name, lineText) });
-        }
-        if (grammar.family === "js") {
-          for (const symbol of extractSymbols(relPath, content)) {
-            const key = `${symbol.line}:${symbol.name}`;
-            if (!byNode.has(key) && queryBlindSpot(symbol, lines[symbol.line - 1] ?? "")) byNode.set(key, symbol);
-          }
-        }
-        return [...byNode.values()].sort((a, b) => a.line - b.line).slice(0, MAX_SYMBOLS_PER_FILE);
-      } catch {
-        return extractSymbols(relPath, content);
-      } finally {
-        tree?.delete();
+    const grammar = GRAMMAR_BY_EXT[extOf(relPath)];
+    if (!grammar || content.length > maxParseBytes) return extractSymbols(relPath, content);
+    const loaded = await language(grammar);
+    if (!loaded) return extractSymbols(relPath, content);
+    let tree: TsTree | null = null;
+    try {
+      tree = loaded.parser.parse(content);
+      const lines = content.split(/\r?\n/);
+      const byNode = new Map<string, DefinitionSpan>();
+      for (const { name: kind, node } of loaded.query.captures(tree.rootNode)) {
+        if (!KINDS.has(kind as SymbolKind)) continue;
+        const line = node.startPosition.row + 1;
+        const name = node.text;
+        const key = `${line}:${name}`;
+        const prior = byNode.get(key);
+        if (prior && (KIND_PRIORITY[kind as SymbolKind] ?? 2) <= (KIND_PRIORITY[prior.kind] ?? 2)) continue;
+        const lineText = lines[line - 1] ?? "";
+        const span = definitionNode(node);
+        const startLine = span.startPosition.row + 1;
+        const endLine = Math.max(startLine, span.endPosition.row + (span.endPosition.column > 0 ? 1 : 0));
+        byNode.set(key, { name, kind: kind as SymbolKind, line, startLine, endLine, exported: isExported(grammar.family, name, lineText) });
       }
+      if (grammar.family === "js") {
+        for (const symbol of extractSymbols(relPath, content)) {
+          const key = `${symbol.line}:${symbol.name}`;
+          if (!byNode.has(key) && queryBlindSpot(symbol, lines[symbol.line - 1] ?? "")) byNode.set(key, symbol);
+        }
+      }
+      return [...byNode.values()].sort((a, b) => a.line - b.line).slice(0, MAX_SYMBOLS_PER_FILE);
+    } catch {
+      return extractSymbols(relPath, content);
+    } finally {
+      tree?.delete();
+    }
   }
   return {
     id: "tree-sitter-1",

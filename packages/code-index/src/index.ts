@@ -193,8 +193,9 @@ async function sharedSnapshot(input: SearchInput, root: string) {
   try {
     const previous = await storage.read();
     const { snapshot } = await refresh(input, root, previous);
-    if (snapshot !== previous) await storage.write(snapshot, () => lock.isFresh?.() ?? true);
-    return { snapshot, fresh: true };
+    const stillOwner = () => lock.isFresh?.() ?? true;
+    if (snapshot !== previous) await storage.write(snapshot, stillOwner);
+    return { snapshot, fresh: stillOwner() };
   } finally {
     await lock.release();
   }

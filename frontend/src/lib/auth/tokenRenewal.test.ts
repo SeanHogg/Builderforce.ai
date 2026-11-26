@@ -13,7 +13,8 @@ vi.mock('../auth', async (importOriginal) => {
   };
 });
 
-import { handleApiUnauthorized } from '../auth';
+/** The mock instance the module under test imported (the registry is reset between tests). */
+const signOutSpy = async () => (await import('../auth')).handleApiUnauthorized as ReturnType<typeof vi.fn>;
 
 const b64 = (value: object) => btoa(JSON.stringify(value)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const jwt = (claims: Record<string, unknown>) => `${b64({ alg: 'HS256' })}.${b64(claims)}.sig`;
@@ -29,9 +30,10 @@ function renewResponse(token: string): Response {
   return new Response(JSON.stringify({ token }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   localStorage.clear();
-  vi.mocked(handleApiUnauthorized).mockClear();
+  // The mock factory's result outlives `vi.resetModules()`, so its call history does too.
+  (await signOutSpy()).mockClear();
 });
 
 afterEach(() => {
@@ -85,7 +87,7 @@ describe('scheduled renewal', () => {
 
     const stop = startTokenRenewal();
     await vi.advanceTimersByTimeAsync(10);
-    expect(handleApiUnauthorized).toHaveBeenCalledTimes(1);
+    expect(await signOutSpy()).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem(WEB_KEY)).toBeNull();
     stop();
   });
@@ -101,7 +103,7 @@ describe('scheduled renewal', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(RENEW_RETRY_MS + 10);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
-    expect(handleApiUnauthorized).not.toHaveBeenCalled();
+    expect(await signOutSpy()).not.toHaveBeenCalled();
     expect(localStorage.getItem(WEB_KEY)).not.toBeNull();
     stop();
   });
@@ -186,11 +188,13 @@ describe('renewAfterUnauthorized', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ code: 'session_expired' }), { status: 401 }));
     const { renewAfterUnauthorized } = await import('./tokenRenewal');
     expect(await renewAfterUnauthorized(`Bearer ${stale}`)).toBe(false);
-    expect(handleApiUnauthorized).not.toHaveBeenCalled();
+    expect(await signOutSpy()).not.toHaveBeenCalled();
   });
 
   it('is a no-op with no session', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const { renewAfterUnauthorized } = await import('./tokenRenewal');
     expect(await renewAfterUnauthorized('Bearer x')).toBe(false);
-    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});

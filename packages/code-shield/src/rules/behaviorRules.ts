@@ -19,20 +19,20 @@ const NETWORK_SEND = /\bfetch\b|\bpost\b|http\.request/i;
  */
 export const BEHAVIOR_RULES: readonly Rule[] = [
   {
-    id: 'dangerous-exec', category: 'insecure-code', severity: 'CRITICAL', weight: 10, attack: 'T1059', scope: 'line',
+    id: 'behavior.dangerous-exec', category: 'insecure-code', severity: 'CRITICAL', weight: 10, attack: 'T1059', scope: 'line',
     title: 'Shell command execution detected (child_process)',
     pattern: /\b(exec|execSync|spawn|spawnSync|execFile|execFileSync)\s*\(/,
     requiresContext: /child_process/,
     remediation: 'Avoid spawning shells; if a process is required, pass a fixed argument array.',
   },
   {
-    id: 'dynamic-code-execution', category: 'insecure-code', severity: 'CRITICAL', weight: 10, attack: 'T1059.007', scope: 'line',
+    id: 'behavior.dynamic-code-execution', category: 'insecure-code', severity: 'CRITICAL', weight: 10, attack: 'T1059.007', scope: 'line',
     title: 'Dynamic code execution detected',
     pattern: /\beval\s*\(|new\s+Function\s*\(/,
     remediation: 'Replace dynamic evaluation with a parser or a lookup table.',
   },
   {
-    id: 'crypto-mining', category: 'cryptojacking', severity: 'CRITICAL', weight: 40, attack: 'T1496', scope: 'line',
+    id: 'behavior.crypto-mining', category: 'cryptojacking', severity: 'CRITICAL', weight: 40, attack: 'T1496', scope: 'line',
     title: 'Possible crypto-mining reference detected',
     pattern: /stratum\+tcp|stratum\+ssl|coinhive|cryptonight|xmrig/i,
     remediation: 'Remove the mining code; it uses the host\'s CPU without consent.',
