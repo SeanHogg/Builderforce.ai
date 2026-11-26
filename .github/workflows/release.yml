@@ -1351,8 +1351,6 @@ jobs:
           NEXT_BUILDERFORCE_ERROR_API_KEY: ${{ github.event_name != 'pull_request' && secrets.BUILDERFORCE_ERROR_API_KEY || '' }}
           # verify-frontend lints and type-checks; see next.config.js.
           NEXT_SKIP_BUILD_CHECKS: '1'
-          # TEMPORARY (first runs of the buffer patch): verify every function against upstream's algorithm.
-          NOP_PATCH_VERIFY: '1'
         run: |
           pnpm install --frozen-lockfile
           # next-on-pages' chunk dedup is patched (frontend/patches/@cloudflare__next-on-pages@1.13.16.patch).
