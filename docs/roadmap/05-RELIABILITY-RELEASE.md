@@ -64,9 +64,9 @@ dependencies:
   - REL-01
 objective: Run `qa-e2e` in CI.
 acceptance:
-  - `qa-e2e` is a job in `release.yml` that runs after `deploy-frontend`. It reports Playwright failures (red job, job-summary warning, report artifact) without failing the release.
+  - `qa-e2e` is its own workflow (`qa-e2e.yml`, started by the Release run's completion) that runs only when that run's `Deploy frontend` job succeeded. It reports Playwright failures (red job, job-summary warning, report artifact) without failing the release.
 evidence:
-  - `.github/workflows/release.yml` job `qa-e2e`
+  - `.github/workflows/qa-e2e.yml` job `qa-e2e`
   - Secrets set 2026-11-25; first green `qa-e2e` run on `main` pending
 blocker: null
 ```

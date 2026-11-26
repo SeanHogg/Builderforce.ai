@@ -1,0 +1,111 @@
+name: QA end-to-end
+
+# REL-03: the authenticated Playwright suite against what the Release workflow's `Deploy frontend` job
+# just shipped. Advisory, not a gate. It lives in its own workflow so the ~11 minutes it takes do not hold
+# the Release run (and, through its concurrency group, the next push to main) open after the deploy.
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  # Release finishes for every push, including ones that deployed nothing, and a Release run can be red
+  # for an unrelated job after the frontend shipped. Only "this was a push and Deploy frontend succeeded"
+  # means there is a fresh deploy to test.
+  gate:
+    name: Was the frontend deployed
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch' }}
+    outputs:
+      deployed: ${{ steps.check.outputs.deployed }}
+    steps:
+      - name: Check the Release run's Deploy frontend job
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "deployed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # --jq runs once per page, so this prints one line per matching job across all pages.
+          ids=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs" --paginate \
+            --jq '.jobs[] | select(.name == "Deploy frontend" and .conclusion == "success") | .id')
+          if [ -n "$ids" ]; then
+            echo "deployed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            echo "Deploy frontend did not succeed in Release run ${{ github.event.workflow_run.id }}; nothing to test."
+          fi
+
+  # fail-open by design: the deploy has already shipped, so a red suite must not fail anything upstream. The job
+  # still shows red, writes a job-summary warning and uploads its report. qa-e2e's `ci` script keeps Playwright's
+  # exit status. Needs the BF_QA_EMAIL / BF_QA_PASSWORD repository secrets (set 2026-11-25).
+  qa-e2e:
+    name: QA end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    needs: gate
+    if: ${{ needs.gate.outputs.deployed == 'true' }}
+    # A newer deploy makes this run moot, so it cancels an older one. On the job, not the workflow: this
+    # workflow also starts for Release runs that deployed nothing, and those must not cancel a QA run that
+    # is still testing the previous deploy (a skipped job never takes the group).
+    concurrency:
+      group: qa-e2e-main
+      cancel-in-progress: true
+    env:
+      BF_BASE_URL: https://builderforce.ai
+      BF_API_URL: https://api.builderforce.ai
+      BF_QA_EMAIL: ${{ secrets.BF_QA_EMAIL }}
+      BF_QA_PASSWORD: ${{ secrets.BF_QA_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Require QA credentials
+        run: |
+          if [ -z "$BF_QA_EMAIL" ] || [ -z "$BF_QA_PASSWORD" ]; then
+            echo "::error::BF_QA_EMAIL / BF_QA_PASSWORD repository secrets are empty (docs/roadmap/OPERATOR-DECISIONS.md)."
+            exit 1
+          fi
+
+      - name: Install qa-e2e
+        working-directory: qa-e2e
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Run the suite
+        working-directory: qa-e2e
+        run: pnpm run ci
+
+      - name: Report advisory failure
+        if: failure()
+        run: |
+          echo "::warning::qa-e2e failed; the release is not blocked (advisory, REL-03). See the qa-e2e-report artifact."
+          echo "⚠️ qa-e2e failed (advisory, does not block the release). See the \`qa-e2e-report\` artifact." >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-e2e-report
+          path: qa-e2e/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7

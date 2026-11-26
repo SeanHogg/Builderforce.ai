@@ -6,9 +6,54 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      allow_rollback:
+        description: >-
+          Skips the "would this replace what is live with something older or divergent" check in Deploy API
+          and Deploy frontend, for a deliberate redeploy. It does NOT bypass the head-of-main checks: on main
+          the dispatched commit must still be the head of main. A dispatch from another branch passes those
+          checks, as before.
+        type: boolean
+        default: false
 
+# Concurrency. On main NOTHING cancels across commits: GitHub cancels whatever sits in a cancel-in-progress
+# group when ANY job enters it, in entry order rather than commit order, so a cancelling group inverts under
+# a re-run or a slow dependency (the older commit would cancel the newer one). Ordering is done by gates.
+#
+#   - Workflow level: one group per commit on a push (`release-<sha>`), so pushes to main never cancel or
+#     queue behind each other; per PR number on a pull request, with cancel-in-progress there only, so a
+#     new push to a PR replaces its previous run.
+#   - Deploy/publish jobs serialize per target in a fixed group on main (`deploy-api-main`,
+#     `publish-extension-main`, ...) with cancel-in-progress: false, so a started migration or publish always
+#     finishes. (GitHub still drops an older job that is merely WAITING in such a group when a newer one
+#     arrives; that never cancels running work.) A PR only verifies in the jobs that also run on PRs, so
+#     those are keyed per PR.
+#   - Superseded main commits finish verification and stop at a head-of-main gate. deploy-api, deploy-frontend,
+#     deploy-help and publish-action are gated twice: a gate JOB (`<job>-gate`, same `needs` and `if` as the
+#     job, `go=false` when this commit is no longer the head of main, so the job is skipped and the run still
+#     ends green) and an assert as the FIRST STEP inside the job, which fails closed and so catches a stale
+#     gate output on a single-job re-run. deploy-api and deploy-frontend additionally refuse to roll back
+#     what is live (the /health commit must be contained in this commit); a dispatch with `allow_rollback`
+#     skips that refusal for a deliberate redeploy.
+#   - publish-cdn is head-of-main gated too, with a `gate` STEP inside the job rather than a gate job (a re-run
+#     re-checks, and a superseded run still ends green): a late older run would otherwise overwrite loader.js,
+#     embed/v1.js and the manifest's `latest`.
+#   - NOT gated: package-npm, publish-extension (version-gated only), publish-dotnet-runtime, and
+#     publish-mcp-registry when api=false (it then does not wait on deploy-api). A superseded commit can still
+#     run them. That is tolerated because each is
+#     version-gated or idempotent (npm publishes a version once, and a version LOWER than the current latest
+#     goes out under the `previous` tag so `latest` never moves back; the dotnet bundle is write-once per
+#     version; the registry rejects a duplicate version), so the exposure is an older version number landing,
+#     not a rollback of what users run.
+#   - Re-run ALL jobs of a superseded run, never a single deploy job: the gate and the assert both refuse it,
+#     because only the newest commit may deploy.
+#   - A gate-superseded run ends SUCCESS even though it deployed nothing, so `plan` does not trust "the last
+#     successful run" alone: it pulls the comparison base back to what is live (.github/scripts/plan-base.sh).
+#
+# Every `!cancelled()` in an `if:` below also checks the result of the job it depends on, so a failed or
+# skipped dependency never lets a deploy through.
 concurrency:
-  group: release-${{ github.event.pull_request.number || 'main' }}
+  group: release-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -59,23 +104,44 @@ jobs:
           BEFORE: ${{ github.event.before }}
           FULL_BUILD: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
-          if [ -n "$PR_BASE" ]; then
-            base="$PR_BASE"
-          else
-            # Include unpublished changes if a prior push failed or was superseded.
-            if ! last=$(gh run list --workflow release.yml --branch main --event push --status success --limit 1 --json headSha --jq '.[0].headSha'); then
-              export FULL_BUILD=true
-            fi
-            base="${last:-$BEFORE}"
-            if ! git merge-base --is-ancestor "$base" HEAD 2>/dev/null; then
-              base=""
-              export FULL_BUILD=true
-            fi
-          fi
+          # Sets `base` (and FULL_BUILD when no trustworthy base exists): the last successful run, pulled back
+          # to what is actually live, because a run whose deploys were skipped as superseded still ends green.
+          source .github/scripts/plan-base.sh
           # The oracle also needs a comparison base on a full verification run.
           echo "base=${base:-$(git merge-base origin/main HEAD)}" >> "$GITHUB_OUTPUT"
           unset GH_TOKEN
           node .github/scripts/affected-builds.mjs "$base"
+
+  # The ONLY saver of the Brain dist (brain-embedded + packages/brain-ui), under its content-hash key. A
+  # save is visible only to jobs that start after it, so the jobs of THIS run cannot use it (they start
+  # together and each restore-misses and builds ~25 s), but the next run's jobs, and any later run on the
+  # same inputs, restore it. No job waits on this one: every consumer uses `mode: restore` and builds from
+  # source on a miss, so nothing here (the VSIX publish path least of all) can be held up by it.
+  # continue-on-error: a failure here only costs the next run a rebuild.
+  prepare-brain:
+    name: Prepare Brain packages
+    runs-on: ubuntu-latest
+    needs: plan
+    if: ${{ needs.plan.outputs.verify-frontend == 'true' || needs.plan.outputs.extension == 'true' }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.23.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: ./.github/actions/pnpm-store-cache
+        with:
+          scope: prepare-brain
+
+      - uses: ./.github/actions/prepare-brain
+        with:
+          mode: save
 
   # One runner per package, in parallel. They used to run one after another in a
   # single step, so the fifth package waited on four others' type-checks and tests,
@@ -85,6 +151,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: plan
     if: ${{ needs.plan.outputs.has-npm == 'true' }}
+    # Type-checks, tests AND publishes in one job, so on main it is never cancelled, only serialized per
+    # package; a PR only verifies and its own newer push cancels it.
+    concurrency:
+      group: package-npm-${{ matrix.package }}-${{ github.event.pull_request.number || 'main' }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     strategy:
       fail-fast: false
       matrix:
@@ -149,7 +220,15 @@ jobs:
     name: Publish cdn.builderforce.ai
     runs-on: ubuntu-latest
     needs: [plan, package-npm]
-    if: ${{ !cancelled() && needs.plan.outputs.cdn == 'true' && github.event_name != 'pull_request' }}
+    # `!cancelled()` lets an unrelated FAILED package leg through; a CANCELLED leg (the whole run was cancelled,
+    # or a re-run was) must not. Head-of-main gated by the `gate` STEP below (not a gate job, so a re-run
+    # re-checks and a superseded run ends green): a late older run must not overwrite loader.js, embed/v1.js
+    # or the manifest's `latest`. deploy-api only `needs` this job and does not read its result, so a run that
+    # skipped its uploads as superseded counts as success there.
+    if: ${{ !cancelled() && needs.package-npm.result != 'cancelled' && needs.plan.outputs.cdn == 'true' && github.event_name != 'pull_request' }}
+    concurrency:
+      group: publish-cdn-main
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
 
@@ -174,7 +253,16 @@ jobs:
           npm run build
           npm run size
 
+      # `go=false` when this commit is no longer the head of main: every step below is then skipped and the job
+      # still succeeds (see the `if` note above).
+      - id: gate
+        name: Is this commit still the head of main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/head-of-main-gate.sh
+
       - name: Ensure R2 bucket, custom domain, CORS, no-Worker route
+        if: ${{ steps.gate.outputs.go == 'true' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
@@ -182,6 +270,7 @@ jobs:
         run: bash .github/scripts/cdn-ensure.sh
 
       - name: Publish assets to R2 (manifest last)
+        if: ${{ steps.gate.outputs.go == 'true' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
@@ -200,6 +289,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: plan
     if: ${{ needs.plan.outputs.dotnet == 'true' && github.event_name != 'pull_request' }}
+    concurrency:
+      group: publish-dotnet-runtime-main
+      cancel-in-progress: false
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -220,11 +312,18 @@ jobs:
 
   agent:
     name: Agent runtime
-    needs: [plan, verify-run-oracles]
+    # verify-api is a need so that `publish` below can require it: `api == 'true'` alone would publish the
+    # agent from a commit whose API suite failed or never finished.
+    needs: [plan, verify-run-oracles, verify-api]
     if: ${{ !cancelled() && needs.plan.outputs.agent == 'true' }}
+    # Verifies and publishes in one reusable workflow, so on main it is serialized and never cancelled;
+    # a PR only verifies, and its own newer push replaces the run.
+    concurrency:
+      group: agent-release-${{ github.event.pull_request.number || 'main' }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     uses: ./.github/workflows/agent-release.yml
     with:
-      publish: ${{ github.event_name != 'pull_request' && (needs.verify-run-oracles.result == 'success' || needs.plan.outputs.api == 'true') }}
+      publish: ${{ github.event_name != 'pull_request' && (needs.verify-run-oracles.result == 'success' || (needs.plan.outputs.api == 'true' && needs.verify-api.result == 'success')) }}
     secrets:
       NPM_TOKEN: ${{ github.event_name != 'pull_request' && secrets.NPM_TOKEN || '' }}
 
@@ -293,6 +392,8 @@ jobs:
           scope: publish-extension
 
       - uses: ./.github/actions/prepare-brain
+        with:
+          mode: restore
 
       - name: ${{ matrix.script }}
         working-directory: clients/vscode
@@ -339,6 +440,8 @@ jobs:
           scope: publish-extension
 
       - uses: ./.github/actions/prepare-brain
+        with:
+          mode: restore
 
       - name: Build and package the VSIX
         working-directory: clients/vscode
@@ -400,6 +503,10 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    # Serialized, never cancelled: see the concurrency note at the top of this file.
+    concurrency:
+      group: publish-extension-main
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
 
@@ -482,13 +589,37 @@ jobs:
   # marketplace copy is a mirror: this job pushes the action directory to a
   # dedicated repo and tags it, which is what the Marketplace listing tracks.
   # No mirror secret → skipped, not failed; the in-repo action still works.
-  publish-action:
-    name: Mirror the GitHub Action
+  # Force-pushes the mirror's main, so an older run landing late would be a real rollback: head-of-main gated.
+  publish-action-gate:
+    name: Is this commit still the head of main (action)
     runs-on: ubuntu-latest
     needs: plan
     if: ${{ needs.plan.outputs.action == 'true' && github.event_name != 'pull_request' }}
+    outputs:
+      go: ${{ steps.gate.outputs.go }}
     steps:
       - uses: actions/checkout@v7
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/head-of-main-gate.sh
+
+  publish-action:
+    name: Mirror the GitHub Action
+    runs-on: ubuntu-latest
+    needs: [plan, publish-action-gate]
+    if: ${{ needs.plan.outputs.action == 'true' && github.event_name != 'pull_request' && needs.publish-action-gate.outputs.go == 'true' }}
+    concurrency:
+      group: publish-action-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+
+      # Fails closed if this commit is no longer the head of main (a stale gate output on a single-job re-run).
+      - name: Assert this commit is the head of main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/head-of-main-gate.sh --assert
 
       - name: Push the action to its standalone repository
         env:
@@ -533,6 +664,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    concurrency:
+      group: publish-mcp-registry-main
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
 
@@ -850,14 +984,31 @@ jobs:
 
       - run: pnpm run test
 
+  # Head-of-main gates: see the concurrency note at the top. Each has the SAME `needs` and `if` as the deploy
+  # job it guards, runs just before it, and is cancellable, so only a deploy that is still the newest commit
+  # ever enters the never-cancelled deploy group. A superseded commit skips the deploy (and what needs it).
+  deploy-api-gate:
+    name: Is this commit still the head of main (API)
+    runs-on: ubuntu-latest
+    needs: [plan, verify-api, verify-kernel, publish-cdn]
+    if: ${{ !cancelled() && needs.verify-api.result == 'success' && (needs.verify-kernel.result == 'success' || needs.plan.outputs.kernel == 'false') && needs.plan.outputs.api == 'true' && github.event_name != 'pull_request' }}
+    outputs:
+      go: ${{ steps.gate.outputs.go }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/head-of-main-gate.sh
+
   deploy-api:
     name: Deploy API
     runs-on: ubuntu-latest
     # After publish-cdn so a release's recorder is public before its API ships. A CDN
     # failure does not hold the API back: ReplayConfigService reads the LIVE manifest,
     # which still names the previous (public) recorder.
-    needs: [plan, verify-api, verify-kernel, publish-cdn]
-    if: ${{ !cancelled() && needs.verify-api.result == 'success' && (needs.verify-kernel.result == 'success' || needs.plan.outputs.kernel == 'false') && needs.plan.outputs.api == 'true' && github.event_name != 'pull_request' }}
+    needs: [plan, verify-api, verify-kernel, publish-cdn, deploy-api-gate]
+    if: ${{ !cancelled() && needs.verify-api.result == 'success' && (needs.verify-kernel.result == 'success' || needs.plan.outputs.kernel == 'false') && needs.plan.outputs.api == 'true' && github.event_name != 'pull_request' && needs.deploy-api-gate.outputs.go == 'true' }}
     # Binds the job to the `production` GitHub Environment so a required-reviewer rule
     # (or a wait timer, or a branch restriction) can gate the migration + worker deploy
     # WITHOUT another change to this file. Until protection rules are configured on that
@@ -865,8 +1016,19 @@ jobs:
     # use with no rules, and repository-level secrets stay readable — so this is the
     # enabling half of the gate, and the operator owns the policy half.
     environment: production
+    # Runs DB migrations: one at a time, and a started run is never cancelled. A newer push's deploy
+    # waits here (and replaces any older run still queued) — see the concurrency note at the top.
+    concurrency:
+      group: deploy-api-main
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
+
+      # Fails closed if this commit is no longer the head of main (a stale gate output on a single-job re-run).
+      - name: Assert this commit is the head of main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/head-of-main-gate.sh --assert
 
       - uses: pnpm/action-setup@v6
         with:
@@ -886,6 +1048,14 @@ jobs:
       # credentials to the `run` step below, which a run step does not get on its own.
       - uses: docker/setup-buildx-action@v3
       - uses: crazy-max/ghaction-github-runtime@v3
+
+      # Last line of defence before the migration: the gate above proved this is the head of main when it ran,
+      # this proves nothing NEWER has been deployed since (the live /health commit must be contained in ours).
+      - name: Refuse to roll the API back
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.allow_rollback) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/assert-not-rollback.sh https://api.builderforce.ai/health
 
       # No global Wrangler here: `deploy:worker` runs through `npm run`, which resolves
       # api's own pinned `wrangler` devDependency. A global install was a second,
@@ -1111,6 +1281,8 @@ jobs:
           scope: deploy-frontend
 
       - uses: ./.github/actions/prepare-brain
+        with:
+          mode: restore
 
       - name: ${{ matrix.name }}
         working-directory: frontend
@@ -1143,7 +1315,10 @@ jobs:
         with:
           scope: deploy-frontend
 
+      # Restores a cache an earlier run saved (see `prepare-brain`), else builds its own; never waits, never saves.
       - uses: ./.github/actions/prepare-brain
+        with:
+          mode: restore
 
       # Next's persistent build cache (webpack module cache + SWC output). The build is
       # the longest step in the release; with the previous run's cache restored, only
@@ -1178,7 +1353,40 @@ jobs:
           NEXT_SKIP_BUILD_CHECKS: '1'
         run: |
           pnpm install --frozen-lockfile
-          pnpm run cf-build
+          # TEMPORARY PROFILING (remove once the build's long pole is found; then run `pnpm run cf-build` again):
+          # `cf-build` is these two scripts in order. Only next-on-pages is profiled: V8 CPU profiles (10 ms
+          # sampling, to keep them small) of every Node process it starts, written OUTSIDE the output tree, so the
+          # deployed output is unchanged. The install above and the finishing scripts are not profiled; the
+          # 12 GiB heap is kept.
+          NODE_OPTIONS="$NODE_OPTIONS --cpu-prof --cpu-prof-interval=10000 --cpu-prof-dir=${{ runner.temp }}/nop-prof" pnpm run cf-build:pages
+          pnpm run cf-build:finish
+
+      # TEMPORARY PROFILING: how many functions next-on-pages saw and how big they are. Read-only. `if: always()`
+      # so a failed build still reports. fail-open by design: diagnostics only, every command's absence of output
+      # (no functions dir after a failed build) is itself the answer.
+      - name: Report the Vercel functions output (profiling)
+        if: always()
+        working-directory: frontend
+        run: |
+          dir=.vercel/output/functions
+          if [ ! -d "$dir" ]; then echo "$dir does not exist"; exit 0; fi
+          du -sh "$dir"
+          echo "*.func dirs: $(find "$dir" -type d -name '*.func' | wc -l)"
+          echo "15 largest *.func dirs (KiB):"
+          find "$dir" -type d -name '*.func' -prune -exec du -sk {} + | sort -rn | head -15 || true
+
+      # TEMPORARY PROFILING: the CPU profiles and next-on-pages' own build log. The log is written to
+      # `_worker.js/nop-build-log.json` (node_modules/@cloudflare/next-on-pages: writeBuildInfo, outputDir =
+      # the `_worker.js` dir); it already ships inside frontend-output, this copy is just easy to download.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nop-profile
+          path: |
+            ${{ runner.temp }}/nop-prof
+            frontend/.vercel/output/static/_worker.js/nop-build-log.json
+          if-no-files-found: ignore
+          retention-days: 7
 
       # Exactly what wrangler.toml deploys: the worker (`_worker.js/`) and the static
       # assets beside it. Hidden files included — `.assetsignore` is what keeps the
@@ -1191,22 +1399,53 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  deploy-frontend:
-    name: Deploy frontend
+  deploy-frontend-gate:
+    name: Is this commit still the head of main (frontend)
     runs-on: ubuntu-latest
-    # deploy-api first: the frontend opens app hosts (`<key>-preview.builderforce.ai`) that only
-    # the API it ships with serves, so a frontend ahead of its API fails every app start.
     needs: [plan, build-frontend, verify-frontend, verify-kernel, verify-run-oracles, deploy-api]
     if: >-
       ${{ !cancelled() && needs.plan.outputs.frontend == 'true' && github.event_name != 'pull_request'
       && needs.build-frontend.result == 'success' && needs.verify-frontend.result == 'success'
       && (needs.verify-kernel.result == 'success' || needs.plan.outputs.kernel == 'false')
       && (needs.deploy-api.result == 'success' || (needs.plan.outputs.api == 'false' && needs.verify-run-oracles.result == 'success')) }}
+    outputs:
+      go: ${{ steps.gate.outputs.go }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/head-of-main-gate.sh
+
+  deploy-frontend:
+    name: Deploy frontend
+    runs-on: ubuntu-latest
+    # deploy-api first: the frontend opens app hosts (`<key>-preview.builderforce.ai`) that only
+    # the API it ships with serves, so a frontend ahead of its API fails every app start.
+    needs: [plan, build-frontend, verify-frontend, verify-kernel, verify-run-oracles, deploy-api, deploy-frontend-gate]
+    # When the API deploy was skipped because this commit was superseded, the condition on deploy-api below is
+    # false and so is the gate's, so the frontend is skipped with it rather than failed.
+    if: >-
+      ${{ !cancelled() && needs.plan.outputs.frontend == 'true' && github.event_name != 'pull_request'
+      && needs.build-frontend.result == 'success' && needs.verify-frontend.result == 'success'
+      && (needs.verify-kernel.result == 'success' || needs.plan.outputs.kernel == 'false')
+      && (needs.deploy-api.result == 'success' || (needs.plan.outputs.api == 'false' && needs.verify-run-oracles.result == 'success'))
+      && needs.deploy-frontend-gate.outputs.go == 'true' }}
     # Same production gate as deploy-api — see the note there. Gating only the API would
     # let a reviewed backend ship behind an unreviewed frontend.
     environment: production
+    # Serialized, never cancelled: see the concurrency note at the top of this file.
+    concurrency:
+      group: deploy-frontend-main
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
+
+      # Fails closed if this commit is no longer the head of main (a stale gate output on a single-job re-run).
+      - name: Assert this commit is the head of main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/head-of-main-gate.sh --assert
 
       - uses: actions/setup-node@v6
         with:
@@ -1220,6 +1459,13 @@ jobs:
           name: frontend-output
           path: frontend/.vercel/output/static
 
+      # See deploy-api: nothing newer may be live already.
+      - name: Refuse to roll the frontend back
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.allow_rollback) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/assert-not-rollback.sh https://builderforce.ai/health
+
       - name: Deploy frontend
         working-directory: frontend
         env:
@@ -1228,73 +1474,43 @@ jobs:
         # GIT_SHA → the frontend's GET /health `commit` (see deploy-api).
         run: wrangler deploy --no-bundle --var "GIT_SHA:${{ github.sha }}"
 
-  # REL-03: the authenticated Playwright suite against what deploy-frontend just shipped. Advisory, not a gate.
-  # fail-open by design: the deploy has already shipped, so a red suite must not fail the release. The job still
-  # shows red, writes a job-summary warning and uploads its report. qa-e2e's `ci` script keeps Playwright's exit status.
-  # Needs the BF_QA_EMAIL / BF_QA_PASSWORD repository secrets (set 2026-11-25).
-  qa-e2e:
-    name: QA end-to-end
+  # The advisory post-deploy Playwright suite (REL-03) is its own workflow, qa-e2e.yml, started by this
+  # workflow's completion. It used to be a job here and held the run (and the next push) open for ~11 minutes.
+
+  # Docs are overwritten wholesale on every deploy, so an older commit landing late would roll them back.
+  # Same head-of-main gate as the API and the frontend (a PR passes it: it only builds).
+  deploy-help-gate:
+    name: Is this commit still the head of main (help)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    continue-on-error: true
-    needs: [plan, deploy-frontend]
-    if: >-
-      ${{ !cancelled() && needs.plan.outputs.frontend == 'true' && github.event_name != 'pull_request'
-      && needs.deploy-frontend.result == 'success' }}
-    env:
-      BF_BASE_URL: https://builderforce.ai
-      BF_API_URL: https://api.builderforce.ai
-      BF_QA_EMAIL: ${{ secrets.BF_QA_EMAIL }}
-      BF_QA_PASSWORD: ${{ secrets.BF_QA_PASSWORD }}
+    needs: plan
+    if: ${{ needs.plan.outputs.help == 'true' }}
+    outputs:
+      go: ${{ steps.gate.outputs.go }}
     steps:
       - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10.23.0
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Require QA credentials
-        run: |
-          if [ -z "$BF_QA_EMAIL" ] || [ -z "$BF_QA_PASSWORD" ]; then
-            echo "::error::BF_QA_EMAIL / BF_QA_PASSWORD repository secrets are empty (docs/roadmap/OPERATOR-DECISIONS.md)."
-            exit 1
-          fi
-
-      - name: Install qa-e2e
-        working-directory: qa-e2e
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm exec playwright install --with-deps chromium
-
-      - name: Run the suite
-        working-directory: qa-e2e
-        run: pnpm run ci
-
-      - name: Report advisory failure
-        if: failure()
-        run: |
-          echo "::warning::qa-e2e failed; the release is not blocked (advisory, REL-03). See the qa-e2e-report artifact."
-          echo "⚠️ qa-e2e failed (advisory, does not block the release). See the \`qa-e2e-report\` artifact." >> "$GITHUB_STEP_SUMMARY"
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: qa-e2e-report
-          path: qa-e2e/playwright-report
-          if-no-files-found: ignore
-          retention-days: 7
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/head-of-main-gate.sh
 
   deploy-help:
     name: Deploy help
     runs-on: ubuntu-latest
-    needs: plan
-    if: ${{ needs.plan.outputs.help == 'true' }}
+    needs: [plan, deploy-help-gate]
+    if: ${{ needs.plan.outputs.help == 'true' && needs.deploy-help-gate.outputs.go == 'true' }}
+    # Publishes on main (never cancelled); a PR only builds, and its own newer push cancels it.
+    concurrency:
+      group: deploy-help-${{ github.event.pull_request.number || 'main' }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v7
+
+      # Fails closed if this commit is no longer the head of main (a stale gate output on a single-job re-run).
+      # A PR is not a main deploy, so it passes.
+      - name: Assert this commit is the head of main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/head-of-main-gate.sh --assert
 
       - uses: actions/setup-node@v6
         with:

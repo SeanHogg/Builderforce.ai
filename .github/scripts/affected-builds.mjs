@@ -58,8 +58,11 @@ export function affectedBuilds(files, full = false) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const base = process.argv[2];
+  // Optional end of the range (default HEAD): plan-base.sh asks "did this component change between two
+  // commits" with the same path rules, instead of keeping a second copy of them.
+  const head = process.argv[3] || 'HEAD';
   // --no-renames keeps both sides of a move in the affected set.
-  const files = base ? execFileSync('git', ['diff', '--name-only', '--no-renames', '-z', base, 'HEAD'], {
+  const files = base ? execFileSync('git', ['diff', '--name-only', '--no-renames', '-z', base, head], {
     cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
   }).split('\0').filter(Boolean) : [];
   const plan = affectedBuilds(files, !base || process.env.FULL_BUILD === 'true');

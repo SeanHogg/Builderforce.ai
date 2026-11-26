@@ -1,5 +1,14 @@
 name: Prepare Brain packages
 description: Install the Brain workspace and restore or build the linked Brain packages.
+inputs:
+  mode:
+    description: >
+      `save` (default): restore the Brain dist cache, build on a miss, and save the cache at job end.
+      Only the release workflow's `prepare-brain` job uses it. `restore`: restore the cache but never save
+      it, and build from source on a miss. Every other job uses this, because jobs that start together
+      cannot see each other's save and would otherwise all rebuild and all try to reserve the same key.
+    required: false
+    default: save
 runs:
   using: composite
   steps:
@@ -15,6 +24,7 @@ runs:
         echo "key=$key" >> "$GITHUB_OUTPUT"
 
     - name: Cache Brain build outputs
+      if: inputs.mode == 'save'
       uses: actions/cache@v6
       with:
         path: |
@@ -22,6 +32,17 @@ runs:
           packages/brain-ui/dist
         key: brain-dist-${{ steps.inputs.outputs.key }}
 
+    - name: Restore Brain build outputs
+      if: inputs.mode != 'save'
+      uses: actions/cache/restore@v6
+      with:
+        path: |
+          brain-embedded/dist
+          packages/brain-ui/dist
+        key: brain-dist-${{ steps.inputs.outputs.key }}
+
+    # After a restore hit this finds the outputs current and builds nothing; on a miss it is
+    # the build fallback.
     - name: Build Brain packages from source
       shell: bash
       env:

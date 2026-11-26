@@ -312,7 +312,8 @@ export const DEPLOY_STATUS_TOOLS: BuiltinTool[] = [
       + '{ api: { version, commit }, frontend: { commit, url } | { error }, '
       + 'release: { workflow, status, conclusion, headSha, url, createdAt } | { error }, '
       + 'matches: { apiIsLatestRelease, frontendIsLatestRelease } } — release is the latest Release workflow run on main '
-      + '(status "completed" + conclusion "success" = shipped); a match is null when a side is unknown. '
+      + '(its status and conclusion describe the CI run only: a run can end "cancelled" or "failure" after the API or frontend already deployed, so '
+      + 'trust the matches and deployed fields, not the conclusion, to know whether a commit is live); a match is null when a side is unknown. '
       + 'Pass commit (a sha or prefix) to also get deployed: { commit, api, frontend, via: { api, frontend } } — '
       + 'true when that commit is live on the Worker, either as its exact sha (via "exact") or contained in a newer deployed sha (via "superseded"); '
       + 'null when it cannot be told.',
