@@ -33,6 +33,7 @@ import { indexerWatches, onIndexedFacts, onIndexerWatching, trackLiveBatch } fro
 import { loadGraph, log, onKnowledgeChanged, openRoot, workspaceFolders, type GraphQuery } from "./knowledgeService";
 import { LivePatchBuilder, PATCH_MAX_FILES } from "./livePatch";
 import { throttledRefresh } from "./liveRefresh";
+import { GRAPH_BUILD_ABORTED } from "./graphWorker";
 
 /** Longest a switch to the background indexer waits for the view's own watcher batch in flight. */
 const IN_FLIGHT_WAIT_MS = 5_000;
@@ -105,7 +106,7 @@ export function subscribeLiveGraph(
     try {
       // The hashes this build starts from: patches diff against them once it is on screen.
       const base = await patcher.baseNow().catch((error: unknown) => { log("live patch base", error); return undefined; });
-      const graph = await loadGraph(secrets, rootId, queryOf?.(rootId));
+      const graph = await loadGraph(secrets, rootId, queryOf?.(rootId), undefined, undefined, { signal: refreshAbort.signal });
       if (!graph || !live) return;
       if (base) patcher.useBase(base);
       const changed = changedSet();
@@ -119,6 +120,8 @@ export function subscribeLiveGraph(
       lastChanged = changed.join("\n");
       handlers.onGraph(graph, changed);
     } catch (error: unknown) {
+      // An unlive / dispose aborted the build: nothing to report.
+      if ((error as { code?: unknown } | null)?.code === GRAPH_BUILD_ABORTED) return;
       log("live refresh", error);
     }
   });

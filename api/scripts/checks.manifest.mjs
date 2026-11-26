@@ -43,6 +43,7 @@ export default [
   // Its native twin: `packages/bfi-node` (the addon the editor's extension host runs),
   // each platform's binary held to the commit it was built from.
   ['check:bfi-node-vendored', '../../scripts/vendor-bfi-node.mjs', '--check'],
+  ['check:native-addon-format', '../../scripts/lib/nativeAddonFormat.test.mjs'],
   ['check:schema', 'check-schema-drift.mjs'],
   // Type-checks, passes every stubbed test, and fails on EVERY execution against a real
   // Postgres: an ON CONFLICT on a partial unique index that omits the predicate. That

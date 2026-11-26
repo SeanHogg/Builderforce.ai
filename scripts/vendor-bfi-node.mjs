@@ -32,7 +32,7 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertAddonMatchesPlatform } from './lib/nativeAddonFormat.mjs';
+import { addonFileName, addonTagOf, assertAddonFile } from './lib/nativeAddonFormat.mjs';
 import { diffAgainst, hashFile, sourceRepository } from './lib/vendoredBuild.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -54,7 +54,6 @@ const SOURCE_INPUTS = [
 ];
 /** The JS face, copied as is. */
 const FACE_FILES = ['index.js', 'index.d.ts'];
-const ADDON = /^bfi_node\.([a-z0-9]+-[a-z0-9]+)\.node$/;
 const source = sourceRepository(sourceRepo);
 
 function fail(message) {
@@ -63,12 +62,18 @@ function fail(message) {
 }
 
 const readRecord = () => (existsSync(sourceRecordPath) ? JSON.parse(readFileSync(sourceRecordPath, 'utf8')) : {});
-const addonsIn = (dir) => (existsSync(dir) ? readdirSync(dir).filter((name) => ADDON.test(name)) : []);
-const platformOf = (name) => ADDON.exec(name)[1];
-/** Fails the run when an addon's bytes are not the executable format its platform tag loads. */
-function checkFormat(file, name) {
+const addonsIn = (dir) => (existsSync(dir) ? readdirSync(dir).filter((name) => addonTagOf(name)) : []);
+/** SOURCE.json's key for an addon file: `<platform>-<arch>`. */
+const platformOf = (name) => {
+  const { platform, arch } = addonTagOf(name);
+  return `${platform}-${arch}`;
+};
+/** The addon file name of a SOURCE.json `<platform>-<arch>` key — the package's own naming. */
+const fileOf = (key) => addonFileName(...key.split('-'));
+/** Fails the run when an addon is not the format and CPU its own name claims. */
+function checkFormat(file) {
   try {
-    assertAddonMatchesPlatform(file, platformOf(name).split('-')[0]);
+    assertAddonFile(file);
   } catch (error) {
     fail(error.message);
   }
@@ -80,15 +85,15 @@ if (args.includes('--check')) {
   if (!existsSync(sourceRecordPath)) fail(`${sourceRecordPath} is missing — run \`node scripts/vendor-bfi-node.mjs\`.`);
   const record = readRecord();
   const addons = addonsIn(vendorDir);
-  for (const name of addons) checkFormat(join(vendorDir, name), name);
+  for (const name of addons) checkFormat(join(vendorDir, name));
   const expected = {
     ...(record.files ?? {}),
-    ...Object.fromEntries(Object.entries(record.platforms ?? {}).map(([platform, p]) => [`bfi_node.${platform}.node`, p.sha256])),
+    ...Object.fromEntries(Object.entries(record.platforms ?? {}).map(([platform, p]) => [fileOf(platform), p.sha256])),
   };
-  const problems = diffAgainst(vendorDir, expected, [...FACE_FILES, ...new Set([...addons, ...Object.keys(record.platforms ?? {}).map((p) => `bfi_node.${p}.node`)])]);
+  const problems = diffAgainst(vendorDir, expected, [...FACE_FILES, ...new Set([...addons, ...Object.keys(record.platforms ?? {}).map(fileOf)])]);
   if (record.dirty) problems.push(`the JS face was vendored from a dirty tree (${record.commit}) — commit the inference changes and re-vendor`);
   for (const [platform, p] of Object.entries(record.platforms ?? {})) {
-    if (p.dirty) problems.push(`bfi_node.${platform}.node was built from a dirty tree (${p.commit}) — re-vendor it from a clean one`);
+    if (p.dirty) problems.push(`${fileOf(platform)} was built from a dirty tree (${p.commit}) — re-vendor it from a clean one`);
   }
   if (problems.length) fail(`packages/bfi-node differs from SOURCE.json:\n  - ${problems.join('\n  - ')}`);
   console.log(`✅  bfi-node vendor: the JS face + ${addons.length} platform addon(s) match SOURCE.json (${record.repository}@${String(record.commit).slice(0, 7)}).`);
@@ -118,7 +123,7 @@ if (fromAt >= 0) {
     if (stamp.commit !== state.commit) {
       fail(`${name} was built from ${String(stamp.commit).slice(0, 7)}, but ${sourceRepo} is at ${String(state.commit).slice(0, 7)} — check out the commit the workflow built.`);
     }
-    checkFormat(join(dir, name), name);
+    checkFormat(join(dir, name));
     copyFileSync(join(dir, name), join(vendorDir, name));
     platforms[platform] = { commit: stamp.commit, ...(stamp.dirty ? { dirty: true } : {}), sha256: hashFile(join(vendorDir, name)) };
   }
@@ -127,9 +132,9 @@ if (fromAt >= 0) {
   console.log(`[bfi-node] node ${crate}/build.mjs  (in ${sourceRepo})`);
   const run = spawnSync('node', [join(...crate.split('/'), 'build.mjs')], { cwd: sourceRepo, stdio: 'inherit' });
   if (run.status !== 0) fail('the addon build failed (is the Rust toolchain installed?).');
-  const name = `bfi_node.${process.platform}-${process.arch}.node`;
+  const name = addonFileName(process.platform, process.arch);
   if (!existsSync(join(crateDir, name))) fail(`${join(crateDir, name)} is missing — the build did not produce it.`);
-  checkFormat(join(crateDir, name), name);
+  checkFormat(join(crateDir, name));
   copyFileSync(join(crateDir, name), join(vendorDir, name));
   platforms[`${process.platform}-${process.arch}`] = {
     commit: state.commit || 'unknown',

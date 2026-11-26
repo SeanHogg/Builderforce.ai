@@ -13,10 +13,7 @@ import { createRequire } from "node:module";
 import { computeBuildId } from "./buildId.mjs";
 import { manifestEditorSchema } from "./scripts/manifest-editor-schema.mjs";
 import { pinnedInstallResolve, sourcePackageAliasMap, sourcePackageRoots } from "../../scripts/sourcePackages.mjs";
-import { assertAddonMatchesPlatform } from "../../scripts/lib/nativeAddonFormat.mjs";
-
-/** A vendored native addon's file name; group 2 is the platform, which picks the expected binary format. */
-const BFI_ADDON = /^bfi_node\.(([a-z0-9]+)-[a-z0-9]+)\.node$/;
+import { addonTagOf, assertAddonFile } from "../../scripts/lib/nativeAddonFormat.mjs";
 
 const watch = process.argv.includes("--watch");
 const production = process.argv.includes("--production");
@@ -348,16 +345,26 @@ async function treeSitterManifest(agentTools) {
  * none runs the wasm. Each is format-checked against its tag first, so a mislabelled
  * binary fails the build instead of reaching Windows' loader (a modal "Bad Image" dialog
  * no try/catch can intercept).
+ *
+ * `vsce-platform.mjs` sets `BFI_NATIVE_TARGET` to its vsce target (`win32-x64`, `alpine-x64`…):
+ * a platform-targeted package then ships only the addon of that exact tag, so an `alpine`
+ * target (no musl build) ships none. Unset — the CI universal package — ships them all.
  */
 function copyBfiNative() {
   const dir = path.dirname(createRequire(import.meta.url).resolve("@seanhogg/bfi-node/package.json"));
-  const addons = fs.readdirSync(dir).filter((name) => BFI_ADDON.test(name));
+  const tagOf = (name) => {
+    const tag = addonTagOf(name);
+    return tag && `${tag.platform}-${tag.arch}`;
+  };
+  const target = process.env.BFI_NATIVE_TARGET;
+  const addons = fs.readdirSync(dir).filter((name) => tagOf(name) && (!target || tagOf(name) === target));
   const keep = new Set(addons);
+  // Matters for harness/integration builds, which don't empty out/: a no-longer-shipped addon would linger.
   for (const stale of fs.readdirSync("out")) {
-    if (stale === "bfi_node.node" || (BFI_ADDON.test(stale) && !keep.has(stale))) fs.rmSync(path.join("out", stale), { force: true });
+    if (stale === "bfi_node.node" || (tagOf(stale) && !keep.has(stale))) fs.rmSync(path.join("out", stale), { force: true });
   }
   for (const name of addons) {
-    assertAddonMatchesPlatform(path.join(dir, name), BFI_ADDON.exec(name)[2]);
+    assertAddonFile(path.join(dir, name));
     fs.copyFileSync(path.join(dir, name), path.join("out", name));
   }
   if (!addons.length) console.warn("[esbuild] no bfi-node addon vendored: the host bfi worker will run the wasm.");

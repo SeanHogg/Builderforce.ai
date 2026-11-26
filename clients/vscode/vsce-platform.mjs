@@ -158,7 +158,8 @@ async function main() {
       const child = spawn(
         process.execPath,
         [vsceCli, operation, "--no-dependencies", "--target", target, ...args],
-        { stdio: "inherit" },
+        // `vscode:prepublish` (esbuild's copyBfiNative) reads the target: ship only this platform's native addon.
+        { stdio: "inherit", env: { ...process.env, BFI_NATIVE_TARGET: target } },
       );
       child.on("error", rejectPromise);
       child.on("exit", (status, signal) => {

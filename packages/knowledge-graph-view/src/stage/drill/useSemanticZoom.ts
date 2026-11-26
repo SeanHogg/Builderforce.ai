@@ -83,6 +83,27 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
     // An enter / out asked for and not yet in the stack: no second step until it lands.
     const pending = useRef(false);
     useEffect(() => { pending.current = false; }, [drill.stack]);
+    // A frame the drill re-anchored onto a rebuilt map's station (same level and depth, new ref): its nest entry follows the
+    // new key, so the zoom stays nested in the mark instead of snapping out.
+    const lastStack = useRef(drill.stack);
+    useEffect(() => {
+        const before = lastStack.current;
+        lastStack.current = drill.stack;
+        if (before === drill.stack) return;
+        const renamed = drill.stack.flatMap((f, i) => {
+            const was = before[i];
+            return was && was.level === f.level && was.ref !== f.ref ? [[`${f.level}:${was.ref}`, `${f.level}:${f.ref}`] as const] : [];
+        });
+        if (renamed.length === 0) return;
+        setEntries((m) => {
+            const next = new Map(m);
+            for (const [from, to] of renamed) {
+                const e = next.get(from);
+                if (e && !next.has(to)) { next.delete(from); next.set(to, { ...e, drill: to }); }
+            }
+            return next;
+        });
+    }, [drill.stack]);
     // The code layer belongs to the level it opened on.
     useEffect(() => { setTrail([]); }, [map.drill]);
 

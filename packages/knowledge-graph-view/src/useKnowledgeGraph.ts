@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { settledThrottle, type SettledThrottle } from '@builderforce/knowledge-client';
 import { LENSES, lensApplies, lensFindings, lensesFor, type LensDef } from './lenses';
 import { localSearch } from './graphModel';
 import { useReviewRun, type ReviewRun } from './useReviewRun';
@@ -266,36 +267,45 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     // A re-read lands only if nothing newer started meanwhile (`growSeq`: any load, a finished review or a
     // source swap bumps it) AND the review of THIS root is still running (`growing`). A re-read held back by
     // the throttle runs once the window opens (trailing), with the latest progress.
-    const grown = useRef<{ at: number; phase: string; done: number }>({ at: 0, phase: '', done: -1 });
+    // The re-read goes through the ONE `settledThrottle`: it never overlaps itself (a build longer than the window would
+    // otherwise be aborted by the next one, forever) and the window runs from when the previous re-read SETTLED; a
+    // progress tick during a re-read yields ONE trailing re-read, with the latest progress.
+    const grown = useRef<{ phase: string; done: number }>({ phase: '', done: -1 });
     const growing = useRef<string | null>(null);
+    const growTask = useRef<() => Promise<void>>(async () => undefined);
+    const growThrottle = useRef<SettledThrottle | null>(null);
+    useEffect(() => {
+        const throttle = settledThrottle(() => growTask.current(), GROW_INTERVAL_MS, { leading: true });
+        growThrottle.current = throttle;
+        return () => { throttle.dispose(); growThrottle.current = null; };
+    }, []);
     const reviewState = review.state;
     const reviewRoot = review.rootId;
     useEffect(() => {
         const root = rootIdRef.current;
         if (held || reviewState.status !== 'running' || !root || !reviewRoot || reviewRoot !== root) {
             growing.current = null;
-            if (reviewState.status !== 'running') grown.current = { at: 0, phase: '', done: -1 };
-            return undefined;
+            if (reviewState.status !== 'running') grown.current = { phase: '', done: -1 };
+            return;
         }
         growing.current = root;
         const p = reviewState.progress;
-        if (!p) return undefined;
+        if (!p) return;
         const last = grown.current;
-        if (p.phase === last.phase && p.done <= last.done) return undefined;
-        const run = () => {
-            if (pendingLoad.current) return; // the root load in flight lands first; the next progress tick re-reads
-            grown.current = { at: Date.now(), phase: p.phase, done: p.done };
+        if (p.phase === last.phase && p.done <= last.done) return;
+        growTask.current = async () => {
+            // Nothing to grow once the review of this root is over; the root load in flight lands first (the next tick re-reads).
+            if (growing.current !== root || pendingLoad.current) return;
+            grown.current = { phase: p.phase, done: p.done };
             const seq = growSeq.current;
             const focus = loadFocusRef.current;
-            source.load(root, focus ? { focus } : undefined).then((g) => {
+            try {
+                const g = await source.load(root, focus ? { focus } : undefined);
                 if (!g || isNotReviewedHere(g) || growSeq.current !== seq || growing.current !== root || rootIdRef.current !== root) return;
                 paint(g); setStale(false); setRefreshFailed(false); setStatus('ready');
-            }).catch(() => undefined);
+            } catch { /* a superseded or failed re-read: the next progress tick re-reads */ }
         };
-        const wait = GROW_INTERVAL_MS - (Date.now() - last.at);
-        if (wait <= 0) { run(); return undefined; }
-        const timer = setTimeout(run, wait);
-        return () => clearTimeout(timer);
+        growThrottle.current?.request();
     }, [held, reviewState, reviewRoot, source, paint]);
 
     const shown = held ? held.graph : graph;
