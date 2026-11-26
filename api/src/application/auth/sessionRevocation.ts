@@ -63,13 +63,7 @@ export interface ActiveTokenRow {
  * and an INNER JOIN would make it indistinguishable from a revoked session. The
  * caller separates the two cases via {@link assertActiveToken}.
  */
-export async function findActiveToken(
-  db: Db,
-  userId: string,
-  jti: string,
-  /** Treat a token that lapsed up to this many seconds ago as still live (renewal only). */
-  expiredGraceSeconds = 0,
-): Promise<ActiveTokenRow | null> {
+export async function findActiveToken(db: Db, userId: string, jti: string): Promise<ActiveTokenRow | null> {
   const [row] = await db
     .select({
       jti: authTokens.jti,
@@ -98,7 +92,7 @@ export async function findActiveToken(
         eq(authTokens.jti, jti),
         eq(authTokens.userId, userId),
         isNull(authTokens.revokedAt),
-        gt(authTokens.expiresAt, new Date(Date.now() - expiredGraceSeconds * 1000)),
+        gt(authTokens.expiresAt, new Date()),
       ),
     )
     .limit(1);
@@ -384,17 +378,25 @@ export async function revokeSessionTokens(
     .returning({ jti: authTokens.jti });
 
   const revokedJtis = rows.map((row) => row.jti);
-  // Both cached verdicts for each revoked jti: the worker's introspection answer and
-  // this API's own live-token row ({@link findActiveTokenCached}).
-  await Promise.all(revokedJtis.flatMap((jti) => [
+  await dropCachedTokenVerdicts(env, revokedJtis);
+  return { revokedJtis };
+}
+
+/**
+ * Drop every cached "live" verdict for tokens that just stopped being live: the
+ * worker's introspection answer and this API's own live-token row
+ * ({@link findActiveTokenCached}). Every writer that makes a jti not-live calls this
+ * in the same request — {@link revokeSessionTokens} and the renewal's rotation.
+ */
+export async function dropCachedTokenVerdicts(env: Env | undefined, jtis: readonly string[]): Promise<void> {
+  await Promise.all(jtis.flatMap((jti) => [
     invalidateCachedStrict(env, sessionIntrospectCacheKey(jti)),
     invalidateCachedStrict(env, activeTokenCacheKey(jti)),
   ]));
   // A load that began before the revoke can write its verdict back just after the deletes above
   // (cross-isolate); delete again a moment later so that late write is not served as last-known-good.
-  for (const jti of revokedJtis) {
+  for (const jti of jtis) {
     invalidateCachedStrictInBackground(env, sessionIntrospectCacheKey(jti), LATE_WRITE_RECHECK_MS);
     invalidateCachedStrictInBackground(env, activeTokenCacheKey(jti), LATE_WRITE_RECHECK_MS);
   }
-  return { revokedJtis };
 }

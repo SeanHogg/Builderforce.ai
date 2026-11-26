@@ -143,8 +143,8 @@ export function foldPartitionViolations(findings: readonly Finding[], maxGroups:
   for (const [, g] of kept) {
     const others = g.samples.slice(1).reduce((n, f) => n + weightOf(f), 0);
     g.samples.forEach((f, i) => {
-      const params = { ...f.params, fromArea: g.fromArea, toArea: g.toArea };
-      folded.push({ ...f, params: i === 0 && g.count - others > 1 ? { ...params, count: g.count - others } : params });
+      // Every carried one states its count (the first: itself and the ones not carried), so the carried counts sum to the group's.
+      folded.push({ ...f, params: { ...f.params, fromArea: g.fromArea, toArea: g.toArea, count: i === 0 ? g.count - others : weightOf(f) } });
     });
   }
   return {

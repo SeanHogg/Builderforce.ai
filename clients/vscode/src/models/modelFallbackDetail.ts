@@ -1,5 +1,6 @@
 import * as os from "node:os";
 import type { ModelFallbackEvent } from "@seanhogg/builderforce-brain-embedded";
+import { DEFAULT_SECRET_PATTERNS, redactText } from "@builderforce/secret-redaction";
 
 const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -19,12 +20,12 @@ export function redactFallbackText(text: string, home: string = os.homedir()): s
     const forms = new Set([home, home.replace(/\\/g, "/"), home.replace(/\//g, "\\")]);
     for (const form of forms) out = out.replace(new RegExp(escape(form), "gi"), "~");
   }
-  return out
-    .replace(/(\bhttps?:\/\/[^\s?#"'<>)]*)\?[^\s"'<>)]*/gi, "$1")
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+  // The shared redactor (`@builderforce/secret-redaction`) owns every credential shape: provider tokens, JWTs,
+  // `Authorization` / Bearer values, `key=value` and JSON secret fields.
+  return redactText(out.replace(/(\bhttps?:\/\/[^\s?#"'<>)]*)\?[^\s"'<>)]*/gi, "$1"), DEFAULT_SECRET_PATTERNS, "strict", () => "[redacted]")
+    // Short-value backstop: the shared set ignores a value too short to be a real secret (it is prose or source
+    // there); in an error notice persisted to a chat, a secret-NAMED pair or a `sk-` / `bfk_` word is hidden whatever its length.
     .replace(new RegExp(`(["']?\\b${SECRET_KEY}["']?\\s*[=:]\\s*)(?:"[^"]*"|'[^']*'|[^\\s,;&"'}]+)`, "gi"), "$1[redacted]")
-    // `Authorization: <credential>`: the scheme word (Bearer/Basic) survives, the credential does not.
-    .replace(/(\bauthorization["']?\s*[=:]\s*(?:(?:Bearer|Basic)\s+)?)(?!\[redacted\]|(?:Bearer|Basic)\s)[^\s,;&"'}]+/gi, "$1[redacted]")
     .replace(/\b(?:sk|bfk)[-_]\S+/gi, "[redacted]");
 }
 

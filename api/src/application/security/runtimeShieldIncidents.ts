@@ -23,7 +23,7 @@ import { loadProjectInTenant, projectInTenantCached } from '../project/projectOw
 import {
   FINDING_KINDS, kindOpensIncident, openKindIncident, type KindIncidentContext, type KindIncidentOutcome,
 } from './findingIncidentKinds';
-import { SHIELD_OPEN_INCIDENTS_PER_PROJECT, type RuntimeShieldEvent } from './runtimeShieldEvent';
+import { redactShieldEvidence, SHIELD_OPEN_INCIDENTS_PER_PROJECT, type RuntimeShieldEvent } from './runtimeShieldEvent';
 
 export type ShieldIncidentResult =
   | KindIncidentOutcome
@@ -65,7 +65,8 @@ export async function recordRuntimeShieldEvent(
   // A probe or a below-floor reason never costs the cap query.
   if (!kindOpensIncident('shield', event)) return { outcome: 'ignored' };
   if (await shieldIncidentCapReached(db, ctx.tenantId, event.projectId)) return { outcome: 'ignored', reason: 'cap' };
-  return openKindIncident(env, db, actor, 'shield', event, ctx, {
+  // Evidence is client-attested: its values are masked before they are stored (the key check ran at the route).
+  return openKindIncident(env, db, actor, 'shield', { ...event, evidence: redactShieldEvidence(event.evidence) }, ctx, {
     projectId: event.projectId, applicationId: event.applicationId, serviceId: event.serviceId,
     ruleId: event.ruleId, reasonCode: event.reasonCode, action: event.action, attestation: 'client-attested',
   });

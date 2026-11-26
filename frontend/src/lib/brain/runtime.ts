@@ -11,6 +11,7 @@
 
 import type { BrainConfig, BrainStreamFn, BrainTransport } from '@seanhogg/builderforce-brain-embedded';
 import { AUTH_API_URL, getStoredTenantToken, checkUnauthorizedAndRedirect } from '../auth';
+import { renewInBackgroundAfterUnauthorized } from '../auth/tokenRenewal';
 import { brain, parseLlmError } from '../builderforceApi';
 import { getModality } from '../modality';
 
@@ -30,7 +31,11 @@ export function lazyLocalFirstStream(transport: BrainTransport): BrainStreamFn {
 const transport: BrainTransport = {
   baseUrl: AUTH_API_URL,
   getToken: getStoredTenantToken,
-  onUnauthorized: (res, hadToken) => checkUnauthorizedAndRedirect(res, hadToken),
+  // A stream is not resent: renew so the next turn carries a fresh token, and sign out
+  // only when the renewal is refused. Without a web session (embed) the 401 signs out.
+  onUnauthorized: (res, hadToken) => {
+    if (!hadToken || !renewInBackgroundAfterUnauthorized()) checkUnauthorizedAndRedirect(res, hadToken);
+  },
   mapError: parseLlmError,
 };
 

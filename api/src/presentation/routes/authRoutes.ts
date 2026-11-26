@@ -30,7 +30,7 @@ import { notify } from '../../application/notifications/notify';
 import { accountTypeGetsWorkspace, ensureStarterWorkspace } from '../../application/tenant/starterWorkspace';
 import { background } from '../middleware/background';
 import { hashPassword, hashSecret, verifyPassword } from '../../infrastructure/auth/HashService';
-import { decodeJwtPayload, signJwt, signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
+import { decodeJwtPayload, signJwt, signWebJwt, verifyWebJwt, WEB_ACCESS_TOKEN_TTL_SECONDS } from '../../infrastructure/auth/JwtService';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
 import type { Db } from '../../infrastructure/database/connection';
 import { persistWebSessionToken } from '../../application/auth/webSessionStore';
@@ -624,7 +624,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
 
     return c.json({
       token,
-      expiresIn,
+      expiresIn: WEB_ACCESS_TOKEN_TTL_SECONDS,
       user: toUserResponse({ ...user, emailVerifiedAt: user.emailVerifiedAt ?? new Date() }),
       mfaRequired: false,
     });
@@ -734,7 +734,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
 
     return c.json({
       token,
-      expiresIn: 86_400,
+      expiresIn: WEB_ACCESS_TOKEN_TTL_SECONDS,
       user: toUserResponse(user),
       mfaRequired: false,
     });
@@ -801,7 +801,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
 
     return c.json({
       token,
-      expiresIn: 86_400,
+      expiresIn: WEB_ACCESS_TOKEN_TTL_SECONDS,
       user: toUserResponse(user),
       mfaRequired: false,
     });

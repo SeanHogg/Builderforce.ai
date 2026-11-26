@@ -1,3 +1,25 @@
+## ✅ RESOLVED 2026-11-26 — The Visualizer no longer crashes VS Code on large repos and opens on the last review (AE-G063, AE-G062; VSIX 2026.11.225)
+
+- **Crash (AE-G063).** On hired.video (6315 files) a finished load sent 123,843 edges and 24,674 per-edge `partition-violation` findings from the worker to the host, into `lastSeen` and on to the webview. The host stalled for up to 10 s, then crashed.
+  - `clients/vscode/src/knowledge/graphBudget.ts` now bounds graphs that are drawn: the view load, live pushes and pack roots, each marked `view: true`.
+    - Only edges between kept nodes survive. Parallel edges merge into one weighted edge, capped at 12,000, structural kinds first.
+    - Violations are grouped per area pair, keeping up to 3 real findings each with true counts.
+    - A count-based payload budget applies.
+  - Whole-graph consumers keep every edge: domain proposals, pack cards, pack indexing and pack merge.
+  - True totals stay in `stats`. Bound reasons appear in the trace and in Copy diagnostics.
+- **First load (AE-G062).**
+  - A run-gated host waits up to 5 s for `lastSeen`, then chooses the root in this order: selected, painted, newest.
+  - On a miss it paints the stored review read-only, and Run still starts live updates. "Ready to run" shows only when nothing is stored. A late `lastSeen` never overrides a root the user picked.
+  - `lastSeen` is written in slices that yield the thread, with its size and any oversize skip logged.
+- **Diagnostics and logging.**
+  - A Copy diagnostics button shows in every state. The Panels button hides when there is no graph.
+  - Every load step goes to the Output channel and to a rolling log capped at 256 KB (`knowledge-log/` in global storage). Previously silent catches now report.
+- **Checks.**
+  - Opus review: two high findings fixed (whole-graph consumers had been bounded; grouped findings broke `[from, to]` consumers).
+  - 96 targeted tests pass, and the VS Code typecheck is clean.
+  - VSIX 2026.11.225 is installed, with the bounding, logging, wait and diagnostics code confirmed in the bundle.
+  - Seven older failing view tests are tracked separately as `AE-G064`.
+
 ## ✅ RESOLVED 2026-11-26 — Interactive Platform MCP, shared Workspace search, and Synapse connector import
 
 - The authenticated Platform MCP interactive profile sends catalog-change notifications and serves a catalog guide and discovery prompt. The MCP registry uses the stateless profile.

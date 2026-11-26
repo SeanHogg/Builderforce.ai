@@ -1,5 +1,4 @@
-import { decodeJwtPayload, signWebJwt } from './JwtService';
-import { parseTokenTimeToDate } from './MfaService';
+import { authTokenRowExpiresAt, decodeJwtPayload, signWebJwt, WEB_ACCESS_TOKEN_TTL_SECONDS } from './JwtService';
 import { authTokens, authUserSessions } from '../database/schema';
 import { eq } from 'drizzle-orm';
 import type { Db } from '../database/connection';
@@ -25,13 +24,15 @@ export async function mintWebSessionToken(
     expiresIn?: number;
   },
 ): Promise<{ token: string; expiresIn: number }> {
-  const expiresIn = opts.expiresIn ?? 86_400;
+  // `opts.expiresIn` is the SESSION length; the token itself is short-lived and renewed.
+  const sessionMaxAge = opts.expiresIn ?? 86_400;
+  const expiresIn = Math.min(WEB_ACCESS_TOKEN_TTL_SECONDS, sessionMaxAge);
   const token = await signWebJwt(
     { sub: opts.userId, email: opts.email, username: opts.username },
     jwtSecret,
-    expiresIn,
+    sessionMaxAge,
   );
-  const payload = decodeJwtPayload<{ jti?: string; sid?: string; exp: number }>(token);
+  const payload = decodeJwtPayload<{ jti?: string; sid?: string; exp: number; sat?: number; sma?: number }>(token);
   if (!payload.jti) return { token, expiresIn };
 
   if (payload.sid) {
@@ -58,7 +59,7 @@ export async function mintWebSessionToken(
     tenantId: null,
     tokenType: 'web',
     issuedAt: new Date(),
-    expiresAt: parseTokenTimeToDate(payload.exp),
+    expiresAt: authTokenRowExpiresAt(payload),
     userAgent: opts.userAgent ?? null,
     ipAddress: opts.ipAddress ?? null,
   });

@@ -11,7 +11,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { killTree } from "../process/killTree";
+import { killTree } from "@builderforce/agent-tools/node-process";
 import { fixText } from "./knowledgeFixText";
 
 export const OUTPUT_TAIL = 64 * 1024;

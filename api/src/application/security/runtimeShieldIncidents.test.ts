@@ -85,6 +85,15 @@ describe('recordRuntimeShieldEvent', () => {
     expect(openKindIncident).not.toHaveBeenCalled();
   });
 
+  it('stores evidence VALUES redacted: a secret under a benign key is masked', async () => {
+    ownership.loadProjectInTenant.mockResolvedValue({ segmentId: 'seg' });
+    const secret = `sk-live-${'a1b2c3d4'.repeat(4)}`;
+    await recordRuntimeShieldEvent(undefined, fakeDb(0).db, actor, { tenantId: 7, segmentId: 'seg' }, { ...event, evidence: { note: `rejected ${secret}`, path: '/api/orders' } });
+    const stored = openKindIncident.mock.calls[0]![4] as RuntimeShieldEvent;
+    expect(JSON.stringify(stored.evidence)).not.toContain(secret);
+    expect(stored.evidence.path).toBe('/api/orders');
+  });
+
   it('opens below the cap', async () => {
     ownership.loadProjectInTenant.mockResolvedValue({ segmentId: 'seg' });
     expect(await recordRuntimeShieldEvent(undefined, fakeDb(SHIELD_OPEN_INCIDENTS_PER_PROJECT - 1).db, actor, { tenantId: 7, segmentId: 'seg' }, event))

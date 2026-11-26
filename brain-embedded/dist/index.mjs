@@ -411,7 +411,7 @@ import {
   workFiledNotStaffedVerdict,
   workFinishPorts,
   workSupportsRoutingSample
-} from "./chunk-YHJLXV7C.mjs";
+} from "./chunk-NWNYO3KB.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -8118,16 +8118,60 @@ function resetOnDeviceStoresForTests() {
 // src/BrainActionsContext.tsx
 import { createContext as createContext2, useCallback as useCallback2, useContext as useContext2, useEffect as useEffect3, useMemo as useMemo2, useRef as useRef2, useState as useState2 } from "react";
 
-// src/toolSpecs.ts
-function toolSpecsFor(actions) {
-  return actions.map((action) => ({
+// ../packages/builderforce-mcp/src/tool.ts
+function requiresWriteApproval(tool) {
+  return "effect" in tool ? tool.effect !== "read" : tool.mutates !== false;
+}
+function toOpenAI(tool) {
+  return {
     type: "function",
     function: {
-      name: action.name,
-      description: action.description,
-      parameters: action.parameters
+      name: tool.name,
+      description: tool.description,
+      parameters: "inputSchema" in tool ? tool.inputSchema : tool.parameters
     }
-  }));
+  };
+}
+
+// ../packages/builderforce-mcp/src/relay.ts
+var MCP_CALL_PATH = "/llm/v1/mcp/call";
+function mcpCatalogPath(surface2) {
+  return "/llm/v1/mcp/tools" + (surface2 ? `?surface=${encodeURIComponent(surface2)}` : "");
+}
+function mcpCallRequest(call2) {
+  return {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(call2)
+  };
+}
+async function readMcpRelayCatalog(response, failure) {
+  if (!response.ok) throw new Error(failure?.(response.status) ?? `tool catalog unavailable (HTTP ${response.status})`);
+  const body = await response.json();
+  return Array.isArray(body.tools) ? body.tools : [];
+}
+function createMcpRelay(options) {
+  const fetcher = options.fetch ?? fetch;
+  const baseUrl = options.baseUrl.replace(/\/+$/, "");
+  function request(path, init = {}) {
+    const headers = {
+      Accept: "application/json",
+      ...options.token ? { Authorization: `Bearer ${options.token}` } : {},
+      ...init.headers,
+      ...options.headers
+    };
+    const signal = options.timeoutMs === void 0 ? void 0 : AbortSignal.timeout(options.timeoutMs);
+    return fetcher(baseUrl + path, { ...init, headers, ...signal ? { signal } : {} });
+  }
+  return {
+    list: async (surface2, failure) => readMcpRelayCatalog(await request(mcpCatalogPath(surface2)), failure),
+    call: (call2) => request(MCP_CALL_PATH, mcpCallRequest(call2))
+  };
+}
+
+// src/toolSpecs.ts
+function toolSpecsFor(actions) {
+  return actions.map(toOpenAI);
 }
 
 // src/BrainActionsContext.tsx
@@ -8265,14 +8309,9 @@ function isErrorResult(out) {
   return !!out && typeof out === "object" && typeof out.error === "string";
 }
 async function fetchMcpToolEntries(transport, skipExtensionIds = []) {
-  const token = transport.getToken();
-  const headers = { Accept: "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers });
-  if (!res.ok) throw new Error(`tool catalog unavailable (HTTP ${res.status})`);
-  const body = await res.json();
+  const tools = await createMcpRelay({ baseUrl: transport.baseUrl, token: transport.getToken() }).list();
   const skip = new Set(skipExtensionIds);
-  return (body.tools ?? []).filter((t) => !skip.has(t.extensionId));
+  return tools.filter((t) => !skip.has(t.extensionId));
 }
 function mcpActionsFrom(entries, transport, onToolResult, localTools) {
   return entries.map((entry) => ({
@@ -8282,9 +8321,9 @@ function mcpActionsFrom(entries, transport, onToolResult, localTools) {
     // Gate writes off the advertised flag; only an explicit mutates=false is
     // read-only. Undefined (external servers) ⇒ mutating, so the host's
     // confirm-before-mutate gate fires (fail safe).
-    mutates: entry.mutates !== false,
+    mutates: requiresWriteApproval(entry),
     run: (args) => {
-      const mutating = entry.mutates !== false;
+      const mutating = requiresWriteApproval(entry);
       const exec = async () => {
         const local = localTools?.(entry);
         if (local) {
@@ -8292,14 +8331,8 @@ function mcpActionsFrom(entries, transport, onToolResult, localTools) {
           onToolResult?.({ name: entry.name, tool: entry.tool, extensionId: entry.extensionId, mutating, ok: !isErrorResult(out2) });
           return out2;
         }
-        const token = transport.getToken();
-        const headers = { "Content-Type": "application/json" };
-        if (token) headers.Authorization = `Bearer ${token}`;
-        const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/call`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: args })
-        });
+        const relay = createMcpRelay({ baseUrl: transport.baseUrl, token: transport.getToken() });
+        const res = await relay.call({ extensionId: entry.extensionId, tool: entry.tool, arguments: args });
         const body = await res.json().catch(() => ({}));
         const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : body.result ?? body;
         onToolResult?.({

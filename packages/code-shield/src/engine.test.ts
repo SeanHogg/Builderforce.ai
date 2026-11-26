@@ -56,7 +56,7 @@ const CASES: readonly (readonly [string, string, string])[] = [
   ['secret.huggingface-token', `hf_${'a'.repeat(24)}`, 'hf_abc'],
   ['secret.sendgrid-key', `SG.${'a'.repeat(20)}.${'b'.repeat(20)}`, 'SG.abc.def'],
   ['secret.builderforce-key', 'bfk_0123456789abcdef', 'bfk_abc'],
-  ['secret.jwt', 'eyJhbGciOi.eyJzdWIiOiJ4.c2lnbmF0dXJl', 'eyJ.a.b'],
+  ['secret.jwt', 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4eHh4.c2lnbmF0dXJlMTIz', 'eyJ.a.b'],
   ['secret.telegram-bot-url', `/bot123456789:${'A'.repeat(25)}/getMe`, 'bot12:abc'],
   ['secret.telegram-bot-token', `123456789:${'A'.repeat(25)}`, '123:abc'],
 ];
@@ -75,6 +75,16 @@ describe('rules', () => {
     for (const rule of [...SECRET_RULES, ...SAST_RULES, ...BEHAVIOR_RULES, ...OBFUSCATION_RULES, ...SIGNATURE_RULES]) {
       expect(covered.has(rule.id), rule.id).toBe(true);
     }
+  });
+
+  it.each([
+    ['a Stripe key', `const k = "sk_live_${'a'.repeat(24)}"`],
+    ['a Google API key', `const k = "AIza${'a'.repeat(35)}"`],
+    ['a github_pat_ token', `const k = "github_pat_${'a'.repeat(40)}"`],
+    ['an sk- key', `const k = "sk-${'a'.repeat(32)}"`],
+  ])('the PR-diff profile flags %s as a secret', (_name, content) => {
+    const findings = scanText({ path: 'src/config.ts', content }, 'pr-diff');
+    expect(findings.some((f) => f.category === 'secret' && f.ruleId?.startsWith('secret.'))).toBe(true);
   });
 
   it('never copies the matched secret into a finding', () => {

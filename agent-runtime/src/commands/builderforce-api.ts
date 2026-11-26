@@ -43,6 +43,23 @@ export async function builderforceApiFetch<T>(
 }
 
 /**
+ * Swap a stored web token for its successor (`POST /api/auth/web/renew`). Web tokens
+ * live minutes and renewal ROTATES them — the presented token stops working and
+ * presenting it again later ends the session — so the caller must store the returned
+ * token before using it. Throws when the session is over (sign in again).
+ */
+export async function renewWebToken(serverUrl: string, webToken: string): Promise<string> {
+  const res = await builderforceApiFetch<{ token?: string }>(`${serverUrl}/api/auth/web/renew`, {
+    method: "POST",
+    token: webToken,
+  });
+  if (!res.token) {
+    throw new Error("Session renewal returned no token");
+  }
+  return res.token;
+}
+
+/**
  * List the tenant's projects, then prompt the user to pick one or create a new
  * one. This is the "confirm the project" step that pairs with
  * {@link selectTenantAndToken} ("confirm the tenant"): without it the host was

@@ -14,11 +14,23 @@ const LEGACY_SHAPE_RULE_IDS: Readonly<Record<string, string>> = {
   'openai-key': 'secret.provider-api-key',
   'google-api-key': 'secret.provider-api-key',
   'stripe-key': 'secret.provider-api-key',
+  // The hand-written GitHub rule matched both `gh*_` tokens and fine-grained `github_pat_` tokens under one id.
+  'github-pat': 'secret.github-token',
 };
 
 /** Shapes that are reported below CRITICAL: a chat/app token or a bare JWT is less often a deploy credential. */
 const HIGH_SHAPES: ReadonlySet<string> = new Set([
   'slack-token', 'slack-rotating-token', 'slack-app-token', 'jwt', 'telegram-bot-url', 'telegram-bot-token', 'stripe-webhook-secret',
+]);
+
+/**
+ * The shapes the hand-written rules already covered at full severity in every path. Every OTHER shape (added by the
+ * derivation) reports at MEDIUM in a test / fixture path, like the generic assignment rule: sample JWTs and fake
+ * platform keys are routine in fixtures, and the PR gate scans whole changed files, so at HIGH/CRITICAL they would hold
+ * every merge that touches such a test. Reported, never skipped.
+ */
+const FULL_SEVERITY_IN_TESTS: ReadonlySet<string> = new Set([
+  'private-key', 'aws-access-key', 'github-token', 'github-pat', 'slack-token', 'openai-key', 'google-api-key', 'stripe-key',
 ]);
 
 const ATTACK_PRIVATE_KEY = 'T1552.004';

@@ -7,11 +7,12 @@ import { renewWebSession, type RenewContext } from '../../application/auth/renew
  * `POST /api/auth/web/renew` — swap the current web token for a fresh short-lived one.
  *
  * Deliberately NOT behind `webAuthMiddleware`: that rejects an expired token, and
- * renewal has to accept one that lapsed moments ago (the tab was asleep). The
- * use case does its own verification, grace window and revocation check.
+ * renewal has to accept one that lapsed (the device was asleep). The use case does
+ * its own signature, session-age and rotation checks.
  *
- * Every refusal is a 401 carrying a machine-readable `code`; `session_expired` means
- * the session reached its maximum age and the person has to sign in again.
+ * Every refusal is a 401 carrying a machine-readable `code`; each one
+ * (`session_expired`, `session_revoked`, `token_revoked`, `invalid_token`,
+ * `account_unavailable`) means the person has to sign in again.
  *
  * Mounted inside `createAuthRoutes` (one `router.route('/', …)` line), like
  * `createSessionIntrospectRoutes`.

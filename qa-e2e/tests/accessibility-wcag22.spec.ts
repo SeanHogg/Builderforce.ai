@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../src/sessionFixture';
 
 const publicPages = ['/', '/login', '/register', '/legal/compliance', '/legal/privacy-rights', '/legal/accessibility'];
 

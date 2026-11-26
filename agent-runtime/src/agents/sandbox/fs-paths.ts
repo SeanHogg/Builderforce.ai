@@ -1,4 +1,5 @@
 import path from "node:path";
+import { isPathInside } from "@builderforce/agent-tools/node-path.js";
 import { resolveSandboxInputPath, resolveSandboxPath } from "../sandbox-paths.js";
 import { SANDBOX_AGENT_WORKSPACE_MOUNT } from "./constants.js";
 import type { SandboxContext } from "./types.js";
@@ -217,7 +218,7 @@ function findMountByContainerPath(mounts: SandboxFsMount[], target: string): San
 
 function findMountByHostPath(mounts: SandboxFsMount[], target: string): SandboxFsMount | null {
   for (const mount of mounts) {
-    if (isPathInsideHost(mount.hostRoot, target)) {
+    if (isPathInside(mount.hostRoot, target)) {
       return mount;
     }
   }
@@ -230,14 +231,6 @@ function isPathInsidePosix(root: string, target: string): boolean {
     return true;
   }
   return !(rel.startsWith("..") || path.posix.isAbsolute(rel));
-}
-
-function isPathInsideHost(root: string, target: string): boolean {
-  const rel = path.relative(root, target);
-  if (!rel) {
-    return true;
-  }
-  return !(rel.startsWith("..") || path.isAbsolute(rel));
 }
 
 function toHostSegments(relativePosix: string): string[] {

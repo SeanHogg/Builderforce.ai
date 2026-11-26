@@ -239,6 +239,9 @@ export const authTokens = pgTable('auth_tokens', {
   userAgent:   text('user_agent'),
   ipAddress:   varchar('ip_address', { length: 64 }),
   lastSeenAt:  timestamp('last_seen_at').notNull().defaultNow(),
+  /** The jti that replaced this one through a web renewal (`renewWebSession`). Set only
+   *  together with `revoked_at`; NULL for every other kind of revocation. (1369) */
+  supersededBy: varchar('superseded_by', { length: 64 }),
 });
 
 

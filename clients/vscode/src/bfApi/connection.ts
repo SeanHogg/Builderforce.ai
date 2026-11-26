@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "../gateway/gateway";
 import { authed } from "./transport";
@@ -12,7 +13,8 @@ export async function diagnose(secrets: vscode.SecretStorage): Promise<string> {
   const lines: string[] = [`Base URL: ${base}`];
   const key = await getApiKey(secrets);
   if (!key) return [...lines, "Not signed in (no API key stored)."].join("\n");
-  lines.push(`API key: ${key.slice(0, 6)}…${key.slice(-3)} (length ${key.length})`);
+  // Presence plus a short one-way fingerprint (enough to tell two keys apart); no part of the key itself is shown.
+  lines.push(`API key: present (fingerprint ${createHash("sha256").update(key).digest("hex").slice(0, 8)})`);
 
   let token: string | undefined;
   try {

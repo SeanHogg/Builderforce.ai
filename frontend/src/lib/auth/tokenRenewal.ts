@@ -11,10 +11,11 @@
  *   - when a request is answered 401 (`renewAfterUnauthorized`, called once by the
  *     transport before it gives up and redirects).
  *
- * Renewal ROTATES the token — the one that was presented stops working — so two tabs
- * renewing at once would sign each other out. Renewal is therefore single-flight
- * across tabs: one tab holds a lock in localStorage while it renews, the others wait
- * for the new token to appear in storage and adopt it. After the web token renews,
+ * Renewal ROTATES the token — the one that was presented stops working, and presenting
+ * it again later ends the whole session (the API only tolerates a repeat within a
+ * short window: two tabs at one instant, a lost response retried). Renewal is therefore
+ * single-flight across tabs: one tab holds a lock in localStorage while it renews, the
+ * others wait for the new token to appear in storage and adopt it. After the web token renews,
  * the workspace token is re-minted through the same `getTenantToken` exchange the
  * sign-in uses.
  *
@@ -122,18 +123,32 @@ async function remintTenantToken(webToken: string): Promise<void> {
   try {
     const res = await getTenantToken(webToken, tenant.id);
     persistTenantSession(res.token, tenant);
-  } catch {
-    // The next request that meets a 401 renews again; a failed re-mint never fails the renewal.
+  } catch (error) {
+    // A failed re-mint never fails the renewal (the next 401 renews again), but it is recorded.
+    // Loaded lazily: the reporter sends through the API client, which imports this module.
+    void import('../reportError').then(({ reportBackgroundFailure }) => reportBackgroundFailure({
+      message: `Re-minting the workspace token after a renewal failed: ${error instanceof Error ? error.message : String(error)}`,
+      level: 'warning',
+    }));
   }
 }
 
 async function renewOnce(before: string): Promise<RenewOutcome> {
   // Another tab may already hold the lock: wait for it to finish, then adopt what it stored.
-  while (heldByAnotherTab()) {
-    await sleep(LOCK_POLL_MS);
+  // Losing the acquire race to a tab that wrote the lock at the same instant is the same
+  // situation, so it waits too rather than giving up (a give-up here would turn a 401 into
+  // a sign-out). A dead holder's lock lapses after LOCK_TTL_MS.
+  const giveUpAt = Date.now() + 2 * LOCK_TTL_MS;
+  for (;;) {
+    while (heldByAnotherTab()) {
+      await sleep(LOCK_POLL_MS);
+      if (getStoredWebToken() !== before) return 'adopted';
+    }
     if (getStoredWebToken() !== before) return 'adopted';
+    if (tryAcquire()) break;
+    if (Date.now() > giveUpAt) return 'transient';
+    await sleep(LOCK_POLL_MS);
   }
-  if (!tryAcquire()) return 'transient';
   try {
     // A tab that renewed between our decision and our lock already did the work.
     if (getStoredWebToken() !== before) return 'adopted';
@@ -207,7 +222,21 @@ async function tick(): Promise<void> {
   const outcome = await renewSession();
   if (outcome === 'expired') signOut();
   else if (outcome === 'transient') arm(RENEW_RETRY_MS);
+  // Nothing to renew (signed out, embed): stop. Re-arming would spin on a lapsed token.
+  else if (outcome === 'no_session') arm(null);
   else armFromStoredToken();
+}
+
+/**
+ * For a transport that cannot resend its request (a stream): after a 401 on a web
+ * session, renew in the background so the NEXT request carries a fresh token, and
+ * sign out only if the renewal is refused. Returns false when there is no web session
+ * to renew (embed, signed out) — the caller's own 401 handling applies then.
+ */
+export function renewInBackgroundAfterUnauthorized(): boolean {
+  if (!getStoredWebToken() || isEmbedMode()) return false;
+  void tick();
+  return true;
 }
 
 /**
@@ -216,7 +245,8 @@ async function tick(): Promise<void> {
  * Returns the cleanup.
  */
 export function startTokenRenewal(): () => void {
-  if (typeof window === 'undefined') return () => undefined;
+  // An embed runs on its host's token and has no web session of its own to renew.
+  if (typeof window === 'undefined' || isEmbedMode()) return () => undefined;
   armFromStoredToken();
   const onForeground = () => {
     if (document.visibilityState === 'hidden') return;

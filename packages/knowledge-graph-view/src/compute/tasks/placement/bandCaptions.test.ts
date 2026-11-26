@@ -11,7 +11,7 @@ import type { PlacementReq } from './request';
 const graph = surfaceFixture();
 const req = (generation: number, camera: PlacementReq['camera'] = 'system'): PlacementReq => ({ graph: 1, generation, camera, drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0 });
 
-describe('the Layers camera's band captions are the localized band titles (sent as strings: the worker has no labels)', () => {
+describe("the Layers camera's band captions are the localized band titles (sent as strings: the worker has no labels)", () => {
     it('draws NO band captions on the perspective Map (the design has none; a ground caption drifts under a tilted camera)', () => {
         const model = buildStageModel(graph, bandStrings(L));
         expect(placeMap(model, req(model.marks.generation, 'map')).captions).toEqual([]);
