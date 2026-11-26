@@ -8,18 +8,17 @@
 import type { CSSProperties, ReactNode, Ref } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
-import { CONTROL } from '../../styles';
 import { actionGlyph, type ActionGlyphName } from '../ui/glyphs';
 import { TYPE } from '../ui/type';
 import type { SelectionFacts } from './cardModel';
 
 /** The look of a card action button. */
 export const cardAction: CSSProperties = {
-    minHeight: CONTROL, padding: '0 10px', borderRadius: 7, cursor: 'pointer', font: 'inherit', ...TYPE.pill,
+    minHeight: 26, padding: '0 9px', borderRadius: 4, cursor: 'pointer', font: 'inherit', ...TYPE.body,
     display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: '100%',
-    border: `1px solid ${cssVar('border')}`, background: 'transparent', color: cssVar('text'),
+    border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), color: cssVar('text'),
 };
-const primaryAction: CSSProperties = { ...cardAction, background: cssVar('accent'), borderColor: cssVar('accent'), color: cssVar('onAccent') };
+const primaryAction: CSSProperties = { ...cardAction, background: cssVar('accent'), borderColor: cssVar('accent'), color: cssVar('onAccent'), fontWeight: 600 };
 
 /** A card's row of actions: wraps, so a 360px card never overflows. */
 export const cardActionRow: CSSProperties = { display: 'flex', gap: 6, flexWrap: 'wrap', minWidth: 0 };
@@ -80,22 +79,27 @@ export function SelectionActions({ labels, facts, onCallers, onSimulate, onRestr
     );
 }
 
-const fact: CSSProperties = { ...TYPE.meta, display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, overflowWrap: 'anywhere' };
+const fact: CSSProperties = { ...TYPE.body, color: cssVar('muted'), display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, overflowWrap: 'anywhere' };
 
 /** One fact of the row: an optional glyph or swatch, then its text, in an optional tone. */
 function Fact({ id, tone, lead, children }: { id: string; tone?: ThemeTone | null; lead?: ReactNode; children: ReactNode }) {
     return <span data-fact={id} style={{ ...fact, color: tone ? cssVar(tone) : fact.color }}>{lead}{children}</span>;
 }
 
-/** The facts row: risk (a swatch and its word), test reach, and the anti-pattern's name. Nothing known ⇒ nothing drawn. */
-export function CardFacts({ labels, facts, risk }: { labels: KnowledgeGraphLabels; facts: SelectionFacts | null; risk?: { value: string; tone: ThemeTone | null } | undefined }) {
+/** The risk of a selection, worded (`High risk`, `No risk flags`) with the tone of its swatch. */
+export interface RiskFact { text: string; tone: ThemeTone | null }
+
+/**
+ * The note card's facts, as the cells of its facts row: risk (a swatch and its words), test reach (the bad tone when no
+ * test reaches it), complexity, the owning team and the anti-pattern's name. A fact that is not known is not drawn.
+ */
+export function CardFacts({ labels, facts, risk, complexity, owner }: { labels: KnowledgeGraphLabels; facts: SelectionFacts | null; risk?: RiskFact | null | undefined; complexity?: string | null | undefined; owner?: string | null | undefined }) {
     const t = labels.surface.map.card;
-    if (!facts && !risk) return null;
     return (
-        <div data-card-facts style={{ display: 'flex', gap: '2px 10px', flexWrap: 'wrap', alignItems: 'center', minWidth: 0 }}>
+        <>
             {risk && (
-                <Fact id="risk" tone={risk.tone} lead={<i aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 2, background: risk.tone ? cssVar(risk.tone) : cssVar('border') }} />}>
-                    {`${t.risk}: ${risk.value}`}
+                <Fact id="risk" lead={<i aria-hidden="true" style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, flex: 'none', background: risk.tone ? cssVar(risk.tone) : cssVar('edge') }} />}>
+                    {risk.text}
                 </Fact>
             )}
             {facts?.tests && (
@@ -103,7 +107,9 @@ export function CardFacts({ labels, facts, risk }: { labels: KnowledgeGraphLabel
                     ? <Fact id="tests" tone="violation" lead={actionGlyph('testMissing')}>{t.testNone}</Fact>
                     : <Fact id="tests">{t.testReached}</Fact>
             )}
+            {complexity && <Fact id="complexity">{complexity}</Fact>}
+            {owner && <Fact id="owner">{fillTemplate(t.ownerIs, { name: owner })}</Fact>}
             {facts?.antiPattern && <Fact id="anti" tone="violation" lead={actionGlyph('warning')}>{facts.antiPattern.name}</Fact>}
-        </div>
+        </>
     );
 }

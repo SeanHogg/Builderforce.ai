@@ -120,11 +120,6 @@ export function TransitMap(p: TransitMapProps) {
     const focusStation = useCallback((id: string) => {
         ([...(hostRef.current?.querySelectorAll('[data-station]') ?? [])].find((el) => el.getAttribute('data-station') === id) as SVGElement | undefined)?.focus({ preventScroll: true });
     }, []);
-    const closeCard = useCallback(() => {
-        const id = cardIdRef.current;
-        setCardId(null);
-        if (id) focusStation(id);
-    }, [focusStation]);
 
     // A station that left the map (a level was entered, the graph changed) takes its card and its unfold with it.
     useEffect(() => {
@@ -184,7 +179,7 @@ export function TransitMap(p: TransitMapProps) {
                 station: cardStation, stations: stations.stations, labels, layerName: layerName(cardStation.layer ?? OTHER_LAYER), findings: model.findings, index: model.index,
                 enter: p.canEnter?.(cardStation.id) ?? NO_ENTER, satellites: cardSatellites.length, unfolded: unfoldedId === cardStation.id, leaf: leaves.has(cardStation.id),
             })}
-            labels={labels} compact={compact} at={anchor} boxRef={cardRef} loading={p.loading} onClose={closeCard}
+            labels={labels} type="source" narrow={compact} loading={p.loading}
             onEnter={() => act(cardStation.id, () => { setUnfoldedId(null); p.onEnter?.(cardStation.id); })}
             onUnfold={() => setUnfoldedId((cur) => (cur === cardStation.id ? null : cardStation.id))}
             onCallers={() => act(cardStation.id, () => p.onQuestion?.('callers'))}

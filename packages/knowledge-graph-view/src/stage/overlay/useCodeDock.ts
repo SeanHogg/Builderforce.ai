@@ -32,7 +32,6 @@ import { INCIDENT_SHOWN } from './incident';
 
 /** The code dock's records while nothing is read: none, and the same array every render. */
 const NO_RECORDS: readonly SymbolRecord[] = [];
-const NO_TYPES: ReadonlyMap<string, MarkType> = new Map();
 
 export interface CodeDockInput {
     p: SceneProps;
@@ -111,9 +110,8 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     const facts = useMemo(() => symbolFacts(factsGraph, surface.stations), [factsGraph, surface.stations]);
     const top = drill.stack[drill.stack.length - 1];
     const inside = zoom.code?.target.ref ?? top?.ref ?? null;
-    // The outline's glyphs: only while it is what the pane shows.
-    const outlined = visible && !reading;
-    const types = useMemo(() => outlined ? stationTypes(graph, map.stations, index) : NO_TYPES, [outlined, graph, map.stations, index]);
+    // The level tree is always drawn in the pane, and the cards name their shape from it.
+    const types = useMemo(() => stationTypes(graph, map.stations, index), [graph, map.stations, index]);
 
     // A pointer hovering a mark while the code is read tints that symbol's lines.
     const [hoverRef, setHoverRef] = useState<string | null>(null);

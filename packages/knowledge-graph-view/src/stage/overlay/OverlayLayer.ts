@@ -11,15 +11,16 @@
  * The lines go through the stage's ONE line shader (`links/LinkLayer`), as one `edge` batch in screen pixels.
  */
 
-import { Color, DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry, SRGBColorSpace } from 'three';
+import { Color, DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry, SRGBColorSpace, TorusGeometry } from 'three';
 import { CALL_LINK_STYLE } from '../../compute/tasks/placement/associations';
 import { polylineBatch, roundedPoints, type WorldPath } from '../../compute/tasks/placement/links';
+import { HallLayer, type HallUniforms } from '../links/HallLayer';
 import { LinkLayer } from '../links/LinkLayer';
 import { slotHalfPx } from '../markSize';
 import type { LinkUniforms } from '../links/shader';
 import type { StageStats } from '../stats';
 import { toneIndex } from '../tones';
-import type { LinkBatch, Placement } from '../types';
+import { FLAG, type LinkBatch, type Placement } from '../types';
 import { callArc, nthCallTo, type CallTrack, type GroundPt } from './callArcs';
 
 export interface OverlayState {
@@ -38,7 +39,8 @@ export interface OverlayState {
 
 export const NO_OVERLAY: OverlayState = { selected: -1, hover: -1, path: [], incident: [] };
 
-const PATH_PX = 3;
+/** The highlighted path's hall bar: this wide (world units) per unit of the mark's own radius, never thinner than the minimum. */
+const PATH_HALL_MIN = 4, PATH_HALL_SHARE = 0.34;
 const INCIDENT_PX = 1.5;
 /** A call's arc, and the current call's (wider, so it reads over the others). */
 const CALL_PX = 1.5, CURRENT_CALL_PX = 3;
@@ -53,6 +55,18 @@ const at = (p: Placement, s: number) => ({ x: p.position[s * 3]!, y: p.position[
 const lifted = (pts: readonly GroundPt[]) => pts.map((q): [number, number, number] => [q.x, OVERLAY_LIFT, q.y]);
 
 /**
+ * The highlighted path as a LIT HALL batch (the design's emissive accent bar with a travelling pulse): the path's consecutive
+ * shown stops joined by rounded corners, raised just off the floor. Null when fewer than two stops are shown.
+ */
+export function overlayHalls(p: Placement, state: OverlayState): LinkBatch | null {
+    const stops: GroundPt[] = [];
+    for (let i = 0; i < state.path.length; i++) { const s = state.path[i]!; if (shown(p, s)) stops.push(at(p, s)); }
+    if (stops.length < 2) return null;
+    const width = Math.max(PATH_HALL_MIN, PATH_HALL_SHARE * 2 * Math.min(...Array.from(state.path, (s) => (shown(p, s) ? p.scale[s]! : Infinity))));
+    return polylineBatch('hall', [{ pts: roundedPoints(stops).map((q): [number, number, number] => [q.x, 0, q.y]), tone: toneIndex('lit'), width, dash: 0, flags: FLAG.PULSE }], 'world');
+}
+
+/**
  * The overlay's lines for `state` over placement `p`: the path's consecutive shown stops, then one segment from the
  * selection to each neighbour that is somewhere else (a hidden neighbour sits at its anchor), then one arc per call of
  * the open method to a shown callee, the current call last (drawn on top). Null when there are none.
@@ -61,9 +75,6 @@ export function overlayLinks(p: Placement, state: OverlayState): LinkBatch | nul
     const tone = toneIndex('accent');
     const callTone = toneIndex(CALL_LINK_STYLE.tone);
     const paths: WorldPath[] = [];
-    const stops: GroundPt[] = [];
-    for (let i = 0; i < state.path.length; i++) { const s = state.path[i]!; if (shown(p, s)) stops.push(at(p, s)); }
-    if (stops.length >= 2) paths.push({ pts: lifted(roundedPoints(stops)), tone, width: PATH_PX, dash: 0, flags: 0 });
     if (shown(p, state.selected)) {
         const from = at(p, state.selected);
         for (let i = 0; i < state.incident.length; i++) {
@@ -103,6 +114,18 @@ function emptyBatch(segments: number): LinkBatch {
 
 /** A ring's inner radius (its outer is 1); the reading ring's is thicker: a glow around the mark rather than an edge. */
 const RING_INNER = 0.82, READING_INNER = 0.66;
+/** The selection TORUS: the design's ring around the shape, its tube this share of the radius. */
+const TORUS_TUBE = 0.045;
+
+function torus(order: number): Mesh {
+    const geometry = new TorusGeometry(1, TORUS_TUBE, 8, 64);
+    geometry.rotateX(-Math.PI / 2);
+    const mesh = new Mesh(geometry, new MeshBasicMaterial({ side: DoubleSide }));
+    mesh.renderOrder = order;
+    mesh.frustumCulled = false;
+    mesh.visible = false;
+    return mesh;
+}
 
 function ring(order: number, opacity: number, inner = RING_INNER): Mesh {
     const geometry = new RingGeometry(inner, 1, 48);
@@ -116,11 +139,12 @@ function ring(order: number, opacity: number, inner = RING_INNER): Mesh {
 
 export class OverlayLayer {
     readonly group = new Group();
-    private readonly selectRing = ring(6, 1);
+    private readonly selectRing = torus(6);
     private readonly hoverRing = ring(5, 0.55);
     private readonly readingRing = ring(5, 0.85, READING_INNER);
     private readonly callRing = ring(6, 1);
     private readonly lines: LinkLayer;
+    private readonly halls: HallLayer;
     private state: OverlayState = NO_OVERLAY;
     private placement: Placement | null = null;
     /** The depth control: a ring sits on top of the mark as drawn (extrude × depth, the shader's `uDepth`). */
@@ -137,14 +161,15 @@ export class OverlayLayer {
         if (this.placement?.minMarkPx) this.placeRings();
     }
 
-    constructor(stats: StageStats, uniforms: LinkUniforms) {
+    constructor(stats: StageStats, uniforms: LinkUniforms & Pick<HallUniforms, 'uTime' | 'uMotion'>) {
         // Only the `edge` family: the overlay's lines are one px batch (LinkLayer preallocates what it is told to).
         this.lines = new LinkLayer(stats, uniforms, ['edge']);
+        this.halls = new HallLayer(stats, uniforms);
         this.selectRing.name = 'overlay:selection';
         this.hoverRing.name = 'overlay:hover';
         this.readingRing.name = 'overlay:reading';
         this.callRing.name = 'overlay:call';
-        this.group.add(this.lines.group, this.readingRing, this.hoverRing, this.callRing, this.selectRing);
+        this.group.add(this.lines.group, this.halls.group, this.readingRing, this.hoverRing, this.callRing, this.selectRing);
         this.group.renderOrder = 5;
         // The line mesh exists from the start (sized for a long path and a full incident fan), so a selection creates none.
         this.lines.set([emptyBatch(PRIMED_SEGMENTS)]);
@@ -173,7 +198,7 @@ export class OverlayLayer {
 
     private get rings(): readonly Mesh[] { return [this.selectRing, this.hoverRing, this.readingRing, this.callRing]; }
 
-    get meshes(): readonly Mesh[] { return [...this.rings, ...this.lines.meshes]; }
+    get meshes(): readonly Mesh[] { return [...this.rings, ...this.lines.meshes, ...this.halls.meshes]; }
 
     private draw(): void {
         const p = this.placement, s = this.state;
@@ -182,7 +207,12 @@ export class OverlayLayer {
         this.placeRings();
         const batch = overlayLinks(p, s);
         this.lines.set(batch ? [batch] : []);
+        const path = overlayHalls(p, s);
+        this.halls.set(path ? [path] : []);
     }
+
+    /** A lit path hall is on screen: the renderer keeps the decorative clock running. */
+    get pulsing(): boolean { return this.group.visible && this.halls.pulsing; }
 
     private placeRings(): void {
         const p = this.placement, s = this.state;
@@ -196,6 +226,7 @@ export class OverlayLayer {
     dispose(): void {
         for (const m of this.rings) { m.geometry.dispose(); (m.material as MeshBasicMaterial).dispose(); }
         this.lines.dispose();
+        this.halls.dispose();
     }
 }
 
@@ -203,6 +234,12 @@ function place(m: Mesh, p: Placement, s: number, depth: number, pxPerWorld: numb
     m.visible = shown(p, s);
     if (!m.visible) return;
     const r = Math.max(RING_MIN, (slotHalfPx(p, s, pxPerWorld) / Math.max(pxPerWorld, 1e-6)) * RING_GROW);
+    if (m.name === 'overlay:selection') {
+        // The torus rings the shape at its foot (the design's: just off the floor), uniformly scaled so its tube stays round.
+        m.position.set(p.position[s * 3]!, p.position[s * 3 + 1]! + TORUS_TUBE * r, p.position[s * 3 + 2]!);
+        m.scale.set(r, r, r);
+        return;
+    }
     m.position.set(p.position[s * 3]!, p.position[s * 3 + 1]! + (p.extrude[s] ?? 0) * depth + OVERLAY_LIFT, p.position[s * 3 + 2]!);
     m.scale.set(r, 1, r);
 }

@@ -53,7 +53,7 @@ const QUESTION_IDS: ReadonlySet<string> = new Set(QUESTIONS.map((q) => q.id));
 export function paintMarks(g: KnowledgeGraph, model: StageModel, input: PaintInput): MarkPaint {
     const { marks, stations, lines } = model;
     const n = marks.keys.length;
-    const tone = new Uint8Array(n), tone2 = new Uint8Array(n).fill(BG_TONE), fill = new Float32Array(n), flags = new Uint8Array(n);
+    const tone = new Uint8Array(n), tone2 = new Uint8Array(n).fill(BG_TONE), fill = new Float32Array(n), flags = new Uint16Array(n);
     const lens = LENSES[input.lensId as LensId] ?? LENSES.structure;
 
     for (let i = 0; i < g.nodes.length; i++) {
@@ -78,7 +78,7 @@ export function paintMarks(g: KnowledgeGraph, model: StageModel, input: PaintInp
     paintFolders(g, marks, tone, flags);
 
     const lit = input.lit ?? questionLit(model, input.questionId ?? null, input.family ?? null);
-    if (lit) dimExcept(new Set(lit), marks, stations, model.stationSlot, flags);
+    if (lit) dimExcept(new Set(lit), marks, stations, model.stationSlot, flags, input.questionId === 'untested' && input.lit === null);
     if (input.roles) {
         const role = new Map(input.roles);
         for (let i = 0; i < n; i++) {
@@ -118,7 +118,7 @@ export function questionLit(model: Pick<StageModel, 'stations' | 'lines'>, quest
  */
 function dimExcept(
     lit: ReadonlySet<string>, marks: Pick<MarkSet, 'keys' | 'slotKind' | 'parentStation' | 'parentFolder'>,
-    stations: StageModel['stations'], stationSlot: StageModel['stationSlot'], flags: Uint8Array,
+    stations: StageModel['stations'], stationSlot: StageModel['stationSlot'], flags: Uint16Array, cage = false,
 ): void {
     const { keys } = marks;
     const on = new Uint8Array(keys.length);
@@ -132,5 +132,9 @@ function dimExcept(
         if (!on[i] && st >= 0 && on[st]) on[i] = 1;
     }
     lightFolders(on, marks, stations, stationSlot);
-    for (let i = 0; i < keys.length; i++) if (!on[i]) flags[i] = flags[i]! | FLAG.DIM;
+    for (let i = 0; i < keys.length; i++) {
+        if (!on[i]) flags[i] = flags[i]! | FLAG.DIM;
+        // The "untested" question lights the marks no test reaches: each wears a dashed red cage.
+        else if (cage && marks.slotKind[i] !== SLOT_FOLDER) flags[i] = flags[i]! | FLAG.CAGE;
+    }
 }

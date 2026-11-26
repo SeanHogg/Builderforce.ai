@@ -1,37 +1,45 @@
 /**
- * The header row (56px): the spine, the ask bar (flex) and, at the right end, ONE action slot (the
- * review status chip + button, `surface/ReviewAction.tsx`). The ask bar is a 40px rounded search whose placeholder is the
- * active question as a sentence (its value until something is typed, with the sentence also the
- * placeholder), with ONE mono note on its right (answer mode · answer, or just "not set up") and
- * the screenshot picker inside it. On a narrow container the row stacks: spine, then a full-width
- * 44px ask bar, then the lines toggle and the action in one sideways-scrolling row.
- * The cameras, the Panels and overlay tools, the questions, the commit scrubber and the lenses are the
- * canvas controls (`surface/SceneOverlay.tsx`).
+ * The header row (design prototype `#top`: 38px, the panel background, a bottom border): an Out icon button (climbs one level), the spine as mono crumbs and,
+ * right-aligned, the search icon button (it expands into the ask input), the review status button and the Panels button (it toggles the drawer). The ask
+ * input's placeholder is the active question as a sentence; the screenshot picker sits inside it (`askWrap` = `PinpointInput`). The theme switch is the host's,
+ * so there is none here.
+ *
+ * `wrapped` (the prototype's `max-width: 900px` rules, read from the CONTAINER width): the row wraps, the spine takes its own full-width row (below the buttons),
+ * the right group fills the first row and ends it, the search icon is gone (the input is simply shown) and a Code | Picture switch joins the right group.
+ * The cameras, the questions and the commit scrubber are the scene's toolbar (`surface/SceneOverlay.tsx`).
  */
 
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from './labels';
 import { cssVar } from './scene/themeColors';
-import { muted } from './styles';
+import { ghostButtonStyle, Seg } from './surface/ui';
+import { chromeGlyph } from './surface/ui/glyphs';
 import { TYPE } from './surface/ui/type';
 import type { QuestionId } from './surface/questions';
 
 export interface ToolbarProps {
     labels: KnowledgeGraphLabels;
     onSearch(q: string): void;
-    /** The active question: its sentence is the ask bar's placeholder, its answer mode the note. */
+    /** The active question: its sentence is the ask input's placeholder. */
     question: QuestionId;
     /** What `{name}` is in the sentence: the station, the line or the folder. */
     askName: string;
-    /** The question's answer in words (`answerLine`): "3 stations", "No station matches.", "Not set up…". Shown beside the answer mode; empty ⇒ absent. */
-    answer?: string | undefined;
-    narrow: boolean;
+    /** The prototype's ≤900px rules: the row wraps and the spine takes its own row. */
+    wrapped: boolean;
+    /** The level above ("the line"); null/absent ⇒ the Out button is disabled and says "Top level". */
+    outTo?: string | null | undefined;
+    onOut?: (() => void) | undefined;
     /** The drill path. */
     spine?: ReactNode;
-    /** The review action (status chip + button): the right end of the row; on a narrow container, beside the lines toggle. */
+    /** The review status button: the right group. */
     action?: ReactNode;
+    /** The Panels button: whether the drawer is open, and its toggle. */
+    drawerOpen: boolean;
+    onToggleDrawer(): void;
+    /** The Code | Picture switch (shown only while `wrapped`): `code` is whether the code pane is the one on show. */
+    panes?: { code: boolean; onPane(code: boolean): void } | undefined;
     /**
-     * Wraps the ask bar so the pinpoint input catches a paste or a drop anywhere on it and puts
+     * Wraps the ask input so the pinpoint input catches a paste or a drop anywhere on it and puts
      * its screenshot button inside: it calls `bar` with that button.
      */
     askWrap?: ((bar: (picker: ReactNode) => ReactNode) => ReactNode) | undefined;
@@ -39,60 +47,65 @@ export interface ToolbarProps {
     linesToggle?: ReactNode;
 }
 
-const searchIcon = (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style={{ flex: 'none', fill: 'none', stroke: cssVar('muted'), strokeWidth: 1.6 }}>
-        <circle cx="7" cy="7" r="5" /><path d="M11 11l4 4" />
-    </svg>
-);
+const icon = (id: string): ReactNode => chromeGlyph(id);
 
-export function Toolbar({ labels, onSearch, question, askName, answer, narrow, spine, action, askWrap, linesToggle }: ToolbarProps) {
-    // null = nothing typed: the box shows the active question as its value, in the normal text colour; typing replaces it.
+export function Toolbar({ labels, onSearch, question, askName, wrapped, outTo, onOut, spine, action, drawerOpen, onToggleDrawer, panes, askWrap, linesToggle }: ToolbarProps) {
+    // null = nothing typed. The input is in the row only while asking (the search button expands it), except where the row wraps: the button is gone there, so the input stays.
     const [typed, setTyped] = useState<string | null>(null);
+    const [asking, setAsking] = useState(false);
     const s = labels.surface;
     const sentence = fillTemplate(s.askSentence[question], { name: askName });
     const q = typed ?? '';
-    // ONE note: a question whose data was never collected says so alone; otherwise the answer mode, then the answer.
-    const notSetUp = answer === s.answerNotSetUp;
-    const showMode = !narrow && !notSetUp;
-    const noteStyle: CSSProperties = { ...muted, ...TYPE.mono, padding: '0 6px', overflow: 'hidden', textOverflow: 'ellipsis', flex: '0 1 auto', whiteSpace: narrow ? 'normal' : 'nowrap' };
+    const showAsk = asking || wrapped;
+    const outLabel = outTo ? fillTemplate(s.overlay.outTo, { name: outTo }) : s.header.topLevel;
     const bar = (picker: ReactNode) => (
         <form
             role="search" onSubmit={(e) => { e.preventDefault(); onSearch(q); }}
+            onKeyDown={(e) => { if (e.key === 'Escape' && !wrapped) { e.stopPropagation(); setAsking(false); } }}
             style={{
-                flex: '1 1 180px', minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, boxSizing: 'border-box', height: narrow ? 44 : 40, padding: '0 6px 0 12px',
-                borderRadius: 10, border: `1px solid ${cssVar('border')}`, background: cssVar('bg'),
+                flex: wrapped ? '1 1 120px' : '0 1 260px', width: wrapped ? undefined : 260, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, boxSizing: 'border-box',
+                height: 'calc(var(--kg-control, 40px) - 2px)', padding: '0 4px 0 10px', borderRadius: 4, border: `1px solid ${cssVar('border')}`, background: cssVar('bg'),
             }}
         >
-            {searchIcon}
             <input
-                type="search" aria-label={labels.searchLabel} placeholder={sentence} value={typed ?? sentence}
-                onFocus={(e) => { if (typed === null) e.currentTarget.select(); }}
+                type="search" aria-label={labels.searchLabel} placeholder={sentence} value={q} autoFocus={asking && !wrapped}
                 onChange={(e) => setTyped(e.target.value)}
-                style={{ flex: 1, minWidth: 0, border: 0, background: 'transparent', color: cssVar('text'), font: 'inherit', ...TYPE.input, ...(narrow ? { fontSize: TYPE.title.fontSize } : null) }}
+                style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'transparent', color: cssVar('text'), font: 'inherit', ...TYPE.input }}
             />
-            {(answer || showMode) && (
-                <span data-testid="kg-answer" role="status" style={noteStyle}>
-                    {showMode && <span data-testid="kg-answer-mode">{s.answerMode[question]}</span>}
-                    {showMode && answer ? ' · ' : ''}{answer}
-                </span>
-            )}
             {picker}
         </form>
     );
     const ask = askWrap ? askWrap(bar) : bar(null);
-    const row: CSSProperties = narrow
-        ? { display: 'grid', gap: 10, padding: '10px 12px' }
-        // One 56px line from COMPACT_WIDTH up: the spine and the ask bar shrink (min-width 0); the action keeps its size.
-        : { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap', height: 56, padding: '0 16px' };
+    const row: CSSProperties = wrapped
+        ? { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 8px', padding: '6px 10px' }
+        : { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', minHeight: 38, padding: '0 8px' };
+    const right: CSSProperties = wrapped
+        ? { display: 'flex', alignItems: 'center', gap: 2, flex: 1, justifyContent: 'flex-end', flexWrap: 'wrap', minWidth: 0 }
+        : { display: 'flex', alignItems: 'center', gap: 2, marginInlineStart: 'auto', minWidth: 0 };
+    const panelsName = s.panelsLabel;
+    const iconBtn = (label: string, on: boolean) => ({ 'aria-label': label, title: label, style: ghostButtonStyle(on, true) });
     return (
-        <div style={{ ...row, boxSizing: 'border-box', flex: 'none', borderBottom: `1px solid ${cssVar('border')}`, background: cssVar('panel') }}>
-            {spine}
-            {ask}
-            {narrow ? (
-                (action || linesToggle) && <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', maxWidth: '100%', padding: 3, margin: -3 }}>{linesToggle}{action}</div>
-            ) : (
-                <>{linesToggle}{action}</>
-            )}
+        <div data-testid="kg-header" style={{ ...row, boxSizing: 'border-box', flex: 'none', minWidth: 0, borderBottom: `1px solid ${cssVar('border')}`, background: cssVar('panel') }}>
+            <button
+                type="button" data-testid="kg-out" disabled={!outTo || !onOut} onClick={onOut} {...iconBtn(outLabel, false)}
+                style={{ ...ghostButtonStyle(false, true), opacity: !outTo || !onOut ? 0.45 : 1, cursor: !outTo || !onOut ? 'default' : 'pointer' }}
+            >{icon('out')}</button>
+            <div style={wrapped ? { order: 3, flexBasis: '100%', minWidth: 0, display: 'flex' } : { minWidth: 0, display: 'flex', flex: '0 1 auto' }}>{spine}</div>
+            <div style={right}>
+                {wrapped && panes && (
+                    <Seg
+                        label={s.header.panesLabel} value={panes.code ? 'code' : 'picture'} onPick={(id) => panes.onPane(id === 'code')}
+                        items={[{ id: 'code', label: s.header.paneCode, labelled: true }, { id: 'picture', label: s.header.panePicture, labelled: true }]}
+                    />
+                )}
+                {linesToggle}
+                {showAsk ? ask : null}
+                {!wrapped && (
+                    <button type="button" data-testid="kg-search-button" aria-expanded={asking} onClick={() => setAsking((v) => !v)} {...iconBtn(labels.searchLabel, asking)}>{icon('search')}</button>
+                )}
+                {action}
+                <button type="button" data-testid="kg-panels-button" aria-expanded={drawerOpen} onClick={onToggleDrawer} {...iconBtn(panelsName, drawerOpen)}>{icon('panels')}</button>
+            </div>
         </div>
     );
 }

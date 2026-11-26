@@ -411,6 +411,8 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
   - (8) **Colour-by.** It is in the toolbar. The mockup has a Colour by Risk/Tests/Activity/Owner legend at the bottom-left with folding shapes.
   - (9) **Camera controls.** There is a 40px arrow pad. The mockup has a vertical ghost-icon column.
   - (10) **Stage.** It is an orthographic, top-down, flat-shaded instanced map of every station. The mockup is perspective, lit, with a room floor plate per level, solid capped boxes, store drums, method pucks, dashed interfaces, roof miniatures, raised lit halls with pulses, a selection ring and chip labels.
+  - (11) **Responsive.** The view must match the mockup at every width (user, 2026-11-26). At ≤900px container width it is a single column, with a Code | Picture switch in the header. The spine gets its own row, the drawer becomes a bottom sheet at 55% height, and the toolbar wraps. The 3D fit follows the stage's aspect, and touch can rotate, pinch and pan. Nothing overflows at 360px.
+  - Done-check: harness screenshots next to the mockup at 1366, 900, 600 and 360px wide, in dark and light.
   - Fixing this unblocks the PRD 43 Part C harness visual check. [make.md › PRD 43](../../docs/specs/make.md)
 
 ### Evermind / SSM `[agents]`

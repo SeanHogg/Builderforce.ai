@@ -38998,6 +38998,8 @@
       "typeExternal": "缺失或外部",
       "typeSystem": "系统或包",
       "typeUnit": "可部署单元",
+
+      "typeInterface": "接口或 Trait",
       "keyButton": "图例：形状、线条和颜色的含义",
       "onScreen": "当前可见",
       "typeClassMeaning": "代码中声明的类、接口或类型。",
@@ -39013,6 +39015,8 @@
       "typeClaimMeaning": "文档所断言的陈述或事实。",
       "typeExternalMeaning": "位于此文件夹之外：缺失的目标或外部依赖。",
       "typeUnitMeaning": "交付的内容：容器、Worker 或已部署的函数。",
+
+      "typeInterfaceMeaning": "一种契约：其他代码实现的接口、类型别名或 trait。",
       "typeSystemMeaning": "聚合：整个系统或包。",
       "linesTitle": "线条",
       "lineFlow": "路线：贯穿代码的一条流程，使用其自己的颜色。",
@@ -39028,7 +39032,16 @@
       "typeFieldMeaning": "类所包含的字段或属性。",
       "colourTitle": "颜色",
       "colourNote": "填充颜色跟随当前叠加层（{preset}）；可在叠加层菜单中更改。",
-      "fadedNote": "变淡的标记不属于当前问题的答案。"
+      "fadedNote": "变淡的标记不属于当前问题的答案。",
+      "colourBy": "着色依据",
+      "showingChanges": "正在显示变更",
+      "shapesShow": "显示形状",
+      "shapesHide": "隐藏形状",
+      "swatchFine": "正常",
+      "swatchLook": "需要关注",
+      "swatchQuiet": "安静 → 繁忙",
+      "diffNew": "新增",
+      "diffGone": "将被移除"
     },
     "statsLine": "{nodes} 个节点 · {edges} 条边 · {sources} 个来源",
     "filesLoaded": "已加载 {loaded} / {total}",
@@ -39394,11 +39407,7 @@
       "panelToggles": {
         "label": "显示的面板",
         "showLeft": "显示线路面板",
-        "hideLeft": "隐藏线路面板",
-        "showBottom": "显示路径栏",
-        "hideBottom": "隐藏路径栏",
-        "showRight": "显示操作面板",
-        "hideRight": "隐藏操作面板"
+        "hideLeft": "隐藏线路面板"
       },
       "overlaysButton": "叠加层",
       "overlaysTitle": "地图显示的内容",
@@ -39760,7 +39769,10 @@
           "restructureTip": "查看重构后的 {name}",
           "risk": "风险",
           "testReached": "有测试覆盖到它",
-          "testNone": "没有测试覆盖到它"
+          "testNone": "没有测试覆盖到它",
+          "riskWord": "{level}风险",
+          "noRisk": "无风险标记",
+          "ownerIs": "{name} 团队"
         },
         "stats": {
           "issues": "反模式",
@@ -39833,12 +39845,11 @@
         "doneTitle": "当满足以下条件时，这条路径才算完成…",
         "doneCheck": "{title} 已在 {items} 中解决",
         "doneNone": "这条路径上没有未解决的发现。",
-        "detailsTitle": "详情",
-        "linkCoverage": "覆盖率",
-        "linkApi": "API"
+        "detailsTitle": "详情"
       },
       "path": {
         "title": "{line} · {entry}",
+        "journey": "旅程",
         "reset": "重置",
         "step": "单步",
         "runToEnd": "运行到末尾",
@@ -40073,6 +40084,7 @@
       },
       "scene": {
         "edgesCapped": "显示 {total} 条连接中的 {shown} 条",
+        "stationsCapped": "显示 {total} 个站点中的 {shown} 个",
         "layingOut": "正在布局…",
         "errorTitle": "此视图出错了",
         "errorRetry": "重试",
@@ -40090,7 +40102,10 @@
         "rotateLeft": "向左旋转",
         "rotateRight": "向右旋转",
         "tiltUp": "向上倾斜",
-        "tiltDown": "向下倾斜"
+        "tiltDown": "向下倾斜",
+        "top": "从上方俯视",
+        "help": "如何浏览",
+        "helpText": "拖动旋转。滚轮缩放：持续放大某个形状即可进入其内部，缩小即可返回。右键拖动平移。双击形状进入，按 Esc 退出。"
       },
       "mind": {
         "moreFoldersOne": "另有 {count} 个文件夹",
@@ -40104,7 +40119,9 @@
         "class": "类",
         "method": "方法",
         "code": "代码",
-        "hint": "在地图上滚动滚轮缩放 · 按 Esc 返回 · 双击方法进入"
+        "hintIn": "放大到某个形状即可进入其内部",
+        "hintInto": "继续放大 · 正在进入 {name}",
+        "hintDeepest": "已是最深一层 · 缩小即可返回"
       },
       "code": {
         "aria": "{name} 的代码，第 {from} 至 {to} 行",
@@ -40184,7 +40201,12 @@
         "lensOut": "输出",
         "lensSimulate": "无测试 · 模拟",
         "lensRestructure": "{name}",
-        "gutterWarn": "反模式：{name}"
+        "gutterWarn": "反模式：{name}",
+        "samePlace": "与图示位置相同",
+        "sayLead": "通俗地说：",
+        "sayHint": "点击某一行或大纲中的一行，图示就会跳到那里。行旁的标记就是它在图示中的形状。",
+        "fileLines": "第 {from}–{to} 行",
+        "fileLine": "第 {line} 行"
       },
       "compare": {
         "aria": "对比",
@@ -40312,24 +40334,7 @@
         },
         "startFrom": "起点",
         "startEntry": "入口",
-        "startStop": "此站点",
-        "modeOpen": "模拟",
-        "modeOpenAria": "用值模拟 {name}",
-        "modeTitle": "用值模拟",
-        "modeEntry": "入口点",
-        "modeName": "名称",
-        "modeValue": "值",
-        "modeAdd": "添加值",
-        "modeRemove": "移除 {name}",
-        "modeCarried": "此跳携带的值",
-        "modeHop": "{from} → {to}",
-        "modeEmpty": "选择一个入口点。将用你输入的值逐步走完它的旅程。",
-        "modeNoHops": "没有从此入口点出发的旅程。",
-        "modeClose": "关闭",
-        "modeStep": "第 {n} 跳，共 {total} 跳",
-        "modeBack": "上一跳",
-        "modeNext": "下一跳",
-        "modeUseSelected": "使用所选标记"
+        "startStop": "此站点"
       },
       "fix": {
         "title": "修复",
@@ -40503,7 +40508,12 @@
         "reviewFailed": "评审失败",
         "parityDiffers": "本地 {local} 个 · 服务器 {server} 个",
         "overlaysNote": "任何指标都可以驱动任何通道。地图、系统、图、思维导图、塔、热力、列表和时序都读取同一组绑定，因此覆盖率条同样可以是反模式条。",
-        "rootsLabel": "已评审的文件夹"
+        "rootsLabel": "已评审的文件夹",
+        "topLevel": "顶层",
+        "panesLabel": "窗格",
+        "paneCode": "代码",
+        "panePicture": "图示",
+        "drawerTabAct": "行动"
       },
       "askSentence": {
         "where": "{name} 通向哪里？",

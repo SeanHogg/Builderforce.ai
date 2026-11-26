@@ -1,5 +1,5 @@
 /**
- * The right rail, Act (330px, panel background, a border on the scene side): what a person can act on
+ * The drawer's Act tab (the drawer owns the width, the background and the border): what a person can act on
  * for the current scope (a station, the drawn line, or the whole graph).
  *
  * Top to bottom: the title ("At {scope} · N issues", or "On this path · N to act on" with a line drawn)
@@ -19,7 +19,6 @@ import { FindingsPanel } from '../FindingsPanel';
 import { nodeIndex } from '../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import { counted } from './plural';
-import { cssVar } from '../scene/themeColors';
 import type { FindingEvidence, SourceLocation } from '../types';
 import { actionCards } from './actModel';
 import { Cards, EmptyCard, smallButton, SystemWideBlock, WalkthroughNote } from './ActCards';
@@ -55,8 +54,6 @@ export interface ActPanelProps {
     model?: Pick<StationModel, 'systemWide'> | undefined;
     /** The scope's name; null = the whole graph. */
     scopeName: string | null;
-    /** A phone: the rail is a section under the scene, with Coverage · API · Fix queue as links. */
-    compact: boolean;
     /** False where the findings are listed beside already (the list camera). */
     showFindings?: boolean;
     onClearScope(): void;
@@ -118,15 +115,8 @@ export function ActPanel(p: ActPanelProps) {
         : undefined), [p.graph, p.stations, path]);
 
     return (
-        <aside
-            aria-label={labels.findingsTitle}
-            style={{
-                width: p.compact ? 'auto' : 330, flex: 'none', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxSizing: 'border-box',
-                background: cssVar('panel'), borderInlineStart: p.compact ? 'none' : `1px solid ${cssVar('border')}`,
-                ...(p.compact ? { borderTop: `1px solid ${cssVar('border')}` } : null),
-            }}
-        >
-            <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <section aria-label={labels.findingsTitle} style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <h2 data-testid="kg-act-title" style={{ ...TYPE.sectionHeading, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{title}</h2>
                     {p.onOpenPanel && (
@@ -136,8 +126,6 @@ export function ActPanel(p: ActPanelProps) {
                 </div>
                 {p.onOpenPanel && (
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: -6 }}>
-                        {p.compact && <button type="button" data-link="coverage" style={smallButton} onClick={() => p.onOpenPanel?.('coverage')}>{t.linkCoverage}</button>}
-                        {p.compact && <button type="button" data-link="api" style={smallButton} onClick={() => p.onOpenPanel?.('api')}>{t.linkApi}</button>}
                         <span data-testid="kg-act-queue" style={TYPE.meta}>{queueCounts}</span>
                     </div>
                 )}
@@ -184,6 +172,6 @@ export function ActPanel(p: ActPanelProps) {
             </div>
 
             {hasHops(path) && <DoneWhen findings={p.findings} labels={labels} index={index} partners={pathPartners} />}
-        </aside>
+        </section>
     );
 }

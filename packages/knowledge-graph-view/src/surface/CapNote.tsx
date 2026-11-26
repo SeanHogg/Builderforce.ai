@@ -10,7 +10,7 @@ import { TYPE } from './ui/type';
 
 export function CapNote({ testId, children }: { testId: string; children: ReactNode }) {
     return (
-        <p data-testid={testId} style={{ position: 'absolute', insetInlineStart: 8, bottom: 8, margin: 0, padding: '2px 8px', borderRadius: 6, ...TYPE.meta, background: cssVar('panel') }}>
+        <p data-testid={testId} style={{ position: 'absolute', insetInlineEnd: 56, bottom: 10, margin: 0, padding: '2px 8px', borderRadius: 6, ...TYPE.meta, background: cssVar('panel') }}>
             {children}
         </p>
     );
@@ -18,11 +18,12 @@ export function CapNote({ testId, children }: { testId: string; children: ReactN
 
 export interface LinkCaption { shown: number; total: number; capped: boolean }
 
-export function EdgesCapped({ caption, labels }: { caption: LinkCaption | null; labels: KnowledgeGraphLabels }) {
+/** `text` words the count when it is not of links (the Map counts stations). */
+export function EdgesCapped({ caption, labels, text }: { caption: LinkCaption | null; labels: KnowledgeGraphLabels; text?: string | undefined }) {
     if (!caption?.capped) return null;
     return (
         <CapNote testId="kg-edges-capped">
-            {fillTemplate(labels.surface.scene.edgesCapped, { shown: caption.shown.toLocaleString(), total: caption.total.toLocaleString() })}
+            {fillTemplate(text ?? labels.surface.scene.edgesCapped, { shown: caption.shown.toLocaleString(), total: caption.total.toLocaleString() })}
         </CapNote>
     );
 }

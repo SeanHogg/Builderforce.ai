@@ -54,5 +54,9 @@ export function placeDrill(g: KnowledgeGraph, model: StageModel, req: PlacementR
         if (slot !== undefined && ref !== undefined && !view.leaves.has(s.id)) slotOfRef.set(ref, slot);
     }
     const associations = associationLinks(placed, req.symbols ?? [], slotOfRef);
-    return { ...placed, ...(associations ? { links: [...placed.links, associations] } : {}), ...(append ? { append } : {}) };
+    // The level's NEIGHBOURS (the world stations drawn as leaves) are outside it: ghosts, drawn at 0.62.
+    const ghost = new Uint8Array(placed.scale.length);
+    let ghosts = 0;
+    for (const id of view.leaves) { const slot = stationSlot.get(id); if (slot !== undefined && placed.scale[slot]! > 0) { ghost[slot] = 1; ghosts++; } }
+    return { ...placed, ...(associations ? { links: [...placed.links, associations] } : {}), ...(append ? { append } : {}), ...(ghosts ? { ghost } : {}) };
 }

@@ -76,16 +76,18 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
     const source = surface.coverage?.source;
     const mapCap: MapCap | undefined = source?.kind === 'cut' ? { shown: source.files, total: source.sources, cut: true } : surface.stations.capped;
 
+    // The header's Out button: inside a drilled level it goes up one level; otherwise it leaves the picked station for the line.
+    // The drill is the transit map's: other cameras keep the station-to-line "Out".
     const drilled = surface.drill.canOut && i.mode === 'transit';
+    const out = {
+        to: drilled ? surface.drill.parent?.name ?? s.map.world : surface.station ? lineLabel : null,
+        onOut: drilled ? surface.drill.out : () => surface.selectStation(null),
+    };
     const overlayProps: SceneOverlayProps = {
         labels, cameras: i.cameras, mode: i.mode, onMode: i.setMode, narrow: layout.phone,
-        // Inside a drilled level "Out" goes up one level; otherwise it leaves the picked station for the line.
-        // The drill is the transit map's: other cameras keep the station-to-line "Out".
-        outTo: drilled ? surface.drill.parent?.name ?? s.map.world : surface.station ? lineLabel : null,
-        onOut: drilled ? surface.drill.out : () => surface.selectStation(null),
         stations: surface.stations.stations, question: surface.question, onQuestion: i.pickQuestion, lenses: kg.lenses, lens: i.lens.id, onLens: i.pickLens,
         family: surface.family, onClearFamily: () => surface.setFamily(null),
         stats: graph.stats, truncated, compact: layout.compact, showAll: i.showAll, drawn: i.visibleNodes, total: graph.nodes.length, onShowAll: () => i.setShowAll(true), capped: mapCap,
     };
-    return { layout, spineItems, onSpinePick, scopeName, pathTitle, truncated, overlayProps, askName: surface.station?.name ?? surface.line?.name ?? i.titleOf(graph.scope.rootId) };
+    return { layout, out, spineItems, onSpinePick, scopeName, pathTitle, truncated, overlayProps, askName: surface.station?.name ?? surface.line?.name ?? i.titleOf(graph.scope.rootId) };
 }

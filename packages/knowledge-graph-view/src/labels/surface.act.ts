@@ -32,12 +32,11 @@ export interface ActLabels {
     act: Record<
         'titlePath' | 'emptyTitle' | 'emptyStation' | 'emptyPath' | 'emptyAsk' | 'emptyShow' | 'systemWide' | 'systemWideNote'
         | 'cardsTitle' | 'apply' | 'prompt' | 'show' | 'cardAction' | 'sourceExact' | 'sourceAnalyzer' | 'sourceModel' | 'fixQueue'
-        | 'keepTitle' | 'keepBody' | 'keepButton' | 'testRequest' | 'doneTitle' | 'doneCheck' | 'doneNone' | 'detailsTitle'
-        | 'linkCoverage' | 'linkApi',
+        | 'keepTitle' | 'keepBody' | 'keepButton' | 'testRequest' | 'doneTitle' | 'doneCheck' | 'doneNone' | 'detailsTitle',
         string
     >;
     /** The path strip. `{line}`, `{entry}`, `{count}`. */
-    path: Record<'title' | 'reset' | 'step' | 'runToEnd' | 'simulate' | 'sequence' | 'noTests' | 'stops' | 'enlarge', string>;
+    path: Record<'title' | 'journey' | 'reset' | 'step' | 'runToEnd' | 'simulate' | 'sequence' | 'noTests' | 'stops' | 'enlarge', string>;
     /**
      * Plain-language walkthrough of a journey. A door is an entry point or an endpoint, a hallway
      * is a call between rooms, and a room is a module or a class.
@@ -124,11 +123,10 @@ export const ACT_DEFAULTS: ActLabels = {
         doneCheck: '{title} is resolved in {items}',
         doneNone: 'No finding is open on this path.',
         detailsTitle: 'Details',
-        linkCoverage: 'Coverage',
-        linkApi: 'API',
     },
     path: {
         title: '{line} · {entry}',
+        journey: 'Journey',
         reset: 'Reset',
         step: 'Step',
         runToEnd: 'Run to end',

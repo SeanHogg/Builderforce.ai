@@ -20,6 +20,8 @@ import type { ThemeColors } from '../scene/themeColors';
 import { StageFrameTap } from './anchor/StageFrameTap';
 import { StageBusContext, stageBus, type StageBus } from './anchor/stageBus';
 import { CaptionLayer } from './captions/CaptionLayer';
+import { ChipLayer } from './labels/ChipLayer';
+import type { PlacedChip } from './labels/runs';
 import { applyCaptionTransform, groundAffine, type Affine2 } from './captions/transform';
 import { bindContextLoss } from './contextLoss';
 import { StageInteraction } from './overlay/StageInteraction';
@@ -202,6 +204,7 @@ export function Stage(p: StageProps) {
     const captions = useRef<HTMLDivElement>(null);
     const tweening = useTweening(placement, p.reducedMotion);
     const [names, setNames] = useState<readonly Caption[]>([]);
+    const [chips, setChips] = useState<readonly PlacedChip[]>([]);
     const legendContext = useStageLegend();
     const legend = p.legend ?? legendContext;
     const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
@@ -214,6 +217,7 @@ export function Stage(p: StageProps) {
     }, [renderer, bus, dpr]);
     const rig = useRig(placement, width, height, p.reducedMotion, box, settle, p.onWheelStep);
     rigRef.current = rig;
+    rig.motionMs = p.reducedMotion ? 0 : TWEEN_MS;
     const panZoom = useMemo(() => panZoomOf(rig, p.reducedMotion, settle), [rig, p.reducedMotion, settle]);
     // The semantic zoom (outside this component) flies and reads the same rig through the bus.
     useEffect(() => bindRig(bus, rig), [bus, rig]);
@@ -247,6 +251,7 @@ export function Stage(p: StageProps) {
         const pull = (): void => {
             const next = renderer.labelCaptions;
             setNames((cur) => (sameCaptions(cur, next) ? cur : next));
+            setChips(renderer.chips);
         };
         const offSettle = bus.onSettle(pull);
         const offRedraw = renderer.onRedraw(pull);
@@ -265,13 +270,14 @@ export function Stage(p: StageProps) {
             <div ref={box} style={{ position: 'relative', display: 'flow-root', width, height, overflow: 'clip', touchAction: touchActionFor(frame) }} data-stage={renderer.kind} data-stage-frame={frame} data-stage-ready={placement ? 'true' : 'false'}>
                 {renderer.kind === 'webgl'
                     ? (
-                        <Canvas orthographic frameloop="demand" dpr={[1, 2]} gl={{ antialias: false, alpha: true }} style={{ position: 'absolute', inset: 0 }}>
+                        <Canvas orthographic frameloop="demand" dpr={[1, 2]} gl={{ antialias: false, alpha: true }} style={{ position: 'absolute', inset: 0, touchAction: 'none' }}>
                             <StageScene {...scene} canvasLabel={p.description ?? ''} width={width} height={height} />
                             <StageFrameTap bus={bus} />
                         </Canvas>
                     )
                     : <NoCanvas {...scene} bus={bus} />}
                 {placement && <CaptionLayer ref={captions} captions={placement.captions} names={names} hidden={tweening} />}
+                {placement && chips.length > 0 && <ChipLayer bus={bus} chips={chips} selected={p.selected} hidden={tweening} onSelect={p.onSelect} onDrill={p.onDrill} />}
                 {placement && <StageInteraction bus={bus} renderer={renderer} keys={keys} placement={placement} tweening={tweening} selected={p.selected} description={p.description} onSelect={p.onSelect} onOut={p.onOut} onDrill={p.onDrill} onClear={p.onClear} />}
                 {placement && (
                     <StageCorner boxHeight={height} legend={legend}>

@@ -38998,6 +38998,8 @@
       "typeExternal": "Absent ou externe",
       "typeSystem": "Système ou paquet",
       "typeUnit": "Unité déployable",
+
+      "typeInterface": "Interface ou trait",
       "keyButton": "Légende : ce que signifient les formes, les lignes et les couleurs",
       "onScreen": "À l’écran",
       "typeClassMeaning": "Une classe, une interface ou un type déclaré dans le code.",
@@ -39013,6 +39015,8 @@
       "typeClaimMeaning": "Une affirmation ou un fait qu’un document avance.",
       "typeExternalMeaning": "Hors de ce dossier : une cible absente ou une dépendance externe.",
       "typeUnitMeaning": "Ce qui est livré : un conteneur, un worker ou une fonction déployée.",
+
+      "typeInterfaceMeaning": "Un contrat : une interface, un alias de type ou un trait que d'autre code implémente.",
       "typeSystemMeaning": "Un agrégat : un système ou un paquet entier.",
       "linesTitle": "Lignes",
       "lineFlow": "Un itinéraire : un flux à travers le code, dans sa propre couleur.",
@@ -39028,7 +39032,16 @@
       "typeFieldMeaning": "Un champ ou une propriété que contient une classe.",
       "colourTitle": "Couleur",
       "colourNote": "La couleur de remplissage suit la superposition active ({preset}) ; modifiez-la dans le menu des superpositions.",
-      "fadedNote": "Les marques estompées sont hors de la réponse à la question en cours."
+      "fadedNote": "Les marques estompées sont hors de la réponse à la question en cours.",
+      "colourBy": "Colorer par",
+      "showingChanges": "Changements affichés",
+      "shapesShow": "Afficher les formes",
+      "shapesHide": "Masquer les formes",
+      "swatchFine": "Correct",
+      "swatchLook": "À examiner",
+      "swatchQuiet": "Calme → actif",
+      "diffNew": "Nouveau",
+      "diffGone": "Disparaît"
     },
     "statsLine": "{nodes} nœuds · {edges} arêtes · {sources} sources",
     "filesLoaded": "{loaded} sur {total} chargés",
@@ -39394,11 +39407,7 @@
       "panelToggles": {
         "label": "Panneaux affichés",
         "showLeft": "Afficher le panneau des lignes",
-        "hideLeft": "Masquer le panneau des lignes",
-        "showBottom": "Afficher la bande des parcours",
-        "hideBottom": "Masquer la bande des parcours",
-        "showRight": "Afficher le panneau d'action",
-        "hideRight": "Masquer le panneau d'action"
+        "hideLeft": "Masquer le panneau des lignes"
       },
       "overlaysButton": "Calques",
       "overlaysTitle": "Ce que montre la carte",
@@ -39760,7 +39769,10 @@
           "restructureTip": "Voir {name} restructuré",
           "risk": "Risque",
           "testReached": "Un test l’atteint",
-          "testNone": "Aucun test ne l’atteint"
+          "testNone": "Aucun test ne l’atteint",
+          "riskWord": "Risque {level}",
+          "noRisk": "Aucun signal de risque",
+          "ownerIs": "Équipe {name}"
         },
         "stats": {
           "issues": "Antimodèles",
@@ -39833,12 +39845,11 @@
         "doneTitle": "Ce chemin est terminé quand…",
         "doneCheck": "{title} est résolu dans {items}",
         "doneNone": "Aucun constat n'est ouvert sur ce chemin.",
-        "detailsTitle": "Détails",
-        "linkCoverage": "Couverture",
-        "linkApi": "API"
+        "detailsTitle": "Détails"
       },
       "path": {
         "title": "{line} · {entry}",
+        "journey": "Parcours",
         "reset": "Réinitialiser",
         "step": "Pas",
         "runToEnd": "Aller jusqu'au bout",
@@ -40073,6 +40084,7 @@
       },
       "scene": {
         "edgesCapped": "{shown} liens affichés sur {total}",
+        "stationsCapped": "{shown} stations affichées sur {total}",
         "layingOut": "Mise en page en cours…",
         "errorTitle": "Cette vue a rencontré une erreur",
         "errorRetry": "Réessayer",
@@ -40090,7 +40102,10 @@
         "rotateLeft": "Pivoter à gauche",
         "rotateRight": "Pivoter à droite",
         "tiltUp": "Incliner vers le haut",
-        "tiltDown": "Incliner vers le bas"
+        "tiltDown": "Incliner vers le bas",
+        "top": "Voir d’en haut",
+        "help": "Comment se déplacer",
+        "helpText": "Faites glisser pour pivoter. Molette pour zoomer : continuez à zoomer sur une forme pour entrer dedans, dézoomez pour revenir. Clic droit glissé pour déplacer. Double-clic sur une forme pour entrer, Échap pour sortir."
       },
       "mind": {
         "moreFoldersOne": "+{count} dossier",
@@ -40104,7 +40119,9 @@
         "class": "Classes",
         "method": "Méthodes",
         "code": "Code",
-        "hint": "Molette sur la carte pour zoomer · Échap pour sortir · double-clic sur une méthode pour y entrer"
+        "hintIn": "Zoomez sur une forme pour entrer dedans",
+        "hintInto": "Continuez à zoomer · entrée dans {name}",
+        "hintDeepest": "Niveau le plus profond · dézoomez pour revenir"
       },
       "code": {
         "aria": "Code de {name}, lignes {from} à {to}",
@@ -40184,7 +40201,12 @@
         "lensOut": "Sortie",
         "lensSimulate": "Aucun test · Simuler",
         "lensRestructure": "{name}",
-        "gutterWarn": "Anti-patron : {name}"
+        "gutterWarn": "Anti-patron : {name}",
+        "samePlace": "au même endroit que l’image",
+        "sayLead": "En clair :",
+        "sayHint": "Cliquez sur une ligne ou une ligne du plan et l’image s’y rend. La marque à côté d’une ligne est sa forme dans l’image.",
+        "fileLines": "lignes {from}–{to}",
+        "fileLine": "ligne {line}"
       },
       "compare": {
         "aria": "Comparaison",
@@ -40312,24 +40334,7 @@
         },
         "startFrom": "Partir de",
         "startEntry": "L'entrée",
-        "startStop": "Cet arrêt",
-        "modeOpen": "Simuler",
-        "modeOpenAria": "Simuler {name} avec des valeurs",
-        "modeTitle": "Simuler avec des valeurs",
-        "modeEntry": "Point d’entrée",
-        "modeName": "Nom",
-        "modeValue": "Valeur",
-        "modeAdd": "Ajouter une valeur",
-        "modeRemove": "Retirer {name}",
-        "modeCarried": "Transporté sur ce saut",
-        "modeHop": "{from} → {to}",
-        "modeEmpty": "Sélectionnez un point d’entrée. Son parcours avance avec les valeurs que vous saisissez.",
-        "modeNoHops": "Aucun parcours ne part de ce point d’entrée.",
-        "modeClose": "Fermer",
-        "modeStep": "Saut {n} sur {total}",
-        "modeBack": "Saut précédent",
-        "modeNext": "Saut suivant",
-        "modeUseSelected": "Utiliser la marque sélectionnée"
+        "startStop": "Cet arrêt"
       },
       "fix": {
         "title": "Correctif",
@@ -40503,7 +40508,12 @@
         "reviewFailed": "La revue a échoué",
         "parityDiffers": "{local} ici · {server} sur le serveur",
         "overlaysNote": "N’importe quelle métrique peut piloter n’importe quel canal. Carte, Système, Graphe, Carte mentale, Tour, Chaleur, Liste et Séquence lisent les mêmes liaisons : une barre de couverture peut tout aussi bien être une barre d’anti-patterns.",
-        "rootsLabel": "Dossiers revus"
+        "rootsLabel": "Dossiers revus",
+        "topLevel": "Niveau supérieur",
+        "panesLabel": "Volet",
+        "paneCode": "Code",
+        "panePicture": "Image",
+        "drawerTabAct": "Agir"
       },
       "askSentence": {
         "where": "où va {name} ?",

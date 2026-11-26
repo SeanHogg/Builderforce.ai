@@ -1,19 +1,17 @@
 /**
- * The camera bar: the segmented *View* group (the cameras from the registry, minus any marked
- * `switcher: false`, which the path strip owns; Sequence is in the switcher) and, at the far end, an icon for
- * "Out to …" (while a station is open). Right after the View group sits the `tools` slot
- * (the Panels and overlay icons; on a phone their own scrolling line). Zoom and Fit live only on the stage nav
- * (`stage/rig/NavControl`); the shape key is docked on the stage corner, not here.
+ * The camera segments of the toolbar (design prototype `#tools`): the *View* segment (the cameras from the registry, minus any marked `switcher: false`;
+ * icon-only, the active one shows its label) and the *3D | Flat* pair (both labelled), one `.seg` each. They are fragments of ONE wrapping row
+ * (`SceneOverlay`), so on a narrow container the segments wrap instead of overflowing. "Out to" lives in the header, zoom and Fit on the stage nav.
  */
 
-import type { CSSProperties, ReactNode } from 'react';
-import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
+import type { CSSProperties } from 'react';
+import type { KnowledgeGraphLabels } from '../labels';
 import { cssVar } from '../scene/themeColors';
 import { CONTROL } from '../styles';
 import type { ViewMode } from '../types';
 import type { CameraDef } from './registry';
-import { Segmented } from './ui';
-import { cameraGlyph, Glyph } from './ui/glyphs';
+import { Seg } from './ui';
+import { cameraGlyph } from './ui/glyphs';
 import { TYPE } from './ui/type';
 
 export interface CameraBarProps {
@@ -21,14 +19,7 @@ export interface CameraBarProps {
     cameras: readonly CameraDef[];
     mode: ViewMode;
     onMode(mode: ViewMode): void;
-    /** The level above the open station ("the line"); present ⇒ the Out icon shows. */
-    outTo?: string | null | undefined;
-    onOut?: (() => void) | undefined;
-    /** The canvas tools (Panels, overlays), right after the View group and outside its scroller so a popover is not clipped. */
-    tools?: ReactNode;
-    /** On a phone the tools take their own sideways-scrolling line instead of sharing the View row. */
-    stacked?: boolean | undefined;
-    /** The ONE 3D / Flat switch (PRD 43 C4): `flat` is its state; absent `onFlat` ⇒ no switch. */
+    /** The ONE 3D / Flat switch (PRD 43 C4): `flat` is its state; absent `onFlat` ⇒ no pair. */
     flat?: boolean | undefined;
     onFlat?: ((flat: boolean) => void) | undefined;
 }
@@ -43,72 +34,25 @@ export const iconButtonStyle: CSSProperties = {
     ...zoomButton, width: CONTROL, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
 };
 
-function IconButton({ label, onClick, testId, children }: { label: string; onClick(): void; testId?: string; children: ReactNode }) {
-    return (
-        <button type="button" aria-label={label} title={label} data-testid={testId} style={iconButtonStyle} onClick={onClick}>
-            {children}
-        </button>
-    );
-}
-
-/** The 3D / Flat switch: one pressed-state button; the glyph and (off a phone) the word name the state it is in. */
-function FlatSwitch({ labels, flat, onFlat, compact }: { labels: KnowledgeGraphLabels; flat: boolean; onFlat(flat: boolean): void; compact: boolean }) {
-    const word = flat ? labels.surface.scene.viewFlat : labels.surface.scene.view3d;
-    const label = labels.surface.scene.flatToggle;
-    return (
-        <button
-            type="button" data-testid="kg-flat-toggle" aria-pressed={flat} aria-label={label} title={`${label}: ${word}`}
-            style={{ ...iconButtonStyle, ...(compact ? {} : { width: 'auto', padding: '0 10px', gap: 6 }), ...(flat ? { background: cssVar('accent'), color: cssVar('onAccent') } : {}) }}
-            onClick={() => onFlat(!flat)}
-        >
-            {cameraGlyph(flat ? 'flat' : 'depth3d')}
-            {!compact && <span>{word}</span>}
-        </button>
-    );
-}
-
-export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, tools, stacked = false, flat = false, onFlat }: CameraBarProps) {
-    // The row WRAPS: the right cluster (Out) never shrinks or scrolls away — on a narrow
-    // container it drops to a second line, end-aligned. The scene sits below the MEASURED controls block
-    // (`SceneOverlay`, `--kg-scene-top`), so a wrapped bar only moves the scene down. One line that never wrapped
-    // pushed the cluster off-screen at ~700px and made the whole overlay wider than the scene (a sideways scrollbar).
-    // Only the View group scrolls sideways, when it alone is wider than the row. Zoom and Fit are the stage nav's.
+export function CameraBar({ labels, cameras, mode, onMode, flat = false, onFlat }: CameraBarProps) {
     // The switch drives the stage: a camera that names a placement is drawn on it, the List (a DOM component) is not.
     const drawsOnStage = !!cameras.find((c) => c.id === mode)?.placement;
-    const backLabel = labels.surface.sequence.backToMap;
-    const outLabel = outTo ? fillTemplate(labels.surface.overlay.outTo, { name: outTo }) : '';
+    const sc = labels.surface.scene;
     return (
-        <div style={{ display: 'grid', gap: 6, padding: '8px 12px', pointerEvents: 'none', minWidth: 0 }}>
-            <div data-testid="kg-camera-row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
-                <div style={{ minWidth: 0, maxWidth: '100%', flex: '0 1 auto', pointerEvents: 'auto', overflowX: 'auto' }}>
-                    <Segmented
-                        label={labels.viewModesLabel}
-                        value={mode}
-                        items={cameras.filter((c) => c.switcher !== false).map((c) => ({ id: c.id, label: labels[c.labelKey], glyph: cameraGlyph(c.id) }))}
-                        onChange={(id) => onMode(id as ViewMode)}
-                    />
-                </div>
-                {onFlat && drawsOnStage && <div style={{ flex: 'none', pointerEvents: 'auto' }}><FlatSwitch labels={labels} flat={flat} onFlat={onFlat} compact={stacked} /></div>}
-                {tools && !stacked && <div data-testid="kg-scene-tools" style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flex: 'none', pointerEvents: 'auto' }}>{tools}</div>}
-                {/* The Sequence camera has no button in the View group (the path strip's Enlarge opens it): this is its way back. */}
-                {mode === 'sequence' && (
-                    <IconButton label={backLabel} testId="kg-back-to-map" onClick={() => onMode('transit')}>
-                        <span data-back-to-map style={{ display: 'contents' }} />
-                        <Glyph><rect x="2.5" y="3" width="11" height="10" rx="1" /><path d="M2.5 7.5h11M6 3v10M10 3v10" /></Glyph>
-                    </IconButton>
-                )}
-                {/* The right cluster: one unit that wraps whole and is pushed to the row's end; it never scrolls or clips. */}
-                <div data-testid="kg-camera-right" style={{ display: 'inline-flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8, alignItems: 'center', flex: 'none', maxWidth: '100%', marginInlineStart: 'auto', pointerEvents: 'auto' }}>
-                    {outTo && onOut && (
-                        <IconButton label={outLabel} testId="kg-out" onClick={onOut}>
-                            <span data-out style={{ display: 'contents' }} />
-                            <Glyph><path d="M8 13V3.5M4.5 7 8 3.5 11.5 7" /></Glyph>
-                        </IconButton>
-                    )}
-                </div>
-            </div>
-            {/* A phone: the tools scroll sideways on their own line (their popover is anchored to the overlay, so the scroller does not clip it). */}
-            {tools && stacked && <div data-testid="kg-scene-tools" style={{ display: 'flex', gap: 8, alignItems: 'center', overflowX: 'auto', pointerEvents: 'auto', maxWidth: '100%', padding: 3, margin: -3 }}>{tools}</div>}
-        </div>
+        <>
+            <Seg
+                label={labels.viewModesLabel} value={mode} onPick={(id) => onMode(id as ViewMode)}
+                items={cameras.filter((c) => c.switcher !== false).map((c) => ({ id: c.id, label: labels[c.labelKey], glyph: cameraGlyph(c.id) }))}
+            />
+            {onFlat && drawsOnStage && (
+                <Seg
+                    label={sc.flatToggle} value={flat ? 'flat' : '3d'} onPick={(id) => onFlat(id === 'flat')}
+                    items={[
+                        { id: '3d', label: sc.view3d, glyph: cameraGlyph('depth3d'), labelled: true, testId: 'kg-dim-3d' },
+                        { id: 'flat', label: sc.viewFlat, glyph: cameraGlyph('flat'), labelled: true, testId: 'kg-dim-flat' },
+                    ]}
+                />
+            )}
+        </>
     );
 }

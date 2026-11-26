@@ -62,7 +62,9 @@ export const touchActionFor =(frame: CameraRig['frame']): string => (frame === '
 export type WheelStep = () => ((dir: 1 | -1) => void) | undefined;
 
 export function bindGestures(el: HTMLElement, rig: RigController, frame: () => CameraRig['frame'], onSettle: () => void, step?: WheelStep): () => void {
-    const pointers = new Map<number, { x: number; y: number; type: string }>();
+    const pointers = new Map<number, { x: number; y: number; type: string; pan: boolean }>();
+    /** Where the two fingers' midpoint was: two fingers also CARRY the view (pan) while they pinch. */
+    let lastMid: [number, number] | null = null;
     let dragging = false, swallowClick = false, pinchDist = 0, wheelTimer: ReturnType<typeof setTimeout> | null = null;
     let travel = 0, lockUntil = 0;
     const local = (e: { clientX: number; clientY: number }): [number, number] => {
@@ -75,8 +77,9 @@ export function bindGestures(el: HTMLElement, rig: RigController, frame: () => C
     };
 
     const down = (e: PointerEvent) => {
-        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType });
-        if (pointers.size === 2) pinchDist = spread();
+        // A right or middle drag, or Shift + drag, PANS the ground; a plain drag pans a ground view and ORBITS an orbit one.
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType, pan: e.button === 2 || e.button === 1 || e.shiftKey });
+        if (pointers.size === 2) { pinchDist = spread(); lastMid = null; }
         dragging = false;
     };
     const move = (e: PointerEvent) => {
@@ -91,6 +94,8 @@ export function bindGestures(el: HTMLElement, rig: RigController, frame: () => C
                 for (const q of pointers.values()) { mx += q.x / pointers.size; my += q.y / pointers.size; }
                 const [sx, sy] = local({ clientX: mx, clientY: my });
                 rig.zoomBy(d / pinchDist, sx, sy);
+                if (lastMid) rig.groundPanBy(mx - lastMid[0], my - lastMid[1]);
+                lastMid = [mx, my];
             }
             pinchDist = d;
             dragging = true;
@@ -101,11 +106,11 @@ export function bindGestures(el: HTMLElement, rig: RigController, frame: () => C
         if (!dragging && Math.hypot(dx, dy) < DRAG_SLOP) return;
         if (!dragging) { dragging = true; el.setPointerCapture?.(e.pointerId); }
         p.x = e.clientX; p.y = e.clientY;
-        rig.panBy(dx, dy);
+        if (p.pan) rig.groundPanBy(dx, dy); else rig.panBy(dx, dy);
     };
     const up = (e: PointerEvent) => {
         pointers.delete(e.pointerId);
-        if (pointers.size < 2) pinchDist = 0;
+        if (pointers.size < 2) { pinchDist = 0; lastMid = null; }
         if (dragging && pointers.size === 0) { swallowClick = true; dragging = false; onSettle(); }
     };
     const click = (e: MouseEvent) => {
@@ -140,6 +145,9 @@ export function bindGestures(el: HTMLElement, rig: RigController, frame: () => C
         wheelTimer = setTimeout(() => { wheelTimer = null; onSettle(); }, WHEEL_SETTLE_MS);
     };
 
+    // The right button pans; the browser's menu would swallow it.
+    const menu = (e: Event) => e.preventDefault();
+    el.addEventListener('contextmenu', menu);
     el.addEventListener('pointerdown', down);
     el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', up);
@@ -148,6 +156,7 @@ export function bindGestures(el: HTMLElement, rig: RigController, frame: () => C
     el.addEventListener('wheel', wheel, { passive: false });
     return () => {
         if (wheelTimer) clearTimeout(wheelTimer);
+        el.removeEventListener('contextmenu', menu);
         el.removeEventListener('pointerdown', down);
         el.removeEventListener('pointermove', move);
         el.removeEventListener('pointerup', up);

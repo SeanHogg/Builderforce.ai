@@ -1,11 +1,9 @@
 // @vitest-environment jsdom
-/** PRD 38 P7 on screen: path-strip hop probabilities, "Run to end" and Simulate following the most likely walk. */
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+/** PRD 38 P7: Simulate follows the most likely walk (the path strip no longer draws hop probabilities). */
+import { describe, expect, it } from 'vitest';
 import { stationTransitions } from '@seanhogg/builderforce-memory/knowledge';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../labels';
 import type { PathModel } from './path';
-import { PathStrip } from './PathStrip';
 import { simulate } from './simulate/simulateModel';
 
 const path: PathModel = {
@@ -19,38 +17,6 @@ const weights = [
 ];
 const referenced = stationTransitions({ weights });
 const traced = stationTransitions({ sequences: [['api', 'svc']], weights });
-
-const strip = (transitions: Parameters<typeof PathStrip>[0]['transitions'], step = 0) =>
-    render(<PathStrip path={path} step={step} labels={L} onStep={vi.fn()} transitions={transitions} />);
-const hopTexts = (c: HTMLElement) => [...c.querySelectorAll('[data-hop-p]')].map((e) => e.textContent);
-
-describe('PathStrip hop probabilities', () => {
-    it('shows P(next) beside the count: a share of references without an interval', () => {
-        const { container } = strip(referenced);
-        expect(hopTexts(container)).toEqual([' · next 3 of 4 references', ' · next 2 of 2 references']);
-    });
-
-    it('a traced hop is ≈ with its interval under 10 runs, and its 1-of-1 is not 100%', () => {
-        const [first] = hopTexts(strip(traced).container);
-        expect(first).toMatch(/next ≈ \d+% \(\d+–\d+\) · n = 1/);
-        expect(first).not.toContain('100%');
-    });
-
-    it('no transition table: no probability and no walk, never a guess', () => {
-        const { container } = strip(null);
-        expect(hopTexts(container)).toEqual([]);
-        fireEvent.click(screen.getByRole('button', { name: L.surface.path.runToEnd }));
-        expect(screen.queryByTestId('kg-walk')).toBeNull();
-        expect(screen.queryByTestId('kg-walk-none')).toBeNull();
-    });
-
-    it('"Run to end" shows the most likely walk from the stop it ran from, each hop with its probability', () => {
-        strip(referenced);
-        fireEvent.click(screen.getByRole('button', { name: L.surface.path.runToEnd }));
-        const walk = screen.getByRole('list', { name: 'Most likely from Api' });
-        expect([...walk.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['→ Service · 3 of 4 references', '→ Db · 2 of 2 references']);
-    });
-});
 
 describe('simulate follows the most likely walk', () => {
     const steps = (transitions: Parameters<typeof simulate>[0]['transitions']) =>

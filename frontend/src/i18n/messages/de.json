@@ -38998,6 +38998,8 @@
       "typeExternal": "Fehlend oder extern",
       "typeSystem": "System oder Paket",
       "typeUnit": "Bereitstellbare Einheit",
+
+      "typeInterface": "Interface oder Trait",
       "keyButton": "Legende: was Formen, Linien und Farben bedeuten",
       "onScreen": "Sichtbar",
       "typeClassMeaning": "Eine Klasse, eine Schnittstelle oder ein Typ, im Code deklariert.",
@@ -39013,6 +39015,8 @@
       "typeClaimMeaning": "Eine Aussage oder Tatsache, die ein Dokument behauptet.",
       "typeExternalMeaning": "Außerhalb dieses Ordners: ein fehlendes Ziel oder eine externe Abhängigkeit.",
       "typeUnitMeaning": "Was ausgeliefert wird: ein Container, ein Worker oder eine bereitgestellte Funktion.",
+
+      "typeInterfaceMeaning": "Ein Vertrag: ein Interface, Typalias oder Trait, den anderer Code implementiert.",
       "typeSystemMeaning": "Ein Aggregat: ein ganzes System oder Paket.",
       "linesTitle": "Linien",
       "lineFlow": "Eine Route: ein Ablauf durch den Code, in eigener Farbe.",
@@ -39028,7 +39032,16 @@
       "typeFieldMeaning": "Ein Feld oder eine Eigenschaft, die eine Klasse enthält.",
       "colourTitle": "Farbe",
       "colourNote": "Die Füllfarbe folgt der aktiven Überlagerung ({preset}); ändern Sie sie im Überlagerungsmenü.",
-      "fadedNote": "Verblasste Markierungen liegen außerhalb der Antwort auf die aktuelle Frage."
+      "fadedNote": "Verblasste Markierungen liegen außerhalb der Antwort auf die aktuelle Frage.",
+      "colourBy": "Einfärben nach",
+      "showingChanges": "Änderungen werden angezeigt",
+      "shapesShow": "Formen anzeigen",
+      "shapesHide": "Formen ausblenden",
+      "swatchFine": "In Ordnung",
+      "swatchLook": "Einen Blick wert",
+      "swatchQuiet": "Ruhig → aktiv",
+      "diffNew": "Neu",
+      "diffGone": "Entfällt"
     },
     "statsLine": "{nodes} Knoten · {edges} Kanten · {sources} Quellen",
     "filesLoaded": "{loaded} von {total} geladen",
@@ -39394,11 +39407,7 @@
       "panelToggles": {
         "label": "Angezeigte Bereiche",
         "showLeft": "Linienbereich anzeigen",
-        "hideLeft": "Linienbereich ausblenden",
-        "showBottom": "Pfadleiste anzeigen",
-        "hideBottom": "Pfadleiste ausblenden",
-        "showRight": "Aktionsbereich anzeigen",
-        "hideRight": "Aktionsbereich ausblenden"
+        "hideLeft": "Linienbereich ausblenden"
       },
       "overlaysButton": "Überlagerungen",
       "overlaysTitle": "Was die Karte zeigt",
@@ -39760,7 +39769,10 @@
           "restructureTip": "{name} umstrukturiert ansehen",
           "risk": "Risiko",
           "testReached": "Ein Test erreicht es",
-          "testNone": "Kein Test erreicht es"
+          "testNone": "Kein Test erreicht es",
+          "riskWord": "Risiko: {level}",
+          "noRisk": "Keine Risikomarker",
+          "ownerIs": "Team {name}"
         },
         "stats": {
           "issues": "Antimuster",
@@ -39833,12 +39845,11 @@
         "doneTitle": "Dieser Pfad ist fertig, wenn…",
         "doneCheck": "{title} ist behoben in {items}",
         "doneNone": "Auf diesem Pfad ist kein Befund offen.",
-        "detailsTitle": "Details",
-        "linkCoverage": "Abdeckung",
-        "linkApi": "API"
+        "detailsTitle": "Details"
       },
       "path": {
         "title": "{line} · {entry}",
+        "journey": "Ablauf",
         "reset": "Zurücksetzen",
         "step": "Schritt",
         "runToEnd": "Bis zum Ende",
@@ -40073,6 +40084,7 @@
       },
       "scene": {
         "edgesCapped": "{shown} von {total} Verbindungen angezeigt",
+        "stationsCapped": "{shown} von {total} Stationen angezeigt",
         "layingOut": "Wird angeordnet…",
         "errorTitle": "In dieser Ansicht ist ein Fehler aufgetreten",
         "errorRetry": "Erneut versuchen",
@@ -40090,7 +40102,10 @@
         "rotateLeft": "Nach links drehen",
         "rotateRight": "Nach rechts drehen",
         "tiltUp": "Nach oben neigen",
-        "tiltDown": "Nach unten neigen"
+        "tiltDown": "Nach unten neigen",
+        "top": "Von oben ansehen",
+        "help": "So bewegst du dich",
+        "helpText": "Ziehen zum Drehen. Scrollen zum Zoomen: weiter in eine Form hineinzoomen, um sie zu betreten, herauszoomen, um zurückzukommen. Rechts ziehen zum Verschieben. Doppelklick auf eine Form zum Betreten, Esc zum Verlassen."
       },
       "mind": {
         "moreFoldersOne": "+{count} Ordner",
@@ -40104,7 +40119,9 @@
         "class": "Klassen",
         "method": "Methoden",
         "code": "Code",
-        "hint": "Mausrad auf der Karte zum Zoomen · Esc zum Verlassen · Doppelklick auf eine Methode, um hineinzugehen"
+        "hintIn": "In eine Form hineinzoomen, um sie zu betreten",
+        "hintInto": "Weiter zoomen · hinein in {name}",
+        "hintDeepest": "Tiefste Ebene · herauszoomen, um zurückzukommen"
       },
       "code": {
         "aria": "Code von {name}, Zeilen {from} bis {to}",
@@ -40184,7 +40201,12 @@
         "lensOut": "Aus",
         "lensSimulate": "Kein Test · Simulieren",
         "lensRestructure": "{name}",
-        "gutterWarn": "Anti-Pattern: {name}"
+        "gutterWarn": "Anti-Pattern: {name}",
+        "samePlace": "derselbe Ort wie im Bild",
+        "sayLead": "In einfachen Worten:",
+        "sayHint": "Klicke auf eine Zeile oder eine Gliederungszeile, und das Bild springt dorthin. Die Markierung neben einer Zeile ist ihre Form im Bild.",
+        "fileLines": "Zeilen {from}–{to}",
+        "fileLine": "Zeile {line}"
       },
       "compare": {
         "aria": "Vergleich",
@@ -40312,24 +40334,7 @@
         },
         "startFrom": "Starten bei",
         "startEntry": "Dem Einstieg",
-        "startStop": "Dieser Station",
-        "modeOpen": "Simulieren",
-        "modeOpenAria": "{name} mit Werten simulieren",
-        "modeTitle": "Mit Werten simulieren",
-        "modeEntry": "Einstiegspunkt",
-        "modeName": "Name",
-        "modeValue": "Wert",
-        "modeAdd": "Wert hinzufügen",
-        "modeRemove": "{name} entfernen",
-        "modeCarried": "Auf diesem Schritt mitgeführt",
-        "modeHop": "{from} → {to}",
-        "modeEmpty": "Wähle einen Einstiegspunkt. Seine Reise wird mit den eingegebenen Werten durchlaufen.",
-        "modeNoHops": "Von diesem Einstiegspunkt geht keine Reise aus.",
-        "modeClose": "Schließen",
-        "modeStep": "Schritt {n} von {total}",
-        "modeBack": "Vorheriger Schritt",
-        "modeNext": "Nächster Schritt",
-        "modeUseSelected": "Die ausgewählte Markierung verwenden"
+        "startStop": "Dieser Station"
       },
       "fix": {
         "title": "Korrektur",
@@ -40503,7 +40508,12 @@
         "reviewFailed": "Review fehlgeschlagen",
         "parityDiffers": "{local} hier · {server} auf dem Server",
         "overlaysNote": "Jede Kennzahl kann jeden Kanal steuern. Karte, System, Graph, Mindmap, Turm, Heat, Liste und Sequenz lesen dieselben Zuordnungen, ein Abdeckungsbalken kann also genauso gut ein Anti-Pattern-Balken sein.",
-        "rootsLabel": "Geprüfte Ordner"
+        "rootsLabel": "Geprüfte Ordner",
+        "topLevel": "Oberste Ebene",
+        "panesLabel": "Bereich",
+        "paneCode": "Code",
+        "panePicture": "Bild",
+        "drawerTabAct": "Handeln"
       },
       "askSentence": {
         "where": "wohin führt {name}?",

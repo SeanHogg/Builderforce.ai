@@ -1,5 +1,6 @@
 /**
- * The commit scrubber, which lives in the question row: "Review ●─●─● Now sha". A dot per commit from
+ * The commit scrubber, the toolbar's compare bar (design prototype `#cmp`): shown only while "What changed?" is asked or a commit is picked, in an accent wash
+ * under the toolbar, with a close button. "Review ●─●─● Now sha". A dot per commit from
  * `source.history`, newest at the right. Picking one marks the stations that commit changed
  * (it feeds the "What changed?" question and the Changed metric through `useSurface`; the root
  * also switches the question, see `onPick`); "Now" clears it. Renders nothing when the source
@@ -14,6 +15,7 @@ import { CONTROL, muted } from '../styles';
 import { TYPE } from './ui/type';
 import type { Commit, KnowledgeGraphSource } from '../types';
 import { QuietButton } from './ui';
+import { Glyph } from './ui/glyphs';
 
 const MAX_DOTS = 40;
 const SHA_LENGTH = 7;
@@ -48,9 +50,11 @@ export interface TimeSliderProps {
     onPick(sha: string | null): void;
     /** Stations the picked commit changed, for the readout. */
     changedStations: number;
+    /** Closes the bar (clears the pick and leaves the question). Absent ⇒ no close button. */
+    onClose?: (() => void) | undefined;
 }
 
-export function TimeSlider({ commits, capped, picked, labels, onPick, changedStations }: TimeSliderProps) {
+export function TimeSlider({ commits, capped, picked, labels, onPick, changedStations, onClose }: TimeSliderProps) {
     const t = labels.surface.time;
     const at = useMemo(() => commits.findIndex((c) => c.sha === picked), [commits, picked]);
     if (commits.length === 0) return null;
@@ -61,13 +65,15 @@ export function TimeSlider({ commits, capped, picked, labels, onPick, changedSta
     const shown = (picked ?? commits[commits.length - 1]!.sha).slice(0, SHA_LENGTH);
     return (
         <div
-            role="group" aria-label={t.aria} data-testid="kg-time" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, ...muted }}
+            role="group" aria-label={t.aria} data-testid="kg-time"
+            style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 10px', padding: '6px 10px', minWidth: 0, borderBottom: `1px solid ${cssVar('border')}`, background: `color-mix(in srgb, ${cssVar('accent')} 8%, ${cssVar('panel')})`, ...muted }}
             onKeyDown={(e) => {
                 if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); } else if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
             }}
         >
-            <span style={{ flex: 'none' }}>{t.label}</span>
-            <div style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', minWidth: 0, scrollbarWidth: 'none' }}>
+            <span aria-hidden="true" style={{ display: 'inline-flex', color: cssVar('accent') }}><Glyph><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3l2 1.5" /></Glyph></span>
+            <span style={{ flex: 'none', fontWeight: 700, color: cssVar('text') }}>{t.label}</span>
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
                 {commits.map((c, i) => {
                     const on = c.sha === picked;
                     // The line to the left of a dot is lit up to the picked commit (everything is lit at Now).
@@ -90,6 +96,11 @@ export function TimeSlider({ commits, capped, picked, labels, onPick, changedSta
             <QuietButton aria-pressed={picked === null} style={{ color: cssVar(picked === null ? 'text' : 'muted'), fontWeight: picked === null ? 700 : 500 }} onClick={() => onPick(null)}>{t.now}</QuietButton>
             <span style={{ flex: 'none', ...TYPE.monoValue, color: cssVar('text') }}>{shown}</span>
             {picked !== null && <span role="status" style={{ flex: 'none' }}>{counted(labels, 'stationChanged', changedStations)}</span>}
+            {onClose && (
+                <button type="button" data-testid="kg-time-close" aria-label={labels.surface.compare.close} title={labels.surface.compare.close} onClick={onClose} style={{ marginInlineStart: 'auto', width: 28, height: 28, padding: 0, border: 0, background: 'transparent', color: cssVar('muted'), cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+                    <Glyph><path d="M4 4l8 8M12 4L4 12" /></Glyph>
+                </button>
+            )}
         </div>
     );
 }

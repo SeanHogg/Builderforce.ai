@@ -67,7 +67,6 @@ describe('the surface', () => {
     it('seeds the question from the initial lens', async () => {
         await mount(surfaceFixture(), { initialLens: 'duplication' });
         expect(screen.getByRole('button', { name: L.surface.questions.copied })).toBeTruthy();
-        expect(screen.getByTestId('kg-answer').textContent).toBe(`${L.surface.answerMode.copied} · 1 station`);
     });
 
     it('lights the stations of the focused refs on the map (initial focus, search, Show)', async () => {
@@ -141,7 +140,6 @@ describe('the surface', () => {
         fireEvent.click(screen.getByRole('button', { name: L.surface.moreQuestions }));
         fireEvent.click(screen.getByRole('menuitem', { name: new RegExp(`^${L.surface.questions.copied}`) }));
         expect(lensIsPicked(deps, L, 'duplication')).toBe(true);
-        expect(screen.getByTestId('kg-answer').textContent).toBe(`${L.surface.answerMode.copied} · 1 station`);
     });
 
     it('says a question is not set up when its data was never collected', async () => {
@@ -149,10 +147,9 @@ describe('the surface', () => {
         const noCoverage: KnowledgeGraph = { ...bare, nodes: bare.nodes.map(({ badges, ...n }) => (badges ? { ...n, badges: Object.fromEntries(Object.entries(badges).filter(([k]) => k !== 'coverage')) } : n)) };
         await mount(noCoverage);
         fireEvent.click(screen.getByRole('button', { name: L.surface.questions.untested }));
-        expect(screen.getByTestId('kg-answer').textContent).toBe(L.surface.answerNotSetUp);
-        // ONE note: the answer mode is not shown beside "not set up".
+        // The answer is the stage note card's now: the header draws no answer note.
+        expect(screen.queryByTestId('kg-answer')).toBeNull();
         expect(screen.queryByTestId('kg-answer-mode')).toBeNull();
-        expect(within(screen.getByRole('search')).getAllByRole('status')).toHaveLength(1);
     });
 
     it('draws the line in the spine, between the folder and the station; picking it steps back up', async () => {

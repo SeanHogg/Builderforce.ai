@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The header: the review action (status chip, action button), the scrubber in the question row, the ask bar, the Panels group, Risk overlays, and the narrow layout. */
+/** The header: Out, the spine, the search that expands into the ask input, the review status button, the Panels button and the drawer it toggles; the toolbar's compare bar; and the wrapped (<=900px) layout. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -54,7 +54,14 @@ async function mount(source: KnowledgeGraphSource) {
     await waitFor(() => expect(document.querySelector('[data-stage-host]')).toBeTruthy());
 }
 const strip = () => within(screen.getByTestId('kg-status-strip'));
-const askBox = () => screen.getByRole('searchbox', { name: L.searchLabel }) as HTMLInputElement;
+/** The ask input: the search icon button expands it (where the header does not wrap). */
+const askBox = () => {
+    if (!screen.queryByRole('searchbox', { name: L.searchLabel })) fireEvent.click(screen.getByTestId('kg-search-button'));
+    return screen.getByRole('searchbox', { name: L.searchLabel }) as HTMLInputElement;
+};
+const toolbar = (over: Partial<Parameters<typeof Toolbar>[0]> = {}) => (
+    <Toolbar labels={L} wrapped={false} onSearch={vi.fn()} question="where" askName="Web" drawerOpen={false} onToggleDrawer={vi.fn()} {...over} />
+);
 
 describe('the status chip and the action button', () => {
     it('says Reviewed with how long ago and in sync, with the dot in the synced colour', async () => {
@@ -70,15 +77,16 @@ describe('the status chip and the action button', () => {
         await waitFor(() => expect(chip.textContent).toContain(counted(L, 'fileNotStored', 1)));
         expect(chip.getAttribute('data-state')).toBe('error');
         fireEvent.click(chip);
-        const panel = await screen.findByRole('dialog', { name: 'Builderforce' });
+        const panel = await screen.findByTestId('kg-drawer');
         expect(within(panel).getByRole('tab', { name: new RegExp(`^${L.surface.run.review.tabServer}`) }).getAttribute('aria-selected')).toBe('true');
         expect(within(panel).getByTestId('kg-review-parity').textContent).toBe(fillTemplate(h.parityDiffers, { local: '120', server: '100' }));
     });
 
-    it('has exactly one action button on the strip and no parity line, ⋯ menu or review card', async () => {
+    it('has exactly one button on the strip (the status chip) and no parity line, ⋯ menu or review card', async () => {
         await mount(sourceOf({ syncStatus: async () => sync() }));
         await screen.findByTestId('kg-status-chip');
-        expect(screen.getAllByTestId('kg-review-action')).toHaveLength(1);
+        expect(strip().getAllByRole('button')).toHaveLength(1);
+        expect(screen.queryByTestId('kg-review-action')).toBeNull();
         expect(screen.queryByTestId('kg-parity')).toBeNull();
         expect(screen.queryByTestId('kg-review-card')).toBeNull();
         expect(screen.queryByRole('button', { name: /more actions/i })).toBeNull();
@@ -88,8 +96,8 @@ describe('the status chip and the action button', () => {
         // Opening does not plan (RunPanel.tsx): planning walks and hashes every file, which opening the panel did not ask for.
         const source = sourceOf({ syncStatus: async () => sync() }) as KnowledgeGraphSource & { requests: unknown[] };
         await mount(source);
-        fireEvent.click(await screen.findByTestId('kg-review-action'));
-        const panel = await screen.findByRole('dialog', { name: 'Builderforce' });
+        fireEvent.click(await screen.findByTestId('kg-status-chip'));
+        const panel = await screen.findByTestId('kg-drawer');
         expect(await within(panel).findByTestId('kg-review-idle')).toBeTruthy();
         expect(within(panel).queryByTestId('kg-review-planning')).toBeNull();
         expect(source.requests).toEqual([]);
@@ -100,7 +108,7 @@ describe('the review in the strip', () => {
     it('Start review in the panel counts and starts in one press, and the chip leaves the ready state', async () => {
         const source = sourceOf() as KnowledgeGraphSource & { confirmed: boolean[] };
         await mount(source);
-        fireEvent.click(await screen.findByTestId('kg-review-action'));
+        fireEvent.click(await screen.findByTestId('kg-status-chip'));
         await screen.findByTestId('kg-review-idle');
         fireEvent.click(screen.getByTestId('kg-footer-action'));
         await waitFor(() => expect(source.confirmed).toEqual([true]));
@@ -108,18 +116,26 @@ describe('the review in the strip', () => {
     });
 });
 
-describe('the commit scrubber', () => {
+describe('the compare bar (the commit scrubber)', () => {
     const commits = [
         { sha: 'aaaaaaa1', title: 'first', at: '2026-01-01', refs: ['src:sys::api/routes.ts'] },
         { sha: 'bbbbbbb2', title: 'second', at: '2026-01-02', refs: ['src:sys::db/repo.ts'] },
     ];
 
-    it('picking a commit also switches the question to "What changed?"', async () => {
+    it('shows only while "What changed?" is asked, and closing it leaves the question', async () => {
         await mount(sourceOf({ history: async () => ({ commits }) }));
-        expect(askBox().placeholder).not.toBe(L.surface.askSentence.changed);
+        expect(screen.queryByTestId('kg-time')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: L.surface.questions.changed }));
+        expect(await screen.findByTestId('kg-time')).toBeTruthy();
+        fireEvent.click(screen.getByTestId('kg-time-close'));
+        expect(screen.queryByTestId('kg-time')).toBeNull();
+    });
+
+    it('picking a commit keeps the question on "What changed?"', async () => {
+        await mount(sourceOf({ history: async () => ({ commits }) }));
+        fireEvent.click(screen.getByRole('button', { name: L.surface.questions.changed }));
         fireEvent.click(await screen.findByRole('button', { name: fillTemplate(L.surface.time.commitAria, { title: 'first', at: '2026-01-01' }) }));
-        expect(askBox().placeholder).toBe(L.surface.askSentence.changed);
-        expect(screen.getByTestId('kg-answer-mode').textContent).toBe(L.surface.answerMode.changed);
+        expect(askBox().placeholder).toBe(fillTemplate(L.surface.askSentence.changed, { name: 'Builderforce' }));
     });
 });
 
@@ -127,7 +143,7 @@ describe('what the ⋯ menu held, now in the Reviews panel', () => {
     it('shows Before and After on the Server tab only when the host keeps a baseline', async () => {
         await mount(sourceOf({ baseline: async () => null, syncStatus: async () => sync() }));
         fireEvent.click(await screen.findByTestId('kg-status-chip'));
-        const panel = await screen.findByRole('dialog', { name: 'Builderforce' });
+        const panel = await screen.findByTestId('kg-drawer');
         fireEvent.click(within(panel).getByRole('tab', { name: new RegExp(`^${L.surface.run.review.tabServer}`) }));
         expect(within(panel).getByText(L.surface.run.review.revisionTitle)).toBeTruthy();
         expect((within(panel).getByRole('radio', { name: L.compareBefore }) as HTMLButtonElement).disabled).toBe(true);
@@ -136,7 +152,7 @@ describe('what the ⋯ menu held, now in the Reviews panel', () => {
     it('has no revision control for a host with no baseline', async () => {
         await mount(sourceOf({ syncStatus: async () => sync() }));
         fireEvent.click(await screen.findByTestId('kg-status-chip'));
-        const panel = await screen.findByRole('dialog', { name: 'Builderforce' });
+        const panel = await screen.findByTestId('kg-drawer');
         fireEvent.click(within(panel).getByRole('tab', { name: new RegExp(`^${L.surface.run.review.tabServer}`) }));
         expect(within(panel).queryByText(L.surface.run.review.revisionTitle)).toBeNull();
     });
@@ -145,8 +161,8 @@ describe('what the ⋯ menu held, now in the Reviews panel', () => {
         const writeText = vi.fn(async () => undefined);
         Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
         await mount(sourceOf());
-        fireEvent.click(await screen.findByTestId('kg-review-action'));
-        const panel = await screen.findByRole('dialog', { name: 'Builderforce' });
+        fireEvent.click(await screen.findByTestId('kg-status-chip'));
+        const panel = await screen.findByTestId('kg-drawer');
         fireEvent.click(within(panel).getByRole('tab', { name: L.surface.run.review.tabDiagnostics }));
         fireEvent.click(within(panel).getByRole('button', { name: L.copyDiagnostics }));
         await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
@@ -157,23 +173,12 @@ describe('what the ⋯ menu held, now in the Reviews panel', () => {
 describe('openReview with a graph on screen', () => {
     it('opens the Reviews panel', async () => {
         render(view(<KnowledgeGraphView source={sourceOf()} openReview />));
-        expect(await screen.findByRole('dialog', { name: 'Builderforce' })).toBeTruthy();
+        expect(await screen.findByTestId('kg-drawer')).toBeTruthy();
     });
 
     it('leaves the panel closed without openReview', async () => {
         await mount(sourceOf());
-        expect(screen.queryByRole('dialog', { name: 'Builderforce' })).toBeNull();
-    });
-});
-
-describe('the Risk overlays trigger', () => {
-    it('is an icon button named with the preset label on a wide container', async () => {
-        await mount(sourceOf());
-        const trigger = screen.getByRole('button', { name: `${fillTemplate(L.surface.presetLabel, { preset: L.surface.presets.risk })} ▾` });
-        expect(trigger.getAttribute('aria-label')).toBe(`${fillTemplate(L.surface.presetLabel, { preset: L.surface.presets.risk })} ▾`);
-        expect(trigger.getAttribute('title')).toBe(`${fillTemplate(L.surface.presetLabel, { preset: L.surface.presets.risk })} ▾`);
-        expect(trigger.querySelector('svg')).toBeTruthy();
-        expect(trigger.style.height).toBe('var(--kg-control, 40px)');
+        expect(screen.queryByTestId('kg-drawer')).toBeNull();
     });
 });
 
@@ -196,67 +201,68 @@ describe('the spine root crumb', () => {
     });
 });
 
-describe('the Panels group', () => {
-    it('toggles Coverage, Patterns and API in order (Reviews opens from the strip); a second press closes the drawer; Fix queue and Simulate have no button', async () => {
+describe('the Panels button and the drawer', () => {
+    it('opens ONE drawer on Act, with Coverage, Patterns and API after it; a second press closes it', async () => {
         await mount(sourceOf({ syncStatus: async () => sync() }));
-        const group = within(screen.getByRole('group', { name: L.surface.panelsLabel }));
-        expect(group.getAllByRole('button').map((b) => b.textContent)).toEqual([L.panelCoverage, L.panelPatterns, L.panelApi]);
-        expect(group.queryByRole('button', { name: L.panelResolve })).toBeNull();
-        expect(group.queryByRole('button', { name: L.panelSimulate })).toBeNull();
-        fireEvent.click(group.getByRole('button', { name: L.panelCoverage }));
-        expect(screen.getByRole('dialog', { name: L.panelCoverage })).toBeTruthy();
-        expect(group.getByRole('button', { name: L.panelCoverage }).getAttribute('aria-pressed')).toBe('true');
-        fireEvent.click(group.getByRole('button', { name: L.panelCoverage }));
-        expect(screen.queryByRole('dialog', { name: L.panelCoverage })).toBeNull();
+        expect(screen.queryByTestId('kg-drawer')).toBeNull();
+        const button = screen.getByTestId('kg-panels-button');
+        expect(button.getAttribute('aria-expanded')).toBe('false');
+        fireEvent.click(button);
+        const drawer = within(screen.getByTestId('kg-drawer'));
+        expect(button.getAttribute('aria-expanded')).toBe('true');
+        expect(drawer.getAllByRole('tab').map((t) => t.getAttribute('aria-label')).slice(0, 4)).toEqual([h.drawerTabAct, L.panelCoverage, L.panelPatterns, L.panelApi]);
+        expect(drawer.getByRole('tab', { name: h.drawerTabAct }).getAttribute('aria-selected')).toBe('true');
+        expect(screen.queryByTestId('kg-act-title')).not.toBeNull();
+        fireEvent.click(drawer.getByRole('tab', { name: L.panelCoverage }));
+        expect(drawer.getByRole('tab', { name: L.panelCoverage }).getAttribute('aria-selected')).toBe('true');
+        expect(screen.queryByTestId('kg-act-title')).toBeNull();
+        fireEvent.click(button);
+        expect(screen.queryByTestId('kg-drawer')).toBeNull();
     });
-});
 
-describe('Risk overlays', () => {
-    it('opens a dialog (560px wide in CSS, which jsdom cannot read back) with the explanatory sentence', async () => {
+    it('has Simulate as a tab, not a toolbar toggle', async () => {
         await mount(sourceOf());
-        fireEvent.click(screen.getByRole('button', { name: `${fillTemplate(L.surface.presetLabel, { preset: L.surface.presets.risk })} ▾` }));
-        const dialog = screen.getByRole('dialog', { name: L.surface.overlaysTitle });
-        expect(within(dialog).getByText(h.overlaysNote)).toBeTruthy();
+        expect(document.querySelector('[data-simulate-toggle]')).toBeNull();
+        fireEvent.click(screen.getByTestId('kg-panels-button'));
+        expect(within(screen.getByTestId('kg-drawer')).getByRole('tab', { name: L.panelSimulate })).toBeTruthy();
     });
 });
 
 describe('the ask bar', () => {
     const question = (id: string) => QUESTIONS.find((q) => q.id === id)!.id;
-    it.each(QUESTIONS.map((q) => [q.id] as const))('the %s question is the placeholder as a sentence, with its answer mode beside it', (id) => {
-        render(<Toolbar labels={L} narrow={false} onSearch={vi.fn()} question={question(id)} askName="Web" />);
+    it.each(QUESTIONS.map((q) => [q.id] as const))('the %s question is the placeholder as a sentence', (id) => {
+        render(toolbar({ question: question(id) }));
         expect(askBox().placeholder).toBe(fillTemplate(L.surface.askSentence[id], { name: 'Web' }));
-        expect(screen.getByTestId('kg-answer-mode').textContent).toBe(L.surface.answerMode[id]);
     });
 
-    it('shows the question as the value (not a placeholder hint) until something is typed, which replaces it', () => {
-        const onSearch = vi.fn();
-        const { rerender } = render(<Toolbar labels={L} narrow={false} onSearch={onSearch} question="where" askName="Web" />);
-        const sentence = fillTemplate(L.surface.askSentence.where, { name: 'Web' });
-        expect(askBox().value).toBe(sentence);
-        rerender(<Toolbar labels={L} narrow={false} onSearch={onSearch} question="wrong" askName="Web" />);
-        expect(askBox().value).toBe(fillTemplate(L.surface.askSentence.wrong, { name: 'Web' })); // follows the question
+    it('is a search icon button that expands into the input, and Escape collapses it', () => {
+        render(toolbar());
+        expect(screen.queryByRole('searchbox', { name: L.searchLabel })).toBeNull();
+        const input = askBox();
+        expect(screen.getByTestId('kg-search-button').getAttribute('aria-expanded')).toBe('true');
+        fireEvent.keyDown(input, { key: 'Escape' });
+        expect(screen.queryByRole('searchbox', { name: L.searchLabel })).toBeNull();
+    });
+
+    it('follows the question in its placeholder and keeps what was typed', () => {
+        const { rerender } = render(toolbar());
+        expect(askBox().value).toBe('');
         fireEvent.change(askBox(), { target: { value: 'invoice' } });
-        expect(askBox().value).toBe('invoice');
-        rerender(<Toolbar labels={L} narrow={false} onSearch={onSearch} question="where" askName="Web" />);
+        rerender(toolbar({ question: 'wrong' }));
+        expect(askBox().placeholder).toBe(fillTemplate(L.surface.askSentence.wrong, { name: 'Web' }));
         expect(askBox().value).toBe('invoice'); // what was typed stays
     });
 
-    it('renders ONE note: "not set up" alone, without the answer mode', () => {
-        render(<Toolbar labels={L} narrow={false} onSearch={vi.fn()} question="untested" askName="Web" answer={L.surface.answerNotSetUp} />);
-        expect(screen.getAllByRole('status')).toHaveLength(1);
-        expect(screen.getByTestId('kg-answer').textContent).toBe(L.surface.answerNotSetUp);
+    it('draws no "answered as" note: the answer is the stage card\'s', () => {
+        render(toolbar({ question: 'wrong' }));
+        askBox();
+        expect(screen.queryByTestId('kg-answer')).toBeNull();
         expect(screen.queryByTestId('kg-answer-mode')).toBeNull();
-    });
-
-    it('renders ONE note: the answer mode, then the answer', () => {
-        render(<Toolbar labels={L} narrow={false} onSearch={vi.fn()} question="wrong" askName="Web" answer="3 stations" />);
-        expect(screen.getAllByRole('status')).toHaveLength(1);
-        expect(screen.getByTestId('kg-answer').textContent).toBe(`${L.surface.answerMode.wrong} · 3 stations`);
     });
 
     it('submits the typed text as a search', () => {
         const onSearch = vi.fn();
-        render(<Toolbar labels={L} narrow={false} onSearch={onSearch} question="where" askName="Web" />);
+        render(toolbar({ onSearch }));
         fireEvent.change(askBox(), { target: { value: 'invoice' } });
         fireEvent.submit(screen.getByRole('search'));
         expect(onSearch).toHaveBeenCalledWith('invoice');
@@ -264,6 +270,7 @@ describe('the ask bar', () => {
 
     it('puts the screenshot button inside the bar when the host can pinpoint', async () => {
         await mount(sourceOf({ pinpoint: vi.fn() }));
+        askBox();
         const bar = within(screen.getByRole('search'));
         expect(bar.getByRole('button', { name: L.surface.pinpoint.button })).toBeTruthy();
         expect(bar.getByRole('searchbox', { name: L.searchLabel })).toBeTruthy();
@@ -271,72 +278,45 @@ describe('the ask bar', () => {
 
     it('has no screenshot button when the host cannot pinpoint', async () => {
         await mount(sourceOf());
+        askBox();
         expect(screen.queryByRole('button', { name: L.surface.pinpoint.button })).toBeNull();
     });
 });
 
-describe('narrow (phone) layout', () => {
+describe('the wrapped (<=900px) layout', () => {
     const narrow = () => vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 360, height: 640, top: 0, left: 0, right: 360, bottom: 640, x: 0, y: 0, toJSON: () => ({}) } as DOMRect);
 
-    it('keeps only the chip dot and the action button in the review action; Risk ▾ and the Panels row scroll sideways in the View bar; the ask bar is 44px', async () => {
+    it('wraps the header, keeps only the status dot, shows the input and the Code | Picture switch instead of the search button, and opens the drawer as a bottom sheet', async () => {
         narrow();
         await mount(sourceOf({ syncStatus: async () => sync() }));
+        expect(screen.getByTestId('kg-header').style.flexWrap).toBe('wrap');
         const s = strip();
-        expect(s.queryByRole('button', { name: `${L.surface.presets.risk} ▾` })).toBeNull(); // the overlays live in the scene overlay's tools
-        expect(s.getByTestId('kg-review-action')).toBeTruthy();
         expect(s.getByTestId('kg-status-chip').textContent).toBe(''); // the chip shrinks to its dot; the words stay in its accessible name
         expect(s.getByTestId('kg-status-chip').getAttribute('aria-label')).toContain('in sync');
-        expect(screen.queryByTestId('kg-parity')).toBeNull();
-        expect(screen.queryByTestId('kg-time')).toBeNull();
-        // The overlay menu is not duplicated in the header row.
-        expect(screen.getAllByRole('button', { name: `${L.surface.presets.risk} ▾` })).toHaveLength(1);
-        const panels = screen.getByRole('group', { name: L.surface.panelsLabel });
-        expect(panels.parentElement!.style.overflowX).toBe('auto');
-        expect(screen.getByRole('search').style.height).toBe('44px');
-        expect(screen.queryByTestId('kg-answer-mode')).toBeNull();
+        expect(screen.queryByTestId('kg-search-button')).toBeNull();
+        expect(screen.getByRole('searchbox', { name: L.searchLabel })).toBeTruthy();
+        expect(screen.getByRole('group', { name: h.panesLabel })).toBeTruthy();
+        fireEvent.click(screen.getByTestId('kg-panels-button'));
+        expect(screen.getByTestId('kg-drawer').getAttribute('data-sheet')).toBe('true');
     });
 
-    it('draws the wide layout otherwise: Risk overlays in the View bar, not beside the review action', async () => {
+    it('draws the desktop header otherwise: one nowrap row, the search button, a right-hand drawer', async () => {
         await mount(sourceOf());
-        expect(strip().queryByRole('button', { name: /▾$/ })).toBeNull();
-        expect(screen.getByRole('search').style.height).toBe('40px');
+        expect(screen.getByTestId('kg-header').style.flexWrap).toBe('nowrap');
+        expect(screen.getByTestId('kg-search-button')).toBeTruthy();
+        expect(screen.queryByRole('group', { name: h.panesLabel })).toBeNull();
+        fireEvent.click(screen.getByTestId('kg-panels-button'));
+        expect(screen.getByTestId('kg-drawer').getAttribute('data-sheet')).toBeNull();
     });
 });
 
-describe('the canvas tools and panel toggles', () => {
-    it('puts the Risk overlays trigger and the Coverage button inside the scene overlay', async () => {
+describe('the toolbar', () => {
+    it('is the views, 3D | Flat and the questions in the scene overlay, with no Panels group, Risk overlays or Simulate toggle', async () => {
         await mount(sourceOf());
         const overlay = within(screen.getByTestId('kg-scene-overlay'));
-        expect(overlay.getByRole('button', { name: `${fillTemplate(L.surface.presetLabel, { preset: L.surface.presets.risk })} ▾` })).toBeTruthy();
-        expect(overlay.getByRole('button', { name: L.panelCoverage })).toBeTruthy();
-    });
-
-    it('puts the Simulate toggle in the scene toolbar, not floating over the scene box', async () => {
-        await mount(sourceOf());
-        const toggle = document.querySelector('[data-simulate-toggle]')!;
-        expect(screen.getByTestId('kg-scene-overlay').contains(toggle)).toBe(true);
-        expect(screen.getByTestId('kg-scene-box').parentElement!.children).not.toContain(toggle);
-        expect(toggle.getAttribute('aria-pressed')).toBe('false');
-        fireEvent.click(toggle);
-        expect(toggle.getAttribute('aria-pressed')).toBe('true');
-    });
-
-    it('hides the Act panel when the right toggle is pressed, and brings it back', async () => {
-        // jsdom may run without a localStorage (the experimental flag): give the panel-visibility
-        // persistence an in-memory stand-in so the toggle round-trips.
-        const mem = new Map<string, string>();
-        vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => { mem.set(k, v); }, removeItem: (k: string) => { mem.delete(k); }, clear: () => mem.clear(), key: () => null, length: 0 });
-        try {
-            window.localStorage.removeItem('kg.panelVisibility.v1');
-            await mount(sourceOf());
-            expect(screen.queryByTestId('kg-act-title')).not.toBeNull();
-            fireEvent.click(screen.getByRole('button', { name: L.surface.panelToggles.hideRight }));
-            expect(screen.queryByTestId('kg-act-title')).toBeNull();
-            fireEvent.click(screen.getByRole('button', { name: L.surface.panelToggles.showRight }));
-            expect(screen.queryByTestId('kg-act-title')).not.toBeNull();
-            window.localStorage.removeItem('kg.panelVisibility.v1');
-        } finally {
-            vi.unstubAllGlobals();
-        }
+        expect(overlay.getByRole('group', { name: L.viewModesLabel })).toBeTruthy();
+        expect(overlay.getByRole('group', { name: L.surface.questionsLabel })).toBeTruthy();
+        expect(overlay.queryByRole('button', { name: L.panelCoverage })).toBeNull();
+        expect(overlay.queryByRole('button', { name: new RegExp(L.surface.presets.risk + ' ▾') })).toBeNull();
     });
 });

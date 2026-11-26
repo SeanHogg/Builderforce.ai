@@ -119,31 +119,6 @@ export function syncPill({ labels, review, stale, refreshFailed, sync, lastRevie
     return make('never', 'idle', r.chipNotReviewedPlain);
 }
 
-export interface StripAction {
-    label: string;
-    /** Counting cannot be started or stopped: the button waits. */
-    disabled: boolean;
-    tab: ReviewsTab;
-}
-
-/** The button for the situation: it opens the panel on Review, where the action itself is; a failed upload opens the Server tab (the review action makes it Retry upload when the source can retry). */
-export function stripAction(labels: KnowledgeGraphLabels, pill: Pick<SyncPill, 'kind'>, rootTitle: string | undefined): StripAction {
-    const r = labels.surface.run.review;
-    const go = (label: string, disabled = false, tab: ReviewsTab = 'review'): StripAction => ({ label, disabled, tab });
-    switch (pill.kind) {
-        case 'counting': return go(r.actionStart, true);
-        case 'ready': return go(r.actionStart);
-        case 'running': return go(labels.reviewStop);
-        case 'stopping': return go(r.stoppingTitle, true);
-        case 'stopped': return go(r.actionResume);
-        case 'uploadFailed': return go(r.actionSeeUpload, false, 'server'); // the review action turns this into Retry upload when the source has the port
-        case 'never': return go(fillTemplate(r.actionReview, { root: rootTitle ?? labels.reviewFolder }));
-        case 'serverOnly': return go(fillTemplate(r.actionReview, { root: rootTitle ?? labels.reviewFolder }));
-        case 'notStored': case 'outOfDate': case 'refresh': return go(r.actionUpdate);
-        case 'failed': case 'uploading': case 'upToDate': return go(r.actionAgain);
-    }
-}
-
 /** This machine holds no snapshot of the folder (a linked project is reviewed on the server only): "0 here" means that. */
 export const hasNoLocalSnapshot = (sync: Pick<SyncStatus, 'local' | 'server'>): boolean => sync.local.files === 0 && (sync.server?.files ?? 0) > 0;
 

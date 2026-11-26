@@ -18,7 +18,7 @@ const web = model.stations.find((s) => s.name === 'Web app')!;
 const path = pathOfLine(lines.lines[0]!, model.byId);
 
 const base = (over: Partial<Parameters<typeof ActPanel>[0]> = {}) => ({
-    graph: withUnused, findings: withUnused.findings, labels: L, station: null, stations: model.stations, scopeName: null, compact: false,
+    graph: withUnused, findings: withUnused.findings, labels: L, station: null, stations: model.stations, scopeName: null,
     onClearScope: vi.fn(), onShow: vi.fn(), onCompose: vi.fn(), onResolve: vi.fn(), onOpenPanel: vi.fn(), ...over,
 });
 const act = (over: Partial<Parameters<typeof ActPanel>[0]> = {}) => {
@@ -67,14 +67,6 @@ describe('ActPanel rail', () => {
         const p = act();
         fireEvent.click(screen.getByRole('button', { name: fillTemplate(L.surface.act.fixQueue, { count: 3 }) }));
         expect(p.onOpenPanel).toHaveBeenCalledWith('resolve');
-    });
-
-    it('is Coverage · API · Fix queue links on a phone', () => {
-        const p = act({ compact: true });
-        fireEvent.click(screen.getByRole('button', { name: L.surface.act.linkCoverage }));
-        fireEvent.click(screen.getByRole('button', { name: L.surface.act.linkApi }));
-        expect(p.onOpenPanel).toHaveBeenNthCalledWith(1, 'coverage');
-        expect(p.onOpenPanel).toHaveBeenNthCalledWith(2, 'api');
     });
 
     it('keeps this run as a test: composes a fixed request naming the path, its stops and its checks', () => {
@@ -188,7 +180,7 @@ describe('shared pin numbering', () => {
         const first = firstFindings([api], reversed).get(api.id)!;
         expect(pins.get(first.finding.id)).toBe(first.n);
         const g = { ...withUnused, findings: reversed };
-        render(<ActPanel {...{ graph: g, findings: reversed, labels: L, station: null, stations: model.stations, scopeName: null, compact: false, onClearScope: vi.fn(), onShow: vi.fn() }} />);
+        render(<ActPanel {...{ graph: g, findings: reversed, labels: L, station: null, stations: model.stations, scopeName: null, onClearScope: vi.fn(), onShow: vi.fn() }} />);
         const card = document.querySelector(`[data-card="${first.finding.id}"]`)!;
         expect(card.querySelector('span')!.textContent).toBe(String(first.n));
     });

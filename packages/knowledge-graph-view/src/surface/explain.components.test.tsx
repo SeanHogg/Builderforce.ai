@@ -99,21 +99,19 @@ describe('a one-station path', () => {
     const stations = buildStations(graph);
     const one = { stops: [{ id: 'a', name: 'vscode/src' }], hops: [] };
 
-    it('disables stepping and the sequence and says why', () => {
-        render(<PathStrip path={one} step={0} labels={L} onStep={vi.fn()} pathTitle="vscode line" onOpenPanel={vi.fn()} />);
-        expect(screen.getByTestId('kg-path-one-station').textContent).toBe(E.oneStation);
-        expect((screen.getByRole('button', { name: L.surface.path.sequence }) as HTMLButtonElement).disabled).toBe(true);
-        expect((screen.getByRole('button', { name: L.surface.path.runToEnd }) as HTMLButtonElement).disabled).toBe(true);
-        expect(screen.queryByText('Pick a line or a station to draw its sequence.')).toBeNull();
+    it('draws the one stop and disables both step buttons', () => {
+        render(<PathStrip path={one} step={0} labels={L} onStep={vi.fn()} pathTitle="vscode line" />);
+        expect(screen.getByText('vscode line')).toBeTruthy();
+        expect((screen.getByRole('button', { name: L.surface.pathBack }) as HTMLButtonElement).disabled).toBe(true);
+        expect((screen.getByRole('button', { name: L.surface.pathNext }) as HTMLButtonElement).disabled).toBe(true);
     });
 
-    it('still steps a real path and offers the sequence', () => {
+    it('still steps a real path', () => {
         const line = buildLines(graph, stations).lines[0]!;
         const path = pathOfLine(line, stations.byId);
         const onStep = vi.fn();
-        render(<PathStrip path={path} step={0} labels={L} onStep={onStep} onOpenPanel={vi.fn()} />);
+        render(<PathStrip path={path} step={0} labels={L} onStep={onStep} />);
         expect(path.stops.length).toBeGreaterThan(1);
-        expect(screen.queryByTestId('kg-path-one-station')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: L.surface.pathNext }));
         expect(onStep).toHaveBeenCalledWith(1);
     });

@@ -38998,6 +38998,8 @@
       "typeExternal": "Ausente o externo",
       "typeSystem": "Sistema o paquete",
       "typeUnit": "Unidad desplegable",
+
+      "typeInterface": "Interfaz o trait",
       "keyButton": "Leyenda: qué significan las formas, las líneas y los colores",
       "onScreen": "En pantalla",
       "typeClassMeaning": "Una clase, interfaz o tipo declarado en el código.",
@@ -39013,6 +39015,8 @@
       "typeClaimMeaning": "Una afirmación o un hecho que sostiene un documento.",
       "typeExternalMeaning": "Fuera de esta carpeta: un destino ausente o una dependencia externa.",
       "typeUnitMeaning": "Lo que se despliega: un contenedor, un worker o una función desplegada.",
+
+      "typeInterfaceMeaning": "Un contrato: una interfaz, un alias de tipo o un trait que implementa otro código.",
       "typeSystemMeaning": "Un agregado: un sistema o paquete completo.",
       "linesTitle": "Líneas",
       "lineFlow": "Una ruta: un flujo a través del código, con su propio color.",
@@ -39028,7 +39032,16 @@
       "typeFieldMeaning": "Un campo o propiedad que contiene una clase.",
       "colourTitle": "Color",
       "colourNote": "El color de relleno sigue la superposición activa ({preset}); cámbialo en el menú de superposiciones.",
-      "fadedNote": "Las marcas atenuadas quedan fuera de la respuesta a la pregunta actual."
+      "fadedNote": "Las marcas atenuadas quedan fuera de la respuesta a la pregunta actual.",
+      "colourBy": "Colorear por",
+      "showingChanges": "Mostrando cambios",
+      "shapesShow": "Mostrar las formas",
+      "shapesHide": "Ocultar las formas",
+      "swatchFine": "Bien",
+      "swatchLook": "Conviene revisarlo",
+      "swatchQuiet": "Tranquilo → activo",
+      "diffNew": "Nuevo",
+      "diffGone": "Desaparece"
     },
     "statsLine": "{nodes} nodos · {edges} aristas · {sources} fuentes",
     "filesLoaded": "{loaded} de {total} cargados",
@@ -39394,11 +39407,7 @@
       "panelToggles": {
         "label": "Paneles visibles",
         "showLeft": "Mostrar el panel de líneas",
-        "hideLeft": "Ocultar el panel de líneas",
-        "showBottom": "Mostrar la barra de rutas",
-        "hideBottom": "Ocultar la barra de rutas",
-        "showRight": "Mostrar el panel de acciones",
-        "hideRight": "Ocultar el panel de acciones"
+        "hideLeft": "Ocultar el panel de líneas"
       },
       "overlaysButton": "Capas",
       "overlaysTitle": "Qué muestra el mapa",
@@ -39760,7 +39769,10 @@
           "restructureTip": "Ver {name} reestructurado",
           "risk": "Riesgo",
           "testReached": "Una prueba lo alcanza",
-          "testNone": "Ninguna prueba lo alcanza"
+          "testNone": "Ninguna prueba lo alcanza",
+          "riskWord": "Riesgo {level}",
+          "noRisk": "Sin indicadores de riesgo",
+          "ownerIs": "Equipo {name}"
         },
         "stats": {
           "issues": "Antipatrones",
@@ -39833,12 +39845,11 @@
         "doneTitle": "Esta ruta está terminada cuando…",
         "doneCheck": "{title} está resuelto en {items}",
         "doneNone": "No hay ningún hallazgo abierto en esta ruta.",
-        "detailsTitle": "Detalles",
-        "linkCoverage": "Cobertura",
-        "linkApi": "API"
+        "detailsTitle": "Detalles"
       },
       "path": {
         "title": "{line} · {entry}",
+        "journey": "Recorrido",
         "reset": "Reiniciar",
         "step": "Paso",
         "runToEnd": "Ejecutar hasta el final",
@@ -40073,6 +40084,7 @@
       },
       "scene": {
         "edgesCapped": "Se muestran {shown} de {total} enlaces",
+        "stationsCapped": "Se muestran {shown} de {total} estaciones",
         "layingOut": "Distribuyendo…",
         "errorTitle": "Esta vista ha tenido un error",
         "errorRetry": "Reintentar",
@@ -40090,7 +40102,10 @@
         "rotateLeft": "Girar a la izquierda",
         "rotateRight": "Girar a la derecha",
         "tiltUp": "Inclinar hacia arriba",
-        "tiltDown": "Inclinar hacia abajo"
+        "tiltDown": "Inclinar hacia abajo",
+        "top": "Mirar desde arriba",
+        "help": "Cómo moverse",
+        "helpText": "Arrastra para girar. Rueda para acercar: sigue acercando una forma para entrar en ella, aleja para volver. Arrastra con el botón derecho para desplazar. Doble clic en una forma para entrar, Esc para salir."
       },
       "mind": {
         "moreFoldersOne": "+{count} carpeta",
@@ -40104,7 +40119,9 @@
         "class": "Clases",
         "method": "Métodos",
         "code": "Código",
-        "hint": "Rueda sobre el mapa para hacer zoom · Esc para salir · doble clic en un método para entrar"
+        "hintIn": "Acércate a una forma para entrar en ella",
+        "hintInto": "Sigue acercando · entrando en {name}",
+        "hintDeepest": "Nivel más profundo · aleja para volver"
       },
       "code": {
         "aria": "Código de {name}, líneas {from} a {to}",
@@ -40184,7 +40201,12 @@
         "lensOut": "Salida",
         "lensSimulate": "Sin prueba · Simular",
         "lensRestructure": "{name}",
-        "gutterWarn": "Antipatrón: {name}"
+        "gutterWarn": "Antipatrón: {name}",
+        "samePlace": "el mismo lugar que la imagen",
+        "sayLead": "En palabras sencillas:",
+        "sayHint": "Haz clic en una línea o en una fila del esquema y la imagen va allí. La marca junto a una línea es su forma en la imagen.",
+        "fileLines": "líneas {from}–{to}",
+        "fileLine": "línea {line}"
       },
       "compare": {
         "aria": "Comparación",
@@ -40312,24 +40334,7 @@
         },
         "startFrom": "Empezar desde",
         "startEntry": "La entrada",
-        "startStop": "Esta parada",
-        "modeOpen": "Simular",
-        "modeOpenAria": "Simular {name} con valores",
-        "modeTitle": "Simular con valores",
-        "modeEntry": "Punto de entrada",
-        "modeName": "Nombre",
-        "modeValue": "Valor",
-        "modeAdd": "Añadir valor",
-        "modeRemove": "Quitar {name}",
-        "modeCarried": "Llevado en este salto",
-        "modeHop": "{from} → {to}",
-        "modeEmpty": "Selecciona un punto de entrada. Su recorrido avanza con los valores que introduzcas.",
-        "modeNoHops": "Ningún recorrido sale de este punto de entrada.",
-        "modeClose": "Cerrar",
-        "modeStep": "Salto {n} de {total}",
-        "modeBack": "Salto anterior",
-        "modeNext": "Salto siguiente",
-        "modeUseSelected": "Usar la marca seleccionada"
+        "startStop": "Esta parada"
       },
       "fix": {
         "title": "Corrección",
@@ -40503,7 +40508,12 @@
         "reviewFailed": "La revisión falló",
         "parityDiffers": "{local} aquí · {server} en el servidor",
         "overlaysNote": "Cualquier métrica puede controlar cualquier canal. Mapa, Sistema, Grafo, Mapa mental, Torre, Calor, Lista y Secuencia leen los mismos enlaces, así que una barra de cobertura puede ser igualmente una barra de antipatrones.",
-        "rootsLabel": "Carpetas revisadas"
+        "rootsLabel": "Carpetas revisadas",
+        "topLevel": "Nivel superior",
+        "panesLabel": "Panel",
+        "paneCode": "Código",
+        "panePicture": "Imagen",
+        "drawerTabAct": "Actuar"
       },
       "askSentence": {
         "where": "¿adónde va {name}?",

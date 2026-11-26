@@ -38,15 +38,16 @@ const floating: CSSProperties = {
     position: 'absolute', zIndex: 4, top: 8, right: 8, bottom: 8, width: 'min(420px, calc(100% - 16px))',
     display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0, pointerEvents: 'auto',
 };
-const filling: CSSProperties = { position: 'absolute', inset: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 };
+/** In the code pane: the rest of its column, under the level tree (the pane owns the header, the say box and the border). */
+const filling: CSSProperties = { flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', background: cssVar('bg') };
 
-/** The code's share of a split box (the editor : map of 42 : 58), and the narrowest box that splits (both sides stay usable). */
-const CODE_SHARE = 0.42;
-export const SPLIT_MIN_PX = 840;
+/** The design's pane column, `minmax(300px, min(36%, 520px))`; boxes up to 900px wide show ONE of the code and the picture. */
+const CODE_SHARE = 0.36;
+export const SPLIT_MIN_PX = 901;
 
-/** The code pane's width beside the map in a box `width` wide; 0 when the box is too narrow and the pane floats over the stage instead. */
+/** The code pane's width beside the map in a box `width` wide; 0 when the box is too narrow to split (one half at a time). */
 export function codePaneWidth(width: number): number {
-    return width >= SPLIT_MIN_PX ? Math.round(width * CODE_SHARE) : 0;
+    return width >= SPLIT_MIN_PX ? Math.round(Math.max(300, Math.min(width * CODE_SHARE, 520))) : 0;
 }
 
 const bar: CSSProperties = {
@@ -192,10 +193,13 @@ export function CodeDock({
                         </span>
                     ))}
                 </nav>
+                <span data-file-note style={{ color: cssVar('muted'), whiteSpace: 'nowrap', marginInlineStart: 'auto' }}>
+                    {target.startLine === target.endLine ? fillTemplate(t.fileLine, { line: target.startLine }) : fillTemplate(t.fileLines, { from: target.startLine, to: target.endLine })}
+                </span>
                 {fileSymbols.length > 0 && (
                     <button type="button" data-action="outline" aria-expanded={outline} onClick={() => setOutline((o) => !o)} style={{ ...toggle, borderColor: cssVar(outline ? 'accent' : 'border') }}>{t.outline}</button>
                 )}
-                {onHide && <button type="button" data-action="dock-hide" aria-label={t.dockHide} title={t.dockHide} onClick={onHide} style={toggle}><span aria-hidden="true">‹</span></button>}
+                {onHide && !pane && <button type="button" data-action="dock-hide" aria-label={t.dockHide} title={t.dockHide} onClick={onHide} style={toggle}><span aria-hidden="true">‹</span></button>}
             </div>
             {outline && fileSymbols.length > 0 && (
                 <ul aria-label={t.outlineAria} data-code-outline style={{ ...list, ...bar, display: 'grid', gap: 0, maxHeight: '40%', overflow: 'auto', flex: '0 1 auto' }}>

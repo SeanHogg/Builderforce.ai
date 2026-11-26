@@ -1,24 +1,24 @@
 /**
- * Which panels are shown: the left (lines), the bottom (path strip), the right (act panel) and the stage's code pane. All shown by default; the choice is kept per
+ * Which panels are shown: the left (lines) and the stage's code pane. Both shown by default; the choice is kept per
  * viewer in localStorage. This is the only module that touches storage for it, and every read and write is guarded, so a blocked store just means "not remembered".
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import { readStored, writeStored } from './viewerStorage';
 
-/** The three docks `DockEdge` draws an edge for. */
-export type PanelSlot = 'left' | 'bottom' | 'right';
+/** The dock `DockEdge` draws an edge for. */
+export type PanelSlot = 'left';
 /** Every slot with a remembered visibility: the docks and the stage's code pane (`code`, PRD 43 Part C1), which draws its own hide control. */
 export type VisibilitySlot = PanelSlot | 'code';
 export type PanelVisibility = Record<VisibilitySlot, boolean>;
 
 export const PANEL_VISIBILITY_KEY = 'kg.panelVisibility.v1';
-const ALL_SHOWN: PanelVisibility = { left: true, bottom: true, right: true, code: true };
+const ALL_SHOWN: PanelVisibility = { left: true, code: true };
 
 function read(): PanelVisibility {
     const parsed = readStored(PANEL_VISIBILITY_KEY) as Partial<Record<VisibilitySlot, unknown>> | null;
     if (!parsed || typeof parsed !== 'object') return ALL_SHOWN;
-    return { left: parsed.left !== false, bottom: parsed.bottom !== false, right: parsed.right !== false, code: parsed.code !== false };
+    return { left: parsed.left !== false, code: parsed.code !== false };
 }
 
 const write = (v: PanelVisibility): void => writeStored(PANEL_VISIBILITY_KEY, v);

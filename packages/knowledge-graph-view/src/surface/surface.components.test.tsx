@@ -16,7 +16,8 @@ import { OverlayMenu } from './OverlayMenu';
 import { counted } from './plural';
 import { cssVar } from '../scene/themeColors';
 import { lineTone, makeOverlay, PRESETS } from './overlays';
-import { PanelDrawer, PanelToggle } from './PanelDock';
+import { Drawer, drawerTabs } from './Drawer';
+import { useDrawer } from './useDrawer';
 import { pathOfLine } from './path';
 import { PathStrip } from './PathStrip';
 import { PANELS } from './panels';
@@ -95,16 +96,16 @@ describe('TransitMap', () => {
 describe('PathStrip', () => {
     const path = pathOfLine(lines.lines[0]!, model.byId);
 
-    it('lists the stops with the edge between each pair and steps', () => {
+    it('lists the numbered stops as one row of chips and steps', () => {
         const onStep = vi.fn();
         render(<PathStrip path={path} step={1} labels={L} onStep={onStep} />);
-        expect(screen.getAllByText(/references · 1/)).toHaveLength(3);
-        expect(screen.getByRole('button', { name: 'Web app' }).getAttribute('aria-current')).toBe('step');
+        expect(screen.getByRole('list', { name: L.surface.path.stops }).querySelectorAll('li')).toHaveLength(path.stops.length);
+        expect(screen.getByRole('button', { name: /Web app/ }).getAttribute('aria-current')).toBe('step');
         fireEvent.click(screen.getByRole('button', { name: L.surface.pathNext }));
         expect(onStep).toHaveBeenCalledWith(2);
         fireEvent.click(screen.getByRole('button', { name: L.surface.pathBack }));
         expect(onStep).toHaveBeenCalledWith(0);
-        fireEvent.click(screen.getByRole('button', { name: 'API' }));
+        fireEvent.click(screen.getByRole('button', { name: /API/ }));
         expect(onStep).toHaveBeenCalledWith(2);
     });
 
@@ -241,20 +242,17 @@ describe('registries', () => {
         expect(ids({ webgl: true })).toEqual(['transit', 'system', 'graph', 'map', '3d', 'heat', 'style', 'features', 'flow', 'sequence', 'list']);
     });
 
-    it('holds the eight drawers (the Reviews drawer comes first, with no header button), and a toggle with no panel available draws nothing', () => {
+    it('holds the eight drawers (the Reviews drawer comes first in the registry)', () => {
         expect(PANELS.map((p) => p.id)).toEqual(['run', 'coverage', 'patterns', 'api', 'domains', 'resolve', 'simulate', 'agentRuns']);
-        const { container } = render(<PanelToggle graph={graph} env={env} labels={L} panel={null} onPanel={vi.fn()} panels={[]} />);
-        expect(container.innerHTML).toBe('');
     });
 
-    it('the header shows Coverage, Patterns, API, Domains, Agent runs in that order; Resolve and Simulate have no button', () => {
+    it('the drawer tabs follow the prototype: Coverage, Patterns, API, Simulate, Fix, Review, then Domains and Agent runs', () => {
         const all = PANELS.map((p) => ({ ...p, available: () => true }));
-        render(<PanelToggle graph={graph} env={env} labels={L} panel={null} onPanel={vi.fn()} panels={all} />);
-        const names = within(screen.getByRole('group', { name: L.surface.panelsLabel })).getAllByRole('button').map((b) => b.textContent);
-        expect(names).toEqual([L.panelCoverage, L.panelPatterns, L.panelApi, L.panelDomains, L.panelAgentRuns]);
+        expect(drawerTabs(graph, env, all).map((p) => p.id)).toEqual(['coverage', 'patterns', 'api', 'simulate', 'resolve', 'run', 'domains', 'agentRuns']);
+        expect(drawerTabs(graph, env, [])).toEqual([]);
     });
 
-    it('draws a button and a controlled drawer (with its subtitle) for each available panel row', () => {
+    it('draws a controlled drawer (Act first, then a tab and the subtitle for each available panel row) that a panel id opens', () => {
         const Body = () => <p>panel body</p>;
         const panels: PanelDef[] = [
             { id: 'coverage', labelKey: 'viewList', component: Body, available: () => true },
@@ -262,21 +260,24 @@ describe('registries', () => {
         ];
         function Harness() {
             const [panel, setPanel] = useState<string | null>(null);
+            const drawer = useDrawer(panel, setPanel);
             return (
                 <>
-                    <PanelToggle graph={graph} env={env} labels={L} panel={panel} onPanel={setPanel} panels={panels} ids={['coverage', 'hidden']} />
-                    <PanelDrawer graph={graph} env={env} labels={L} surface={{} as never} panel={panel} onPanel={setPanel} onShow={vi.fn()} panels={panels} />
+                    <button type="button" onClick={() => setPanel('coverage')}>open</button>
+                    <Drawer drawer={drawer} sheet={false} act={<p>act body</p>} graph={graph} env={env} labels={L} surface={{} as never} onShow={vi.fn()} panels={panels} />
                 </>
             );
         }
         render(<Harness />);
-        expect(screen.queryByRole('button', { name: L.viewGraph })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: L.viewList }));
+        expect(screen.queryByTestId('kg-drawer')).toBeNull();
+        fireEvent.click(screen.getByText('open'));
+        expect(screen.queryByRole('tab', { name: L.viewGraph })).toBeNull();
+        expect(screen.getAllByRole('tab').map((t) => t.getAttribute('aria-label'))).toEqual([L.surface.header.drawerTabAct, L.viewList]);
         expect(screen.getByText('panel body')).toBeTruthy();
-        expect(screen.getByRole('dialog')).toBeTruthy();
-        expect(screen.getByText(L.surface.drawerSubtitle.coverage)).toBeTruthy();
-        // Pressing the open panel's button closes the drawer again.
-        fireEvent.click(screen.getByRole('button', { name: L.viewList }));
-        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(screen.getByText(new RegExp(L.surface.drawerSubtitle.coverage))).toBeTruthy();
+        fireEvent.click(screen.getByRole('tab', { name: L.surface.header.drawerTabAct }));
+        expect(screen.getByText('act body')).toBeTruthy();
+        fireEvent.click(screen.getByTestId('kg-drawer-close'));
+        expect(screen.queryByTestId('kg-drawer')).toBeNull();
     });
 });

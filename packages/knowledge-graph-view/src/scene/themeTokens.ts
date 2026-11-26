@@ -89,6 +89,18 @@ export const KG_TOKENS = {
     bandInfrastructure: ['--kg-band-infrastructure', '--bf-warning'],
     bandData: ['--kg-band-data', '--bf-warning'],
     bandOther: ['--kg-band-other', '--bf-text-muted'],
+    // The 3D stage's own palette (the design's `--s-*`): a level's floor plate and the room inside a shape, the lighter
+    // top of a box / warn box / drum, the puck (a method), the drum (a store), the hall bars and the lit / selected accents.
+    floor: ['--kg-s-floor', '--bf-surface'],
+    room: ['--kg-s-room', '--bf-surface-2'],
+    nodeTop: ['--kg-s-node-top', '--bf-border-strong'],
+    warnTop: ['--kg-s-warn-top', '--bf-warning'],
+    puck: ['--kg-s-puck', '--bf-text-secondary'],
+    store: ['--kg-s-store', '--bf-success'],
+    storeTop: ['--kg-s-store-top', '--bf-success'],
+    hall: ['--kg-s-hall', '--bf-border'],
+    lit: ['--kg-s-lit', '--bf-accent'],
+    sel: ['--kg-s-sel', '--bf-text'],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type ThemeTone = keyof typeof KG_TOKENS;

@@ -238,4 +238,55 @@ describe('the orbit rig (3D, a placement carrying rig.view)', () => {
         rig.setHome({ cx: 0, cz: 0, zoom: 1 }, ORBIT_RIG, 800, 600, 10, 0);
         expect(rig.currentOrbit.pitch).toBe(90);
     });
+    describe('a fitted orbit (the Map: fit-to-content from the stage's own aspect)', () => {
+        const FITTED = {
+            home: { position: [0, 0, 0] as const, target: [0, 0, 0] as const, up: [0, 1, 0] as const },
+            depth: { tilt: [5, 83] as [number, number], orbit: true },
+            view: { yaw: -31.5, pitch: 35.6, distance: 1, fov: 38, radius: 100, flatDepth: 0.03 },
+        };
+        const HOME = { cx: 0, cz: 0, zoom: 1 };
+
+        it('derives the distance from the narrower half-angle: a tall, narrow box backs off further than a wide one', () => {
+            const wide = new RigController(), tall = new RigController();
+            wide.setHome(HOME, FITTED, 1200, 600, 0, 0);
+            tall.setHome(HOME, FITTED, 360, 800, 0, 0);
+            expect(tall.currentOrbit.distance).toBeGreaterThan(wide.currentOrbit.distance);
+            expect(wide.currentOrbit.distance).toBeGreaterThan(100);
+        });
+
+        it('re-fits on a resize and eases there, keeping the person's yaw; reduced motion (motionMs 0) jumps', () => {
+            const rig = new RigController();
+            rig.setHome(HOME, FITTED, 1200, 600, 0, 0);
+            const before = rig.currentOrbit.distance;
+            rig.orbitBy(40, 0);
+            const yaw = rig.currentOrbit.yaw;
+            rig.motionMs = 0;
+            rig.resize(HOME, 360, 800);
+            expect(rig.currentOrbit.distance).toBeGreaterThan(before);
+            expect(rig.currentOrbit.yaw).toBe(yaw);
+        });
+
+        it('collapses the extrude toward flatDepth as the pitch comes down to Flat, and back', () => {
+            const rig = new RigController();
+            rig.setHome(HOME, FITTED, 800, 600, 0, 0);
+            expect(rig.depthUniform).toBe(1);
+            rig.setFlat(true, 0, 0);
+            expect(rig.depthUniform).toBeCloseTo(0.03);
+            rig.setFlat(false, 0, 0);
+            expect(rig.depthUniform).toBe(1);
+        });
+
+        it('pans along the ground (groundPanBy) without rotating, and Top squares the view from above', () => {
+            const rig = new RigController();
+            rig.setHome(HOME, FITTED, 800, 600, 0, 0);
+            const { yaw, pitch } = rig.currentOrbit;
+            rig.groundPanBy(30, 0);
+            expect(rig.currentOrbit.yaw).toBe(yaw);
+            expect(rig.currentOrbit.pitch).toBe(pitch);
+            expect(rig.currentOrbit.tx).not.toBe(0);
+            rig.topView(0, 0);
+            expect(rig.currentOrbit.yaw).toBe(0);
+            expect(rig.currentOrbit.pitch).toBeGreaterThan(pitch);
+        });
+    });
 });

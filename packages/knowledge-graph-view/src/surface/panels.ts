@@ -18,10 +18,10 @@ import { RunPanel } from './run/RunPanel';
 export type PanelId = 'run' | 'coverage' | 'patterns' | 'api' | 'resolve' | 'simulate' | 'agentRuns' | 'domains';
 
 /**
- * The panels that have a button in the header's "Panels" group, in order. Resolve and Simulate
- * stay in the registry (the Act rail and the path strip open them with `openPanel`).
+ * The drawer's tabs after Act, in order (the design prototype's: Coverage, Patterns, API, Simulate, Fix, Review), then the panels it has no tab for
+ * (Domains, Agent runs). A panel is a tab only where its `available` rule holds; anything can open one with `openPanel`.
  */
-export const HEADER_PANELS: readonly PanelId[] = ['coverage', 'patterns', 'api', 'domains', 'agentRuns'];
+export const DRAWER_ORDER: readonly PanelId[] = ['coverage', 'patterns', 'api', 'simulate', 'resolve', 'run', 'domains', 'agentRuns'];
 
 export const PANELS: readonly (PanelDef & { id: PanelId })[] = [
     // The Reviews panel (start, watch, stop, runs, server, diagnostics): opened by the status chip and its action button; it has no header button.

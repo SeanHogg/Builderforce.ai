@@ -16,10 +16,12 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { ROLE_TONE } from '../../../scene/highlightRoles';
 import { MARK_TYPE_ORDER } from '../../../shapes';
 import { makeOverlay, PRESETS, segmentUntested } from '../../../surface/overlays';
+import { MARK_TYPE_ORDER } from '../../../shapes';
+import { FORM_RISE, TYPE_FORM } from '../../../stage/marks/forms';
 import { towerHeight } from '../../../surface/transit/towerHeight';
 import { withDocs } from '../../../surface/transit/testFixtures';
 import { surfaceFixture } from '../../../testing';
-import { BG_TONE, toneIndex } from '../../../stage/tones';
+import { toneIndex } from '../../../stage/tones';
 import { DASH_CYCLE, DASH_DESCRIBES, DASH_SOLID, DASH_UNTESTED, DASH_WALL, FLAG, type LinkBatch, type Placement } from '../../../stage/types';
 import { paintMarks } from '../markPaint';
 import { buildStageModel, type StageModel } from '../stageModel';
@@ -47,11 +49,12 @@ const model = buildStageModel(graph);
 const map = run(graph, model, req(model));
 
 describe('Map hops (was HopPath)', () => {
-    const routes = family(map, 'route')!;
+    const routes = family(map, 'hall')!;
     const starts = firstSegments(routes);
 
-    it('draws a background casing under every route, wider than the line', () => {
-        expect(routes.casing).toEqual({ tone: BG_TONE, extra: 4 });
+    it('draws every route as a hall: a raised bar in world units, with no casing', () => {
+        expect(routes.casing).toBeUndefined();
+        expect(routes.widthUnit).toBe('world');
     });
 
     it('dashes an untested hop 9/7 in the violation tone and draws a tested one solid in its line\'s tone', () => {
@@ -69,7 +72,7 @@ describe('Map hops (was HopPath)', () => {
     it('marks a cycle hop by shape: dashed 3/5, not by colour alone', () => {
         const cyc: StageModel = { ...model, lines: { ...model.lines, lines: model.lines.lines.map((l, i) => (i === 0 ? { ...l, hops: l.hops.map((h) => ({ ...h, cycle: true })) } : l)) } };
         const p = run(graph, cyc, req(cyc));
-        const b = family(p, 'route')!;
+        const b = family(p, 'hall')!;
         const first = model.lines.lines[0]!.id;
         const dashes = firstSegments(b).filter((_, g) => b.lineIds![g] === first).map((seg) => b.dash[seg]);
         expect(dashes.length).toBeGreaterThan(0);
@@ -158,7 +161,7 @@ describe('towers (was TowerMark and the Map\'s towers look)', () => {
         for (const { slot } of tall.a11y) {
             const s = model.stations.stations.find((x) => model.stationSlot.get(x.id) === slot)!;
             expect(flat.extrude[slot]).toBe(0);
-            expect(tall.extrude[slot]).toBe(towerHeight(neutral.style(s).size, s.cx));
+            expect(tall.extrude[slot]).toBe(towerHeight(neutral.style(s).size, s.cx) * FORM_RISE[TYPE_FORM[MARK_TYPE_ORDER[model.marks.type[slot]!]!]]);
         }
     });
 

@@ -16,14 +16,16 @@ import { Color, Group, SRGBColorSpace, Vector3, type Object3D } from 'three';
 import type { ThemeColors } from '../scene/themeColors';
 import { documentFontPort, type StageFontPort } from './fonts';
 import { LabelLayer, type TextPort } from './labels/LabelLayer';
+import type { PlacedChip } from './labels/runs';
 import { troikaTextPort } from './labels/troika';
+import { HallLayer } from './links/HallLayer';
 import { LinkLayer } from './links/LinkLayer';
 import { MarkLayer } from './marks/MarkLayer';
 import { sharedMarkUniforms } from './marks/shader';
 import { PlaneLayer } from './planes/PlaneLayer';
 import { createStats, type StageStats } from './stats';
 import { TONE_ORDER } from './tones';
-import { Tween } from './tween';
+import { spanOf, Tween } from './tween';
 import { FLAG, type Caption, type MarkPaint, type MarkSet, type Placement, type SlotAppend } from './types';
 import { LiveKeys } from './liveKeys';
 import { AppendedSlots, withAppended } from './drill/appended';
@@ -58,6 +60,8 @@ export interface StageRenderer {
     onRedraw(cb: () => void): () => void;
     /** Label runs the SDF pass handed to the DOM caption layer (a glyph outside the font, or no host font). */
     readonly labelCaptions: readonly Caption[];
+    /** The names drawn as DOM chips (perspective placements), positioned above each mark's top; `labels/ChipLayer` projects them. */
+    readonly chips: readonly PlacedChip[];
     setMarks(set: MarkSet): void;
     setPaint(paint: MarkPaint): void;
     /** Fades every mark outside `lit` (what the code on screen lights); null: none. Kept across a context restore. */
@@ -117,15 +121,16 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
     const uniforms = sharedMarkUniforms();
     const marksLayer = new MarkLayer(stats, uniforms);
     const links = new LinkLayer(stats, { uPxPerWorld: uniforms.uPxPerWorld, uDpr: uniforms.uDpr, uPalette: uniforms.uPalette, uBg: uniforms.uBg });
+    const halls = new HallLayer(stats, { uPalette: uniforms.uPalette, uBg: uniforms.uBg, uTime: uniforms.uTime, uMotion: uniforms.uMotion });
     const planes = new PlaneLayer(stats, uniforms.uPalette);
     const redraw = new Set<() => void>();
     const notify = (): void => { options.onChange?.(); for (const cb of redraw) cb(); };
     const fonts = options.fonts ?? documentFontPort();
     const labels = new LabelLayer((options.text ?? troikaTextPort)(notify), fonts);
     const root = new Group();
-    root.add(planes.group, links.group, marksLayer.group);
+    root.add(planes.group, links.group, halls.group, marksLayer.group);
     if (labels.object) root.add(labels.object);
-    const overlay = new OverlayLayer(stats, { uPxPerWorld: uniforms.uPxPerWorld, uDpr: uniforms.uDpr, uPalette: uniforms.uPalette, uBg: uniforms.uBg });
+    const overlay = new OverlayLayer(stats, { uPxPerWorld: uniforms.uPxPerWorld, uDpr: uniforms.uDpr, uPalette: uniforms.uPalette, uBg: uniforms.uBg, uTime: uniforms.uTime, uMotion: uniforms.uMotion });
     root.add(overlay.group);
     const appended = new AppendedSlots();
     const live = new LiveKeys();
@@ -142,19 +147,22 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
 
     const land = (now: number, animate: boolean): void => {
         uniforms.uT.value = 1;
+        uniforms.uLin.value = 1;
         if (!placement) return;
         links.set(placement.links); links.visible = true;
+        halls.set(placement.links); halls.visible = true;
         planes.set(placement.planes); planes.visible = true;
         overlay.follow(placement);
         if (animate) labels.landed(now);
     };
-    const motionOn = (): boolean => pulsing && motion.visible && !motion.reduced;
+    const motionOn = (): boolean => (pulsing || halls.pulsing || overlay.pulsing) && motion.visible && !motion.reduced;
 
     const r: StageRenderer = {
         kind: 'webgl', object: root, stats,
         get marks() { return marks; },
         get placement() { return placement; },
         get labelCaptions() { return labels.domCaptions; },
+        get chips() { return labels.chips; },
         keys: () => live.get(),
         onKeys: (cb) => live.on(cb),
         onRedraw(cb) { redraw.add(cb); return () => { redraw.delete(cb); }; },
@@ -162,7 +170,7 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
         setPaint(next) { paint = next; marksLayer.setPaint(next); pulsing = hasPulse(next); },
         setFade(lit) { fade = lit; marksLayer.setFade(lit); },
         get overlay() { return overlayState; },
-        setOverlay(state) { overlayState = state; overlay.set(state); },
+        setOverlay(state) { overlayState = state; overlay.set(state); marksLayer.setHover(state.hover); },
         setPalette(next) {
             colors = next;
             paletteOf(next, uniforms.uPalette.value);
@@ -170,7 +178,7 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
             bg.setStyle(next.bg ?? '#ffffff').getRGB(rgb, SRGBColorSpace);
             uniforms.uBg.value.set(rgb.r, rgb.g, rgb.b);
             labels.setPalette(next);
-            overlay.setColors({ accent: next.accent ?? '#2563eb', selection: next.text ?? '#ffffff', call: next.partner ?? '#f5b53d' });
+            overlay.setColors({ accent: next.lit ?? next.accent ?? '#2563eb', selection: next.lit ?? next.accent ?? '#2563eb', call: next.partner ?? '#f5b53d' });
         },
         setPlacement(next, now, tweenMs) {
             // A placement arriving mid-tween continues from where the marks ARE (baked at the current eased t).
@@ -193,9 +201,14 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
             labels.setPlacement(p, now, !jump);
             if (jump) { land(now, false); labels.place(labelView()); return; }
             links.visible = false;
+            halls.visible = false;
             planes.visible = false;
             uniforms.uT.value = 0;
-            tween.begin(now, tweenMs);
+            uniforms.uLin.value = 0;
+            // One mark runs `tweenMs` (760, cubic in-out); each starts 45 ms after the one before it (the shader reads `uLin`).
+            uniforms.uDur.value = tweenMs;
+            uniforms.uSpan.value = spanOf(tweenMs);
+            tween.begin(now, spanOf(tweenMs));
         },
         setView(next) { view = next; uniforms.uPxPerWorld.value = next.pxPerWorld; uniforms.uDpr.value = next.dpr; },
         settleView(next) { r.setView(next); overlay.setPxPerWorld(next.pxPerWorld); if (!tween.active) labels.place(labelView()); },
@@ -211,6 +224,7 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
             let more = false;
             if (tween.active) {
                 uniforms.uT.value = tween.at(now);
+                uniforms.uLin.value = tween.linear;
                 if (tween.active) more = true; else land(now, true);
             }
             labels.tick(now, labelView());
@@ -239,7 +253,7 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
             if (last.colors) r.setPalette(last.colors);
             if (last.placement) r.setPlacement(last.placement, now, 0);
         },
-        dispose() { marksLayer.dispose(); links.dispose(); planes.dispose(); labels.dispose(); overlay.dispose(); },
+        dispose() { marksLayer.dispose(); links.dispose(); halls.dispose(); planes.dispose(); labels.dispose(); overlay.dispose(); },
     };
     // The font fetch finishes after the first placement. Until then names are DOM captions; once the blob: URL is
     // ready (or the fetch failed and monoUrl stays null) re-place and ask for a frame so the SDF pass or the captions update.
@@ -266,6 +280,7 @@ export function createNoopStage(): StageRenderer {
         onRedraw: () => () => {},
         // Nothing draws without WebGL (B8: such a host shows the List camera), so no label is routed anywhere.
         labelCaptions: [],
+        chips: [],
         get overlay() { return overlayState; },
         setOverlay(state) { overlayState = state; },
         setMarks(set) { marks = set; placement = null; table = new SlotTable(set); appended.reset(); live.reset(set.keys); },

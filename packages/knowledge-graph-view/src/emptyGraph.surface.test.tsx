@@ -8,7 +8,8 @@ import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { LENSES } from './lenses';
 import { ViewSurface } from './ViewSurface';
 import { CAMERAS } from './surface/cameras';
-import { PanelDrawer, PanelToggle } from './surface/PanelDock';
+import { Drawer } from './surface/Drawer';
+import { useDrawer } from './surface/useDrawer';
 import { PANELS } from './surface/panels';
 import { useSurface } from './surface/useSurface';
 import type { KnowledgeGraphSource } from './types';
@@ -19,8 +20,8 @@ const pending = (): KnowledgeGraphSource => ({ scopes: () => new Promise(() => u
 describe('the surface over no graph', () => {
     it('cycles every camera the frame offers without crashing', () => {
         render(<div style={{ height: 600 }}><KnowledgeGraphView source={pending()} /></div>);
-        const group = screen.getByRole('radiogroup', { name: L.viewModesLabel });
-        const buttons = within(group).getAllByRole('radio');
+        const group = screen.getByRole('group', { name: L.viewModesLabel });
+        const buttons = within(group).getAllByRole('button');
         expect(buttons.length).toBeGreaterThan(0);
         for (const b of buttons) fireEvent.click(b);
         expect(screen.getByRole('region', { name: L.regionLabel })).toBeTruthy();
@@ -41,24 +42,23 @@ describe('the surface over no graph', () => {
         expect(screen.queryByTestId('kg-camera-error')).toBeNull();
     });
 
-    it('opens every panel of the dock over an empty graph', () => {
+    it('opens every tab of the drawer over an empty graph', () => {
         function Harness() {
             const surface = useSurface(EMPTY_GRAPH, null);
+            const drawer = useDrawer(surface.panel, surface.openPanel);
             const env = { webgl: false, reducedMotion: true, hasLines: true, compact: false, hasRun: true };
             const panels = PANELS.map((p) => ({ ...p, available: () => true }));
             return (
                 <>
-                    <PanelToggle graph={EMPTY_GRAPH} env={env} labels={L} panel={surface.panel} onPanel={surface.openPanel} panels={panels} ids={PANELS.map((p) => p.id)} />
-                    <PanelDrawer graph={EMPTY_GRAPH} env={env} labels={L} surface={surface} panel={surface.panel} onPanel={surface.openPanel} panels={panels} onShow={vi.fn()} source={pending()} />
+                    <button type="button" onClick={drawer.toggle}>toggle</button>
+                    <Drawer drawer={drawer} sheet={false} act={<p>act</p>} graph={EMPTY_GRAPH} env={env} labels={L} surface={surface} panels={panels} onShow={vi.fn()} source={pending()} />
                 </>
             );
         }
         render(<Harness />);
-        const group = screen.getByRole('group', { name: L.surface.panelsLabel });
-        for (const b of within(group).getAllByRole('button')) {
-            fireEvent.click(b);
-            fireEvent.click(b);
-        }
-        expect(within(group).getAllByRole('button')).toHaveLength(PANELS.length);
+        fireEvent.click(screen.getByText('toggle'));
+        const tabs = screen.getAllByRole('tab');
+        for (const t of tabs) fireEvent.click(screen.getAllByRole('tab').find((x) => x.getAttribute('aria-label') === t.getAttribute('aria-label'))!);
+        expect(tabs).toHaveLength(PANELS.length + 1);
     });
 });

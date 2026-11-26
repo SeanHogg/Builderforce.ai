@@ -37,7 +37,10 @@ export interface PlacedLabel {
     note?: { text: string; tone: number; position: [number, number, number]; fontSize: number };
 }
 
-export interface PlacedLabels { sdf: PlacedLabel[]; dom: Caption[] }
+/** A chip (`LabelRun.chip`): a screen-facing DOM label at a mark's top, projected by `ChipLayer` every frame. */
+export interface PlacedChip { slot: number; text: string; position: [number, number, number]; risky: boolean; ghost: boolean; priority: number }
+
+export interface PlacedLabels { sdf: PlacedLabel[]; dom: Caption[]; chips: PlacedChip[] }
 
 const ANCHOR_X: Record<LabelRun['anchor'], PlacedLabel['anchorX']> = { start: 'left', middle: 'center', end: 'right' };
 /** A note's size relative to its name (`TYPE.monoMeta` 10 / `TYPE.monoName` 11) and its line gap. */
@@ -46,7 +49,7 @@ const NOTE_RATIO = 10 / 11, LINE_GAP = 1.25;
 const LIFT = 0.05;
 
 export function placeLabels(
-    runs: readonly LabelRun[], p: Pick<Placement, 'position' | 'scale' | 'extrude'>, view: LabelView,
+    runs: readonly LabelRun[], p: Pick<Placement, 'position' | 'scale' | 'extrude' | 'ghost'>, view: LabelView,
     sdfAvailable: boolean, lod: LabelLod = LABEL_LOD,
 ): PlacedLabels {
     const px = Math.max(view.pxPerWorld, 1e-6);
@@ -58,7 +61,7 @@ export function placeLabels(
         })
         .sort((a, b) => b.priority - a.priority || a.slot - b.slot)
         .slice(0, lod.maxLabels);
-    const sdf: PlacedLabel[] = [], dom: Caption[] = [];
+    const sdf: PlacedLabel[] = [], dom: Caption[] = [], chips: PlacedChip[] = [];
     for (const r of shown) {
         const unit = r.scale === 'world' ? 1 : 1 / px;
         // A world run grows with the zoom but never draws under its nominal size in CSS px: zoomed out on a wide Map or
@@ -66,6 +69,7 @@ export function placeLabels(
         const textUnit = r.scale === 'world' ? Math.max(1, 1 / px) : unit;
         const x = p.position[r.slot * 3]! + (r.offsetWorld?.[0] ?? 0) + r.offsetPx[0] * unit;
         const y = (p.extrude[r.slot] ?? 0) * view.depth + LIFT;
+        if (r.chip) { chips.push({ slot: r.slot, text: r.text, position: [p.position[r.slot * 3]!, y, p.position[r.slot * 3 + 2]!], risky: r.chip.risky, ghost: p.ghost?.[r.slot] === 1, priority: r.priority }); continue; }
         const z = p.position[r.slot * 3 + 2]! + (r.offsetWorld?.[1] ?? 0) + r.offsetPx[1] * unit;
         if (!sdfAvailable || !monoCovers(r.text) || (r.note && !monoCovers(r.note.text))) {
             dom.push({ text: r.text, position: [x, y, z], anchor: r.anchor, tone: r.tone, font: 'mono' });
@@ -79,5 +83,5 @@ export function placeLabels(
             ...(r.note ? { note: { text: r.note.text, tone: r.note.tone, position: [x, y, z + fontSize * LINE_GAP] as [number, number, number], fontSize: fontSize * NOTE_RATIO } } : {}),
         });
     }
-    return { sdf, dom };
+    return { sdf, dom, chips };
 }

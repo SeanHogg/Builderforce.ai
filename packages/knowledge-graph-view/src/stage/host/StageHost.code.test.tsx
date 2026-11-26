@@ -3,7 +3,7 @@
  * location in a narrow one (360 px), and a hide control whose Show tab brings it back.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../../labels';
 import { LENSES } from '../../lenses';
 import { surfaceFixture } from '../../testing';
@@ -49,34 +49,22 @@ describe('the code pane in the host', () => {
         expect(container.querySelector('[data-pane-switch]')).toBeNull();
     });
 
-    it('in a 360 px box shows ONE of the two under a Code | Picture switch', async () => {
-        const { container } = mount(360);
-        const sw = await screen.findByRole('radiogroup', { name: sc.paneSwitchAria });
-        expect(container.querySelector('[data-code-split]')).toBeNull();
-        // The picture first: the pane is not drawn.
-        expect(container.querySelector('[data-code-narrow]')).toBeNull();
-        expect(sw.querySelector('[aria-checked="true"]')?.textContent).toBe(sc.panePicture);
-        fireEvent.click(within(sw).getByRole('radio', { name: sc.paneCode }));
-        expect(container.querySelector('[data-code-narrow] [data-level-outline]')).not.toBeNull();
-        expect((container.querySelector('[data-map-pane]') as HTMLElement).style.visibility).toBe('hidden');
-        fireEvent.click(within(sw).getByRole('radio', { name: sc.panePicture }));
-        expect(container.querySelector('[data-code-narrow]')).toBeNull();
-        expect((container.querySelector('[data-map-pane]') as HTMLElement).style.visibility).toBe('');
-    });
-
-    it('in a 360 px box the picture half carries the same Hide button, which goes through onToggleCode', async () => {
-        const onToggleCode = vi.fn();
-        const { container } = mount(360, { onToggleCode });
-        const hide = await screen.findByRole('button', { name: sc.dockHide });
-        expect(container.querySelector('[data-pane-switch]')!.contains(hide)).toBe(true);
-        fireEvent.click(hide);
-        expect(onToggleCode).toHaveBeenCalledTimes(1);
+    it('in a 360 px box shows ONE of the two, chosen by the viewer\'s code slot (the header\'s Code | Picture switch)', async () => {
+        const code = mount(360);
+        expect(await screen.findByRole('complementary', { name: sc.dockAria })).toBeTruthy();
+        expect(code.container.querySelector('[data-code-split]')).toBeNull();
+        expect(code.container.querySelector('[data-code-narrow] [data-level-outline]')).not.toBeNull();
+        expect((code.container.querySelector('[data-map-pane]') as HTMLElement).style.visibility).toBe('hidden');
+        code.unmount();
+        const picture = mount(360, { codeShown: false });
+        expect(picture.container.querySelector('[data-code-narrow]')).toBeNull();
+        expect((picture.container.querySelector('[data-map-pane]') as HTMLElement).style.visibility).toBe('');
     });
 
     it('hidden, it leaves a Show tab and no pane or switch; the tab and the pane\'s own Hide both go through onToggleCode', async () => {
         const onToggleCode = vi.fn();
         const hidden = mount(1000, { codeShown: false, onToggleCode });
-        expect(hidden.container.querySelector('[data-code-split], [data-pane-switch]')).toBeNull();
+        expect(hidden.container.querySelector('[data-code-split]')).toBeNull();
         fireEvent.click(await screen.findByRole('button', { name: sc.dockShow }));
         expect(onToggleCode).toHaveBeenCalledTimes(1);
         hidden.unmount();

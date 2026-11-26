@@ -17,7 +17,7 @@ import type { MonoWeight, StageFontPort } from '../fonts';
 import { TONE_ORDER } from '../tones';
 import type { Caption, LabelRun, Placement } from '../types';
 import { LabelFade } from './fade';
-import { placeLabels, type LabelView, type PlacedLabel } from './runs';
+import { placeLabels, type LabelView, type PlacedChip, type PlacedLabel } from './runs';
 
 /** The text object the layer drives (troika `Text`'s fields it uses). */
 export interface LabelText {
@@ -49,11 +49,12 @@ const CACHE_MAX = 2000;
 export class LabelLayer {
     readonly fade = new LabelFade();
     private runs: readonly LabelRun[] = [];
-    private placement: Pick<Placement, 'position' | 'scale' | 'extrude'> | null = null;
+    private placement: Pick<Placement, 'position' | 'scale' | 'extrude' | 'ghost'> | null = null;
     private readonly cache = new Map<string, LabelText>();
     private readonly active = new Map<string, { text: LabelText; tone: number; halo: number }>();
     private colors: ThemeColors | null = null;
     private dom: Caption[] = [];
+    private chipList: PlacedChip[] = [];
     private opacityNow = 1;
     /** Placements made (a test reads it: labels are placed after the tween, never during). */
     placements = 0;
@@ -63,11 +64,13 @@ export class LabelLayer {
     get object(): Object3D | null { return this.port.object; }
     /** Runs routed to the DOM caption layer by the last placement. */
     get domCaptions(): readonly Caption[] { return this.dom; }
+    /** Runs drawn as DOM chips (`LabelRun.chip`): the perspective Map's names, projected by the chip layer. */
+    get chips(): readonly PlacedChip[] { return this.chipList; }
     get shown(): readonly string[] { return [...this.active.keys()]; }
     get opacity(): number { return this.opacityNow; }
 
     /** A new placement's runs. With `tweening`, they wait for {@link landed}; otherwise they are placed now. */
-    setPlacement(p: Pick<Placement, 'position' | 'scale' | 'extrude' | 'labels'>, now: number, tweening: boolean): void {
+    setPlacement(p: Pick<Placement, 'position' | 'scale' | 'extrude' | 'ghost' | 'labels'>, now: number, tweening: boolean): void {
         this.runs = p.labels;
         this.placement = p;
         if (tweening) this.fade.tweenBegan(now);
@@ -89,6 +92,7 @@ export class LabelLayer {
         const sdfAvailable = this.fonts.monoUrl(500) !== null;
         const placed = placeLabels(this.runs, this.placement, view, sdfAvailable);
         this.dom = placed.dom;
+        this.chipList = placed.chips;
         this.placements++;
         const next = new Set<string>();
         for (const l of placed.sdf) {

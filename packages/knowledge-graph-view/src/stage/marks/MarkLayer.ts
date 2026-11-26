@@ -11,7 +11,8 @@
  */
 
 import { DynamicDrawUsage, Group, InstancedBufferAttribute, InstancedMesh, type ShaderMaterial } from 'three';
-import { DASHED_SHAPES, MARK_TYPE_ORDER, SHAPE_OUTLINES, TYPE_SHAPE } from '../../shapes';
+import { DASHED_SHAPES, MARK_TYPE_ORDER, SHAPE_OUTLINES } from '../../shapes';
+import { outlineShape, TYPE_FORM } from './forms';
 import { SlotTable } from '../slots';
 import { uploadRange, type StageStats } from '../stats';
 import { FLAG, type MarkPaint, type MarkSet, type Placement, type SlotAppend } from '../types';
@@ -51,14 +52,15 @@ export class MarkLayer {
         this.appendedParent.clear();
         this.batches = set.batches.map((b, bi) => {
             const capacity = table.batchCapacity(bi);
-            const shape = TYPE_SHAPE[MARK_TYPE_ORDER[b.type] ?? 'external'];
+            const type = MARK_TYPE_ORDER[b.type] ?? 'external';
+            const shape = outlineShape(type);
             const geometry = markGeometry(shape);
             const batch = { place: [dynamic(capacity, 4), dynamic(capacity, 4)] as [InstancedBufferAttribute, InstancedBufferAttribute], extrude: dynamic(capacity, 2), paint: dynamic(capacity, 4) };
             geometry.setAttribute('placeA', batch.place[0]);
             geometry.setAttribute('placeB', batch.place[1]);
             geometry.setAttribute('extrudeAB', batch.extrude);
             geometry.setAttribute('paint', batch.paint);
-            const mesh = new InstancedMesh(geometry, markMaterial(this.uniforms, SHAPE_OUTLINES[shape], DASHED_SHAPES.has(shape)), capacity);
+            const mesh = new InstancedMesh(geometry, markMaterial(this.uniforms, SHAPE_OUTLINES[shape], DASHED_SHAPES.has(shape), TYPE_FORM[type]), capacity);
             this.stats.meshesCreated++;
             mesh.count = table.batchCount[bi]!;
             mesh.frustumCulled = false;
@@ -85,6 +87,8 @@ export class MarkLayer {
     /** The slots lit while the rest fade (the code on screen); null: no fade. Checked against the slot itself, appended ones included. */
     private fade: ReadonlySet<number> | null = null;
     private lastPaint: MarkPaint | null = null;
+    /** The placement's ghosts (`Placement.ghost`): their paint flag gets `FLAG.GHOST`. */
+    private ghost: Uint8Array | null = null;
 
     /** Fades every mark outside `lit` (the paint's DIM flag on top of its own); null puts the paint back as it was. */
     setFade(lit: ReadonlySet<number> | null): void {
@@ -102,6 +106,7 @@ export class MarkLayer {
             for (let i = 0; i < count; i++) {
                 let s = slots[i]!;
                 const faded = this.fade !== null && !this.fade.has(s);
+                const ghosted = this.ghost?.[s] ? FLAG.GHOST : 0;
                 // An appended slot (a drilled symbol) the paint predates is painted like its station (else folder);
                 // one with neither, held since an append, keeps what it has.
                 if (s >= paint.tone.length) {
@@ -109,7 +114,7 @@ export class MarkLayer {
                     if (parent < 0 || parent >= paint.tone.length) continue;
                     s = parent;
                 }
-                out[i * 4] = paint.tone[s] ?? 0; out[i * 4 + 1] = paint.tone2[s] ?? 0; out[i * 4 + 2] = paint.fill[s] ?? 0; out[i * 4 + 3] = (paint.flags[s] ?? 0) | (faded ? FLAG.DIM : 0);
+                out[i * 4] = paint.tone[s] ?? 0; out[i * 4 + 1] = paint.tone2[s] ?? 0; out[i * 4 + 2] = paint.fill[s] ?? 0; out[i * 4 + 3] = (paint.flags[s] ?? 0) | (faded ? FLAG.DIM : 0) | ghosted;
             }
             uploadRange(this.stats, b.paint, 0, count, bi);
         });
@@ -126,6 +131,8 @@ export class MarkLayer {
     setPlacement(p: Placement, midTween?: number): number {
         const table = this.table;
         if (!table) return this.target === 1 ? 0 : 1;
+        this.ghost = p.ghost ?? null;
+        if (this.lastPaint) this.setPaint(this.lastPaint);
         if (this.placed && midTween !== undefined && midTween < 1) return this.retarget(p, midTween, table);
         const into: 0 | 1 = this.placed ? (this.target === 1 ? 0 : 1) : 1;
         const writeSets: Array<0 | 1> = this.placed ? [into] : [0, 1];
@@ -213,6 +220,23 @@ export class MarkLayer {
             b.mesh.count = table.batchCount[bi]!;
         });
         return true;
+    }
+
+    /**
+     * The hovered slot, as an emissive accent tint: each batch's `uHoverInst` names the ONE instance to tint (-1 none) — a
+     * uniform, never a paint attribute, so a hover touches no mark data. Returns true when the tint changed.
+     */
+    setHover(slot: number): boolean {
+        const table = this.table;
+        if (!table) return false;
+        const bi = slot >= 0 && slot < table.batchOf.length ? table.batchOf[slot]! : -1;
+        const inst = bi >= 0 ? table.instanceOf[slot]! : -1;
+        let changed = false;
+        this.batches.forEach((b, i) => {
+            const u = (b.mesh.material as ShaderMaterial).uniforms.uHoverInst!, next = i === bi ? inst : -1;
+            if (u.value !== next) { u.value = next; changed = true; }
+        });
+        return changed;
     }
 
     /** The meshes, for the renderer spy and the draw-call count. */

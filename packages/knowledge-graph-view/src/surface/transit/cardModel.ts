@@ -42,6 +42,8 @@ export interface CardModel {
     leaf: boolean;
     /** Test reach and the anti-pattern's name; absent when the wiring passed no facts. */
     facts?: SelectionFacts | null;
+    /** The station's owning team, when the graph knows it. */
+    owner?: string | undefined;
     /** Restructure is shown but disabled while false (see `CardInput.restructureReady`). */
     restructureReady?: boolean;
 }
@@ -122,6 +124,7 @@ export function buildCard(i: CardInput): CardModel {
         hasPatterns: s.patterns.length > 0,
         leaf: i.leaf,
         facts: selectionFacts(i.facts, s.refs, labels),
+        owner: s.owner,
         restructureReady: i.restructureReady ?? true,
     };
 }

@@ -16,18 +16,22 @@ import type { CallSite, KnowledgeGraph } from '@seanhogg/builderforce-memory/kno
 import { restructureOf } from './restructureTarget';
 import { useComputed } from '../../compute/useComputed';
 import { fillTemplate } from '../../labels';
-import { COMPACT_WIDTH, nodeIndex } from '../../graphModel';
+import { nodeIndex } from '../../graphModel';
 import { fileRefOf } from '../../surface/stations';
 import type { SceneProps } from '../../surface/registry';
 import { stageBus, StageBusContext } from '../anchor/stageBus';
 import { ZOOM_BANDS } from '../labels/lod';
 import { cssVar } from '../../scene/themeColors';
 import { TYPE } from '../../surface/ui/type';
+import { questionGlyph } from '../../surface/ui/glyphs';
+import { depthCrumbs } from '../../surface/DepthTrail';
+import { answerOf } from '../../surface/transit/noteFacts';
+import { NARROW_STAGE_PX } from '../../surface/transit/NoteCard';
 import { MARK_TYPE_ORDER, type MarkType } from '../../shapes';
 import { railKindOf, type RailKind } from '../drill/codeText';
 import { CallBadges } from './CallBadges';
 import { CodeDock } from './CodeDock';
-import { CodeOutline } from './CodeOutline';
+import { CodePane } from './CodePane';
 import { CodeTrail } from './CodeTrail';
 import { StepCard } from './StepCard';
 import { useCodeDock } from './useCodeDock';
@@ -40,7 +44,7 @@ import { SlotIncident } from './incident';
 import { StageToast, useStageToast } from './StageToast';
 import { StatusStrip } from './StatusStrip';
 import { CallSiteCard } from './CallSiteCard';
-import { StageCard } from './StageCard';
+import { StageCard, stationCardOf } from './StageCard';
 import { SymbolCard, type SymbolCardState } from './SymbolCard';
 
 /** The Map's bands, in ladder order (system, class, method, code). */
@@ -192,7 +196,6 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
         return out;
     }, [patched, map, zoom]);
 
-    const closeCard = useCallback(() => setCardKey(null), []);
     // The Map's wheel and ladder go one band at a time; a step with nothing to enter says so at the method band.
     const atCodeLevel = !!zoom.code;
     const bandIndex = BAND_ORDER.indexOf(zoom.band);
@@ -225,12 +228,16 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     // Restructure is offered only for a restructurable anti-pattern; a click loads the file's symbols when the drill lacks them,
     // so it is disabled only while that read is in flight (the same target and rule as the outline row and the lens).
     const restructureLoading = dock.restructureLoading === true;
+    // The card's answer row: the question being asked, bold, and what it answers (the text the header used to carry).
+    const narrow = width <= NARROW_STAGE_PX;
+    const answer = useMemo(() => ({ icon: questionGlyph(surface.question), ...answerOf(surface.question, surface, p.labels) }), [surface, p.labels]);
+    const findings = useMemo(() => new Map(graph.findings.map((f) => [f.id, f] as const)), [graph]);
     const symbolRestructure = restructureOf(d.facts, [cardSubject?.ref ?? ''], restructureLoading);
     const symbolCard = cardSubject && (
         <SymbolCard
             slotKey={cardSlot} symbolRef={cardSubject.ref} name={cardRecord?.name ?? index.get(cardSubject.ref)?.label ?? cardSubject.ref} state={cardSubject.state}
             records={records} markType={cardType} labels={p.labels} onDrill={() => onDrill(`node:${cardSubject.ref}`)} onCode={d.openCode}
-            onZoomIn={() => wheelStep(1)} onZoomOut={() => wheelStep(-1)} onOpenSource={p.onOpenSource}
+            onOpenSource={p.onOpenSource} answer={answer} narrow={narrow}
             facts={d.facts} onCallers={() => surface.setQuestion('callers')} onSimulate={actOn(dock.onSimulate, cardSubject.ref)} onRestructure={actOn(dock.onRestructure, symbolRestructure.ref)} restructureReady={symbolRestructure.ready}
         />
     );
@@ -239,8 +246,8 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const card = (
         <StageBusContext.Provider value={bus}>
             <StageCard
-                cardKey={cardKey} map={map} drill={drill} graph={graph} labels={p.labels} compact={d.mapWidth > 0 && d.mapWidth < COMPACT_WIDTH}
-                onClose={closeCard} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel} onEnter={zoom.zoomInto}
+                cardKey={cardKey} map={map} drill={drill} graph={graph} labels={p.labels} narrow={narrow} answer={answer}
+                type={(cardKey && d.types.get(map.stationOfKey(cardKey)?.id ?? '')) || 'source'} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel} onEnter={zoom.zoomInto}
                 onCode={d.openCode} facts={d.facts} onSimulate={actOn(dock.onSimulate, cardRefs[0])}
                 onRestructure={actOn(dock.onRestructure, stationRestructure.ref)} restructureReady={stationRestructure.ready}
             />
@@ -254,8 +261,11 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
             <StageToast message={toast.message} />
         </StageBusContext.Provider>
     );
-    // Reading: the file (the whole of it; `files` its tabs). Else the outline of the level, from the stations the stage already has.
-    const pane = !d.visible ? null : d.reading ? (
+    // The pane: the level tree always; under it the file being read (the whole of it; `files` its tabs), else the level's folder listing; then the plain words.
+    const sayStation = map.stationOfKey(selected ?? cardKey);
+    const say = sayStation ? (() => { const c = stationCardOf(sayStation, { map, drill, findings, index, labels: p.labels, facts: d.facts }); return [c.meta, ...c.issues].join('. '); })()
+        : (selected && index.get(selected.replace(/^node:/, ''))?.label) || depthCrumbs(drill.stack, null, p.labels.surface.depth).at(-1)?.name || '';
+    const reading = !d.reading ? null : (
         <CodeDock
             target={d.codeTarget} name={d.codeName} reader={surface.readSource} labels={p.labels} records={records} scrollLine={d.scrollLine}
             reading={reader} onDrill={d.drillTo} onOpenSource={p.onOpenSource} onClose={d.closeCode} onOut={out} hover={d.hoverRef} pane
@@ -263,10 +273,15 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
             onSimulate={dock.onSimulate} onRestructure={dock.onRestructure} onHide={d.hide} compare={dock.compare} readerAt={surface.readSourceAt}
             files={d.codeTarget ? { home: (zoom.code?.target ?? d.markTarget)?.path ?? d.codeTarget.path, across: d.acrossTarget?.path ?? null } : undefined}
         />
-    ) : (
-        <CodeOutline
-            stations={map.stations.stations} keyOf={map.keyOfStation} types={d.types} facts={d.facts} selected={selected} canEnter={(id) => drill.canEnter(id).can}
-            onSelect={onSelect} onEnter={zoom.zoomInto} onRestructure={dock.onRestructure} onHide={d.hide} note={surface.readSource ? undefined : t.levelNoSource} labels={p.labels}
+    );
+    const onHoverRow = (key: string | null) => bus.setHover(key ? bus.slotOf(key) : -1);
+    const pane = !d.visible ? null : (
+        <CodePane
+            labels={p.labels} say={say} onHide={d.hide} note={surface.readSource ? undefined : t.levelNoSource} narrow={!d.split} source={reading}
+            tree={{
+                ancestors: depthCrumbs(drill.stack, null, p.labels.surface.depth), onClimb: drill.climb, stations: map.stations.stations, keyOf: map.keyOfStation, types: d.types,
+                facts: d.facts, selected, canEnter: (id) => drill.canEnter(id).can, onSelect, onEnter: zoom.zoomInto, onHover: onHoverRow,
+            }}
         />
     );
     const code = {

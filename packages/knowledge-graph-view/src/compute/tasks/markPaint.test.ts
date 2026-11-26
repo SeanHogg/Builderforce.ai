@@ -67,6 +67,17 @@ describe('markPaint: the question and the family as data (PRD 43 B1a rule 1)', (
         for (const s of stations.stations) expect(dim(p, model.stationSlot.get(s.id)!)).toBe(!narrowed!.has(s.id));
     });
 
+    it('the "untested" question cages every mark it lights (a dashed red cage) and no other question or mark does', () => {
+        const p = paint({ questionId: 'untested' });
+        const lit = surfaceLit('untested');
+        const caged = (slot: number) => (p.flags[slot]! & FLAG.CAGE) !== 0;
+        for (const s of stations.stations) expect(caged(model.stationSlot.get(s.id)!), s.id).toBe(lit !== null && lit.has(s.id));
+        for (let i = 0; i < marks.keys.length; i++) if (dim(p, i)) expect(caged(i)).toBe(false);
+        for (const q of QUESTIONS.map((x) => x.id).filter((x) => x !== 'untested')) expect(paint({ questionId: q }).flags.every((f) => (f & FLAG.CAGE) === 0), q).toBe(true);
+        expect(FLAG.CAGE).toBeGreaterThan(255); // wider than a byte: the paint's flags are a Uint16Array
+        expect(p.flags).toBeInstanceOf(Uint16Array);
+    });
+
     it('no question, an unknown id, or "layers" dims nothing; an explicit lit wins over the question', () => {
         const none = paint({});
         for (const q of [null, 'nope', 'layers']) expect([...paint({ questionId: q }).flags]).toEqual([...none.flags]);

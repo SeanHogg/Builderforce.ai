@@ -26,20 +26,20 @@ export const KNOWN_NODE_KINDS = ['file', 'section', 'symbol', 'area', 'entity', 
 /** What a node is, as the legend names it. */
 export type MarkType =
     | 'class' | 'function' | 'source' | 'test' | 'doc' | 'config' | 'style' | 'data'
-    | 'section' | 'entity' | 'claim' | 'external' | 'unit' | 'system';
+    | 'section' | 'entity' | 'claim' | 'external' | 'unit' | 'system' | 'interface';
 
 /** The type of a node no rule claims (an unknown kind, an asset, generated output). */
 export const FALLBACK_TYPE: MarkType = 'external';
 
 /** Legend order: code first, then documents and knowledge, the outside and the aggregates last. */
 export const MARK_TYPE_ORDER: readonly MarkType[] = [
-    'class', 'function', 'source', 'test', 'style', 'config', 'data', 'doc', 'section', 'entity', 'claim', 'external', 'unit', 'system',
+    'class', 'function', 'source', 'test', 'style', 'config', 'data', 'doc', 'section', 'entity', 'claim', 'external', 'unit', 'system', 'interface',
 ];
 
 /** A silhouette. Each has ONE outline: drawn flat in 2D, extruded in 3D. */
 export type NodeShape =
     | 'square' | 'circle' | 'window' | 'diamond' | 'tile' | 'triangle' | 'funnel'
-    | 'drum' | 'banner' | 'pentagon' | 'smallStar' | 'cross' | 'capsule' | 'hexagon';
+    | 'drum' | 'banner' | 'pentagon' | 'smallStar' | 'cross' | 'capsule' | 'hexagon' | 'slant';
 
 /**
  * type → shape: no two types share a silhouette, and every pair stays apart at 8 px (DPR 1) — XOR / union of the
@@ -59,12 +59,14 @@ export type NodeShape =
  *   claim    — a five-point star (an assertion);
  *   external — a dashed cross (outside the folder / not here);
  *   unit     — a wide, low capsule (a deployable unit: a container, a worker, a function — what ships);
- *   system   — a flat-topped hexagon at the full extent (the aggregate).
+ *   system   — a flat-topped hexagon at the full extent (the aggregate);
+ *   interface — a slanted parallelogram (a contract: it leans toward whatever implements it), drawn in 3D as a translucent,
+ *               dashed-edge box.
  */
 export const TYPE_SHAPE: Readonly<Record<MarkType, NodeShape>> = Object.freeze({
     class: 'square', function: 'circle', source: 'window', test: 'diamond', doc: 'tile', config: 'triangle',
     style: 'funnel', data: 'drum', section: 'banner', entity: 'pentagon', claim: 'smallStar',
-    external: 'cross', unit: 'capsule', system: 'hexagon',
+    external: 'cross', unit: 'capsule', system: 'hexagon', interface: 'slant',
 });
 
 /** A deployable unit is an `entity` node with this `type` badge (`deployFacts.ts` `DEPLOY_UNIT_TYPE`, the pack's word). */
@@ -76,14 +78,19 @@ export const DASHED_SHAPES: ReadonlySet<NodeShape> = new Set<NodeShape>(['cross'
 /** The legend key (`labels.legend`) that names a type. */
 export const typeLegendKey = (type: MarkType): string => `type${type.charAt(0).toUpperCase()}${type.slice(1)}`;
 
-export type SymbolSort = 'class' | 'function' | 'method';
-const CLASSY = /^(class|interface|type|enum|struct|trait|object)$/;
+export type SymbolSort = 'class' | 'interface' | 'function' | 'method';
+const CLASSY = /^(class|enum|struct|object)$/;
+const CONTRACT = /^(interface|type|trait|protocol)$/;
 const METHODY = /^(method|member|constructor)$/;
+
+/** A class or an interface: a symbol that HOLDS members (the drill and the sequence fold their methods into it). */
+export const isClassLike = (sort: SymbolSort): boolean => sort === 'class' || sort === 'interface';
 
 /** A symbol's sort: from a badge when the pack wrote one (`symbolKind`, `kind` or `type`), else from its name. */
 export function symbolSort(n: Pick<KNode, 'label' | 'badges'>): SymbolSort {
     const declared = String(n.badges?.symbolKind ?? n.badges?.kind ?? n.badges?.type ?? '').toLowerCase();
     if (CLASSY.test(declared)) return 'class';
+    if (CONTRACT.test(declared)) return 'interface';
     if (METHODY.test(declared)) return 'method';
     if (declared !== '') return 'function';
     const name = n.label.replace(/\(.*$/, '');
@@ -100,7 +107,7 @@ const FILE_TYPE = { source: 'source', test: 'test', doc: 'doc', config: 'config'
 export function markTypeOf(n: Pick<KNode, 'kind' | 'ref' | 'label' | 'badges'>): MarkType {
     switch (n.kind) {
         case 'file': return FILE_TYPE[fileCategory(n)];
-        case 'symbol': return symbolSort(n) === 'class' ? 'class' : 'function';
+        case 'symbol': { const sort = symbolSort(n); return sort === 'class' ? 'class' : sort === 'interface' ? 'interface' : 'function'; }
         case 'section': return 'section';
         case 'area': return 'source';
         case 'entity': return n.badges?.['type'] === DEPLOY_UNIT ? 'unit' : 'entity';
@@ -182,6 +189,7 @@ export const SHAPE_OUTLINES: Readonly<Record<NodeShape, readonly Pt[]>> = Object
     cross: cross(1.25, 0.32),
     capsule: [...arc(0.8, 0, 0.45, 0.45, -Math.PI / 2, Math.PI / 2, 8), ...arc(-0.8, 0, 0.45, 0.45, Math.PI / 2, (3 * Math.PI) / 2, 8)],
     hexagon: regular(6, 1.25, 0),
+    slant: [[-0.65, -0.7], [1.25, -0.7], [0.65, 0.7], [-1.25, 0.7]],
 });
 
 /** 2D-only detail strokes drawn over a shape in the background colour: the drum's lid, the page's fold, the window's title bar. */

@@ -1,27 +1,24 @@
 /**
- * The symbol card: what a selected, read or pinned file or symbol mark is — its kind, name and lines, its counts, and
- * the ways in (drill in, zoom, show code, open the file). It rides the mark's SLOT with `useSlotAnchor` (as `StageCard`
- * does) and hides while the slot is off the stage. Station cards keep their own card; the open code level has the step card.
+ * The symbol card: what a selected, read or pinned file or symbol mark is, in the ONE note-card shell (`NoteCard`) docked
+ * at the stage's top-left: its shape, name and kind, its facts, and the ways in (drill in, callers, simulate / restructure,
+ * show code, open the file). Station cards keep their own card; the open code level has the step card.
  */
 
-import { useRef } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { kindLabel } from '../../names';
-import { typeLegendKey, type MarkType } from '../../shapes';
+import { typeLegendKey, typeShape, type MarkType } from '../../shapes';
+import { ShapeGlyph } from '../../surface/LegendGlyph';
 import { selectionFacts } from '../../surface/transit/cardModel';
-import { CardAction, cardActionRow, CardFacts, SelectionActions } from '../../surface/transit/CardActions';
+import { CardAction, CardFacts, SelectionActions } from '../../surface/transit/CardActions';
+import { riskFactOf } from '../../surface/transit/noteFacts';
+import { NoteCard, type NoteAnswer } from '../../surface/transit/NoteCard';
 import type { SymbolFacts } from '../../surface/symbolFacts';
 import { TYPE } from '../../surface/ui/type';
 import type { SourceLocation, SymbolRecord } from '../../types';
-import { useSlotAnchor } from '../anchor/useSlotAnchor';
 import { codeTargetOf, symbolCounts } from '../drill/codeText';
-import { card, chip, chips, kicker } from './cardStyles';
+import { chip, chips } from './cardStyles';
 
 export type SymbolCardState = 'selected' | 'reading' | 'pinned';
-
-const STATE_LABEL: Readonly<Record<SymbolCardState, 'stateSelected' | 'stateReading' | 'statePinned'>> = {
-    selected: 'stateSelected', reading: 'stateReading', pinned: 'statePinned',
-};
 
 export interface SymbolCardProps {
     /** The mark's slot key (`node:<ref>`); null = no card. */
@@ -36,8 +33,6 @@ export interface SymbolCardProps {
     labels: KnowledgeGraphLabels;
     onDrill(): void;
     onCode(): void;
-    onZoomIn(): void;
-    onZoomOut(): void;
     onOpenSource?: ((location: SourceLocation) => void) | undefined;
     /** The graph's facts, computed once by the wiring; absent ⇒ no facts row, no Restructure. */
     facts?: SymbolFacts | undefined;
@@ -47,11 +42,12 @@ export interface SymbolCardProps {
     onRestructure?: (() => void) | undefined;
     /** False while the restructure's file is being read: Restructure shows disabled. Default true. */
     restructureReady?: boolean | undefined;
+    /** The answer to the question being asked. */
+    answer?: NoteAnswer | null | undefined;
+    narrow?: boolean | undefined;
 }
 
-export function SymbolCard({ slotKey, symbolRef, name, state, records, markType, labels, onDrill, onCode, onZoomIn, onZoomOut, onOpenSource, facts: symbolFacts, onCallers, onSimulate, onRestructure, restructureReady }: SymbolCardProps) {
-    const el = useRef<HTMLElement | null>(null);
-    const { missing } = useSlotAnchor(slotKey, el);
+export function SymbolCard({ slotKey, symbolRef, name, state, records, markType, labels, onDrill, onCode, onOpenSource, facts: symbolFacts, onCallers, onSimulate, onRestructure, restructureReady, answer, narrow }: SymbolCardProps) {
     if (!slotKey) return null;
     const t = labels.surface.code;
     const target = codeTargetOf(symbolRef, records);
@@ -65,27 +61,26 @@ export function SymbolCard({ slotKey, symbolRef, name, state, records, markType,
     const shown = target?.name ?? name;
     const selection = selectionFacts(symbolFacts, [symbolRef], labels);
     return (
-        <section
-            ref={el} data-symbol-card data-state={state} hidden={missing} aria-label={shown}
-            style={{ ...card('left'), top: 0, left: 0, zIndex: 2 }}
-        >
-            <div style={kicker}><span>{kindLabel(labels, typeLegendKey(markType))}</span><em>{t[STATE_LABEL[state]]}</em></div>
-            <b style={TYPE.monoTitle}>{shown}</b>
-            {target && <span style={TYPE.monoMeta}>{`${target.path}:${target.startLine}–${target.endLine}`}</span>}
-            {facts.length > 0 && (
-                <div style={chips}>{facts.map(([id, text]) => <span key={id} data-chip={id} style={chip}>{text}</span>)}</div>
+        <NoteCard
+            role="symbol" ariaLabel={shown} name={shown} kind={kindLabel(labels, typeLegendKey(markType))} narrow={narrow} answer={answer}
+            glyph={<ShapeGlyph shape={typeShape(markType)} size={14} />}
+            meta={(
+                <span data-state={state} style={{ display: 'grid', gap: 4 }}>
+                    {target && <span style={TYPE.monoMeta}>{`${target.path}:${target.startLine}–${target.endLine}`}</span>}
+                    {facts.length > 0 && <span style={chips}>{facts.map(([id, text]) => <span key={id} data-chip={id} style={chip}>{text}</span>)}</span>}
+                </span>
             )}
-            <CardFacts labels={labels} facts={selection} />
-            <div style={cardActionRow}>
-                {counts.calls > 0 && <CardAction id="drill-in" primary glyph="inside" label={t.drillInAction} onClick={onDrill} />}
-                <SelectionActions labels={labels} facts={selection} onCallers={onCallers} onSimulate={onSimulate} onRestructure={onRestructure} restructureReady={restructureReady} />
-                <CardAction id="zoom-in" label={labels.zoomIn} onClick={onZoomIn} />
-                <CardAction id="show-code" label={t.showCode} onClick={onCode} />
-                {target && onOpenSource && (
-                    <CardAction id="open-file" label={t.openFile} onClick={() => onOpenSource({ path: target.path, startLine: target.startLine, endLine: target.startLine })} />
-                )}
-                <CardAction id="zoom-out" glyph="out" label={labels.zoomOut} onClick={onZoomOut} />
-            </div>
-        </section>
+            facts={<CardFacts labels={labels} facts={selection} risk={riskFactOf(selection?.antiPattern ? { word: 'high', tone: 'sev4' } : null, labels)} />}
+            acts={(
+                <>
+                    <CardAction id="drill-in" primary glyph="inside" label={t.drillInAction} disabled={counts.calls === 0} onClick={onDrill} />
+                    <SelectionActions labels={labels} facts={selection} onCallers={onCallers} onSimulate={onSimulate} onRestructure={onRestructure} restructureReady={restructureReady} />
+                    <CardAction id="show-code" label={t.showCode} onClick={onCode} />
+                    {target && onOpenSource && (
+                        <CardAction id="open-file" label={t.openFile} onClick={() => onOpenSource({ path: target.path, startLine: target.startLine, endLine: target.startLine })} />
+                    )}
+                </>
+            )}
+        />
     );
 }

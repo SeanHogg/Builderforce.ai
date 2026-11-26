@@ -23,7 +23,6 @@ import { Graph2D } from '../graph2d/Graph2D';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../labels';
 import { LENSES } from '../lenses';
 import { MindMap } from '../map/MindMap';
-import { SequenceView } from '../surface/SequenceDiagram';
 import { TransitMap } from '../surface/TransitMap';
 import { LAST_RUN_JSON, LOCK_MS, Recorder, writeReport } from './harness';
 import { runModelSteps, type Shared } from './modelSteps';
@@ -128,11 +127,6 @@ describe.skipIf(!process.env.KG_PERF)('view pipelines (KG_PERF=1)', () => {
                         onSelectStation: none, onSelectLine: none, label: 'map', graph: g, variant,
                     }), '[data-station]');
                 }
-            }
-            const best = lines && stations ? [...lines.lines].sort((a, b) => b.stops.length - a.stops.length)[0] : undefined;
-            if (best && stations) {
-                const path = { stops: best.stops.map((id) => ({ id, name: stations.byId.get(id)?.name ?? id })), hops: best.hops.map((x) => ({ kind: 'references', count: x.count })) };
-                await measure('Sequence', () => h(SequenceView, { path: path as never, step: 0, onStep: none, labels: L }), '[data-testid="kg-sequence"]');
             }
             expect(renders.length).toBeGreaterThan(0);
         }, HOUR);

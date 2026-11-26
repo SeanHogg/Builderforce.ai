@@ -7,3 +7,4 @@ export { Card, type CardProps } from './Card';
 export { Chip, type ChipProps } from './Chip';
 export { ProvenanceBadge } from './ProvenanceBadge';
 export { Pin } from './Pin';
+export { Seg, segButtonStyle, ghostButtonStyle, type SegItem, type SegProps } from './Seg';

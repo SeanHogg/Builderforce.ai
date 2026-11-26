@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The scene overlay: the View group, "Out to", the scale note and the sync banner. Zoom and Fit live on the stage nav, not here. */
+/** The scene overlay: the toolbar row (views, 3D | Flat, questions), the compare bar slot, the scale note and the sync banner. Out is the header's; zoom and Fit live on the stage nav. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
@@ -21,22 +21,10 @@ describe('SceneOverlay', () => {
     it('is a View group of the cameras (Flow and Sequence included), and picking one calls onMode', () => {
         const p = overlayProps();
         render(<SceneOverlay {...p} />);
-        const view = within(screen.getByRole('radiogroup', { name: L.viewModesLabel }));
-        expect(view.getAllByRole('radio').map((r) => r.textContent)).toEqual([L.viewTransit, L.viewSystem, L.viewGraph, L.viewMap, L.view3d, L.viewHeat, L.viewStyle, L.viewFeatures, L.viewFlow, L.viewSequence, L.viewList]);
-        fireEvent.click(view.getByRole('radio', { name: L.viewHeat }));
+        const view = within(screen.getByRole('group', { name: L.viewModesLabel }));
+        expect(view.getAllByRole('button').map((r) => r.textContent)).toEqual([L.viewTransit, L.viewSystem, L.viewGraph, L.viewMap, L.view3d, L.viewHeat, L.viewStyle, L.viewFeatures, L.viewFlow, L.viewSequence, L.viewList]);
+        fireEvent.click(view.getByRole('button', { name: L.viewHeat }));
         expect(p.onMode).toHaveBeenCalledWith('heat');
-    });
-
-    it('offers "Back to map" only on the Sequence camera, which has no button of its own', () => {
-        const p = overlayProps({ mode: 'sequence' });
-        render(<SceneOverlay {...p} />);
-        fireEvent.click(screen.getByRole('button', { name: L.surface.sequence.backToMap }));
-        expect(p.onMode).toHaveBeenCalledWith('transit');
-    });
-
-    it('has no "Back to map" on the other cameras', () => {
-        render(<SceneOverlay {...overlayProps()} />);
-        expect(screen.queryByRole('button', { name: L.surface.sequence.backToMap })).toBeNull();
     });
 
     it('does not put zoom, Fit or the shape key in the top bar — those live on the stage', () => {
@@ -51,13 +39,12 @@ describe('SceneOverlay', () => {
         expect(screen.queryByRole('button', { name: L.zoomReset })).toBeNull();
     });
 
-    it('shows "Out to" only while there is a level above, and calls onOut', () => {
-        const onOut = vi.fn();
+    it('has no Out button (the header owns it) and shows the compare bar only when given one', () => {
         const { rerender } = render(<SceneOverlay {...overlayProps()} />);
         expect(screen.queryByText(/Out to/)).toBeNull();
-        rerender(<SceneOverlay {...overlayProps({ outTo: 'Web line', onOut })} />);
-        fireEvent.click(screen.getByRole('button', { name: fillTemplate(L.surface.overlay.outTo, { name: 'Web line' }) }));
-        expect(onOut).toHaveBeenCalled();
+        expect(screen.queryByTestId('kg-bar-slot')).toBeNull();
+        rerender(<SceneOverlay {...overlayProps({ time: <div data-testid="kg-bar-slot" /> })} />);
+        expect(within(screen.getByTestId('kg-scene-controls')).getByTestId('kg-bar-slot')).toBeTruthy();
     });
 
     it('draws the scale note, with Show all on a compact screen', () => {
@@ -106,7 +93,7 @@ describe('the scene top', () => {
         stubHeight(40);
         render(<SceneOverlay {...overlayProps()} />);
         const controls = screen.getByTestId('kg-scene-controls');
-        expect(within(controls).getByRole('radiogroup', { name: L.viewModesLabel })).toBeTruthy();
+        expect(within(controls).getByRole('group', { name: L.viewModesLabel })).toBeTruthy();
         expect(within(controls).queryByTestId('kg-scale-note')).toBeNull(); // the scale note floats at the bottom, over the scene
     });
 
@@ -124,11 +111,13 @@ describe('the scene top', () => {
         expect(container.style.getPropertyValue(SCENE_TOP_VAR)).toBe('');
     });
 
-    it('keeps the question bar on one line, its pills scrolling sideways', () => {
+    it('is ONE wrapping row on the panel background, the questions segment after the views', () => {
         render(<SceneOverlay {...overlayProps()} />);
-        const pills = screen.getByRole('group', { name: L.surface.questionsLabel });
-        expect(pills.parentElement!.style.flexWrap).toBe('nowrap');
-        expect(pills.style.overflowX).toBe('auto');
+        const row = screen.getByTestId('kg-camera-row');
+        expect(row.style.flexWrap).toBe('wrap');
+        const views = within(row).getByRole('group', { name: L.viewModesLabel });
+        const questions = within(row).getByRole('group', { name: L.surface.questionsLabel });
+        expect(views.compareDocumentPosition(questions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 });
 

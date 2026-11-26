@@ -1,30 +1,29 @@
 // @vitest-environment jsdom
-/** The review action: a status chip joined to ONE action button. Both open the Reviews panel, in every state. */
+/** The review status: ONE ghost button (a dot and the status words) that opens the Reviews tab of the drawer, in every state. */
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../labels';
 import type { ReviewState } from '../useReviewRun';
 import { ReviewAction, type ReviewActionProps } from './ReviewAction';
-import { stripAction, syncPill, type SyncPillInput } from './syncPill';
-import { RetryUploadContext } from './run/useRetryUpload';
+import { syncPill, type SyncPillInput } from './syncPill';
 
 const pillOf = (over: Partial<SyncPillInput> = {}) => syncPill({ labels: L, review: { status: 'idle' }, stale: false, refreshFailed: false, sync: null, ...over });
 
 const strip = (over: Partial<ReviewActionProps> = {}, input: Partial<SyncPillInput> = {}) => {
     const pill = pillOf(input);
-    const p: ReviewActionProps = { labels: L, narrow: false, pill, action: stripAction(L, pill, 'Docs'), onOpen: vi.fn(), ...over };
+    const p: ReviewActionProps = { labels: L, narrow: false, pill, onOpen: vi.fn(), ...over };
     const utils = render(<ReviewAction {...p} />);
     return { p, ...utils };
 };
 
 describe('ReviewAction', () => {
-    it('is the chip and the one action button, joined in one group', () => {
+    it('is ONE button in a status group, with no separate action button', () => {
         strip();
         const row = screen.getByTestId('kg-status-strip');
         expect(row.getAttribute('role')).toBe('group');
         expect(row.getAttribute('aria-label')).toBe(L.surface.header.statusLabel);
-        expect(within(row).getAllByTestId('kg-review-action')).toHaveLength(1);
-        expect(within(row).getByTestId('kg-status-chip')).toBeTruthy();
+        expect(within(row).getAllByRole('button')).toHaveLength(1);
+        expect(screen.queryByTestId('kg-review-action')).toBeNull();
     });
 
     it('holds no parity line, no ⋯ menu and no review card', () => {
@@ -32,15 +31,13 @@ describe('ReviewAction', () => {
         expect(screen.queryByTestId('kg-parity')).toBeNull();
         expect(screen.queryByRole('button', { name: /more actions/i })).toBeNull();
         expect(screen.queryByTestId('kg-review-card')).toBeNull();
-        expect(within(screen.getByTestId('kg-status-strip')).getAllByRole('button')).toHaveLength(2);
     });
 
-    it('on a narrow container shrinks the chip to its dot (the words stay in its name) and keeps the verb', () => {
+    it('on a narrow container shrinks to its dot (the words stay in its name)', () => {
         strip({ narrow: true }, { review: { status: 'planning' } });
         const chip = screen.getByTestId('kg-status-chip');
         expect(chip.textContent).toBe('');
         expect(chip.getAttribute('aria-label')).toContain(L.surface.run.review.chipCountingPlain);
-        expect(screen.getByTestId('kg-review-action').textContent).toBe(L.surface.run.review.actionStart);
     });
 
     it('says the state in words as well as colour', () => {
@@ -48,7 +45,7 @@ describe('ReviewAction', () => {
         expect(screen.getByTestId('kg-status-chip').getAttribute('aria-label')).toBe(`${L.surface.run.review.chipStopping} ${L.surface.pillStates.syncing}`);
     });
 
-    it('draws a 2px progress underline on the chip only while reviewing', () => {
+    it('draws a 2px progress underline only while reviewing', () => {
         const { unmount } = strip({}, { review: { status: 'running', progress: { phase: 'extract', done: 5, total: 10 } } });
         expect(screen.getByTestId('kg-chip-progress').style.width).toBe('50%');
         unmount();
@@ -69,7 +66,7 @@ describe('ReviewAction', () => {
         expect(spin({ review: { status: 'aborted' } }).spinner).toBe(false);
     });
 
-    describe('both buttons open the Reviews panel, in every state', () => {
+    describe('opens the Reviews tab that explains the state, in every state', () => {
         const states: [string, Partial<SyncPillInput>, string][] = [
             ['never reviewed', {}, 'review'],
             ['counting', { review: { status: 'planning' } as ReviewState }, 'review'],
@@ -81,47 +78,15 @@ describe('ReviewAction', () => {
             ['up to date', { sync: { local: { files: 3, docs: 0 }, server: { files: 3, docs: 0 }, sources: [] }, lastReviewedAt: '2026-01-01T11:58:00Z' }, 'runs'],
             ['files not stored', { sync: { local: { files: 3, docs: 0 }, server: { files: 3, docs: 0 }, sources: [], skipped: [{ path: 'a', reason: 'x' }] } }, 'server'],
         ];
-        it.each(states)('%s: the chip opens its tab and the button opens Review', (_name, input, chipTab) => {
+        it.each(states)('%s', (_name, input, tab) => {
             const { p } = strip({}, input);
             fireEvent.click(screen.getByTestId('kg-status-chip'));
-            expect(p.onOpen).toHaveBeenLastCalledWith(chipTab);
-            const action = screen.getByTestId('kg-review-action') as HTMLButtonElement;
-            if (action.disabled) return; // counting / stopping: the button waits
-            fireEvent.click(action);
-            expect(p.onOpen).toHaveBeenLastCalledWith('review');
-        });
-
-        const failedSync = { local: { files: 3, docs: 0 }, server: { files: 3, docs: 0 }, sources: [], replica: { dirty: 1, sending: false, failed: [{ reason: 'x' } as never] } };
-
-        it('a failed upload with no retry port: the button says so and, like the chip, opens the Server tab', () => {
-            const { p } = strip({}, { sync: failedSync });
-            expect(screen.getByTestId('kg-review-action').textContent).toBe(L.surface.run.review.actionSeeUpload);
-            fireEvent.click(screen.getByTestId('kg-status-chip'));
-            expect(p.onOpen).toHaveBeenLastCalledWith('server');
-            fireEvent.click(screen.getByTestId('kg-review-action'));
-            expect(p.onOpen).toHaveBeenLastCalledWith('server');
-        });
-
-        it('a failed upload with a retry port (from context): the button is Retry upload, retries at once instead of opening the panel, and is disabled while it runs', () => {
-            const retry = vi.fn();
-            const pill = pillOf({ sync: failedSync });
-            const p: ReviewActionProps = { labels: L, narrow: false, pill, action: stripAction(L, pill, 'Docs'), onOpen: vi.fn() };
-            const view = render(<RetryUploadContext.Provider value={{ retry, running: false, failed: false }}><ReviewAction {...p} /></RetryUploadContext.Provider>);
-            expect(screen.getByTestId('kg-review-action').textContent).toBe(L.surface.run.review.actionRetryUpload);
-            fireEvent.click(screen.getByTestId('kg-review-action'));
-            expect(retry).toHaveBeenCalledTimes(1);
-            expect(p.onOpen).not.toHaveBeenCalled();
-
-            view.rerender(<RetryUploadContext.Provider value={{ retry, running: true, failed: false }}><ReviewAction {...p} /></RetryUploadContext.Provider>);
-            const busy = screen.getByTestId('kg-review-action') as HTMLButtonElement;
-            expect(busy.disabled).toBe(true);
-            expect(busy.textContent).toBe(L.surface.run.review.uploadRetrying);
+            expect(p.onOpen).toHaveBeenLastCalledWith(tab);
         });
     });
 
     it('is a plain status with no button for a host that cannot review or record runs', () => {
         strip({ onOpen: undefined });
-        expect(screen.queryByTestId('kg-review-action')).toBeNull();
         expect(screen.getByTestId('kg-status-chip').tagName).toBe('SPAN');
     });
 });

@@ -2,14 +2,14 @@
 
 export interface SceneLabels {
     /** The scenes draw only part of the links: `{shown}`, `{total}` (already formatted for the locale). */
-    scene: Record<'edgesCapped' | 'layingOut' | 'errorTitle' | 'errorRetry' | 'errorBack' | 'view3d' | 'viewFlat' | 'flatToggle', string>;
+    scene: Record<'edgesCapped' | 'stationsCapped' | 'layingOut' | 'errorTitle' | 'errorRetry' | 'errorBack' | 'view3d' | 'viewFlat' | 'flatToggle', string>;
     /**
      * The mind map's "+N folders" leaf and its accessible name, in One and Other forms (`{count}`); a language with no
      * plural form repeats the one. Read through `isOne` (surface/plural.ts), like `counted()`.
      */
     mind: Record<`${'moreFolders' | 'moreFoldersAria'}${'One' | 'Other'}`, string>;
     /** The semantic-zoom bands (PRD 43 B1a rules 9–10): the control's group name and one word per band. */
-    zoom: Record<'group' | 'system' | 'class' | 'method' | 'code' | 'hint', string>;
+    zoom: Record<'group' | 'system' | 'class' | 'method' | 'code' | 'hintIn' | 'hintInto' | 'hintDeepest', string>;
     /**
      * The code band's panel (B1a rule 9): its accessible name (`{name}`, `{from}`, `{to}`), the read in progress, the
      * note when the host has no file contents (the panel then shows `path:line` and "Open at line"), and the note when
@@ -28,19 +28,21 @@ export interface SceneLabels {
         | 'stateSelected' | 'stateReading' | 'statePinned' | 'methodsCount' | 'fieldsCount' | 'callsCount' | 'imported' | 'drillInAction' | 'showCode' | 'openFile'
         | 'status' | 'following' | 'pinnedStatus' | 'statusLine' | 'resetView'
         | 'dockAria' | 'dockHide' | 'dockShow' | 'levelAria' | 'levelEmpty' | 'levelNoSource' | 'rowNoTest' | 'rowAntiPattern' | 'rowGoInside' | 'rowRestructure'
-        | 'paneSwitchAria' | 'paneCode' | 'panePicture' | 'lensOut' | 'lensSimulate' | 'lensRestructure' | 'gutterWarn',
+        | 'paneSwitchAria' | 'paneCode' | 'panePicture' | 'lensOut' | 'lensSimulate' | 'lensRestructure' | 'gutterWarn'
+        | 'samePlace' | 'sayLead' | 'sayHint' | 'fileLines' | 'fileLine',
         string
     >;
     /**
      * The stage's navigation control (bottom-right): its group name, the pan pad (on 3D, up / down move through the
      * plane stack) and the orbit buttons shown on the 3D camera. Zoom in / out and Fit reuse `zoomIn`, `zoomOut`, `zoomReset`.
      */
-    nav: Record<'group' | 'panUp' | 'panDown' | 'panLeft' | 'panRight' | 'rotateLeft' | 'rotateRight' | 'tiltUp' | 'tiltDown', string>;
+    nav: Record<'group' | 'panUp' | 'panDown' | 'panLeft' | 'panRight' | 'rotateLeft' | 'rotateRight' | 'tiltUp' | 'tiltDown' | 'top' | 'help' | 'helpText', string>;
 }
 
 export const SCENE_DEFAULTS: SceneLabels = {
     scene: {
         edgesCapped: 'Showing {shown} of {total} links',
+        stationsCapped: 'Showing {shown} of {total} stations',
         layingOut: 'Laying out…',
         /** A camera that threw: the error boundary's heading, then its two actions (Back leaves a drilled level). */
         errorTitle: 'This view hit an error',
@@ -63,7 +65,9 @@ export const SCENE_DEFAULTS: SceneLabels = {
         class: 'Classes',
         method: 'Methods',
         code: 'Code',
-        hint: 'Wheel on the map to zoom · Esc to go out · double-click a method to go inside',
+        hintIn: 'Zoom into a shape to go inside it',
+        hintInto: 'Keep zooming · going inside {name}',
+        hintDeepest: 'Deepest level · zoom out to come back',
     },
     code: {
         aria: 'Code of {name}, lines {from} to {to}',
@@ -157,6 +161,12 @@ export const SCENE_DEFAULTS: SceneLabels = {
         lensSimulate: 'No test · Simulate',
         lensRestructure: '{name}',
         gutterWarn: 'Anti-pattern: {name}',
+        /** The pane's header note, the file bar's line range (`{from}`, `{to}`; `{line}`), and the plain-words box. */
+        samePlace: 'same place as the picture',
+        sayLead: 'In plain words:',
+        sayHint: 'Click a line or an outline row and the picture goes there. The mark beside a line is its shape in the picture.',
+        fileLines: 'lines {from}–{to}',
+        fileLine: 'line {line}',
     },
     nav: {
         group: 'Move the view',
@@ -168,5 +178,8 @@ export const SCENE_DEFAULTS: SceneLabels = {
         rotateRight: 'Rotate right',
         tiltUp: 'Tilt up',
         tiltDown: 'Tilt down',
+        top: 'Look from above',
+        help: 'How to move around',
+        helpText: 'Drag to rotate. Scroll to zoom: keep zooming into a shape to go inside it, zoom out to come back. Right-drag to pan. Double-click a shape to enter, Esc to go out.',
     },
 };

@@ -28,3 +28,6 @@ export const LINK_FAMILY_STYLE: Readonly<Record<LinkFamily, LinkFamilyStyle>> = 
     // Sequence messages and cycle arrows (a cycle's segments dash 3/5 per segment).
     arrow: { capacity: 1024, widthUnit: 'px', width: 1.5, dash: DASH_SOLID },
 };
+
+/** The hall family (raised flat bars, `links/HallLayer`): segments preallocated at mount, and the bar's thickness as a share of its width. */
+export const HALL_STYLE = { capacity: 2048, thickness: 0.4 } as const;

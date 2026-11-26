@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
-/** The depth trail: system › module › class › method, each earlier crumb climbing back. */
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+/** The depth trail's crumbs (system › module › class › method) and the plain-words walkthrough sentence of a journey step. */
+import { describe, expect, it } from 'vitest';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../labels';
-import { DepthTrail, depthCrumbs, type DepthFrame } from './DepthTrail';
-import { PathStrip } from './PathStrip';
+import { depthCrumbs, type DepthFrame } from './DepthTrail';
 import type { PathModel } from './path';
+import { walkthroughSentence } from './walkthrough';
 
 const stack: DepthFrame[] = [
     { level: 'package', name: 'Billing' },
@@ -31,36 +30,8 @@ describe('depthCrumbs', () => {
     });
 });
 
-describe('DepthTrail', () => {
-    it('draws nothing on the system map', () => {
-        const { container } = render(<DepthTrail stack={[]} systemName="App" labels={L} onClimb={vi.fn()} />);
-        expect(container.firstChild).toBeNull();
-    });
-
-    it('climbs when an earlier crumb is clicked, and the crumb you are on is not a button', () => {
-        const onClimb = vi.fn();
-        render(<DepthTrail stack={stack} systemName="App" labels={L} onClimb={onClimb} />);
-        expect(screen.getByRole('navigation', { name: L.surface.depth.aria })).toBeTruthy();
-        expect(screen.getAllByText('›')).toHaveLength(3);
-        fireEvent.click(screen.getByRole('button', { name: 'Back to Billing' }));
-        expect(onClimb).toHaveBeenCalledWith(1);
-        fireEvent.click(screen.getByRole('button', { name: 'Back to App' }));
-        expect(onClimb).toHaveBeenCalledWith(0);
-        fireEvent.click(screen.getByRole('button', { name: 'Back to Invoice' }));
-        expect(onClimb).toHaveBeenCalledWith(2);
-        expect(screen.queryByRole('button', { name: /charge/ })).toBeNull();
-        expect(screen.getByText('charge').getAttribute('aria-current')).toBe('location');
-    });
-});
-
-describe('PathStrip depth trail and walkthrough', () => {
-    it('shows the trail above the journey and narrates the current step', () => {
-        const onClimb = vi.fn();
-        render(<PathStrip path={journey} step={1} labels={L} onStep={vi.fn()} trail={stack.slice(0, 1)} systemName="App" onClimb={onClimb} />);
-        expect(screen.getByTestId('kg-depth-trail')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Back to App' }));
-        expect(onClimb).toHaveBeenCalledWith(0);
-        expect(screen.getByTestId('kg-step-narration').textContent)
-            .toBe('Walk the hallway from Login to Accounts (2 calls). Leave through the door Accounts.');
+describe('the walkthrough sentence', () => {
+    it('narrates the current step of a journey', () => {
+        expect(walkthroughSentence(journey, 1, L.surface.walk)).toBe('Walk the hallway from Login to Accounts (2 calls). Leave through the door Accounts.');
     });
 });

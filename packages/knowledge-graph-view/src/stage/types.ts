@@ -22,6 +22,10 @@ export type SlotKind = typeof SLOT_NODE | typeof SLOT_STATION | typeof SLOT_FOLD
 /** Per-slot paint bits (`MarkPaint.flags`, `LinkBatch.flags`). */
 export const FLAG = {
     DIM: 1, SHELL: 2, DOC: 4, INTERCHANGE: 8, OUTLINE: 16, PULSE: 32, SELECTABLE: 64,
+    /** Outside the current drill level (a neighbour): drawn at 0.62 opacity. */
+    GHOST: 128,
+    /** The "untested" question is on and this mark has no test: a dashed red cage round it. */
+    CAGE: 256,
 } as const;
 
 /** Built once per GRAPH (rule 1). `type` indexes `MARK_TYPE_ORDER` (`shapes.ts`); one batch per type present. */
@@ -53,7 +57,8 @@ export interface MarkPaint {
     tone: Uint8Array;
     tone2: Uint8Array;
     fill: Float32Array;
-    flags: Uint8Array;
+    /** One word per slot (`FLAG` bits): wider than a byte since CAGE is 256. */
+    flags: Uint16Array;
 }
 
 /**
@@ -71,9 +76,12 @@ export const DASH_WALL = 4;
 /** Every link family the stage draws; the renderer preallocates one mesh per family when it mounts. */
 export const LINK_FAMILIES = ['route', 'edge', 'describes', 'wall', 'arrow'] as const;
 export type LinkFamily = typeof LINK_FAMILIES[number];
+/** The raised flat bars between shapes (3D boxes, world-unit width): drawn by `links/HallLayer`, not the line shader. */
+export const HALL_FAMILY = 'hall' as const;
+export type LinkFamilyOrHall = LinkFamily | typeof HALL_FAMILY;
 
 export interface LinkBatch {
-    family: LinkFamily;
+    family: LinkFamilyOrHall;
     /** xyz per point; a NaN triple breaks the polyline. Corners are pre-rounded by the worker. */
     points: Float32Array;
     /** Running length along the polyline at each point (continuous dashes). */
@@ -99,7 +107,11 @@ export interface LinkBatch {
     callSites?: (CallSite | null)[];
 }
 
-export interface PlaneSpec { kind: 'band' | 'partition' | 'lifeline'; min: Vec3; max: Vec3; tone: number }
+/**
+ * `room`: a level's FLOOR PLATE, a lit slab — `min[1]` its underside, `max[1]` its top face, `tone` its body, `edge` the tone of
+ * its outlined edges (the lit accent, or the warn tone when the room is risky). The other kinds are flat backdrop quads.
+ */
+export interface PlaneSpec { kind: 'band' | 'partition' | 'lifeline' | 'room'; min: Vec3; max: Vec3; tone: number; edge?: number }
 
 export interface LabelRun {
     slot: number; text: string; offsetPx: [number, number];
@@ -121,6 +133,11 @@ export interface LabelRun {
      * than their names on a big tree, so a mark-size gate dropped every name. Absent = the LOD decides.
      */
     minMarkPx?: number;
+    /**
+     * Drawn as a DOM CHIP (a bordered panel label projected above its shape, `labels/ChipLayer`) instead of SDF text lying on
+     * the ground: the perspective Map's names. `risky` gives it the warn border.
+     */
+    chip?: { risky: boolean };
 }
 
 /**
@@ -156,7 +173,16 @@ export interface CameraRig {
     view?: OrbitView;
 }
 
-export interface OrbitView { yaw: number; pitch: number; distance: number; fov: number }
+export interface OrbitView {
+    yaw: number; pitch: number; distance: number; fov: number;
+    /**
+     * Fit-to-content: the radius of the sphere that must stay in frame. The rig then derives `distance` from the stage's OWN
+     * aspect (the narrower of the vertical and horizontal half-angles), and again on every resize while the view is unmoved.
+     */
+    radius?: number;
+    /** The extrude multiplier Flat collapses heights to (the design's 0.03); absent = heights stay full in Flat. */
+    flatDepth?: number;
+}
 
 /** All a camera supplies (rule 4): a position, scale and extrude for EVERY slot (hidden = scale 0 at its anchor). */
 export interface Placement {
@@ -185,6 +211,8 @@ export interface Placement {
      * numbered from `base` (= the MarkSet's slot count) in order; `position` / `scale` / `extrude` cover them too.
      */
     append?: SlotAppend;
+    /** Per slot, 1 = a ghost (outside the level on show: a drill's neighbour); the mark layer ORs `FLAG.GHOST` into its paint. Absent = none. */
+    ghost?: Uint8Array;
 }
 
 /** Slots appended after the MarkSet (B1a rule 1: a drill APPENDS into the preallocated headroom). Same fields as the MarkSet's, per appended slot. */

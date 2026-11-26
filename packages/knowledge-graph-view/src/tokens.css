@@ -113,6 +113,17 @@
   --kg-band-infrastructure: var(--vscode-charts-orange, #fb923c);
   --kg-band-data: var(--vscode-charts-yellow, #facc15);
   --kg-band-other: var(--kg-unused);
+  /* The 3D stage's palette (the design's `--s-*`, dark): floor plate, room, lighter tops, puck, drum, halls, lit and selected accents. */
+  --kg-s-floor: #151a23;
+  --kg-s-room: #1e2531;
+  --kg-s-node-top: #a3b6d3;
+  --kg-s-warn-top: #f1c680;
+  --kg-s-puck: #c9d3e2;
+  --kg-s-store: #5b9aa8;
+  --kg-s-store-top: #9ccbd6;
+  --kg-s-hall: #2c3545;
+  --kg-s-lit: #4f8cff;
+  --kg-s-sel: #ffffff;
 }
 
 /* Coarse pointer: keep the 40px tap target. */
@@ -194,6 +205,17 @@
   --kg-band-domain: var(--vscode-charts-green, #047857);
   --kg-band-infrastructure: var(--vscode-charts-orange, #c2410c);
   --kg-band-data: var(--vscode-charts-yellow, #a16207);
+  /* The 3D stage's palette, light (the design's `[data-theme="light"]` `--s-*`). */
+  --kg-s-floor: #e8ecf2;
+  --kg-s-room: #dbe2ec;
+  --kg-s-node-top: #b4c4dc;
+  --kg-s-warn-top: #f3cd8e;
+  --kg-s-puck: #55657d;
+  --kg-s-store: #4f8f9e;
+  --kg-s-store-top: #8fc1cc;
+  --kg-s-hall: #c2cbd8;
+  --kg-s-lit: #2457d6;
+  --kg-s-sel: #101622;
 }
 
 /* VS Code light themes: the editor's own orange/yellow/green charts hues are too pale as text-weight marks; darken them toward black like hostTokens.css does for cycle/duplicate. */

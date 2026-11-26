@@ -9,11 +9,12 @@
  * SVG tower's own reading). Pure.
  */
 
-import { bandTitleIn } from '../../../surface/bands';
-import { lineTone, makeOverlay, segmentUntested } from '../../../surface/overlays';
+import { makeOverlay, segmentUntested } from '../../../surface/overlays';
 import { towerHeight } from '../../../surface/transit/towerHeight';
 import { layoutTransit } from '../../../surface/transitLayout';
 import { RESTING_DEPTH } from '../../../stage/depth';
+import { FORM_RISE, TYPE_FORM } from '../../../stage/marks/forms';
+import { MARK_TYPE_ORDER } from '../../../shapes';
 import { BG_TONE, toneIndex } from '../../../stage/tones';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { DASH_CYCLE, DASH_SOLID, DASH_UNTESTED, FLAG, type Caption, type LabelRun, type Placement, type PlaneSpec } from '../../../stage/types';
@@ -22,11 +23,15 @@ import { anchorHidden, draftFor, show } from './anchor';
 import { linkBatch, type LinkPath } from './links';
 import { mapDecorations } from './mapDecor';
 import { widenMapBounds } from './mapBounds';
+import { roofMinis } from './roofMinis';
 import { channelBindings, placementKeyOf, VIEWPORT_BANDS, type PlacementReq } from './request';
 
 const CASING_EXTRA = 4;
 const TEXT = toneIndex('text');
-const BAND_TONES = [toneIndex('panel'), toneIndex('bg')];
+/** The design's home view: fov 38, theta -0.55 rad (yaw), phi 0.95 rad (pitch = 90° - phi), heights collapse to 0.03 in Flat. */
+const HOME_FOV = 38, HOME_YAW = (-0.55 * 180) / Math.PI, HOME_PITCH = 90 - (0.95 * 180) / Math.PI, FLAT_DEPTH = 0.03;
+/** The floor plate's thickness, as a share of the level's width. */
+const PLATE_THICKNESS = 0.02;
 
 /** `g`: the graph the stations were folded from — the describes links and HTTP walls read it (`mapDecor.ts`); absent = none. */
 export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<KnowledgeGraph, 'nodes' | 'edges'>): Placement {
@@ -44,15 +49,18 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
         const slot = model.stationSlot.get(id), at = layout.positions.get(id), s = stations.byId.get(id);
         if (slot === undefined || !at || !s) continue;
         const size = overlay.style(s).size;
-        const extrude = depth * towerHeight(size, s.cx);
+        const form = TYPE_FORM[MARK_TYPE_ORDER[marks.type[slot]!] ?? 'source'];
+        const extrude = depth * towerHeight(size, s.cx) * FORM_RISE[form];
         top = Math.max(top, extrude);
         show(d, slot, at.x, 0, at.y, size, extrude);
         labels.push({
             slot, text: s.name, offsetPx: [0, size + 12], font: 'mono', size: 11, weight: 500, anchor: 'middle',
             tone: TEXT, halo: { tone: BG_TONE, px: 3 }, priority: s.use, scale: 'world',
+            chip: { risky: s.anti >= 3 },
         });
         a11y.push({ slot, label: s.path ?? s.name });
     }
+    roofMinis(model, d, layout.drawn);
     anchorHidden(marks, d, 'station', [layout.width / 2, 0, layout.height / 2]);
 
     const lineIndex = new Map(lines.lines.map((l) => [l.id, l] as const));
@@ -66,13 +74,17 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
         const cycle = line?.hops[r.index]?.cycle === true;
         return {
             pts: r.pts, width: widths.get(r.lineId) ?? neutralWidth, flags: FLAG.SELECTABLE,
-            tone: untested ? toneIndex('violation') : toneIndex(lineTone(line?.colourIndex ?? r.index)),
+            tone: untested ? toneIndex('violation') : cycle ? toneIndex('cycle') : toneIndex('hall'),
             dash: untested ? DASH_UNTESTED : cycle ? DASH_CYCLE : DASH_SOLID,
         };
     });
 
-    const planes: PlaneSpec[] = layout.bands.map((b, i) => ({ kind: 'band', min: [0, -0.5, b.y], max: [layout.width, -0.5, b.y + b.h], tone: BAND_TONES[i % 2]! }));
-    const captions: Caption[] = layout.bands.map((b) => ({ text: bandTitleIn(model.strings, b.layer), position: [8, 0, b.y + 14], anchor: 'start', tone: toneIndex('muted') }));
+    // ONE floor plate per level (the layer bands belong to the Layers camera): the floor at the top level, the room inside a shape.
+    const thick = Math.max(4, layout.width * PLATE_THICKNESS), inside = req.drill != null;
+    const planes: PlaneSpec[] = [{ kind: 'room', min: [0, -thick, 0], max: [layout.width, 0, layout.height], tone: toneIndex(inside ? 'room' : 'floor'), edge: toneIndex(inside ? 'lit' : 'edge') }];
+    // The perspective Map has no band captions (the design has none, and a ground caption drifts under a tilted camera); the
+    // Layers camera keeps its band titles (`rows.ts`).
+    const captions: Caption[] = [];
     const cx = layout.width / 2, cz = layout.height / 2;
     const decor = g ? mapDecorations(g, stations, layout) : [];
     const bounds = widenMapBounds(layout, widths, neutralWidth, CASING_EXTRA, top, decor);
@@ -80,14 +92,16 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
         generation: marks.generation, cacheKey: placementKeyOf(marks, req), anchor: 'station',
         position: d.position, scale: d.scale, extrude: d.extrude,
         // Each route polyline (`group`) names its line, so a route pick selects the line (as the SVG map's hop does).
-        links: [{ ...linkBatch('route', paths, 0, { tone: BG_TONE, extra: CASING_EXTRA }), lineIds: layout.routes.map((r) => r.lineId) }, ...decor],
+        links: [{ ...linkBatch('hall', paths, 0), lineIds: layout.routes.map((r) => r.lineId) }, ...decor],
         planes, labels, captions, a11y,
         caption: { shown: layout.drawn.length, total: stations.stations.length, capped: layout.drawn.length < stations.stations.length },
         bounds,
         rig: {
-            projection: 'orthographic', frame: 'document',
-            home: { position: [cx, 1000, cz], target: [cx, 0, cz], up: [0, 0, -1] },
-            depth: { tilt: [0, 60], orbit: false },
+            projection: 'perspective', frame: 'fill',
+            home: { position: [cx, 1000, cz], target: [cx, top * 0.35, cz], up: [0, 1, 0] },
+            depth: { tilt: [5, 83], orbit: true },
+            // Fit-to-content: the rig derives the distance from the stage's own aspect (and again on every resize).
+            view: { yaw: HOME_YAW, pitch: HOME_PITCH, distance: 1000, fov: HOME_FOV, radius: Math.hypot(layout.width, layout.height, top) / 2 + 12, flatDepth: FLAT_DEPTH },
         },
     };
 }

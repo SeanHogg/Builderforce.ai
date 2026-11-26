@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The path strip, the notes it hangs on a stop, and the words of a hop (hopText / pathMermaid). */
+/** The journey strip (one row), the notes of a stop, and the words of a hop (hopText / pathMermaid). */
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../labels';
@@ -11,15 +11,16 @@ import { graph, lines, model } from './testFixtures';
 
 const path = pathOfLine(lines.lines[0]!, model.byId);
 const strip = (over: Partial<Parameters<typeof PathStrip>[0]> = {}) => {
-    const p = { path, step: 1, labels: L, onStep: vi.fn(), stations: model.byId, onOpenPanel: vi.fn(), ...over };
+    const p = { path, step: 1, labels: L, onStep: vi.fn(), stations: model.byId, ...over };
     render(<PathStrip {...p} />);
     return p;
 };
 const click = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
 
 describe('PathStrip', () => {
-    it('titles the strip with the title the root made (in mono), else "Path"', () => {
+    it('titles the strip with the title the root made, else "Path", after the "Journey" cap', () => {
         strip({ pathTitle: 'Web line · GET /users/:id' });
+        expect(screen.getByText(L.surface.path.journey)).toBeTruthy();
         expect(screen.getByText('Web line · GET /users/:id')).toBeTruthy();
     });
 
@@ -28,50 +29,26 @@ describe('PathStrip', () => {
         expect(screen.getByText(L.surface.pathTitle, { selector: 'strong' })).toBeTruthy();
     });
 
-    it('resets to the first stop, steps either way and runs to the end', () => {
+    it('steps either way with the arrows and jumps with a numbered chip', () => {
         const p = strip();
-        click(L.surface.path.reset);
-        expect(p.onStep).toHaveBeenLastCalledWith(0);
         click(L.surface.pathNext);
         expect(p.onStep).toHaveBeenLastCalledWith(2);
         click(L.surface.pathBack);
         expect(p.onStep).toHaveBeenLastCalledWith(0);
-        click(L.surface.path.runToEnd);
-        expect(p.onStep).toHaveBeenLastCalledWith(path.stops.length - 1);
+        const chips = screen.getByRole('list', { name: L.surface.path.stops }).querySelectorAll('button');
+        expect(chips).toHaveLength(path.stops.length);
+        expect(chips[0]!.querySelector('b')!.textContent).toBe('1');
+        fireEvent.click(chips[2]!);
+        expect(p.onStep).toHaveBeenLastCalledWith(2);
+        expect(chips[1]!.getAttribute('aria-current')).toBe('step');
     });
 
-    it('offers Run to end only before the last stop', () => {
-        strip({ step: path.stops.length - 1 });
-        expect((screen.getByRole('button', { name: L.surface.path.runToEnd }) as HTMLButtonElement).disabled).toBe(true);
-    });
-
-    it('opens the Simulate drawer from "Simulate with values"', () => {
-        const p = strip();
-        click(L.surface.path.simulate);
-        expect(p.onOpenPanel).toHaveBeenCalledWith('simulate');
-    });
-
-    it('notes a stop from its metrics ("no tests") and patterns', () => {
+    it('has no Reset, Run to end, Simulate, Sequence or narration: one row', () => {
         strip();
-        const repo = model.stations.find((s) => s.name === 'repositories')!;
-        expect(document.querySelector(`[data-stop-note="${repo.id}"]`)!.textContent).toContain(L.surface.path.noTests);
-        const api = model.stations.find((s) => s.name === 'API')!;
-        expect(document.querySelector(`[data-stop-note="${api.id}"]`)!.textContent).toContain(api.patterns[0]!);
-    });
-
-    it('swaps the stop chips for the sequence diagram with the Sequence toggle, which then offers Enlarge', () => {
-        const onEnlarge = vi.fn();
-        strip({ onEnlarge });
-        expect(screen.queryByRole('button', { name: L.surface.path.enlarge })).toBeNull();
-        const toggle = screen.getByRole('button', { name: L.surface.path.sequence });
-        fireEvent.click(toggle);
-        expect(toggle.getAttribute('aria-pressed')).toBe('true');
-        expect(document.querySelectorAll('[data-lifeline]')).toHaveLength(path.stops.length);
-        expect(screen.queryByRole('list', { name: L.surface.path.stops })).toBeNull();
-        click(L.surface.path.enlarge);
-        expect(onEnlarge).toHaveBeenCalled();
-        fireEvent.click(toggle);
-        expect(document.querySelector('[data-lifeline]')).toBeNull();
+        for (const name of [L.surface.path.reset, L.surface.path.runToEnd, L.surface.path.simulate, L.surface.path.sequence]) {
+            expect(screen.queryByRole('button', { name })).toBeNull();
+        }
+        expect(screen.queryByTestId('kg-step-narration')).toBeNull();
     });
 
     it('copies the Mermaid of exactly what the Sequence camera draws', () => {
@@ -80,30 +57,6 @@ describe('PathStrip', () => {
         strip();
         click(L.copyMermaid);
         expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/^sequenceDiagram\n    participant P1 as main\.tsx/));
-    });
-
-    it('is a vertical list on a phone and keeps the hops between the stops', () => {
-        strip({ narrow: true });
-        const list = screen.getByRole('list', { name: L.surface.path.stops });
-        expect(list.style.flexDirection).toBe('column');
-        expect(list.querySelectorAll('[data-hop]')).toHaveLength(path.hops.length);
-    });
-
-    it('draws a hop\'s detail (what travels over it) when the edge carries one', () => {
-        strip({ path: { ...path, hops: path.hops.map((h, i) => (i === 0 ? { ...h, detail: 'PUT 1.4 MB' } : h)) } });
-        expect(screen.getByText(/PUT 1\.4 MB/)).toBeTruthy();
-    });
-
-    it('marks a cycle hop with a glyph and the cycle label (never colour alone)', () => {
-        strip({ path: { ...path, hops: path.hops.map((h, i) => (i === 0 ? { ...h, cycle: true } : h)) } });
-        const hop = document.querySelector('[data-hop][data-cycle]')!;
-        expect(hop.querySelector('[data-cycle-mark]')).not.toBeNull();
-        expect(hop.textContent).toContain(L.surface.cycleHop);
-    });
-
-    it('says "no direct reference" for a hop with a zero count, the same words the Sequence camera uses', () => {
-        strip({ path: { ...path, hops: path.hops.map((h, i) => (i === 0 ? { ...h, count: 0 } : h)) } });
-        expect(document.querySelector('[data-hop]')!.textContent).toContain(L.surface.noDirectReference);
     });
 });
 
@@ -129,20 +82,5 @@ describe('pathNotes', () => {
 
     it('writes no note for a clean, tested station', () => {
         expect(stationNote({ ...model.stations[0]!, cov: 0.9, patterns: [], findingIds: [] }, L)).toBeNull();
-    });
-});
-
-describe('PathStrip hop route labels', () => {
-    it('draws the label of a hop after its words, and nothing for a hop with none', () => {
-        const labels = path.hops.map((_, i) => (i === 0 ? 'PUT 1.4 MB' : null));
-        strip({ routeLabels: labels });
-        const routes = document.querySelectorAll('[data-route]');
-        expect(routes).toHaveLength(1);
-        expect(routes[0]!.textContent).toContain('PUT 1.4 MB');
-    });
-
-    it('draws no label when none is known (never a guess)', () => {
-        strip();
-        expect(document.querySelector('[data-route]')).toBeNull();
     });
 });

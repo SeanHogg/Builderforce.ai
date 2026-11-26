@@ -7,6 +7,7 @@ import { PRESETS } from '../surface/overlays';
 import { surfaceFixture } from '../testing';
 import { withSymbols } from '../surface/transit/testFixtures';
 import { createWebGLStage } from './renderer';
+import { spanOf } from './tween';
 import type { Placement } from './types';
 
 const graph = withSymbols(surfaceFixture());
@@ -56,7 +57,7 @@ describe('StageRenderer (PRD 43 B1a done checks)', () => {
         stage.setPlacement(place('map'), 0, 0);
         stage.setPlacement(place('graph'), 0, 400);
         expect(stage.tick(200)).toBe(true);
-        expect(stage.tick(400)).toBe(false);
+        expect(stage.tick(spanOf(400))).toBe(false);
         stage.setPlacement(place('map'), 1_000, 0);
         expect(stage.tick(1_001)).toBe(false);
     });

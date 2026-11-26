@@ -8,6 +8,7 @@
 
 import { DoubleSide, DynamicDrawUsage, Float32BufferAttribute, GLSL3, Group, InstancedBufferAttribute, InstancedBufferGeometry, InstancedMesh, ShaderMaterial, type IUniform, type Vector3 } from 'three';
 import { PALETTE_SIZE } from '../tones';
+import { RoomLayer } from './RoomLayer';
 import { uploadRange, type StageStats } from '../stats';
 import type { PlaneSpec } from '../types';
 
@@ -39,12 +40,18 @@ export class PlaneLayer {
     private rect!: InstancedBufferAttribute;
     private plane!: InstancedBufferAttribute;
     private capacity = 0;
+    /** The floor plates (`room` planes): lit 3D slabs, not backdrop quads. */
+    private rooms: RoomLayer | null = null;
 
     constructor(private readonly stats: StageStats, private readonly palette: IUniform<Vector3[]>) {
         this.create(PLANE_CAPACITY);
+        this.rooms = new RoomLayer(stats, palette);
+        this.group.add(this.rooms.group);
     }
 
-    set(planes: readonly PlaneSpec[]): void {
+    set(all: readonly PlaneSpec[]): void {
+        this.rooms?.set(all);
+        const planes = all.filter((p) => p.kind !== 'room');
         if (planes.length > this.capacity) this.create(Math.max(planes.length, this.capacity * 2));
         const r = this.rect.array as Float32Array, q = this.plane.array as Float32Array;
         planes.forEach((p, i) => {
@@ -62,7 +69,7 @@ export class PlaneLayer {
     get visible(): boolean { return this.group.visible; }
 
     private create(capacity: number): void {
-        this.dispose();
+        this.disposeQuads();
         const geometry = new InstancedBufferGeometry();
         geometry.setAttribute('position', new Float32BufferAttribute(QUAD, 3));
         this.rect = new InstancedBufferAttribute(new Float32Array(capacity * 4), 4).setUsage(DynamicDrawUsage);
@@ -84,6 +91,12 @@ export class PlaneLayer {
     }
 
     dispose(): void {
+        this.rooms?.dispose();
+        this.rooms = null;
+        this.disposeQuads();
+    }
+
+    private disposeQuads(): void {
         if (!this.mesh) return;
         this.group.remove(this.mesh);
         this.mesh.geometry.dispose();

@@ -1,6 +1,6 @@
 /**
- * The question chips: the five primary questions as pills, a *More questions* menu for the
- * rest, and a "{family} only ✕" chip while the patterns question is narrowed to a family.
+ * The questions segment of the toolbar: the primary questions as icon buttons (the active one shows its words), a *More questions* button opening a menu
+ * of the rest, and a "{family} only ✕" chip while the patterns question is narrowed to a family.
  *
  * The lens row is gone: every lens is reachable here. A lens that is a question's twin opens
  * with that question (its menu item says "was the {lens} lens"); a lens with no question
@@ -13,7 +13,8 @@ import type { LensDef } from '../lenses';
 import type { LensId } from '../types';
 import { MORE_QUESTIONS, PRIMARY_QUESTIONS, questionForLens, type QuestionId } from './questions';
 import type { Station } from './stations';
-import { Menu, Pill, pillStyle, type MenuItem } from './ui';
+import { Menu, Seg, pillStyle, segButtonStyle, type MenuItem } from './ui';
+import { questionGlyph } from './ui/glyphs';
 
 export interface QuestionBarProps {
     labels: KnowledgeGraphLabels;
@@ -54,7 +55,7 @@ export function moreItems(labels: KnowledgeGraphLabels, question: QuestionId, le
 export function QuestionBar({ labels, stations, question, onQuestion, lenses, lens, onLens, family, onClearFamily }: QuestionBarProps) {
     const s = labels.surface;
     const items = moreItems(labels, question, lenses, lens);
-    // A lens with no question (Compare) is a More item of its own; while it is the active pick no pill is lit, and the trigger names it.
+    // A lens with no question (Compare) is a More item of its own; while it is the active pick no button is lit, and the trigger names it.
     const lensOnly = lensOnlyOf(lenses, lens);
     const moreActive = lensOnly !== null || MORE_QUESTIONS.some((q) => q.id === question);
     const moreName = lensOnly !== null ? labels.lenses[lensOnly] : s.questions[question];
@@ -69,26 +70,20 @@ export function QuestionBar({ labels, stations, question, onQuestion, lenses, le
     };
 
     return (
-        // One line, never wrapped (the scene sits below a measured controls block): the pills scroll sideways; the More menu
-        // and the family chip stay put, so the menu's popover is not clipped by the scroller.
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0, flexWrap: 'nowrap' }}>
-            <div
-                role="group" aria-label={s.questionsLabel}
-                style={{ display: 'flex', gap: 6, minWidth: 0, flex: '0 1 auto', overflowX: 'auto', scrollSnapType: 'x proximity', scrollbarWidth: 'none' }}
-            >
-                {PRIMARY_QUESTIONS.map((q) => (
-                    <Pill
-                        key={q.id} data-question={q.id} on={lensOnly === null && q.id === question} title={hint(q.id, q.lens)}
-                        style={{ scrollSnapAlign: 'start', ...(status(q.id) === 'not-set-up' ? { borderStyle: 'dashed' } : null) }}
-                        onClick={() => onQuestion(q.id)}
-                    >
-                        {s.questions[q.id]}
-                    </Pill>
-                ))}
-            </div>
-            <Menu
-                label={s.moreQuestions} active={moreActive} items={items} onSelect={pick} panelStyle={{ minWidth: 300, maxWidth: 'calc(100vw - 24px)' }}
-                trigger={<>{moreActive ? moreName : s.moreQuestions}<span aria-hidden="true"> ▾</span></>}
+        <>
+            <Seg
+                label={s.questionsLabel} value={lensOnly === null ? question : null} onPick={(id) => onQuestion(id as QuestionId)}
+                items={PRIMARY_QUESTIONS.map((q) => ({
+                    id: q.id, label: s.questions[q.id], glyph: questionGlyph(q.id), dashed: status(q.id) === 'not-set-up',
+                    ...(hint(q.id, q.lens) ? { title: `${s.questions[q.id]} · ${hint(q.id, q.lens)}` } : {}),
+                }))}
+                trailing={(
+                    <Menu
+                        label={s.moreQuestions} active={moreActive} items={items} onSelect={pick} panelStyle={{ minWidth: 300, maxWidth: 'calc(100vw - 24px)' }}
+                        title={s.moreQuestions} triggerLabel={moreActive ? moreName : s.moreQuestions} triggerStyle={segButtonStyle(moreActive, true)}
+                        trigger={<>{questionGlyph(moreActive && !lensOnly ? question : 'more') ?? questionGlyph('more')}{moreActive ? <span>{moreName}</span> : null}</>}
+                    />
+                )}
             />
             {family && (
                 <button
@@ -98,6 +93,6 @@ export function QuestionBar({ labels, stations, question, onQuestion, lenses, le
                     {fillTemplate(s.overlay.familyOnly, { family })}<span aria-hidden="true"> ✕</span>
                 </button>
             )}
-        </div>
+        </>
     );
 }

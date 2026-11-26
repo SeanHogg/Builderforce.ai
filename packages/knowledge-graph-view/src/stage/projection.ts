@@ -70,6 +70,19 @@ export const orbitPxPerWorld = (o: Pick<OrbitPose, 'distance' | 'fov' | 'height'
 export const orbitDistanceFor = (pxPerWorld: number, fov: number, height: number): number =>
     height / (2 * Math.max(1e-6, pxPerWorld) * Math.tan((fov * Math.PI) / 360));
 
+/** Share of the stage a fitted view fills (the design's 0.9 of the fitting distance). */
+export const FIT_FILL = 0.9;
+
+/**
+ * The distance that frames a sphere of `radius` in a `width` × `height` box: the radius over the sine of the NARROWER of the
+ * vertical half-angle and the horizontal one (from the box's own aspect), so a tall, narrow stage still frames the whole
+ * content. The design's `fit()`.
+ */
+export function orbitFitDistance(radius: number, fov: number, width: number, height: number): number {
+    const half = (fov * Math.PI) / 360, side = Math.atan(Math.tan(half) * (Math.max(1, width) / Math.max(1, height)));
+    return (Math.max(1e-6, radius) / Math.sin(Math.min(half, side))) * FIT_FILL;
+}
+
 const EYE = [0, 0, 0], UP = [0, 0, 0], FWD = [0, 0, 0];
 
 /** World → CSS px under the orbit view; false when the point is behind the camera. */

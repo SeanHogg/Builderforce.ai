@@ -17,10 +17,10 @@
  */
 
 import { RESTING_DEPTH } from '../depth';
-import { Tween, TWEEN_MS } from '../tween';
+import { now as clock, Tween, TWEEN_MS } from '../tween';
 import type { Projector, ScreenFrame } from '../pick';
 import {
-    groundScreenMatrix, orbitBasis, orbitDistanceFor, orbitPxPerWorld, projectGround, projectOrbit, type GroundView, type OrbitPose,
+    groundScreenMatrix, orbitBasis, orbitDistanceFor, orbitFitDistance, orbitPxPerWorld, projectGround, projectOrbit, type GroundView, type OrbitPose,
 } from '../projection';
 import type { CameraRig } from '../types';
 
@@ -79,6 +79,12 @@ export class RigController {
     private orbitHome: OrbitState = this.orbit;
     /** A tween in orbit space (orbit → orbit, or across the kinds): from, to. */
     private blend: { from: OrbitState; to: OrbitState } | null = null;
+    /** Fit-to-content (`OrbitView.radius`): the radius the orbit must keep in frame; the distance follows the box's aspect. */
+    private fitRadius: number | undefined;
+    /** The extrude multiplier Flat collapses an orbit to (`OrbitView.flatDepth`); undefined = heights stay full. */
+    private flatDepth: number | undefined;
+    /** How long a resize re-fit and a view change take (the stage sets 0 under reduced motion). */
+    motionMs = TWEEN_MS;
     width = 0;
     height = 0;
 
@@ -97,9 +103,15 @@ export class RigController {
     get projection(): RigPose['projection'] { return this.kind === 'orbit' || this.blend ? 'perspective' : 'orthographic'; }
     /** The marks' extrude multiplier: the depth control on the ground, full in orbit (the 3D scene stands up). */
     get depthUniform(): number {
-        const target = this.kind === 'orbit' ? 1 : this.depthNow;
+        const target = this.kind === 'orbit' ? this.orbitDepth() : this.depthNow;
         // Across a re-home (Map ↔ 3D) the extrude follows the camera tween instead of snapping.
         return this.tween.active && this.depthT < 1 ? lerp(this.depthFrom, target, this.depthT) : target;
+    }
+    /** An orbit's extrude: full, or — when the placement names a `flatDepth` — collapsing toward it as the pitch comes down to Flat. */
+    private orbitDepth(): number {
+        if (this.flatDepth === undefined) return 1;
+        const rest = this.restingPitch, k = clamp((this.orbit.pitch - rest) / Math.max(1, FLAT_PITCH - rest), 0, 1);
+        return lerp(1, this.flatDepth, k);
     }
     /** The extrude multiplier a re-home tween starts from, and the tween's eased progress. */
     private depthFrom = 0;
@@ -126,7 +138,10 @@ export class RigController {
         if (rig.view) {
             const t = rig.home.target;
             this.restingPitch = clamp(rig.view.pitch, ...this.tiltRange);
-            this.orbitHome = { tx: t[0], ty: t[1], tz: t[2], yaw: rig.view.yaw, pitch: this.flatNow ? FLAT_PITCH : this.restingPitch, distance: rig.view.distance, fov: rig.view.fov };
+            this.fitRadius = rig.view.radius;
+            this.flatDepth = rig.view.flatDepth;
+            const distance = this.fitRadius === undefined ? rig.view.distance : orbitFitDistance(this.fitRadius, rig.view.fov, width, height);
+            this.orbitHome = { tx: t[0], ty: t[1], tz: t[2], yaw: rig.view.yaw, pitch: this.flatNow ? FLAT_PITCH : this.restingPitch, distance, fov: rig.view.fov };
             this.kind = 'orbit';
             this.goOrbit(fromOrbit, this.orbitHome, now, ms);
             return;
@@ -147,6 +162,16 @@ export class RigController {
         this.width = width; this.height = height;
         this.home = home;
         if (!this.moved && this.kind === 'ground') { this.tween.finish(); this.blend = null; this.view = home; this.target = home; }
+        // A fitted orbit re-fits to the box's NEW aspect and eases there (the person's yaw and pitch stay): a narrow, tall stage still frames the room.
+        if (this.kind === 'orbit' && this.fitRadius !== undefined) {
+            const distance = orbitFitDistance(this.fitRadius, this.orbitHome.fov, width, height);
+            if (Math.abs(distance - this.orbitHome.distance) > 1e-6) {
+                this.orbitHome = { ...this.orbitHome, distance };
+                const live = this.liveOrbit();
+                this.goOrbit(live, { ...live, tx: this.orbitHome.tx, ty: this.orbitHome.ty, tz: this.orbitHome.tz, distance }, clock(), this.motionMs);
+                return;
+            }
+        }
         this.changed();
     }
 
@@ -226,6 +251,30 @@ export class RigController {
         this.orbit = { ...this.orbit, yaw: this.orbit.yaw - dx * ORBIT_DEG_PER_PX, pitch };
         this.moved = true;
         this.changed();
+    }
+
+    /**
+     * Moves the view along the GROUND by a screen delta in CSS px, the way a right-drag (or two fingers) carries the room: the
+     * target slides along the camera's horizontal right and forward, clamped to the fitted content. Ground views pan.
+     */
+    groundPanBy(dx: number, dy: number): void {
+        if (this.kind !== 'orbit') { this.panBy(dx, dy); return; }
+        this.stop();
+        const o = this.orbit, k = 1 / Math.max(1e-6, this.pxPerWorld), yaw = (o.yaw * Math.PI) / 180;
+        const c = Math.cos(yaw), s = Math.sin(yaw);
+        const limit = (this.fitRadius ?? Infinity) * 1.1, h = this.orbitHome;
+        this.orbit = { ...o, tx: clamp(o.tx - (dx * c + dy * s) * k, h.tx - limit, h.tx + limit), tz: clamp(o.tz + (dx * s - dy * c) * k, h.tz - limit, h.tz + limit) };
+        this.moved = true;
+        this.changed();
+    }
+
+    /** The view from straight above (the nav's Top): pitched nearly down and squared to the axes, tweened; the pitch stays in range. */
+    topView(now: number, ms: number = TWEEN_MS): void {
+        if (this.kind !== 'orbit') return;
+        this.stop();
+        const from = this.liveOrbit(), [, hi] = this.tiltRange;
+        this.goOrbit(from, { ...from, yaw: 0, pitch: Math.min(hi, 83) }, now, ms);
+        this.moved = true;
     }
 
     /** Centres the view on ground point (x, z) at the current zoom / distance (a focused off-screen proxy, B5). */

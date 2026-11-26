@@ -31,7 +31,7 @@ export function withSymbolRecords(graph: KnowledgeGraph, records: readonly Symbo
 }
 
 /** The ONE symbol classifier lives with the mark-type registry (a symbol's sort picks its shape). */
-export { symbolSort, type SymbolSort } from '../../shapes';
+export { isClassLike, symbolSort, type SymbolSort } from '../../shapes';
 
 export const isSymbol = (n: KNode): boolean => n.kind === 'symbol';
 

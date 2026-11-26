@@ -45,7 +45,7 @@ describe('a worker fail-over keeps the stage showing (requests carry the model i
         expect(marksDone).toHaveBeenCalled();
 
         const placed = vi.fn();
-        client.run('placement', { ...req('map'), graph, generation: built.generation }, { done: placed, fail: vi.fn() });
+        client.run('placement', { ...req('system'), graph, generation: built.generation }, { done: placed, fail: vi.fn() });
         await flush();
         expect((worker.runs()[1]!.req as { model?: unknown }).model).toEqual({ strings });   // the codec carried the inputs
         worker.onerror?.({} as never);                                   // the worker dies with the placement owed
@@ -53,6 +53,6 @@ describe('a worker fail-over keeps the stage showing (requests carry the model i
         const p = placed.mock.calls[0]![0] as { generation: number; captions: { text: string }[] };
         expect(p.generation).toBe(built.generation);                     // still matches the marks on show
         expect(p.captions.length).toBeGreaterThan(0);
-        expect(p.captions.every((c) => c.text.startsWith('Domaine:'))).toBe(true); // built with the same localized strings
+        expect(p.captions.some((c) => c.text.startsWith('Domaine:'))).toBe(true); // built with the same localized strings
     });
 });

@@ -15,7 +15,7 @@ import { LAYER_ORDER } from '../layers';
 import { buildLines, type LinesModel } from '../lines';
 import { fileNodesOf, mapEdges, tailOf } from '../outlineGraph';
 import { buildStations, fileRefOf, stationOfRef, type Station, type StationModel } from '../stations';
-import { isErrorish, membersOfClass, shortName, symbolSort, symbolsOf, symbolsOfFile } from './symbols';
+import { isClassLike, isErrorish, membersOfClass, shortName, symbolSort, symbolsOf, symbolsOfFile } from './symbols';
 
 export type DrillLevel = 'package' | 'class' | 'function';
 export interface DrillFrame {
@@ -63,10 +63,10 @@ function membersOf(graph: KnowledgeGraph, world: StationModel, frame: DrillFrame
             const station = stationOfRef(world, frame.ref);
             return { members: asFiles(world.byId.get(station ?? '')?.refs ?? []), order: [...LAYER_ORDER], filesOnly: true, extra: [], anchors: [] };
         }
-        const members = own.map((node) => ({ node, role: isErrorish(node) ? 'errors' : symbolSort(node) === 'class' ? 'symbol' : 'methods' }));
+        const members = own.map((node) => ({ node, role: isErrorish(node) ? 'errors' : isClassLike(symbolSort(node)) ? 'symbol' : 'methods' }));
         // A class stands above its methods.
         const extra: KEdge[] = [];
-        for (const cls of own.filter((n) => symbolSort(n) === 'class')) {
+        for (const cls of own.filter((n) => isClassLike(symbolSort(n)))) {
             for (const m of membersOfClass(own, cls)) extra.push({ from: cls.ref, to: m.ref, kind: 'references', weight: 1, origin: 'extracted' });
         }
         return { members, order: ['symbol', 'methods', 'errors'], filesOnly: false, extra, anchors: [frame.ref] };

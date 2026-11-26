@@ -32,18 +32,28 @@ describe('placement (PRD 43 B1a rule 4: visibility is scale)', () => {
         expect([d.scale[0], d.scale[1], d.scale[4]]).toEqual([1, 1, 8]);
     });
 
-    it('Map: shows the drawn stations; every node sits at its station at scale 0', () => {
+    it('Map: shows the drawn stations; a node is a roof miniature on its station (at most 12) or sits at it at scale 0', () => {
         const p = place('map');
         const shown = p.a11y.map((a) => a.slot);
         expect(shown.length).toBeGreaterThan(0);
         for (const s of shown) { expect(marks.slotKind[s]).toBe(SLOT_STATION); expect(p.scale[s]).toBeGreaterThan(0); }
+        const minis = new Map<number, number>();
         for (let i = 0; i < graph.nodes.length; i++) {
-            expect(p.scale[i]).toBe(0);
             const st = marks.parentStation[i]!;
-            if (st >= 0) expect(at(p, i)).toEqual(at(p, st));
+            if (p.scale[i]! > 0) {
+                // A roof miniature: small, standing on its station's roof (the station's height), over its footprint.
+                expect(st).toBeGreaterThanOrEqual(0);
+                expect(p.scale[i]).toBeLessThan(p.scale[st]!);
+                expect(p.position[i * 3 + 1]).toBe(p.extrude[st]);
+                minis.set(st, (minis.get(st) ?? 0) + 1);
+            } else if (st >= 0) expect(at(p, i)).toEqual(at(p, st));
         }
-        expect(p.links[0]!.family).toBe('route');
-        expect(p.links[0]!.casing).toBeDefined();
+        for (const n of minis.values()) expect(n).toBeLessThanOrEqual(12);
+        expect(p.links[0]!.family).toBe('hall');
+        expect(p.links[0]!.casing).toBeUndefined();
+        expect(p.planes.filter((pl) => pl.kind === 'room')).toHaveLength(1);
+        expect(p.rig.projection).toBe('perspective');
+        expect(p.rig.view?.radius).toBeGreaterThan(0);
         expect(p.position.length).toBe(marks.keys.length * 3);
     });
 

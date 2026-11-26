@@ -37,7 +37,10 @@ describe('markTypeOf (PRD 43 B1a rule 2)', () => {
         expect(markTypeOf(node('symbol', 'a.ts#Widget', { label: 'Widget' }))).toBe('class');
         expect(markTypeOf(node('symbol', 'a.ts#run', { label: 'run' }))).toBe('function');
         expect(markTypeOf(node('symbol', 'a.ts#W.run', { label: 'Widget.run' }))).toBe('function');
-        expect(markTypeOf(node('symbol', 'a.ts#X', { label: 'x', badges: { symbolKind: 'interface' } }))).toBe('class');
+        expect(markTypeOf(node('symbol', 'a.ts#X', { label: 'x', badges: { symbolKind: 'interface' } }))).toBe('interface');
+        expect(markTypeOf(node('symbol', 'a.ts#T', { label: 'T', badges: { symbolKind: 'type' } }))).toBe('interface');
+        expect(markTypeOf(node('symbol', 'a.ts#Tr', { label: 'Tr', badges: { symbolKind: 'trait' } }))).toBe('interface');
+        expect(markTypeOf(node('symbol', 'a.ts#E', { label: 'E', badges: { symbolKind: 'enum' } }))).toBe('class');
         expect(markTypeOf(node('section'))).toBe('section');
         expect(markTypeOf(node('entity'))).toBe('entity');
         expect(markTypeOf(node('claim'))).toBe('claim');

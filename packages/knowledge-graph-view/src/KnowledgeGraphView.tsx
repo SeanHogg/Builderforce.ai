@@ -2,17 +2,18 @@
  * `KnowledgeGraphView` — the ONE view of a knowledge graph, on every host (PRD 38 §4.6).
  *
  * A composition root: it holds the graph's state and the surface's state, and lays out the
- * parts, each its own module. Header (`surface/SurfaceHeader.tsx`: the spine, ask bar and review
- * action); left, the lines and their stations; centre, the scene with its floating controls
- * (`surface/SceneOverlay.tsx`: View, Panels + Risk overlays, panel toggles, questions, commit
- * scrubber) and the path strip below; right, the Act panel. The three panels hide via
+ * parts, each its own module. Header (`surface/SurfaceHeader.tsx`: Out, the spine, search, the review
+ * status and the Panels button); left, the lines and their stations; centre, the scene with its
+ * toolbar (`surface/SceneOverlay.tsx`: views, 3D | Flat, questions, the compare bar) and the
+ * journey row below; right, ONE drawer (`surface/Drawer.tsx`: Act, Coverage, Patterns, API, Simulate,
+ * Fix, Review...), closed until opened. The lines and the stage's code pane hide via
  * `surface/usePanelVisibility.ts`. The cameras and the panels are registries (`surface/cameras.tsx`,
  * `surface/panels.ts`), so this file names none of them. What the chrome derives from the state
- * (the layout steps, the spine, the titles, the overlay's props) is `surface/useSurfaceChrome.ts`.
+ * (the spine, the titles, the overlay's props) is `surface/useSurfaceChrome.ts`.
  *
- * The rails reflow by container width (`layout.ts`): below 1100px the Act rail moves under the
- * scene; below 840px the Lines list stacks above the path strip; below the phone width it is a
- * sheet. With no reviewed folder it offers **Review a folder**.
+ * Everything reflows by container width (`layout.ts`): at or under 900px the header wraps and the
+ * drawer is a bottom sheet; below 840px the Lines list stacks above the journey; below the phone
+ * width it is a sheet. With no reviewed folder it offers **Review a folder**.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -29,7 +30,7 @@ import { isSmall } from './compute/size';
 import type { VisibleGraph } from './graphModel';
 import { useStableGraph } from './stableGraph';
 import { useContainerWidth, useRenderEnvironment } from './environment';
-import { layoutOf, sceneMinHeight, sceneRowFlex, SCENE_TOP_FALLBACK } from './layout';
+import { layoutOf, SCENE_TOP_FALLBACK } from './layout';
 import { useReviewTargets } from './ReviewLauncher';
 import { ViewSurface } from './ViewSurface';
 import { LensPanel } from './LensPanel';
@@ -48,8 +49,10 @@ import { RetryUploadContext } from './surface/run/useRetryUpload';
 import { useZoomHost, ZoomProvider } from './surface/zoom';
 import { LinesPanel } from './surface/LinesPanel';
 import { foldCopyFindings } from './surface/systems';
-import { DockEdge, PanelDrawer } from './surface/PanelDock';
-import { SimulatePanel } from './surface/SimulatePanel';
+import { DockEdge } from './surface/PanelDock';
+import { Drawer } from './surface/Drawer';
+import { useDrawer } from './surface/useDrawer';
+import { useOpenSimulate } from './surface/useOpenSimulate';
 import { canApplyKind } from './surface/codemods';
 import { showsTowers, useClearHighlightOutsideTower } from './surface/useShowInTower';
 import { TowerLegend } from './surface/TowerLegend';
@@ -59,11 +62,8 @@ import { docStations } from './surface/transit/docs';
 import { typesPresent } from './shapes';
 import { groupTermini } from './surface/transit/termini';
 import { PathStrip } from './surface/PathStrip';
-import { transitionTableOf } from './surface/transitionTable';
-import { hopRouteLabels } from './surface/sequenceText';
 import { SurfaceHeader } from './surface/SurfaceHeader';
 import { TimeSlider, useHistory } from './surface/TimeSlider';
-import { SceneTools } from './surface/SceneTools';
 import { FlatViewContext, useFlatView } from './surface/useFlatView';
 import { usePanelVisibility } from './surface/usePanelVisibility';
 import { Pill } from './surface/ui';
@@ -125,9 +125,6 @@ export function KnowledgeGraphView({
     const env = useRenderEnvironment();
     const [chosen, setMode] = useState<ViewMode | null>(null);
     const [showAll, setShowAll] = useState(false), [tracing, setTracing] = useState(false), [linesOpen, setLinesOpen] = useState(false);
-    const [simulateMode, setSimulateMode] = useState(false);
-    /** The stop (station id) Simulate was asked to start from by a card or lens; null for the toggle. */
-    const [simulateAt, setSimulateAt] = useState<string | null>(null);
     const targets = useReviewTargets(source); // read ONCE: the empty state's launcher uses it
     const sync = useSyncStatus(source, kg.rootId, kg.graph); // read ONCE: the pill, the banner and the Sync drawer share it
     const zoom = useZoomHost();
@@ -152,8 +149,6 @@ export function KnowledgeGraphView({
     const readSource = useMemo(() => (source.readSource && kg.rootId ? (path: string, range: SourceRange) => source.readSource!(kg.rootId!, path, range) : undefined), [source, kg.rootId]);
     const readSourceAt = useMemo(() => (source.readSourceAt && kg.rootId ? (path: string, rev: string, range: SourceRange) => source.readSourceAt!(kg.rootId!, path, rev, range) : undefined), [source, kg.rootId]);
     const surface = useSurface(graph, compare.showingBefore ? null : kg.baseline?.graph ?? null, { question: questionForLens(kg.requested.id), focus: kg.focus, changed, symbols, readSource, readSourceAt, editorView, repoConfigName: labels.surface.repoConfig, communityFallback: labels.communityFallback });
-    // PRD 38 P7: the station transition table, built once per graph (memoised on it in `transitionTableOf`).
-    const transitions = useMemo(() => (real ? transitionTableOf(graph, surface.stations) : null), [real, graph, surface.stations]);
     // The question follows the lens in effect: a requested lens the graph cannot show falls back, and the pills must say which one is on.
     const lensInEffect = lens.id, lensAsked = kg.requested.id, setQuestion = surface.setQuestion;
     useEffect(() => {
@@ -176,7 +171,6 @@ export function KnowledgeGraphView({
     // "What changed?" (PRD 38 P4): the files that usually change with the changed ones and are not touched yet.
     const changedPartners = useMemo(() => (surface.question === 'changed' ? partnersOf(graph, surface.changedFiles ?? []) : undefined), [surface.question, graph, surface.changedFiles]);
     const resolvedFixes = useMemo(() => new Set(Object.values(surface.fixFlows).filter(isResolved).map((f) => f.findingId)), [surface.fixFlows]);
-    const routeLabels = useMemo(() => hopRouteLabels(surface.path, surface.stations.byId, index), [surface.path, surface.stations.byId, index]);
     const diagnostics = () => graphDiagnostics({
         status: kg.status, rootId: kg.rootId, graph: real, drawn: { nodes: drawn.nodes.length, edges: drawn.edges.length },
         showAll, webgl: env.webgl, reducedMotion: env.reducedMotion, mode, width, compact, lens: lens.id,
@@ -249,24 +243,17 @@ export function KnowledgeGraphView({
     useEffect(() => { if (mode === 'transit' || mode === 'map') setTowers(!flatView.flat); }, [mode, flatView.flat, setTowers]);
     /** The stage's code pane has its own hide control (PRD 43 Part C1); its slot is remembered with the docks'. */
     const toggleCode = () => panels.toggle('code');
-    /** Simulate is a mode of the right rail: turning it on opens that rail if it was collapsed. */
-    const toggleSimulate = () => {
-        if (!simulateMode && !panels.visibility.right) panels.toggle('right');
-        setSimulateMode(!simulateMode);
-        setSimulateAt(null);
-    };
+    // The ONE drawer: a panel opened from anywhere (`setPanel`) opens it at that tab; the header's Panels button opens it on Act.
+    const drawer = useDrawer(panel, setPanel);
+    const openSimulate = useOpenSimulate(surface, setPanel);
     const changedStations = new Set([...changed].flatMap((r) => stationOfRef(surface.stations, r) ?? [])).size;
-    const actions = useCompareActions({ compare, current: kg.graph, graph, index, surface, symbols, labels, select, openSimulate: (stopId) => { if (!simulateMode) toggleSimulate(); setSimulateAt(stopId ?? null); } });
+    const actions = useCompareActions({ compare, current: kg.graph, graph, index, surface, symbols, labels, select, openSimulate });
+    // The compare bar (the commit scrubber) shows only while "What changed?" is asked or a commit is picked.
+    const showTime = surface.question === 'changed' || compare.picked !== null;
     const overlay = (
         <SceneOverlay
             {...chrome.overlayProps} flat={flatView.flat} onFlat={onFlat}
-            tools={real ? <SceneTools graph={graph} env={surfaceEnv} labels={labels} surface={surface} panel={panel} onPanel={setPanel} panelsMenu={layout.panelsMenu} narrow={layout.phone}
-                simulate={{
-                    pressed: simulateMode,
-                    ariaLabel: fillTemplate(labels.surface.simulate.modeOpenAria, { name: selected ? index.get(selected)?.label ?? selected : labels.surface.simulate.modeEntry }),
-                    onToggle: toggleSimulate,
-                }} /> : undefined}
-            time={<TimeSlider commits={history.commits} capped={history.total} picked={compare.picked?.sha ?? null} labels={labels} changedStations={changedStations} onPick={(sha) => { compare.pickCommit(sha); if (sha) pickQuestion('changed'); }} />}
+            time={showTime ? <TimeSlider commits={history.commits} capped={history.total} picked={compare.picked?.sha ?? null} labels={labels} changedStations={changedStations} onPick={(sha) => { compare.pickCommit(sha); if (sha) pickQuestion('changed'); }} onClose={() => { compare.pickCommit(null); pickQuestion('where'); }} /> : undefined}
         />
     );
     const leftDock = hasLines && !layout.phone && !layout.linesStacked;
@@ -276,16 +263,17 @@ export function KnowledgeGraphView({
         <FlatViewContext.Provider value={flatView.setFlat}><RestructureContext.Provider value={actions.restructureFinding}><RetryUploadContext.Provider value={retryUpload}>
         <SurfaceFrame ref={rootRef} label={labels.regionLabel}>
             <SurfaceHeader
-                kg={kg} source={source} labels={labels} graph={graph} hasGraph={!!real} surface={surface} env={surfaceEnv} narrow={layout.phone} sync={sync.status}
-                run={runRead.live} rootTitle={titleOf(graph.scope.rootId)} onOpenReviews={openReviews}
+                kg={kg} source={source} labels={labels} graph={graph} surface={surface} env={surfaceEnv} wrapped={layout.drawerSheet} sync={sync.status}
+                run={runRead.live} onOpenReviews={openReviews} outTo={chrome.out.to} onOut={chrome.out.onOut} drawerOpen={drawer.open} onToggleDrawer={drawer.toggle}
+                panes={{ code: panels.visibility.code, onPane: (code) => { if (code !== panels.visibility.code) toggleCode(); } }}
                 spine={<Spine labels={labels} items={chrome.spineItems} roots={{ scopes: kg.scopes, rootId: kg.rootId, onRoot: kg.selectRoot }} onPick={chrome.onSpinePick} />}
                 askName={chrome.askName}
                 linesToggle={layout.phone && hasLines ? <Pill on={linesOpen} aria-expanded={linesOpen} onClick={() => setLinesOpen((v) => !v)}>{s.linesButton}</Pill> : undefined}
                 onSearch={(q) => void kg.search(q)} onSelect={select} onMatches={pinpointed} onClear={unpin} onCompose={onCompose}
             />
             {noHits !== null && <p role="status" style={{ ...muted, margin: 0, padding: '4px 12px' }}>{fillTemplate(labels.searchNoHits, { query: noHits })}</p>}
-            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: layout.actBelow ? 'column' : 'row', overflow: layout.actBelow ? 'auto' : 'hidden' }}>
-                <div style={{ display: 'flex', minWidth: 0, ...sceneRowFlex(layout) }}>
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', minWidth: 0, flex: 1, minHeight: 0 }}>
                     {leftDock && (
                         <DockEdge slot="left" shown={panels.visibility.left} onToggle={panels.toggle} labels={labels}>
                             {linesPanel(true)}
@@ -293,7 +281,7 @@ export function KnowledgeGraphView({
                     )}
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                         {layout.phone && overlay}{actions.bar}
-                        <div style={{ position: 'relative', flex: 1, minHeight: sceneMinHeight(layout) }}>
+                        <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
                             {/* Below the floating controls in every camera: `--kg-scene-top` is the measured height `SceneOverlay` publishes on this box (a phone stacks them in flow, so 0). */}
                             <div data-testid="kg-scene-box" style={{ position: 'absolute', top: layout.phone ? 0 : `var(--kg-scene-top, ${SCENE_TOP_FALLBACK})`, right: 0, bottom: 0, left: 0, overflow: 'auto' }}>
                                 {real ? (
@@ -321,46 +309,34 @@ export function KnowledgeGraphView({
                             </DockEdge>
                         )}
                         {hasLines && (
-                            <DockEdge slot="bottom" shown={panels.visibility.bottom} onToggle={panels.toggle} labels={labels}>
-                                <PathStrip
-                                    path={surface.path} step={surface.step} labels={labels} onStep={surface.setStep} pathTitle={chrome.pathTitle}
-                                    stations={surface.stations.byId} routeLabels={routeLabels} onOpenPanel={setPanel} onEnlarge={() => setMode('sequence')} narrow={layout.phone} transitions={transitions}
-                                    trail={surface.drill.stack} systemName={titleOf(graph.scope.rootId)} onClimb={surface.drill.climb}
-                                />
-                            </DockEdge>
+                            <PathStrip path={surface.path} step={surface.step} labels={labels} onStep={surface.setStep} pathTitle={chrome.pathTitle} stations={surface.stations.byId} />
                         )}
                     </div>
                 </div>
                 {real && (
-                    <DockEdge slot="right" shown={panels.visibility.right} onToggle={panels.toggle} labels={labels} below={layout.actBelow}>
-                    {simulateMode ? (
-                        <SimulatePanel
-                            graph={graph} from={selected} fromName={selected ? index.get(selected)?.label : undefined}
-                            path={surface.path} startAt={simulateAt} labels={labels} onStep={surface.setStep} onClose={() => setSimulateMode(false)}
-                        />
-                    ) : (
-                    <ActPanel
-                    graph={graph} findings={findings} listedFindings={listedFindings} lensName={labels.lenses[lens.id]} labels={labels} station={surface.station} stations={surface.stations.stations} scopeName={chrome.scopeName}
-                    compact={layout.actBelow} showFindings={mode !== 'list'} onClearScope={() => surface.selectLine(null)} onShow={show} onCompose={onCompose} onResolve={surface.resolve}
-                    evidence={evidenceOf} onOpenSource={onOpenSource} canApply={canApplyFor} resolved={resolvedFixes} onOpenPanel={setPanel} path={surface.path} step={surface.step} pathTitle={chrome.pathTitle}
-                    model={surface.stations} copyFix={copyFix} onAskUntested={() => pickQuestion('untested')} changedPartners={changedPartners}
-                >
-                    <InsightsPanel graph={graph} labels={labels} lenses={kg.lenses.map((l) => l.id)} onLens={pickLens} onShow={show} findingKinds={mode !== 'list'} />
-                    <LensPanel graph={graph} lens={lens} requested={kg.requested} baseline={kg.baseline} current={kg.graph} labels={labels} evidence={evidenceFor} onOpenSource={onOpenSource} />
-                </ActPanel>
-                    )}
-                    </DockEdge>
+                    <Drawer
+                        drawer={drawer} sheet={layout.drawerSheet}
+                        graph={graph} env={surfaceEnv} labels={labels} surface={surface} source={source} rootId={kg.rootId ?? undefined}
+                        rootTitle={titleOf(graph.scope.rootId)} onChanged={kg.reload} diagnostics={diagnostics} sync={sync} history={history} runs={runs} reviews={reviews}
+                        lastReviewedAt={kg.scopes.find((x) => x.rootId === kg.rootId)?.lastReviewedAt}
+                        revision={keepsBaseline ? compare.revision : undefined}
+                        onResendSkipped={source.review && kg.rootId ? () => { const id = kg.rootId!; setPanel(null); kg.review.start({ rootId: id, force: true }); } : undefined}
+                        onCamera={setMode} cameras={cameras.map((c) => c.id)} onShow={show} onCompose={onCompose}
+                        act={(
+                            <ActPanel
+                                graph={graph} findings={findings} listedFindings={listedFindings} lensName={labels.lenses[lens.id]} labels={labels} station={surface.station} stations={surface.stations.stations} scopeName={chrome.scopeName}
+                                showFindings={mode !== 'list'} onClearScope={() => surface.selectLine(null)} onShow={show} onCompose={onCompose} onResolve={surface.resolve}
+                                evidence={evidenceOf} onOpenSource={onOpenSource} canApply={canApplyFor} resolved={resolvedFixes} onOpenPanel={setPanel} path={surface.path} step={surface.step} pathTitle={chrome.pathTitle}
+                                model={surface.stations} copyFix={copyFix} onAskUntested={() => pickQuestion('untested')} changedPartners={changedPartners}
+                            >
+                                <InsightsPanel graph={graph} labels={labels} lenses={kg.lenses.map((l) => l.id)} onLens={pickLens} onShow={show} findingKinds={mode !== 'list'} />
+                                <LensPanel graph={graph} lens={lens} requested={kg.requested} baseline={kg.baseline} current={kg.graph} labels={labels} evidence={evidenceFor} onOpenSource={onOpenSource} />
+                            </ActPanel>
+                        )}
+                    />
                 )}
             </div>
             {layout.phone && hasLines && <Sheet open={linesOpen} compact title={s.linesTitle} closeLabel={labels.close} onClose={() => setLinesOpen(false)}>{linesPanel(false)}</Sheet>}
-            <PanelDrawer
-                graph={graph} env={surfaceEnv} labels={labels} surface={surface} panel={panel} onPanel={setPanel} renderPanel={renderPanel} source={source} rootId={kg.rootId ?? undefined}
-                rootTitle={titleOf(graph.scope.rootId)} onChanged={kg.reload} diagnostics={diagnostics} sync={sync} history={history} runs={runs} reviews={reviews}
-                lastReviewedAt={kg.scopes.find((x) => x.rootId === kg.rootId)?.lastReviewedAt}
-                revision={keepsBaseline ? compare.revision : undefined}
-                onResendSkipped={source.review && kg.rootId ? () => { const id = kg.rootId!; setPanel(null); kg.review.start({ rootId: id, force: true }); } : undefined}
-                onCamera={setMode} cameras={cameras.map((c) => c.id)} onShow={show} onCompose={onCompose}
-            />
             <NodeSheet
                 graph={graph} index={index} selected={selected} tracing={tracing} labels={labels} source={source} confirm={confirm} renderPanel={renderPanel}
                 compact={layout.compact} onClose={() => { setTracing(false); kg.select(null); }} onTrace={() => setTracing((v) => !v)} onSelect={select} onChanged={kg.reload} onShow={show}

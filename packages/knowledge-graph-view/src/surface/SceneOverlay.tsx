@@ -1,18 +1,12 @@
 /**
- * The controls that float over the scene (mockup B-Surface): the
- * *View* group with "↑ Out to …", the question pills with the *More questions*
- * menu and the "{family} only ✕" chip, and the scale note in the bottom-left corner. Zoom, Fit and the
- * shape key live on the stage (nav + docked legend), not in this bar. The overlay takes the scene's
- * whole box but lets pointer events through: only its controls take them.
+ * The toolbar over the scene (design prototype `#tools` + `#cmp`): ONE wrapping row on the panel background — the View segment (`CameraBar`), the
+ * 3D | Flat pair, a spacer, then the questions segment with its More menu (`QuestionBar`) — and, under it, the compare bar (`time`, the commit scrubber)
+ * only while "What changed?" is asked or a commit is picked. The scale note sits in the bottom-left corner. The overlay takes the scene's whole box but
+ * lets pointer events through: only its controls take them. The scene starts below the MEASURED toolbar (`--kg-scene-top`).
  *
- * `narrow` (a phone) stops floating: the same parts stack in flow ABOVE the scene, the View and
- * question rows become horizontal scrollers, and the scale note follows them.
+ * `narrow` (a phone) stops floating: the same parts stack in flow ABOVE the scene.
  *
- * Two slots come from the root: `tools` (Panels + Risk overlays, right after the View group) and
- * `time` (the commit scrubber, at the end of the question row). Panel show/hide is the dock-edge chevron.
- *
- * Pure presentation. Every datum comes in by prop; the pieces it composes are `CameraBar`
- * (View), `QuestionBar` and `ScaleLine`.
+ * Pure presentation. Every datum comes in by prop; the pieces it composes are `CameraBar`, `QuestionBar` and `ScaleLine`.
  */
 
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from 'react';
@@ -35,9 +29,6 @@ export interface SceneOverlayProps {
     cameras: readonly CameraDef[];
     mode: ViewMode;
     onMode(mode: ViewMode): void;
-    /** The level above the open station or drill ("the line"); null ⇒ no "↑ Out to" button. */
-    outTo?: string | null | undefined;
-    onOut?: (() => void) | undefined;
     // The question row.
     stations: readonly Station[];
     question: QuestionId;
@@ -61,9 +52,7 @@ export interface SceneOverlayProps {
     capped?: MapCap | undefined;
     /** A phone: stack in flow above the scene instead of floating over it. */
     narrow?: boolean | undefined;
-    /** The canvas tools (Panels, Risk overlays): `CameraBar` puts them right after the View group. */
-    tools?: ReactNode;
-    /** The commit scrubber, at the trailing end of the question row. */
+    /** The compare bar (the commit scrubber) under the toolbar; absent ⇒ not shown. */
     time?: ReactNode;
     /** The ONE 3D / Flat switch (PRD 43 C4), shown beside the View group when `onFlat` is given. */
     flat?: boolean | undefined;
@@ -101,26 +90,25 @@ export function SceneOverlay(p: SceneOverlayProps) {
     const controls = useRef<HTMLDivElement>(null);
     useSceneTop(rootRef, controls, !narrow);
     const root: CSSProperties = narrow
-        ? { position: 'relative', display: 'grid', gap: 6, padding: '4px 0' }
+        ? { position: 'relative', display: 'grid', gap: 0 }
         : { position: 'absolute', inset: 0, zIndex: 2, display: 'flex', flexDirection: 'column', pointerEvents: 'none', padding: '0 0 10px', minHeight: 0 };
 
     return (
         <div ref={rootRef} role="group" aria-label={t.controls} data-testid="kg-scene-overlay" style={root}>
             {/* The controls block: what the scene must sit below. Its height is measured, never assumed. */}
-            <div ref={controls} data-testid="kg-scene-controls" style={{ display: 'grid', gap: narrow ? 6 : 0, minWidth: 0 }}>
-            <CameraBar
-                labels={labels} cameras={p.cameras} mode={p.mode} onMode={p.onMode} outTo={p.outTo} onOut={p.onOut}
-                tools={p.tools} stacked={narrow} flat={p.flat} onFlat={p.onFlat}
-            />
-            <div style={{ padding: '0 12px 8px', pointerEvents: 'none', minWidth: 0, display: 'flex', gap: 8, alignItems: 'center', flexWrap: narrow ? 'nowrap' : 'wrap' }}>
-                <div style={{ pointerEvents: 'auto', width: narrow ? '100%' : 'fit-content', maxWidth: '100%' }}>
-                    <QuestionBar
-                        labels={labels} stations={p.stations} question={p.question} onQuestion={p.onQuestion} lenses={p.lenses} lens={p.lens} onLens={p.onLens}
-                        family={p.family} onClearFamily={p.onClearFamily}
-                    />
-                </div>
-                {p.time && <div style={{ pointerEvents: 'auto', flex: 'none', maxWidth: '100%', overflowX: narrow ? 'auto' : 'visible' }}>{p.time}</div>}
+            <div ref={controls} data-testid="kg-scene-controls" style={{ display: 'grid', gap: 0, minWidth: 0 }}>
+            <div
+                data-testid="kg-camera-row"
+                style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '6px 10px', minWidth: 0, pointerEvents: 'auto', borderBottom: `1px solid ${cssVar('border')}`, background: cssVar('panel') }}
+            >
+                <CameraBar labels={labels} cameras={p.cameras} mode={p.mode} onMode={p.onMode} flat={p.flat} onFlat={p.onFlat} />
+                <span aria-hidden="true" style={{ flex: 1 }} />
+                <QuestionBar
+                    labels={labels} stations={p.stations} question={p.question} onQuestion={p.onQuestion} lenses={p.lenses} lens={p.lens} onLens={p.onLens}
+                    family={p.family} onClearFamily={p.onClearFamily}
+                />
             </div>
+            {p.time && <div style={{ pointerEvents: 'auto', minWidth: 0 }}>{p.time}</div>}
             </div>
             <div style={{ flex: 1, minHeight: 0 }} />
             <div style={{ padding: '0 12px', ...(narrow ? null : { pointerEvents: 'none' }) }}>

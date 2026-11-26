@@ -1,13 +1,12 @@
 /**
  * The spine: where the person is, as a drill path under the reviewed folder
- * (station › file › symbol). Every crumb but the current one steps back up to it. With
+ * (station › file › symbol), as the prototype's mono crumbs. Every crumb but the current one steps back up to it. With
  * several reviewed folders the root crumb is a menu of them (it replaces the old scope select).
  */
 
 import type { CSSProperties } from 'react';
 import type { KnowledgeGraphLabels } from '../labels';
 import { cssVar } from '../scene/themeColors';
-import { CONTROL } from '../styles';
 import type { KnowledgeScopeSummary } from '../types';
 import type { SpineItem } from './path';
 import { Menu } from './ui';
@@ -27,11 +26,10 @@ export interface SpineProps {
     roots?: SpineRoots | undefined;
 }
 
-const crumb = (current: boolean, mono: boolean): CSSProperties => ({
-    minHeight: CONTROL, padding: '0 8px', borderRadius: 7, cursor: 'pointer', font: 'inherit', whiteSpace: 'nowrap',
-    ...(mono ? TYPE.monoName : TYPE.pill),
-    color: cssVar('text'), background: current ? cssVar('accentSoft') : 'transparent',
-    border: `1px solid ${current ? cssVar('accent') : 'transparent'}`,
+/** A crumb (design prototype `#spine button`): mono 12px, muted until it is the current one, which takes the accent wash. */
+const crumb = (current: boolean): CSSProperties => ({
+    padding: '4px 6px', borderRadius: 4, border: 0, cursor: 'pointer', whiteSpace: 'nowrap', font: 'inherit', ...TYPE.monoValue,
+    color: cssVar(current ? 'text' : 'muted'), background: current ? cssVar('accentSoft') : 'transparent',
 });
 
 export function Spine({ items, labels, onPick, roots }: SpineProps) {
@@ -43,7 +41,7 @@ export function Spine({ items, labels, onPick, roots }: SpineProps) {
         const menu = several && item.kind === 'root';
         return (
             <li key={`${item.kind}:${item.id ?? ''}`} style={{ display: 'flex', alignItems: 'center', gap: 2, flex: 'none' }}>
-                {i > 0 && <span aria-hidden="true" style={{ color: cssVar('muted') }}>›</span>}
+                {i > 0 && <span aria-hidden="true" style={{ color: cssVar('muted'), ...TYPE.monoValue }}>›</span>}
                 {menu ? (
                     <Menu
                         trigger={`${item.label} ▾`} label={labels.surface.header.rootsLabel} alignStart active={current}
@@ -51,7 +49,7 @@ export function Spine({ items, labels, onPick, roots }: SpineProps) {
                         onSelect={(id) => { if (id === roots.rootId) onPick(item); else roots.onRoot(id); }}
                     />
                 ) : (
-                    <button type="button" aria-current={current ? 'location' : undefined} onClick={() => onPick(item)} style={crumb(current, item.kind === 'file' || item.kind === 'symbol')}>
+                    <button type="button" aria-current={current ? 'location' : undefined} onClick={() => onPick(item)} style={crumb(current)}>
                         {item.label}
                     </button>
                 )}

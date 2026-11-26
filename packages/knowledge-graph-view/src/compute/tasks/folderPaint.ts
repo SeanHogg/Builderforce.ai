@@ -40,7 +40,7 @@ function folderSeverities(g: Pick<KnowledgeGraph, 'nodes' | 'findings'>): Map<st
 }
 
 /** Every folder slot's tone (its worst finding beneath, else {@link FOLDER_QUIET_TONE}) and flags (selectable). */
-export function paintFolders(g: Pick<KnowledgeGraph, 'nodes' | 'findings'>, marks: FolderMarks, tone: Uint8Array, flags: Uint8Array): void {
+export function paintFolders(g: Pick<KnowledgeGraph, 'nodes' | 'findings'>, marks: FolderMarks, tone: Uint8Array, flags: Uint16Array): void {
     const severity = folderSeverities(g);
     for (let i = 0; i < marks.keys.length; i++) {
         if (marks.slotKind[i] !== SLOT_FOLDER) continue;

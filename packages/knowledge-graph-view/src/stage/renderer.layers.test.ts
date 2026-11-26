@@ -8,9 +8,10 @@ import { surfaceFixture } from '../testing';
 import { withSymbols } from '../surface/transit/testFixtures';
 import { fixedFontPort } from './fonts';
 import type { LabelText, TextPort } from './labels/LabelLayer';
-import { LINK_FAMILY_STYLE } from './links/families';
+import { HALL_STYLE } from './links/families';
 import { FLAG_GLSL, PULSE_PERIOD_MS } from './marks/shader';
 import { createWebGLStage, MOTION_FRAME_MS } from './renderer';
+import { spanOf } from './tween';
 import { FLAG, LINK_FAMILIES, type MarkPaint, type Placement } from './types';
 
 const graph = withSymbols(surfaceFixture());
@@ -54,12 +55,15 @@ describe('the stage layers (PRD 43 B3)', () => {
         const map = place('map');
         stage.setPlacement(map, 0, 0);
         expect(stage.stats.meshesCreated).toBe(created);
-        const route = meshes(stage.object!, 'links:route')[0]!;
-        expect(route.count).toBeGreaterThan(0);
-        expect(route.count).toBeLessThanOrEqual(LINK_FAMILY_STYLE.route.capacity);
-        expect(uniform(route, 'uWorldWidth').value).toBe(1);
-        expect(uniform(route, 'uCasing').value).toBeGreaterThan(0);
-        expect(meshes(stage.object!, 'planes')[0]!.count).toBe(map.planes.length);
+        // The Map's routes are HALLS (raised 3D bars), and its level stands on ONE floor plate (a lit room slab).
+        const halls = meshes(stage.object!, 'halls').find((m) => m.name === 'halls')!;
+        expect(halls.count).toBeGreaterThan(0);
+        expect(halls.count).toBeLessThanOrEqual(HALL_STYLE.capacity);
+        expect(uniform(halls, 'uThick').value).toBe(HALL_STYLE.thickness);
+        expect(meshes(stage.object!, 'links:route')[0]!.count).toBe(0);
+        expect(map.planes.filter((p) => p.kind === 'room')).toHaveLength(1);
+        expect(meshes(stage.object!, 'rooms')[0]!.count).toBe(1);
+        expect(meshes(stage.object!, 'planes')[0]!.count).toBe(map.planes.filter((p) => p.kind !== 'room').length);
         // The map's names went to the label pass (a font is available, the fixture's names are latin).
         expect(text.created()).toBeGreaterThan(0);
         // A switch away and back still creates no mesh, links included.
@@ -86,6 +90,8 @@ describe('the stage layers (PRD 43 B3)', () => {
         stage.tick(200);
         expect(links.visible).toBe(false);
         stage.tick(400);
+        expect(links.visible).toBe(false); // each mark starts 45 ms after the one before it: the tween spans the stagger too
+        stage.tick(spanOf(400));
         expect(links.visible).toBe(true);
         expect(planes.visible).toBe(true);
         expect(meshes(stage.object!, 'links:route')[0]!.count).toBe(0); // Graph brings no routes

@@ -18,7 +18,7 @@
  * No WebGL, or a context lost for good: the List (the registry's `fallback` row) instead (B8).
  */
 
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { fillTemplate } from '../../labels';
 import { useComputed } from '../../compute/useComputed';
 import { viewportBandOf } from '../../compute/tasks/placement/request';
@@ -29,10 +29,10 @@ import { LayingOut } from '../../surface/LayingOut';
 import type { SceneProps } from '../../surface/registry';
 import { codeCompareOf, paintDiffEntries, type CompareView } from '../../surface/compareModel';
 import { showsTowers } from '../../surface/useShowInTower';
-import { Segmented } from '../../surface/ui';
-import { actionGlyph } from '../../surface/ui/glyphs';
 import { TYPE } from '../../surface/ui/type';
-import { codePaneWidth } from '../overlay/CodeDock';
+import { codePaneWidth, SPLIT_MIN_PX } from '../overlay/CodeDock';
+import { ColourLegend } from './ColourLegend';
+import { LevelRail } from './LevelRail';
 import { toggleButton } from '../overlay/cardStyles';
 import { CODE_BAR_PX } from '../overlay/CodeTrail';
 import { STATUS_PX } from '../overlay/StatusStrip';
@@ -77,12 +77,12 @@ export interface StageFlatProps {
 export interface StageHostProps extends SceneProps, StageCodeProps, StageCompareProps, StageFlatProps {
     /** The placement the active camera row names. */
     camera: PlacementCamera;
+    /** The scale sentence (`ScaleLine`), drawn under the Colour-by legend at the bottom-left; the view's chrome hands it in. */
+    scale?: ReactNode;
     /** The DOM camera shown when the stage cannot draw (no WebGL, a lost context). */
     fallback: ComponentType<SceneProps>;
 }
 
-/** The Code | Picture switch's row in a box too narrow to split. */
-const SWITCH_PX = 44;
 // Exactly its scene box (the layout gives that box its minimum, `sceneMinHeight`): a floor here made the stage taller
 // than the box, so a fill camera scrolled inside it and drew only the strip on screen.
 const BOX = { position: 'relative', width: '100%', height: '100%' } as const;
@@ -102,7 +102,7 @@ const BANDS = ['system', 'class', 'method'] as const;
 /** The Map's ladder: the same bands plus the code. Going in stays with the wheel, double-click and Enter. */
 const MAP_BANDS: readonly ZoomBand[] = ZOOM_BANDS.map((b) => b.band);
 
-function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, compare, flat = false, ...p }: SceneProps & StageCodeProps & StageCompareProps & StageFlatProps & { camera: PlacementCamera; renderer: StageRenderer; onLost(): void }) {
+function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, compare, flat = false, ...p }: SceneProps & StageCodeProps & StageCompareProps & StageFlatProps & { camera: PlacementCamera; scale?: ReactNode; renderer: StageRenderer; onLost(): void }) {
     const box = useRef<HTMLDivElement>(null);
     // Before the box is measured (and where nothing measures it: jsdom) the stage is laid out for a standard box.
     const measured = useContainerSize(box);
@@ -125,11 +125,9 @@ function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimula
     const code = wiring.code;
     const codeWidth = code.split ? codePaneWidth(boxWidth) : 0;
     const narrow = code.visible && !code.split;
-    const [paneView, setPaneView] = useState<'code' | 'picture'>('picture');
-    // Opening a file in a narrow box shows it; closing it returns to the picture.
-    useEffect(() => { setPaneView(code.reading ? 'code' : 'picture'); }, [code.reading]);
-    const showCodeHalf = narrow && paneView === 'code';
-    const switchPx = narrow ? SWITCH_PX : 0, barPx = code.reading ? CODE_BAR_PX : 0, statusPx = code.reading ? STATUS_PX : 0;
+    // A box up to 900px wide shows ONE of the two: the pane while the viewer's `code` slot is on (the header's Code | Picture switch), else the picture.
+    const showCodeHalf = narrow;
+    const switchPx = 0, barPx = code.reading ? CODE_BAR_PX : 0, statusPx = code.reading ? STATUS_PX : 0;
     const width = boxWidth - codeWidth, height = boxHeight - switchPx - barPx - statusPx;
 
     // Paint: the lens, the overlay, the question (+ its family) and what it lights; Show in towers' roles while a tower
@@ -201,12 +199,18 @@ function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimula
     const drill = surface.drill;
     const levelNote = camera !== 'map' ? null
         : drill.notice ? fillTemplate(labels.surface.map.drillReset, { name: drill.notice }) : drill.view?.noSymbols ? labels.surface.map.noSymbolsNote : null;
-    const caption = ready ? placement.caption : null;
-    const mapBand = MAP_BANDS.indexOf(wiring.zoom.band);
     const sc = labels.surface.code;
-    // Reset view: bumped to fit the camera and put the tilt back up (the 3D view's own button).
-    const [resets, setResets] = useState(0);
-    const resetView = useCallback(() => setResets((n) => n + 1), []);
+    const caption = ready ? placement.caption : null;
+    // The level rail: the Sequence has three levels (no code band), every other camera the Map's four; a click goes to that level.
+    const narrowStage = boxWidth <= SPLIT_MIN_PX - 1;
+    const sequenceRail = camera === 'sequence';
+    const picked = wiring.map.stationOfKey(selected);
+    const rail = {
+        bands: sequenceRail ? MAP_BANDS.slice(0, BANDS.length) : MAP_BANDS,
+        current: Math.max(0, sequenceRail ? seqBand : MAP_BANDS.indexOf(wiring.zoom.band)),
+        go: (i: number) => (sequenceRail ? zoomToBand(i) : wiring.toBand(i)),
+    };
+    const intoName = picked && drill.canEnter(picked.id).can ? picked.name : null;
 
     // Esc clears the pick, else goes out, from anywhere over a shown map (not while typing, in a dialog, or when a pane already took it).
     const onEscape = wiring.onEscape;
@@ -227,22 +231,8 @@ function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimula
     return (
         <div ref={box} style={BOX} data-stage-host data-stage-camera={camera}>
             {code.split && (
-                <div data-code-split style={{ position: 'absolute', insetBlockStart: 0, insetBlockEnd: statusPx, insetInlineStart: 0, width: codeWidth, borderInlineEnd: `1px solid ${cssVar('border')}`, background: cssVar('bg') }}>
+                <div data-code-split style={{ position: 'absolute', insetBlockStart: 0, insetBlockEnd: statusPx, insetInlineStart: 0, width: codeWidth }}>
                     {code.pane}
-                </div>
-            )}
-            {narrow && (
-                <div data-pane-switch style={{ position: 'absolute', top: 0, left: 0, right: 0, height: SWITCH_PX, boxSizing: 'border-box', display: 'flex', alignItems: 'center', padding: '0 8px', borderBottom: `1px solid ${cssVar('border')}`, background: cssVar('bg') }}>
-                    <Segmented
-                        label={sc.paneSwitchAria} value={paneView} onChange={(id) => setPaneView(id as 'code' | 'picture')}
-                        items={[{ id: 'code', label: sc.paneCode }, { id: 'picture', label: sc.panePicture }]}
-                    />
-                    {/* The same icon close button as the docked pane's, on the picture half (the code half carries its own). */}
-                    {!showCodeHalf && (
-                        <button type="button" data-action="dock-hide" aria-label={sc.dockHide} title={sc.dockHide} onClick={code.hide} style={{ ...toggleButton, marginInlineStart: 'auto', minHeight: 24 }}>
-                            <span aria-hidden="true">{actionGlyph('close')}</span>
-                        </button>
-                    )}
                 </div>
             )}
             {code.show && (
@@ -255,30 +245,19 @@ function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimula
             )}
             {code.reading && <div style={{ position: 'absolute', top: switchPx, left: codeWidth, width }}>{code.bar}</div>}
             <div data-map-pane style={{ position: 'absolute', top: switchPx + barPx, left: codeWidth, width, height, ...(showCodeHalf ? { visibility: 'hidden', pointerEvents: 'none' } : null) }}>
-                {/* Over the stage's top-left corner, so the stage box (and every projection into it) starts at the map's origin. */}
-                {(camera === 'sequence' || camera === 'map' || levelNote) && (
-                    <div style={{ position: 'absolute', zIndex: 1, insetBlockStart: 8, insetInlineStart: 8, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, maxWidth: 'calc(100% - 16px)' }}>
-                        {camera === 'sequence' && !method && (
-                            <Segmented label={zoom.group} value={BANDS[seqBand]!} onChange={(id) => zoomToBand(Math.max(0, BANDS.indexOf(id as typeof BANDS[number])))} items={BANDS.map((b) => ({ id: b, label: zoom[b] }))} />
-                        )}
-                        {camera === 'map' && (
-                            <Segmented
-                                label={zoom.group} value={MAP_BANDS[mapBand]!} onChange={(id) => wiring.toBand(MAP_BANDS.indexOf(id as ZoomBand))}
-                                items={MAP_BANDS.map((b) => ({ id: b, label: zoom[b] }))}
-                            />
-                        )}
-                        {camera === 'map' && surface.towers && <button type="button" data-action="reset-view" onClick={resetView} style={toggleButton}>{sc.resetView}</button>}
-                        {camera === 'map' && <p data-stage-hint style={{ margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'), ...TYPE.bodyMuted }}>{zoom.hint}</p>}
-                        {levelNote && <p data-level-note style={{ margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'),...TYPE.bodyMuted }}>{levelNote}</p>}
-                    </div>
-                )}
+                {levelNote && <p data-level-note style={{ position: 'absolute', zIndex: 1, insetBlockEnd: 74, insetInlineStart: 10, maxWidth: 'calc(100% - 80px)', margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'), ...TYPE.bodyMuted }}>{levelNote}</p>}
+                <LevelRail
+                    zoom={zoom} bands={rail.bands} current={rail.current} onGo={rail.go} narrow={narrowStage}
+                    deepest={rail.current >= rail.bands.length - 1} into={intoName}
+                />
+                {ready && <ColourLegend labels={labels} surface={surface} types={legendTypesOf(shownMarks?.type)} comparing={!!compare} narrow={narrowStage} scale={scale} />}
                 {shownMarks && (
                     <Stage
                         renderer={renderer} marks={shownMarks} paint={frame?.paint ?? paint} placement={frame?.placement ?? null} colors={colors}
                         width={width} height={height} reducedMotion={p.reducedMotion} selected={selected} onSelect={wiring.onSelect} onDrill={wiring.onDrill}
-                        nav={nav} description={labels.regionLabel} legend={{ types: legendTypesOf(shownMarks.type), labels, links: camera === 'map' && wiring.zoom.band !== 'system' }}
+                        nav={nav} description={labels.regionLabel}
                         onOut={wiring.onEscape} onClear={wiring.clearSelection}
-                        {...(camera === 'map' ? { tilt: flat ? 0 : 1, resetTilt: resets, onWheelStep: wiring.wheelStep } : {})} flat={flat} onContextLost={onLost}
+                        {...(camera === 'map' ? { tilt: flat ? 0 : 1, onWheelStep: wiring.wheelStep } : {})} flat={flat} onContextLost={onLost}
                     />
                 )}
                 {!ready && <LayingOut labels={labels} corner={!!frame} />}
@@ -289,7 +268,7 @@ function StageBody({ renderer, onLost, camera, codeShown, onToggleCode, onSimula
                     </StageBusContext.Provider>
                 )}
                 {(drill.loading && camera === 'map') && <LayingOut labels={labels} corner />}
-                <EdgesCapped caption={caption} labels={labels} />
+                <EdgesCapped caption={caption} labels={labels} text={camera === 'map' ? labels.surface.scene.stationsCapped : undefined} />
             </div>
             {showCodeHalf && (
                 <div data-code-narrow style={{ position: 'absolute', insetInline: 0, insetBlockStart: switchPx + barPx, insetBlockEnd: statusPx, background: cssVar('bg') }}>{code.pane}</div>

@@ -38256,6 +38256,8 @@
       "typeExternal": "Missing or external",
       "typeSystem": "System or package",
       "typeUnit": "Deployable unit",
+
+      "typeInterface": "Interface or trait",
       "keyButton": "Legend: what the shapes, lines and colours mean",
       "onScreen": "On screen",
       "typeClassMeaning": "A class, interface or type declared in the code.",
@@ -38271,6 +38273,8 @@
       "typeClaimMeaning": "A statement or fact a document asserts.",
       "typeExternalMeaning": "Outside this folder: a missing target or an external dependency.",
       "typeUnitMeaning": "What ships: a container, a worker or a deployed function.",
+
+      "typeInterfaceMeaning": "A contract: an interface, type alias or trait other code implements.",
       "typeSystemMeaning": "An aggregate: a whole system or package.",
       "linesTitle": "Lines",
       "lineFlow": "A route: one flow through the code, in its own colour.",
@@ -38286,7 +38290,16 @@
       "typeFieldMeaning": "A field or property a class holds.",
       "colourTitle": "Colour",
       "colourNote": "Fill colour follows the active overlay ({preset}); change it under the overlay menu.",
-      "fadedNote": "Faded marks are outside the answer to the current question."
+      "fadedNote": "Faded marks are outside the answer to the current question.",
+      "colourBy": "Colour by",
+      "showingChanges": "Showing changes",
+      "shapesShow": "Show the shapes",
+      "shapesHide": "Hide the shapes",
+      "swatchFine": "Fine",
+      "swatchLook": "Needs a look",
+      "swatchQuiet": "Quiet → busy",
+      "diffNew": "New",
+      "diffGone": "Goes away"
     },
     "statsLine": "{nodes} nodes · {edges} edges · {sources} sources",
     "filesLoaded": "{loaded} of {total} loaded",
@@ -38603,11 +38616,7 @@
       "panelToggles": {
         "label": "Panels shown",
         "showLeft": "Show lines panel",
-        "hideLeft": "Hide lines panel",
-        "showBottom": "Show path strip",
-        "hideBottom": "Hide path strip",
-        "showRight": "Show act panel",
-        "hideRight": "Hide act panel"
+        "hideLeft": "Hide lines panel"
       },
       "overlaysButton": "Overlays",
       "overlaysTitle": "What the map shows",
@@ -38893,7 +38902,10 @@
           "restructureTip": "See {name} restructured",
           "risk": "Risk",
           "testReached": "A test reaches it",
-          "testNone": "No test reaches it"
+          "testNone": "No test reaches it",
+          "riskWord": "{level} risk",
+          "noRisk": "No risk flags",
+          "ownerIs": "{name} team"
         },
         "stats": { "issues": "Anti-patterns", "complexity": "Complexity", "coverage": "Coverage", "reached": "Reached", "usage": "Importance" },
         "statWords": {
@@ -38938,12 +38950,11 @@
         "doneTitle": "This path is done when…",
         "doneCheck": "{title} is resolved in {items}",
         "doneNone": "No finding is open on this path.",
-        "detailsTitle": "Details",
-        "linkCoverage": "Coverage",
-        "linkApi": "API"
+        "detailsTitle": "Details"
       },
       "path": {
         "title": "{line} · {entry}",
+        "journey": "Journey",
         "reset": "Reset",
         "step": "Step",
         "runToEnd": "Run to end",
@@ -39160,6 +39171,7 @@
       },
       "scene": {
         "edgesCapped": "Showing {shown} of {total} links",
+        "stationsCapped": "Showing {shown} of {total} stations",
         "layingOut": "Laying out…",
         "errorTitle": "This view hit an error",
         "errorRetry": "Try again",
@@ -39177,7 +39189,10 @@
         "rotateLeft": "Rotate left",
         "rotateRight": "Rotate right",
         "tiltUp": "Tilt up",
-        "tiltDown": "Tilt down"
+        "tiltDown": "Tilt down",
+        "top": "Look from above",
+        "help": "How to move around",
+        "helpText": "Drag to rotate. Scroll to zoom: keep zooming into a shape to go inside it, zoom out to come back. Right-drag to pan. Double-click a shape to enter, Esc to go out."
       },
       "mind": {
         "moreFoldersOne": "+{count} folder",
@@ -39191,7 +39206,9 @@
         "class": "Classes",
         "method": "Methods",
         "code": "Code",
-        "hint": "Wheel on the map to zoom · Esc to go out · double-click a method to go inside"
+        "hintIn": "Zoom into a shape to go inside it",
+        "hintInto": "Keep zooming · going inside {name}",
+        "hintDeepest": "Deepest level · zoom out to come back"
       },
       "code": {
         "aria": "Code of {name}, lines {from} to {to}",
@@ -39271,7 +39288,12 @@
         "lensOut": "Out",
         "lensSimulate": "No test · Simulate",
         "lensRestructure": "{name}",
-        "gutterWarn": "Anti-pattern: {name}"
+        "gutterWarn": "Anti-pattern: {name}",
+        "samePlace": "same place as the picture",
+        "sayLead": "In plain words:",
+        "sayHint": "Click a line or an outline row and the picture goes there. The mark beside a line is its shape in the picture.",
+        "fileLines": "lines {from}–{to}",
+        "fileLine": "line {line}"
       },
       "compare": {
         "aria": "Comparison",
@@ -39434,24 +39456,7 @@
         },
         "startFrom": "Start from",
         "startEntry": "The entry",
-        "startStop": "This stop",
-        "modeOpen": "Simulate",
-        "modeOpenAria": "Simulate {name} with values",
-        "modeTitle": "Simulate with values",
-        "modeEntry": "Entry point",
-        "modeName": "Name",
-        "modeValue": "Value",
-        "modeAdd": "Add value",
-        "modeRemove": "Remove {name}",
-        "modeCarried": "Carried along this hop",
-        "modeHop": "{from} → {to}",
-        "modeEmpty": "Select an entry point. Its journey is stepped with the values you enter.",
-        "modeNoHops": "No journey leaves this entry point.",
-        "modeClose": "Close",
-        "modeStep": "Hop {n} of {total}",
-        "modeBack": "Previous hop",
-        "modeNext": "Next hop",
-        "modeUseSelected": "Use the selected mark"
+        "startStop": "This stop"
       },
       "fix": {
         "title": "Fix",
@@ -39607,7 +39612,12 @@
         "reviewFailed": "Review failed",
         "parityDiffers": "{local} here · {server} on the server",
         "overlaysNote": "Any metric can drive any channel. Map, System, Graph, Mind map, Tower, Heat, List and Sequence all read the same bindings, so a coverage bar can just as well be an anti-pattern bar.",
-        "rootsLabel": "Reviewed folders"
+        "rootsLabel": "Reviewed folders",
+        "topLevel": "Top level",
+        "panesLabel": "Pane",
+        "paneCode": "Code",
+        "panePicture": "Picture",
+        "drawerTabAct": "Act"
       },
       "askSentence": {
         "where": "where does {name} go?",

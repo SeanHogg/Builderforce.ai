@@ -6,8 +6,8 @@ import type { NoteKey, QuestionId } from '../surface/questions';
 export interface HeaderLabels {
     spineLabel: string;
     panelsLabel: string;
-    /** Collapse / expand names for the three docks (lines, path strip, act panel). The chevron on each dock edge uses these. */
-    panelToggles: Record<'label' | 'showLeft' | 'hideLeft' | 'showBottom' | 'hideBottom' | 'showRight' | 'hideRight', string>;
+    /** Collapse / expand names for the lines dock. The chevron on its edge uses these. */
+    panelToggles: Record<'label' | 'showLeft' | 'hideLeft', string>;
     overlaysButton: string;
     overlaysTitle: string;
     /** The overlay button's name: `{preset}`. */
@@ -46,7 +46,7 @@ export interface HeaderLabels {
     /** `{title}`, `{at}`, `{count}`. */
     time: Record<'label' | 'aria' | 'now' | 'commitAria', string>;
     /** The header: the review action's failure words, the parity line (`{local}`, `{server}`) and the overlay sentence. */
-    header: Record<'statusLabel' | 'updateFailed' | 'reviewFailed' | 'parityDiffers' | 'overlaysNote' | 'rootsLabel', string>;
+    header: Record<'statusLabel' | 'updateFailed' | 'reviewFailed' | 'parityDiffers' | 'overlaysNote' | 'rootsLabel' | 'topLevel' | 'panesLabel' | 'paneCode' | 'panePicture' | 'drawerTabAct', string>;
     /** The ask bar's placeholder per question, as a sentence; `{name}` is the station, the line or the folder. */
     askSentence: Record<QuestionId, string>;
     /** The ask bar's note per question: how it is answered. */
@@ -59,8 +59,7 @@ export const HEADER_DEFAULTS: HeaderLabels = {
     spineLabel: 'Where you are',
     panelsLabel: 'Panels',
     panelToggles: {
-        label: 'Panels shown', showLeft: 'Show lines panel', hideLeft: 'Hide lines panel', showBottom: 'Show path strip', hideBottom: 'Hide path strip',
-        showRight: 'Show act panel', hideRight: 'Hide act panel',
+        label: 'Panels shown', showLeft: 'Show lines panel', hideLeft: 'Hide lines panel',
     },
     overlaysButton: 'Overlays',
     overlaysTitle: 'What the map shows',
@@ -132,6 +131,11 @@ export const HEADER_DEFAULTS: HeaderLabels = {
         parityDiffers: '{local} here · {server} on the server',
         overlaysNote: 'Any metric can drive any channel. Map, System, Graph, Mind map, Tower, Heat, List and Sequence all read the same bindings, so a coverage bar can just as well be an anti-pattern bar.',
         rootsLabel: 'Reviewed folders',
+        topLevel: 'Top level',
+        panesLabel: 'Pane',
+        paneCode: 'Code',
+        panePicture: 'Picture',
+        drawerTabAct: 'Act',
     },
     askSentence: {
         where: 'where does {name} go?', wrong: 'what is wrong on {name}?', untested: 'what has no test on {name}?', patterns: 'which patterns are in {name}?',

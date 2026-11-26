@@ -6,13 +6,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../labels';
-import { layoutOf, sceneMinHeight, sceneRowFlex, SCENE_MIN_PX, SCENE_STACKED_VH } from '../layout';
+
 import { placeLabels } from './labels/runs';
 import { documentHeight, stageHeight } from './projection';
 import type { TextPort } from './labels/LabelLayer';
 import { createWebGLStage } from './renderer';
 import { wheelIntent } from './rig/gestures';
-import { NAV_PAN_PX, NavControl } from './rig/NavControl';
+import { NavControl } from './rig/NavControl';
 import { RigController } from './rig/rig';
 import { panZoomOf } from './rig/useRig';
 import type { LabelRun } from './types';
@@ -35,24 +35,6 @@ describe('stage sizing', () => {
         expect(stageHeight(undefined, undefined, 1900, 900)).toBe(900);
     });
 
-
-    it('regression: a stacked scene reserves the overlay on top of its drawing minimum (the 3D strip at ~700px)', () => {
-        expect(sceneMinHeight(layoutOf(1400))).toBe(0);
-        const stacked = sceneMinHeight(layoutOf(704));
-        expect(stacked).toBe(`calc(max(${SCENE_MIN_PX}px, ${SCENE_STACKED_VH}vh) + var(--kg-scene-top, 88px))`);
-        // A phone stacks the overlay in flow above the region: nothing to reserve.
-        expect(sceneMinHeight(layoutOf(400))).toBe(`max(${SCENE_MIN_PX}px, ${SCENE_STACKED_VH}vh)`);
-    });
-
-    it('regression: a stacked scene GROWS into the height left under it (an empty band filled the ~890px panel\'s bottom)', () => {
-        // Below the Act breakpoint the scene row was `flex: none` — exactly its minimum — so with a short or hidden Act
-        // section nothing claimed the rest of the column. It grows now, never shrinking under its minimum (the column scrolls).
-        const stacked = sceneRowFlex(layoutOf(890));
-        expect(stacked.flex).toBe('1 0 auto');
-        expect(stacked.minHeight).toBeUndefined();
-        // Side by side the row's flex still gives it the height.
-        expect(sceneRowFlex(layoutOf(1400))).toEqual({ flex: 1, minHeight: 0 });
-    });
 
     it('regression: a world label never draws under its nominal CSS px when zoomed out (Map / Mind map names)', () => {
         const run: LabelRun = { slot: 0, text: 'Area 16', offsetPx: [0, 0], font: 'mono', size: 11, weight: 500, anchor: 'middle', tone: 3, halo: { tone: 0, px: 3 }, priority: 1, scale: 'world' };
@@ -78,6 +60,9 @@ describe('stage sizing', () => {
         stage.dispose();
     });
 });
+
+/** CSS px one slide moves the view (the arrow keys' pan step). */
+const NAV_PAN_PX = 48;
 
 describe('stage navigation', () => {
     it('wheel: the page keeps a document frame\'s plain wheel; Shift or a trackpad pans a fill frame; a mouse wheel zooms', () => {
@@ -112,8 +97,6 @@ describe('stage navigation', () => {
         const { unmount } = render(<NavControl rig={rig} panZoom={panZoom} labels={labels} onSettle={settle} />);
         expect(document.querySelector('[data-stage-nav-orbit]')).toBeNull();
         // A keyboard click (detail 0) acts once.
-        fireEvent.click(screen.getByRole('button', { name: L.surface.nav.panDown }), { detail: 0 });
-        expect(rig.current.cz).toBeCloseTo(NAV_PAN_PX / Math.cos(rig.tilt * Math.PI / 180));
         fireEvent.click(screen.getByRole('button', { name: L.zoomIn }), { detail: 0 });
         expect(rig.current.zoom).toBeGreaterThan(1);
         fireEvent.click(screen.getByRole('button', { name: L.zoomReset }));

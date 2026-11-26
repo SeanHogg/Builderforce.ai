@@ -14,7 +14,7 @@
  */
 
 import type { CallSite, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { symbolSort } from '../../../shapes';
+import { isClassLike, symbolSort } from '../../../shapes';
 import type { Line } from '../../../surface/lines';
 import { fileRefOf, stationOfRef, type StationModel } from '../../../surface/stations';
 import { isSymbol, parentName, shortName } from '../../../surface/transit/symbols';
@@ -59,13 +59,13 @@ const identity = (ref: string): string => ref;
 /** The class a method belongs to (same file, named as its parent, or named by ref in a loaded record), else the symbol itself. */
 function classOfIndex(symbols: readonly KNode[]): (ref: string) => string {
     const classes = new Map<string, string>();
-    for (const n of symbols) if (symbolSort(n) === 'class') { classes.set(`${fileRefOf(n.ref)}\0${n.label}`, n.ref); classes.set(`${fileRefOf(n.ref)}\0${shortName(n)}`, n.ref); }
+    for (const n of symbols) if (isClassLike(symbolSort(n))) { classes.set(`${fileRefOf(n.ref)}\0${n.label}`, n.ref); classes.set(`${fileRefOf(n.ref)}\0${shortName(n)}`, n.ref); }
     const byRef = new Map(symbols.map((n) => [n.ref as string, n] as const));
     return (ref) => {
         const n = byRef.get(ref);
         const parent = n ? parentName(n) : null;
         if (!parent) return ref;
-        if (byRef.has(parent) && symbolSort(byRef.get(parent)!) === 'class') return parent;
+        if (byRef.has(parent) && isClassLike(symbolSort(byRef.get(parent)!))) return parent;
         return classes.get(`${fileRefOf(ref)}\0${parent}`) ?? classes.get(`${fileRefOf(ref)}\0${parent.slice(parent.lastIndexOf('.') + 1)}`) ?? ref;
     };
 }
@@ -76,7 +76,7 @@ function classOfIndex(symbols: readonly KNode[]): (ref: string) => string {
  */
 function entrySymbols(entry: string | null, symbols: readonly KNode[], stations: StationModel, line: Line | null, classOf: (ref: string) => string): string[] {
     const sorted = [...symbols].sort((a, b) => (fileRefOf(a.ref) < fileRefOf(b.ref) ? -1 : fileRefOf(a.ref) > fileRefOf(b.ref) ? 1 : lineOf(a) - lineOf(b)));
-    const expand = (list: readonly KNode[]): string[] => list.flatMap((n) => (symbolSort(n) === 'class' ? sorted.filter((m) => m.ref !== n.ref && classOf(m.ref) === n.ref).map((m) => m.ref as string) : [n.ref as string]));
+    const expand = (list: readonly KNode[]): string[] => list.flatMap((n) => (isClassLike(symbolSort(n)) ? sorted.filter((m) => m.ref !== n.ref && classOf(m.ref) === n.ref).map((m) => m.ref as string) : [n.ref as string]));
     if (entry?.startsWith('node:')) {
         const ref = entry.slice(5);
         const own = sorted.find((n) => n.ref === ref);

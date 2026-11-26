@@ -5,7 +5,7 @@ import type { StoredReviewRun, SyncStatus } from '../types';
 import type { ReviewState } from '../useReviewRun';
 import { counted } from './plural';
 import { liveRun, RUN_AT } from './run/runFixture';
-import { parityText, relativeTime, stripAction, syncPill, type SyncPillInput } from './syncPill';
+import { parityText, relativeTime, syncPill, type SyncPillInput } from './syncPill';
 
 const h = L.surface.header;
 const r = L.surface.run.review;
@@ -94,29 +94,6 @@ describe('syncPill: the chip', () => {
     it('a review in flight outranks a stale refresh; a failed review is an error', () => {
         expect(pill({ review: { status: 'running' }, stale: true, refreshFailed: true }).state).toBe('syncing');
         expect(pill({ review: { status: 'error', message: 'x', at: '2026-01-01T00:00:00Z' } as ReviewState })).toMatchObject({ state: 'error', text: h.reviewFailed });
-    });
-});
-
-describe('stripAction: the button is the next action', () => {
-    const action = (over: Partial<SyncPillInput>, root: string | undefined = 'Docs') => stripAction(L, pill(over), root);
-
-    it.each([
-        ['never reviewed', {}, fillTemplate(r.actionReview, { root: 'Docs' }), false],
-        ['out of date', { sync: sync({ server: { files: 1, docs: 0 } }) }, r.actionUpdate, false],
-        ['files not stored', { sync: sync({ skipped: [{ path: 'a', reason: 'x' }] }) }, r.actionUpdate, false],
-        ['counting', { review: { status: 'planning' } as ReviewState }, r.actionStart, true],
-        ['plan ready', { review: { status: 'confirm', plan: {} as never } as ReviewState }, r.actionStart, false],
-        ['running', { review: { status: 'running' } as ReviewState }, L.reviewStop, false],
-        ['stopping', { review: { status: 'stopping', stoppedAt: 0 } as ReviewState }, r.stoppingTitle, true],
-        ['stopped', { review: { status: 'aborted' } as ReviewState }, r.actionResume, false],
-        ['up to date', { sync: sync(), lastReviewedAt: '2026-01-01T11:58:00Z' }, r.actionAgain, false],
-    ])('%s', (_name, over, label, disabled) => {
-        expect(action(over as Partial<SyncPillInput>)).toMatchObject({ label, disabled, tab: 'review' });
-    });
-
-    it('a failed upload opens the Server tab (the strip itself turns it into Retry upload when the source can retry)', () => {
-        const failed = sync({ replica: { dirty: 1, sending: false, failed: [{ reason: 'x' } as never] } });
-        expect(action({ sync: failed })).toMatchObject({ label: r.actionSeeUpload, tab: 'server' });
     });
 });
 

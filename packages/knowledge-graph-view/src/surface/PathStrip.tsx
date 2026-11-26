@@ -1,31 +1,18 @@
 /**
- * The path strip (150px under the scene on desktop, a vertical list on a phone): the title of
- * the line and where it enters, Reset / Step / Run to end, *Simulate with values* (opens the
- * Simulate drawer), a Sequence toggle that swaps the stop chips for the sequence diagram, and
- * *Copy as Mermaid*. Each stop is a mono chip with a note from its metrics ("no tests · god");
- * between two stops the hop says its edge kind and count (and what travels over it, when the
- * edge carries it), in the violation colour where it skips or climbs a layer.
+ * The journey strip (design prototype `#journey`): ONE row on the panel background under the scene, a top border — the cap "Journey", the path's bold title,
+ * ‹ › step buttons, the numbered stops as a sideways-scrolling chip row (`<b>n</b> name`, the current one on the accent wash) and *Copy as Mermaid* at the end.
+ * Stepping, Simulate and the Sequence view are elsewhere now: Simulate is a drawer tab, Sequence a view in the toolbar, and the plain-words sentence of the
+ * step (`walkthroughSentence`) is the code pane's.
  */
 
-import { useState } from 'react';
 import { CopiedNote, CopyFallback, useCopyText } from '../copyText';
-import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
+import type { KnowledgeGraphLabels } from '../labels';
 import { cssVar } from '../scene/themeColors';
-import { CONTROL, muted } from '../styles';
-import { Pill, pillStyle, QuietButton } from './ui';
+import { ghostButtonStyle } from './ui';
 import { TYPE } from './ui/type';
-import { Action, LikelyWalk, StepControls } from './StepControls';
-import { DepthTrail, type DepthFrame } from './DepthTrail';
 import type { PathModel } from './path';
-import { walkthroughSentence } from './walkthrough';
-import { hopProbabilityText, hopTransition, likelyWalk, type TransitionTable } from './transitionTable';
-import { stationNote } from './pathNotes';
-import { SequenceView } from './SequenceDiagram';
-import { hopText, pathMermaid } from './sequenceText';
+import { pathMermaid } from './sequenceText';
 import type { Station } from './stations';
-
-/** The strip's fixed height on desktop. */
-export const PATH_STRIP_HEIGHT = 150;
 
 export interface PathStripProps {
     path: PathModel;
@@ -34,103 +21,49 @@ export interface PathStripProps {
     onStep(n: number): void;
     /** The strip's title ("Web line · GET /users"), made by the root; absent ⇒ "Path". */
     pathTitle?: string | null | undefined;
-    /** Switches the scene to the full-size Sequence camera; the Enlarge control shows only while the Sequence toggle is on. */
-    onEnlarge?: (() => void) | undefined;
-    /** The stations by id, for each stop's note. Absent ⇒ no notes. */
+    /** The stations by id: a chip's tooltip is its file path. Absent ⇒ no tooltip. */
     stations?: ReadonlyMap<string, Station> | undefined;
-    /** Opens a drawer by PANELS id; *Simulate with values* is offered only with it. */
-    onOpenPanel?: ((id: string) => void) | undefined;
-    /** The route label per hop ("PUT 1.4 MB"), indexed like `path.hops`; from `hopRouteLabels`. A null or absent entry draws nothing. */
-    routeLabels?: readonly (string | null)[] | undefined;
-    /** A phone: the stops are a vertical list instead of a row. */
-    narrow?: boolean | undefined;
-    /** The station transition table (`transitionTableOf`): each hop shows P(next) and "Run to end" the most likely walk. Absent ⇒ neither. */
-    transitions?: TransitionTable | null | undefined;
-    /** The drill stack, outermost first. Empty or absent ⇒ no depth trail. */
-    trail?: readonly DepthFrame[] | undefined;
-    /** The system crumb. Absent ⇒ the "System" word. */
-    systemName?: string | null | undefined;
-    /** Climb back to a depth. 0 is the system. Absent ⇒ the trail is not drawn. */
-    onClimb?: ((depth: number) => void) | undefined;
 }
 
-const chipStyle = (on: boolean) => ({ ...pillStyle(on), ...TYPE.mono, fontWeight: on ? TYPE.pillOn.fontWeight : TYPE.monoName.fontWeight });
+const chip = (on: boolean) => ({
+    flex: 'none', border: 0, padding: '4px 8px', borderRadius: 4, font: 'inherit', ...TYPE.pill, fontWeight: on ? 700 : 400, whiteSpace: 'nowrap', cursor: 'pointer',
+    color: cssVar(on ? 'text' : 'muted'), background: on ? cssVar('accentSoft') : 'transparent',
+} as const);
 
-export function PathStrip({ path, step, labels, onStep, pathTitle, onEnlarge, stations, onOpenPanel, routeLabels, narrow = false, transitions, trail, systemName, onClimb }: PathStripProps) {
+export function PathStrip({ path, step, labels, onStep, pathTitle, stations }: PathStripProps) {
     const s = labels.surface;
-    const [sequence, setSequence] = useState(false);
-    /** The stop "Run to end" ran from, for this path only (another path drops it). */
-    const [ranFrom, setRanFrom] = useState<{ path: PathModel; id: string } | null>(null);
-    const walkFrom = ranFrom?.path === path ? path.stops.find((x) => x.id === ranFrom.id) ?? null : null;
     const copier = useCopyText();
     const last = path.stops.length - 1;
-    // One station has nothing to step through and no sequence to draw.
-    const single = path.stops.length === 1;
     const at = Math.min(Math.max(step, 0), Math.max(last, 0));
-    const title = pathTitle || s.pathTitle;
     const mermaid = pathMermaid(path, labels);
-    const ctl = { height: `calc(${CONTROL} - 4px)`, padding: '0 10px', fontWeight: 600 } as const;
-
+    const cap = <h2 style={{ ...TYPE.sectionHeading, flex: 'none' }}>{s.path.journey}</h2>;
+    const bar = { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', minWidth: 0, borderTop: `1px solid ${cssVar('border')}`, background: cssVar('panel') } as const;
+    if (path.stops.length === 0) {
+        return <section aria-label={s.pathTitle} data-testid="kg-path" style={bar}>{cap}<p style={{ ...TYPE.bodyMuted, margin: 0 }}>{s.pathEmpty}</p></section>;
+    }
+    const arrow = (label: string, to: number, disabled: boolean, glyph: string) => (
+        <button type="button" aria-label={label} title={label} disabled={disabled} onClick={() => onStep(to)} style={{ ...ghostButtonStyle(false, true), border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), flex: 'none', opacity: disabled ? 0.45 : 1, cursor: disabled ? 'default' : 'pointer' }}>
+            <span aria-hidden="true">{glyph}</span>
+        </button>
+    );
     return (
-        <section
-            aria-label={s.pathTitle} data-testid="kg-path"
-            style={{
-                display: 'grid', gap: 6, padding: '8px 12px', borderTop: `1px solid ${cssVar('border')}`, background: cssVar('bg'),
-                alignContent: 'start', minWidth: 0, ...(narrow ? null : { height: PATH_STRIP_HEIGHT, flex: 'none', overflow: 'auto' }),
-            }}
-        >
-            {onClimb && <DepthTrail stack={trail ?? []} systemName={systemName} labels={labels} onClimb={onClimb} />}
-            {path.stops.length === 0 ? <p style={{ ...muted, margin: 0 }}>{s.pathEmpty}</p> : (
-                <>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <strong style={{ ...TYPE.subtitle, marginInlineEnd: 4, overflowWrap: 'anywhere' }}>{title}</strong>
-                        <StepControls at={at} last={last} labels={labels} onStep={onStep} onRunToEnd={(from) => { const id = path.stops[from]?.id; setRanFrom(id ? { path, id } : null); }} />
-                        {onOpenPanel && <Action onClick={() => onOpenPanel('simulate')}>{s.path.simulate}</Action>}
-                        <Pill style={ctl} on={sequence && !single} disabled={single} onClick={() => setSequence((v) => !v)}>{s.path.sequence}</Pill>
-                        {sequence && !single && onEnlarge && <Action onClick={onEnlarge}>{s.path.enlarge}</Action>}
-                        <QuietButton onClick={() => void copier.copy(mermaid)}>{labels.copyMermaid}</QuietButton>
-                        <CopiedNote status={copier.status} labels={labels} />
-                        <span aria-live="polite" style={{ ...muted, ...TYPE.monoValue }}>{fillTemplate(s.pathStep, { n: at + 1, total: path.stops.length })}</span>
-                    </div>
-                    <p data-testid="kg-step-narration" style={{ ...muted, margin: 0 }}>{walkthroughSentence(path, at, s.walk)}</p>
-                    {walkFrom && transitions && <LikelyWalk from={walkFrom.name} hops={likelyWalk(transitions, walkFrom.id, stations ?? new Map(path.stops.map((x) => [x.id, x])), labels)} labels={labels} />}
-                    {single && <p data-testid="kg-path-one-station" style={{ ...muted, margin: 0 }}>{s.explain.oneStation}</p>}
-                    <CopyFallback status={copier.status} text={mermaid} label={labels.copyMermaid} labels={labels} />
-                    {sequence && !single ? <SequenceView path={path} step={at} onStep={onStep} labels={labels} copy={false} /> : (
-                        <ol
-                            aria-label={s.path.stops}
-                            style={{
-                                listStyle: 'none', margin: 0, padding: '0 0 2px', display: 'flex', gap: narrow ? 4 : 6, minWidth: 0,
-                                ...(narrow ? { flexDirection: 'column', alignItems: 'stretch' } : { alignItems: 'flex-start', overflowX: 'auto' }),
-                            }}
-                        >
-                            {path.stops.map((stop, i) => {
-                                const hop = i > 0 ? path.hops[i - 1] : undefined;
-                                const bad = hop?.verdict === 'skips' || hop?.verdict === 'upward';
-                                const note = stationNote(stations?.get(stop.id), labels);
-                                const p = hop ? hopProbabilityText(labels, hopTransition(transitions, path.stops[i - 1]?.id, stop.id)) : null;
-                                return (
-                                    <li key={stop.id} style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', alignItems: narrow ? 'flex-start' : 'center', gap: 6, flex: 'none' }}>
-                                        {hop && (
-                                            <span style={{ ...TYPE.monoMeta, color: cssVar(bad ? 'violation' : 'muted') }} data-hop={hop.verdict ?? 'ok'} data-cycle={hop.cycle || undefined}>
-                                                {narrow ? '↓ ' : ''}{hop.cycle && <span aria-hidden="true" data-cycle-mark>⟲ </span>}{hopText(labels, hop)}
-                                                {p ? <span data-hop-p>{` · ${p}`}</span> : null}
-                                                {hop.detail ? ` · ${hop.detail}` : ''}
-                                                {routeLabels?.[i - 1] ? <span data-route={routeLabels[i - 1]}>{` · ${routeLabels[i - 1]}`}</span> : null}
-                                                {hop.verdict === 'skips' ? ` · ${labels.traceSkips}` : hop.verdict === 'upward' ? ` · ${labels.traceUpward}` : ''}
-                                            </span>
-                                        )}
-                                        <span style={{ display: 'grid', gap: 2, justifyItems: narrow ? 'start' : 'center' }}>
-                                            <button type="button" aria-current={i === at ? 'step' : undefined} style={chipStyle(i === at)} title={stations?.get(stop.id)?.path} onClick={() => onStep(i)}>{stop.name}</button>
-                                            {note && <span data-stop-note={stop.id} style={TYPE.monoMeta}>{note}</span>}
-                                        </span>
-                                    </li>
-                                );
-                            })}
-                        </ol>
-                    )}
-                </>
-            )}
+        <section aria-label={s.pathTitle} data-testid="kg-path" style={bar}>
+            {cap}
+            <strong style={{ ...TYPE.subtitle, whiteSpace: 'nowrap', flex: 'none', maxWidth: '40%', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pathTitle || s.pathTitle}</strong>
+            {arrow(s.pathBack, at - 1, at <= 0, '‹')}
+            {arrow(s.pathNext, at + 1, at >= last, '›')}
+            <ol aria-label={s.path.stops} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', gap: 2, minWidth: 0, overflowX: 'auto', flex: 1 }}>
+                {path.stops.map((stop, i) => (
+                    <li key={stop.id} style={{ display: 'flex', flex: 'none' }}>
+                        <button type="button" aria-current={i === at ? 'step' : undefined} title={stations?.get(stop.id)?.path} style={chip(i === at)} onClick={() => onStep(i)}>
+                            <b style={{ color: cssVar('accent'), fontWeight: 600, marginInlineEnd: 4 }}>{i + 1}</b>{stop.name}
+                        </button>
+                    </li>
+                ))}
+            </ol>
+            <button type="button" onClick={() => void copier.copy(mermaid)} style={{ ...ghostButtonStyle(false, false), border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), fontWeight: 400 }}>{labels.copyMermaid}</button>
+            <CopiedNote status={copier.status} labels={labels} />
+            <CopyFallback status={copier.status} text={mermaid} label={labels.copyMermaid} labels={labels} />
         </section>
     );
 }

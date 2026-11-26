@@ -11,6 +11,7 @@ import { capacityFor } from '../slots';
 import { uploadRange, type StageStats } from '../stats';
 import { LINK_FAMILIES, type LinkBatch, type LinkFamily } from '../types';
 import { LINK_FAMILY_STYLE } from './families';
+import { fillSegments, segmentsOf } from './pack';
 import { linkMaterial, setLinkStyle, type LinkUniforms } from './shader';
 
 interface Family { mesh: InstancedMesh; a: InstancedBufferAttribute; b: InstancedBufferAttribute; style: InstancedBufferAttribute; capacity: number }
@@ -18,13 +19,7 @@ interface Family { mesh: InstancedMesh; a: InstancedBufferAttribute; b: Instance
 /** The segment quad: x along (0 at A, 1 at B), y across (−1..1). */
 const QUAD = [0, -1, 0, 1, -1, 0, 1, 1, 0, 0, -1, 0, 1, 1, 0, 0, 1, 0];
 
-/** Segments of a batch: consecutive non-break points. */
-export function segmentsOf(batch: LinkBatch): number {
-    let n = 0;
-    const p = batch.points;
-    for (let i = 1; i < p.length / 3; i++) if (!Number.isNaN(p[i * 3]!) && !Number.isNaN(p[(i - 1) * 3]!)) n++;
-    return n;
-}
+export { segmentsOf };
 
 export class LinkLayer {
     readonly group = new Group();
@@ -40,6 +35,7 @@ export class LinkLayer {
     set(batches: readonly LinkBatch[]): void {
         const seen = new Set<LinkFamily>();
         for (const batch of batches) {
+            if (batch.family === 'hall') continue; // halls are 3D bars: `HallLayer`'s
             seen.add(batch.family);
             const count = segmentsOf(batch);
             const fam = this.familyFor(batch.family, count);
@@ -94,14 +90,5 @@ export class LinkLayer {
 }
 
 function fill(batch: LinkBatch, fam: Family): void {
-    const p = batch.points, run = batch.runLength;
-    const a = fam.a.array as Float32Array, b = fam.b.array as Float32Array, st = fam.style.array as Float32Array;
-    let s = 0;
-    for (let i = 1; i < p.length / 3; i++) {
-        if (Number.isNaN(p[i * 3]!) || Number.isNaN(p[(i - 1) * 3]!)) continue;
-        a[s * 4] = p[(i - 1) * 3]!; a[s * 4 + 1] = p[(i - 1) * 3 + 1]!; a[s * 4 + 2] = p[(i - 1) * 3 + 2]!; a[s * 4 + 3] = run[i - 1]!;
-        b[s * 4] = p[i * 3]!; b[s * 4 + 1] = p[i * 3 + 1]!; b[s * 4 + 2] = p[i * 3 + 2]!; b[s * 4 + 3] = batch.width[s]!;
-        st[s * 4] = batch.tone[s]!; st[s * 4 + 1] = batch.dash[s]!; st[s * 4 + 2] = batch.flags[s]!; st[s * 4 + 3] = batch.group[s]!;
-        s++;
-    }
+    fillSegments(batch, fam.a.array as Float32Array, fam.b.array as Float32Array, fam.style.array as Float32Array);
 }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The question pills, the More questions menu (every former lens), the family chip and the lens-only pick. */
+/** The question segment, the More questions menu (every former lens), the family chip and the lens-only pick. */
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from '../labels';
@@ -13,7 +13,7 @@ const bar = (over: Partial<Parameters<typeof QuestionBar>[0]> = {}) => {
     render(<QuestionBar {...p} />);
     return p;
 };
-const pill = (q: string) => document.querySelector(`button[data-question="${q}"]`) as HTMLElement;
+const pill = (q: string) => document.querySelector(`button[data-seg="${q}"]`) as HTMLElement;
 
 describe('QuestionBar', () => {
     it('keeps every former lens reachable: the More menu lists each with a "was the {lens} lens" sub-line, and picking one does what its chip did', () => {
