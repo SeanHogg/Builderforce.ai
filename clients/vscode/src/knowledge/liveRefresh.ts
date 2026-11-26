@@ -5,6 +5,12 @@
  * A burst of triggers (a review landing, a branch switch, edits) coalesces into ONE rebuild: the
  * first request inside a closed window schedules a trailing rebuild for when it opens, so nothing
  * is lost and nothing runs more often than the window.
+ *
+ * The window is measured from when the previous run SETTLED (resolved or rejected), never from when
+ * it started, and a refresh never starts while the previous one is still building: a build longer
+ * than the window would otherwise overlap (and abort) its predecessor forever, handing the view a
+ * new graph every window. A request made during a run schedules exactly ONE trailing run, `windowMs`
+ * after that run settled.
  */
 
 /** At most one whole-graph refresh per this many ms while the root runs. */
@@ -25,23 +31,40 @@ export interface LiveRefreshThrottle {
  */
 export function throttledRefresh(refresh: () => void | Promise<void>, windowMs: number = FULL_REFRESH_MIN_MS): LiveRefreshThrottle {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let lastRun = Date.now();
+  let lastSettled = Date.now();
+  let running = false;
+  let trailing = false; // a request arrived while a run was in flight
+
+  const settle = (): void => {
+    running = false;
+    lastSettled = Date.now();
+    if (trailing) {
+      trailing = false;
+      timer = setTimeout(run, windowMs);
+    }
+  };
 
   const run = (): void => {
-    lastRun = Date.now();
     timer = undefined;
-    void refresh();
+    running = true;
+    try {
+      Promise.resolve(refresh()).then(settle, settle);
+    } catch {
+      settle();
+    }
   };
 
   return {
     request(): void {
+      if (running) { trailing = true; return; } // exactly ONE trailing run, after this one settles
       if (timer) return; // a rebuild is already scheduled for when the window opens
-      const wait = Math.max(0, windowMs - (Date.now() - lastRun));
+      const wait = Math.max(0, windowMs - (Date.now() - lastSettled));
       timer = setTimeout(run, wait);
     },
     dispose(): void {
       if (timer) clearTimeout(timer);
       timer = undefined;
+      trailing = false;
     },
   };
 }

@@ -32,6 +32,7 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertAddonMatchesPlatform } from './lib/nativeAddonFormat.mjs';
 import { diffAgainst, hashFile, sourceRepository } from './lib/vendoredBuild.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -64,6 +65,14 @@ function fail(message) {
 const readRecord = () => (existsSync(sourceRecordPath) ? JSON.parse(readFileSync(sourceRecordPath, 'utf8')) : {});
 const addonsIn = (dir) => (existsSync(dir) ? readdirSync(dir).filter((name) => ADDON.test(name)) : []);
 const platformOf = (name) => ADDON.exec(name)[1];
+/** Fails the run when an addon's bytes are not the executable format its platform tag loads. */
+function checkFormat(file, name) {
+  try {
+    assertAddonMatchesPlatform(file, platformOf(name).split('-')[0]);
+  } catch (error) {
+    fail(error.message);
+  }
+}
 
 const args = process.argv.slice(2);
 
@@ -71,6 +80,7 @@ if (args.includes('--check')) {
   if (!existsSync(sourceRecordPath)) fail(`${sourceRecordPath} is missing — run \`node scripts/vendor-bfi-node.mjs\`.`);
   const record = readRecord();
   const addons = addonsIn(vendorDir);
+  for (const name of addons) checkFormat(join(vendorDir, name), name);
   const expected = {
     ...(record.files ?? {}),
     ...Object.fromEntries(Object.entries(record.platforms ?? {}).map(([platform, p]) => [`bfi_node.${platform}.node`, p.sha256])),
@@ -108,6 +118,7 @@ if (fromAt >= 0) {
     if (stamp.commit !== state.commit) {
       fail(`${name} was built from ${String(stamp.commit).slice(0, 7)}, but ${sourceRepo} is at ${String(state.commit).slice(0, 7)} — check out the commit the workflow built.`);
     }
+    checkFormat(join(dir, name), name);
     copyFileSync(join(dir, name), join(vendorDir, name));
     platforms[platform] = { commit: stamp.commit, ...(stamp.dirty ? { dirty: true } : {}), sha256: hashFile(join(vendorDir, name)) };
   }
@@ -118,6 +129,7 @@ if (fromAt >= 0) {
   if (run.status !== 0) fail('the addon build failed (is the Rust toolchain installed?).');
   const name = `bfi_node.${process.platform}-${process.arch}.node`;
   if (!existsSync(join(crateDir, name))) fail(`${join(crateDir, name)} is missing — the build did not produce it.`);
+  checkFormat(join(crateDir, name), name);
   copyFileSync(join(crateDir, name), join(vendorDir, name));
   platforms[`${process.platform}-${process.arch}`] = {
     commit: state.commit || 'unknown',

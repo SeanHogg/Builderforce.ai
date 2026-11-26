@@ -164,7 +164,7 @@ describe("installHostBfiRuntime", () => {
     it("hands the worker the addon, PREFERS its port over a webview, and answers the picker from the native record", async () => {
       const { spawn } = fakeSpawn();
       const loadNative = vi.fn(() => nativeModule);
-      const o = { ...options(fakeStore([BONSAI]), spawn), nativePath: "/ext/out/bfi_node.node", loadNative };
+      const o = { ...options(fakeStore([BONSAI]), spawn), nativePath: "/ext/out/bfi_node.win32-x64.node", loadNative };
       const attach = vi.spyOn(o.bridge, "attach");
       const runtime = installHostBfiRuntime(o);
       await flush();
@@ -173,13 +173,13 @@ describe("installHostBfiRuntime", () => {
       expect(await runtime.support()).toBe(NATIVE_SUPPORT);
       void o.bridge.probe({ fresh: true });
       await flush();
-      expect(spawn.mock.calls[0]![1]).toMatchObject({ nativePath: "/ext/out/bfi_node.node" });
+      expect(spawn.mock.calls[0]![1]).toMatchObject({ nativePath: "/ext/out/bfi_node.win32-x64.node" });
     });
 
     it("does not load the addon at install when nothing is cached — only once something asks", async () => {
       const { spawn } = fakeSpawn();
       const loadNative = vi.fn(() => nativeModule);
-      const runtime = installHostBfiRuntime({ ...options(fakeStore(), spawn), nativePath: "/ext/out/bfi_node.node", loadNative });
+      const runtime = installHostBfiRuntime({ ...options(fakeStore(), spawn), nativePath: "/ext/out/bfi_node.win32-x64.node", loadNative });
       await flush();
       expect(loadNative).not.toHaveBeenCalled();
       expect(runtime.native).toBe(true);
@@ -189,7 +189,7 @@ describe("installHostBfiRuntime", () => {
 
     it("claims nothing native when the addon will not load: the wasm worker is not preferred", async () => {
       const { spawn } = fakeSpawn();
-      const o = { ...options(fakeStore([BONSAI]), spawn), nativePath: "/ext/out/bfi_node.node", loadNative: vi.fn(() => null) };
+      const o = { ...options(fakeStore([BONSAI]), spawn), nativePath: "/ext/out/bfi_node.win32-x64.node", loadNative: vi.fn(() => null) };
       const attach = vi.spyOn(o.bridge, "attach");
       const runtime = installHostBfiRuntime(o);
       await flush();

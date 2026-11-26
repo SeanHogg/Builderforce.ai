@@ -13,6 +13,7 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { SymbolRecord } from '../../types';
 import type { StationModel } from '../stations';
 import { buildDrillView, hasSymbols, type DrillFrame, type DrillLevel, type DrillView } from './drillView';
+import { anchorFilesOf, reanchorDrill } from './reanchorDrill';
 import { SYMBOL_FILES, symbolsOf, symbolsOfFile, withSymbolRecords } from './symbols';
 
 export type EnterCheck = { can: true; level: DrillLevel } | { can: false; reason: 'noSymbols' | 'leaf' | 'deepest' | 'unknown' };
@@ -65,14 +66,15 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
     // The graph as the drill reads it: the stored files plus the definitions loaded so far.
     const full = useMemo(() => (graph ? withSymbolRecords(graph, records) : null), [graph, records]);
 
-    // The map can change under the person (a re-review, Live): a level whose station or file is gone is left, and said so.
+    // The map can change under the person (a re-review, Live): a package whose station id changed follows its files to the
+    // station that holds them now; a level whose files are gone is left, and said so.
     useEffect(() => {
         if (!full) return;
-        const gone = stack.findIndex((f) => (f.level === 'package' ? !world.byId.has(f.ref) : f.level === 'class' ? !world.stationOf.has(f.ref) : !full.nodes.some((n) => n.ref === f.ref)));
-        if (gone < 0) return;
-        setNotice(stack[gone]!.name);
-        setStack(stack.slice(0, gone));
-        setSelected(null);
+        const fresh = reanchorDrill(stack, world, (ref) => full.nodes.some((n) => n.ref === ref));
+        if (fresh.stack === stack) return;
+        for (const [from, to] of fresh.moved) if (asked.current.has(from)) { asked.current.delete(from); asked.current.add(to); }
+        if (fresh.notice !== null) { setNotice(fresh.notice); setSelected(null); }
+        setStack(fresh.stack);
     }, [world, full, stack]);
     const view = useMemo(() => {
         const top = stack[stack.length - 1];
@@ -97,7 +99,7 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
         const check = canEnter(id);
         if (!check.can) return;
         const name = view?.stations.byId.get(id)?.name ?? world.byId.get(id)?.name ?? id;
-        setStack((s) => [...s, { level: check.level, ref: id, name }]);
+        setStack((s) => [...s, check.level === 'package' ? { level: check.level, ref: id, name, files: anchorFilesOf(world, id) } : { level: check.level, ref: id, name }]);
         setSelected(null);
         setNotice(null);
         if (check.level === 'package' && load && !asked.current.has(id)) {

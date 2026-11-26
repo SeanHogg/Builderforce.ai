@@ -9,15 +9,21 @@
  */
 import { existsSync } from "node:fs";
 import * as path from "node:path";
-import { loadBfiNode } from "@seanhogg/bfi-node";
+import { addonFileName, loadBfiNode } from "@seanhogg/bfi-node";
 import type { BfiModule } from "@seanhogg/builderforce-brain-embedded/bfi";
 
-/** The addon `esbuild.mjs` copies beside the bundle (this platform's prebuilt one). */
-export const HOST_BFI_NATIVE_FILE = "bfi_node.node";
-
-/** The addon's path in an install, when this build ships one. */
-export function nativeAddonPath(outDir: string, exists: (file: string) => boolean = existsSync): string | undefined {
-  const file = path.join(outDir, HOST_BFI_NATIVE_FILE);
+/**
+ * This platform's addon in an install, when the build ships one. `esbuild.mjs` copies every
+ * vendored addon into `out/` under its tagged name, so only this host's own file is ever
+ * considered — another platform's binary is never loaded.
+ */
+export function nativeAddonPath(
+  outDir: string,
+  exists: (file: string) => boolean = existsSync,
+  platform: string = process.platform,
+  arch: string = process.arch,
+): string | undefined {
+  const file = path.join(outDir, addonFileName(platform, arch));
   return exists(file) ? file : undefined;
 }
 

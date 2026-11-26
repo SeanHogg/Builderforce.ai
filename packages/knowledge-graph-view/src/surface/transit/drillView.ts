@@ -18,7 +18,11 @@ import { buildStations, fileRefOf, stationOfRef, type Station, type StationModel
 import { isErrorish, membersOfClass, shortName, symbolSort, symbolsOf, symbolsOfFile } from './symbols';
 
 export type DrillLevel = 'package' | 'class' | 'function';
-export interface DrillFrame { level: DrillLevel; ref: string; name: string }
+export interface DrillFrame {
+    level: DrillLevel; ref: string; name: string;
+    /** A package frame: the member files it was entered with, so a rebuilt map (new station ids) can re-anchor it (`reanchorDrill`). */
+    files?: string[];
+}
 
 export interface DrillView {
     level: DrillLevel;
