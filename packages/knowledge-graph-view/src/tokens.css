@@ -67,6 +67,8 @@
   --kg-stale: #a8a29e;
   --kg-unused: #78716c;
   --kg-changed: #38bdf8;
+  --kg-diff-added: #4ade80;
+  --kg-diff-removed: #f87171;
   --kg-plane: rgba(148, 163, 184, 0.12);
   /* Tower camera: the shadow under a tower and the scrim behind a drawer (`--kg-raise`, the pipe underlay, is a neutral above). */
   --kg-scrim: rgba(0, 0, 0, 0.4);
@@ -164,6 +166,8 @@
   --kg-stale: #6a645e;
   --kg-unused: #857d75;
   --kg-changed: #0369a1;
+  --kg-diff-added: #15803d;
+  --kg-diff-removed: #b91c1c;
   --kg-plane: rgba(100, 116, 139, 0.1);
   --kg-scrim: rgba(15, 23, 42, 0.18);
   --kg-tower-side: rgba(15, 23, 42, 0.16);

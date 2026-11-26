@@ -46,6 +46,9 @@ export const KG_TOKENS = {
     stale: ['--kg-stale', '--bf-text-muted'],
     unused: ['--kg-unused', '--bf-text-muted'],
     changed: ['--kg-changed', '--bf-accent'],
+    // Compare (PRD 43 C5): what a diff paints a mark that is new or gone; "changed" above is the third.
+    diffAdded: ['--kg-diff-added', '--bf-success'],
+    diffRemoved: ['--kg-diff-removed', '--bf-danger'],
     plane: ['--kg-plane', '--bf-surface-2'],
     warnBg: ['--kg-warn-bg', '--bf-warning-bg'],
     errorText: ['--kg-error', '--bf-error'],

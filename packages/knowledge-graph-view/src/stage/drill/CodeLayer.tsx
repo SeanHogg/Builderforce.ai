@@ -13,16 +13,18 @@
  * available here, and still offers "Open at line" when the host can open one.
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar, type ThemeTone } from '../../scene/themeColors';
 import { CONTROL } from '../../styles';
+import { ShapeGlyph } from '../../surface/LegendGlyph';
 import { TYPE } from '../../surface/ui/type';
 import type { SourceLocation, SourceReader, SourceText, SymbolRecord } from '../../types';
 import {
-    codeRows, drillRefForName, readingLineAt, scrollTopForLine, syntaxLight, visibleWindow, VIRTUAL_AFTER,
+    codeRows, drillRefForName, railShape, readingLineAt, scrollTopForLine, syntaxLight, visibleWindow, VIRTUAL_AFTER,
     type CallStep, type CodeTarget, type Lens, type RailKind, type TokenKind,
 } from './codeText';
+import { visibleLensActions, type LensActionId, type LensCtx } from './lensActions';
 
 export interface CodeLayerProps {
     target: CodeTarget;
@@ -66,14 +68,16 @@ export interface CodeLayerProps {
     lens?: ReadonlyMap<number, Lens> | null | undefined;
     /** A lens link was clicked. */
     onLens?: ((action: LensAction, lens: Lens) => void) | undefined;
+    /** The facts, the level you are inside and the handlers that exist (`lensActions`): adds the out / simulate / restructure rows and the gutter's glyphs. */
+    lensCtx?: LensCtx | null | undefined;
     /** The enclosing symbols pinned above the code for its top line (`stickyChain`). */
     sticky?: ((firstLine: number) => readonly SymbolRecord[]) | undefined;
     /** A sticky row was clicked: go to its line. */
     onJump?: ((line: number) => void) | undefined;
 }
 
-/** A lens link: a class's references, Show in map; a method's callers, Drill in. */
-export type LensAction = 'references' | 'show' | 'callers' | 'drill';
+/** A lens link (`LENS_ACTIONS`): a class's references, Show in map; a method's callers, Drill in; and Out, Simulate, Restructure. */
+export type LensAction = LensActionId;
 
 /** One code row's height (px), and the rows a virtualized panel renders before it has measured itself. */
 export const ROW_PX = 18;
@@ -83,6 +87,8 @@ const READING_TINT = `color-mix(in srgb, ${cssVar('text')} 5%, transparent)`;
 const MARKED_TINT = `color-mix(in srgb, ${cssVar('accent')} 14%, transparent)`;
 const OUTSIDE_OPACITY = 0.3;
 const RAIL_PX = 3;
+/** The gutter's glyph column (a symbol's shape on its first line), and the mark inside it. */
+const GLYPH_PX = 14;
 const STICKY_SHADOW = '0 2px 6px color-mix(in srgb, currentColor 18%, transparent)';
 
 /** The gutter rail's tone per symbol kind (the rows of the symbol being read take the accent instead). */
@@ -136,26 +142,41 @@ const button: CSSProperties = {
 };
 
 /** A lens link: muted, the acting one (Show in map, Drill in) on the accent; plain text when nothing handles it. */
-function LensLink({ text, go = false, onClick }: { text: string; go?: boolean; onClick?: (() => void) | undefined }) {
+function LensLink({ text, glyph, go = false, onClick }: { text: string; glyph?: string | undefined; go?: boolean | undefined; onClick?: (() => void) | undefined }) {
     const style: CSSProperties = { color: cssVar(go ? 'accent' : 'muted') };
-    if (!onClick) return <span style={style}>{text}</span>;
-    return <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} style={{ ...LINK_BUTTON, ...style, textDecoration: 'none' }}>{text}</button>;
+    const body = <>{glyph && <span aria-hidden="true">{glyph} </span>}{text}</>;
+    if (!onClick) return <span style={style}>{body}</span>;
+    return <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} style={{ ...LINK_BUTTON, ...style, textDecoration: 'none' }}>{body}</button>;
 }
 
-/** The lens line above a definition: a class's references and Show in map, a method's callers and Drill in. */
-function LensLine({ lens, labels, onLens }: { lens: Lens; labels: KnowledgeGraphLabels; onLens?: ((action: LensAction, lens: Lens) => void) | undefined }) {
+/** The lens line above a definition: the visible rows of `LENS_ACTIONS`, drawn in order (no branch per action here). */
+function LensLine({ lens, labels, ctx, onLens }: { lens: Lens; labels: KnowledgeGraphLabels; ctx: LensCtx | null; onLens?: ((action: LensAction, lens: Lens) => void) | undefined }) {
     const t = labels.surface.code;
-    const act = (action: LensAction) => onLens ? () => onLens(action, lens) : undefined;
-    if (lens.kind === 'class') {
-        return <><LensLink text={fillTemplate(t.lensReferences, { count: lens.count })} onClick={act('references')} />{' · '}<LensLink go text={t.showInMap} onClick={act('show')} /></>;
-    }
-    const callers = fillTemplate(lens.count === 1 ? t.lensCaller : t.lensCallers, { count: lens.count });
-    return <><LensLink text={callers} onClick={act('callers')} />{' · '}<LensLink go text={t.drillIn} onClick={act('drill')} /></>;
+    return (
+        <>
+            {visibleLensActions(lens, ctx).map((row, i) => (
+                <Fragment key={row.id}>
+                    {i > 0 && ' · '}
+                    <LensLink go={row.go} glyph={row.glyph} text={row.label(t, lens, ctx)} onClick={onLens ? () => onLens(row.id, lens) : undefined} />
+                </Fragment>
+            ))}
+        </>
+    );
+}
+
+/** The gutter's warning for a symbol carrying an anti-pattern (in place of its shape). */
+function WarnGlyph({ label }: { label: string }) {
+    return (
+        <svg width={GLYPH_PX - 4} height={GLYPH_PX - 4} viewBox="0 0 10 10" role="img" aria-label={label} data-gutter-warn style={{ flex: 'none' }}>
+            <title>{label}</title>
+            <path d="M5 1 L9.5 9 H0.5 Z" fill={cssVar('violation')} />
+        </svg>
+    );
 }
 
 export function CodeLayer({
     target, reader, labels, onOpenSource, onClose, onOut, scrollLine, records = [], onDrill, onReadingLine, steps, currentStep = -1, span, onStep, marked,
-    onViewport, onText, onPickLine, cursorLine, rails, railSpan, lens, onLens, sticky, onJump,
+    onViewport, onText, onPickLine, cursorLine, rails, railSpan, lens, onLens, lensCtx = null, sticky, onJump,
 }: CodeLayerProps) {
     const t = labels.surface.code, card = labels.surface.map.card;
     const linesRef = useRef<HTMLDivElement | null>(null);
@@ -221,6 +242,17 @@ export function CodeLayer({
         const tone = on ? cssVar('accent') : kind ? cssVar(RAIL_TONE[kind]) : 'transparent';
         return <span aria-hidden="true" data-rail={kind} data-rail-on={on ? '' : undefined} style={{ flex: `0 0 ${RAIL_PX}px`, background: tone }} />;
     };
+    // A symbol's shape on its first line, a warning instead when it carries an anti-pattern; the column exists only with the facts.
+    const glyphOf = (n1: number | null) => {
+        if (!lensCtx) return null;
+        const l = n1 === null ? undefined : lens?.get(n1);
+        const warn = l ? lensCtx.facts.antiPatternOf(l.ref) : null;
+        return (
+            <span data-gutter-glyph={l?.ref} style={{ flex: `0 0 ${GLYPH_PX}px`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                {l && (warn ? <WarnGlyph label={fillTemplate(t.gutterWarn, { name: warn.kind })} /> : <ShapeGlyph shape={railShape(l.kind)} tone={RAIL_TONE[l.kind]} size={GLYPH_PX - 4} />)}
+            </span>
+        );
+    };
     const numberOf = (n1: number | null) => <span aria-hidden="true" style={{ flex: `0 0 ${gutter}`, textAlign: 'right', paddingRight: 8, color: cssVar('muted') }}>{n1}</span>;
     const textOf = (n1: number, drill: boolean) => (
         <span>{(tokens[n1 - first] ?? []).map((tok, k) => <CodeToken key={k} tok={tok} path={target.path} records={records} onDrill={drill ? onDrill : undefined} drillAria={t.drillAria} />)}</span>
@@ -260,7 +292,7 @@ export function CodeLayer({
                                         key={r.ref} type="button" data-sticky-line={r.line} onClick={onJump ? () => onJump(r.line) : undefined}
                                         style={{ ...rowBox, width: '100%', border: 0, padding: 0, font: 'inherit', color: 'inherit', background: 'transparent', cursor: onJump ? 'pointer' : 'default', textAlign: 'left' }}
                                     >
-                                        {railOf(r.line)}{numberOf(r.line)}{stepColumn()}{textOf(r.line, false)}
+                                        {railOf(r.line)}{glyphOf(r.line)}{numberOf(r.line)}{stepColumn()}{textOf(r.line, false)}
                                     </button>
                                 ))}
                             </div>
@@ -277,9 +309,10 @@ export function CodeLayer({
                                 return (
                                     <div key={`lens:${row.lens}`} data-code-lens={row.lens} data-lens-kind={l.kind} style={{ ...rowBox, ...TYPE.meta, lineHeight: `${ROW_PX}px`, ...placed(r), opacity: span && !inSpan(span, at) ? OUTSIDE_OPACITY : undefined }}>
                                         {rails && <span aria-hidden="true" style={{ flex: `0 0 ${RAIL_PX}px` }} />}
+                                        {glyphOf(null)}
                                         {numberOf(null)}
                                         {stepColumn()}
-                                        <span>{indent}<LensLine lens={l} labels={labels} onLens={onLens} /></span>
+                                        <span>{indent}<LensLine lens={l} labels={labels} ctx={lensCtx} onLens={onLens} /></span>
                                     </div>
                                 );
                             }
@@ -300,6 +333,7 @@ export function CodeLayer({
                                     }}
                                 >
                                     {railOf(n1)}
+                                    {glyphOf(n1)}
                                     {numberOf(n1)}
                                     {stepColumn(step != null && <StepBadge n={step + 1} count={stepCount} current={isCall} aria={t.stepAria} onClick={onStep ? () => onStep(step) : undefined} />)}
                                     {textOf(n1, true)}

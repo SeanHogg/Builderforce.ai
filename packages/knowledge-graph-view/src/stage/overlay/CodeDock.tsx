@@ -16,17 +16,18 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { pathOf } from '../../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
-import { typeShape, type NodeShape } from '../../shapes';
 import { list } from '../../styles';
 import { ShapeGlyph } from '../../surface/LegendGlyph';
 import { TYPE } from '../../surface/ui/type';
 import { fileRefOf } from '../../surface/stations';
+import type { SymbolFacts } from '../../surface/symbolFacts';
 import type { SourceLocation, SourceReader, SymbolRecord } from '../../types';
 import { CodeLayer, LINK_BUTTON, RAIL_TONE, type LensAction } from '../drill/CodeLayer';
 import {
-    baseName, callerIndex, codeTargetOf, lensRows, MAX_SPAN, railKindOf, railKinds, spanInFile, stickyChain, symbolChain,
-    type CodeTarget, type Lens, type RailKind,
+    baseName, callerIndex, codeTargetOf, lensRows, MAX_SPAN, railKindOf, railKinds, railShape, spanInFile, stickyChain, symbolChain,
+    type CodeTarget, type Lens,
 } from '../drill/codeText';
+import type { LensCtx } from '../drill/lensActions';
 import type { CodeReading } from '../drill/useCodeReading';
 import { toggleButton as toggle } from './cardStyles';
 

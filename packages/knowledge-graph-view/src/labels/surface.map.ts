@@ -74,7 +74,9 @@ export interface MapLabels {
         satelliteAria: string;
         /** The Map's look toggle (the group's name, its two choices and their tips): flat, or towers and pipes. */
         look: Record<'label' | 'flat' | 'towers' | 'flatTip' | 'towersTip', string>;
-        card: Record<'close' | 'issueMore' | 'goInside' | 'unfold' | 'fold' | 'whoCalls' | 'apiContract' | 'patterns' | 'noSymbols' | 'leaf' | 'loading' | 'callSite' | 'openAtLine', string>;
+        card: Record<'close' | 'issueMore' | 'goInside' | 'unfold' | 'fold' | 'whoCalls' | 'apiContract' | 'patterns' | 'noSymbols' | 'leaf' | 'loading' | 'callSite' | 'openAtLine'
+            /** The short action labels beside their glyphs (`whoCalls` stays their accessible name), and the facts row: `{name}` the anti-pattern. */
+            | 'callers' | 'simulate' | 'simulateTip' | 'restructure' | 'restructureTip' | 'risk' | 'testReached' | 'testNone', string>;
         /** `reached` replaces `coverage` when the number is a static reach (a heuristic), not a measurement. */
         stats: Record<'issues' | 'complexity' | 'coverage' | 'reached' | 'usage', string>;
         /** The numbers as words: the anti-pattern level (1 to 5), and the importance rank (`{rank}` of `{total}`). */
@@ -231,6 +233,9 @@ export const MAP_DEFAULTS: MapLabels = {
             whoCalls: 'Who calls this?', apiContract: 'API contract', patterns: 'Patterns',
             noSymbols: 'No symbols here: nothing lies further inside.', leaf: 'Outside this level', loading: 'Reading symbols…',
             callSite: 'Call site', openAtLine: 'Open at line {line}',
+            callers: 'Callers', simulate: 'Simulate', simulateTip: 'Run the path through this and see what it reaches',
+            restructure: 'Restructure', restructureTip: 'See {name} restructured', risk: 'Risk',
+            testReached: 'A test reaches it', testNone: 'No test reaches it',
         },
         stats: { issues: 'Anti-patterns', complexity: 'Complexity', coverage: 'Coverage', reached: 'Reached', usage: 'Importance' },
         statWords: {

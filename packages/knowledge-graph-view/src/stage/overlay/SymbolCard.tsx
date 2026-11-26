@@ -8,11 +8,14 @@ import { useRef } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { kindLabel } from '../../names';
 import { typeLegendKey, type MarkType } from '../../shapes';
+import { selectionFacts } from '../../surface/transit/cardModel';
+import { CardAction, cardActionRow, CardFacts, SelectionActions } from '../../surface/transit/CardActions';
+import type { SymbolFacts } from '../../surface/symbolFacts';
 import { TYPE } from '../../surface/ui/type';
 import type { SourceLocation, SymbolRecord } from '../../types';
 import { useSlotAnchor } from '../anchor/useSlotAnchor';
 import { codeTargetOf, symbolCounts } from '../drill/codeText';
-import { action, card, chip, chips, kicker } from './cardStyles';
+import { card, chip, chips, kicker } from './cardStyles';
 
 export type SymbolCardState = 'selected' | 'reading' | 'pinned';
 
@@ -36,9 +39,15 @@ export interface SymbolCardProps {
     onZoomIn(): void;
     onZoomOut(): void;
     onOpenSource?: ((location: SourceLocation) => void) | undefined;
+    /** The graph's facts, computed once by the wiring; absent ⇒ no facts row, no Restructure. */
+    facts?: SymbolFacts | undefined;
+    /** Each is optional: absent ⇒ its button is not shown. Restructure replaces Simulate when the symbol carries an anti-pattern. */
+    onCallers?: (() => void) | undefined;
+    onSimulate?: (() => void) | undefined;
+    onRestructure?: (() => void) | undefined;
 }
 
-export function SymbolCard({ slotKey, symbolRef, name, state, records, markType, labels, onDrill, onCode, onZoomIn, onZoomOut, onOpenSource }: SymbolCardProps) {
+export function SymbolCard({ slotKey, symbolRef, name, state, records, markType, labels, onDrill, onCode, onZoomIn, onZoomOut, onOpenSource, facts: symbolFacts, onCallers, onSimulate, onRestructure }: SymbolCardProps) {
     const el = useRef<HTMLElement | null>(null);
     const { missing } = useSlotAnchor(slotKey, el);
     if (!slotKey) return null;
@@ -52,6 +61,7 @@ export function SymbolCard({ slotKey, symbolRef, name, state, records, markType,
     if (counts.callers > 0) facts.push(['callers', fillTemplate(t.callers, { count: counts.callers })]);
     if (markType === 'external') facts.push(['imported', t.imported]);
     const shown = target?.name ?? name;
+    const selection = selectionFacts(symbolFacts, [symbolRef], labels);
     return (
         <section
             ref={el} data-symbol-card data-state={state} hidden={missing} aria-label={shown}
@@ -63,14 +73,16 @@ export function SymbolCard({ slotKey, symbolRef, name, state, records, markType,
             {facts.length > 0 && (
                 <div style={chips}>{facts.map(([id, text]) => <span key={id} data-chip={id} style={chip}>{text}</span>)}</div>
             )}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {counts.calls > 0 && <button type="button" data-action="drill-in" onClick={onDrill} style={action(true)}>{t.drillInAction}</button>}
-                <button type="button" data-action="zoom-in" onClick={onZoomIn} style={action(false)}>{labels.zoomIn}</button>
-                <button type="button" data-action="show-code" onClick={onCode} style={action(false)}>{t.showCode}</button>
+            <CardFacts labels={labels} facts={selection} />
+            <div style={cardActionRow}>
+                {counts.calls > 0 && <CardAction id="drill-in" primary glyph="inside" label={t.drillInAction} onClick={onDrill} />}
+                <SelectionActions labels={labels} facts={selection} onCallers={onCallers} onSimulate={onSimulate} onRestructure={onRestructure} />
+                <CardAction id="zoom-in" label={labels.zoomIn} onClick={onZoomIn} />
+                <CardAction id="show-code" label={t.showCode} onClick={onCode} />
                 {target && onOpenSource && (
-                    <button type="button" data-action="open-file" onClick={() => onOpenSource({ path: target.path, startLine: target.startLine, endLine: target.startLine })} style={action(false)}>{t.openFile}</button>
+                    <CardAction id="open-file" label={t.openFile} onClick={() => onOpenSource({ path: target.path, startLine: target.startLine, endLine: target.startLine })} />
                 )}
-                <button type="button" data-action="zoom-out" onClick={onZoomOut} style={action(false)}>{labels.zoomOut}</button>
+                <CardAction id="zoom-out" glyph="out" label={labels.zoomOut} onClick={onZoomOut} />
             </div>
         </section>
     );

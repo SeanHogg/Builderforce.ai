@@ -21,6 +21,7 @@ import { litStations, QUESTIONS, type QuestionId } from '../../surface/questions
 import { BG_TONE, toneIndex } from '../../stage/tones';
 import { FLAG, SLOT_NODE, type MarkPaint, type MarkSet } from '../../stage/types';
 import type { LensId } from '../../types';
+import type { DiffKind } from '../compare/diffGraphs';
 import { lightFolders, paintFolders } from './folderPaint';
 import type { StageModel } from './stageModel';
 
@@ -35,7 +36,16 @@ export interface PaintInput {
     questionId?: string | null;
     /** The pattern family the patterns question is narrowed to; a family with no question asks `patterns`. */
     family?: string | null;
+    /**
+     * Compare (PRD 43 C5): mark key (`node:<ref>`, `st:<id>`) or its bare ref → how it differs. Folder slots never take it. Overrides the slot's tone with a diff tone.
+     * Paint, not a MarkSet input (a commit's refs never rebuild the MarkSet), and no new attribute: it reuses `tone`.
+     */
+    diff?: ReadonlyMap<string, DiffKind>;
 }
+
+const DIFF_TONE: Readonly<Record<DiffKind, number>> = {
+    added: toneIndex('diffAdded'), removed: toneIndex('diffRemoved'), changed: toneIndex('changed'),
+};
 
 const DOC_TYPE = MARK_TYPE_ORDER.indexOf('doc');
 const QUESTION_IDS: ReadonlySet<string> = new Set(QUESTIONS.map((q) => q.id));
@@ -75,6 +85,14 @@ export function paintMarks(g: KnowledgeGraph, model: StageModel, input: PaintInp
             if (marks.slotKind[i] !== SLOT_NODE) continue;
             const r = role.get(g.nodes[i]!.ref);
             if (r) tone[i] = toneIndex(ROLE_TONE[r]); else flags[i] = flags[i]! | FLAG.DIM;
+        }
+    }
+    if (input.diff?.size) {
+        for (let i = 0; i < n; i++) {
+            // The key (`node:<ref>`) or the bare ref `diffKindOf` returns, the way `dimExcept` reads `lit`.
+            const key = marks.keys[i]!;
+            const kind = input.diff.get(key) ?? input.diff.get(key.slice(key.indexOf(':') + 1));
+            if (kind) tone[i] = DIFF_TONE[kind];
         }
     }
     return { generation: marks.generation, tone, tone2, fill, flags };

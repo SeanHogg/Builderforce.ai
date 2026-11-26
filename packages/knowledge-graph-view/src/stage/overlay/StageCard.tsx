@@ -17,6 +17,7 @@ import { buildCard } from '../../surface/transit/cardModel';
 import type { Rect } from '../../surface/transit/cardPlacement';
 import { StationCard } from '../../surface/transit/StationCard';
 import { bandTitle } from '../../surface/bands';
+import type { SymbolFacts } from '../../surface/symbolFacts';
 import type { DrillModel } from '../../surface/transit/useDrill';
 import { useStageBus } from '../anchor/stageBus';
 import { useSlotAnchor } from '../anchor/useSlotAnchor';
@@ -40,12 +41,18 @@ export interface StageCardProps {
     onEnter?: ((stationId: string) => void) | undefined;
     /** Opens the docked code panel on this mark. Absent ⇒ no Code button. */
     onCode?: (() => void) | undefined;
+    /** The graph's facts, computed once by the wiring (test reach, anti-pattern); absent ⇒ no facts row, no Restructure. */
+    facts?: SymbolFacts | undefined;
+    /** Opens the path simulator through this station. Absent ⇒ no Simulate button. */
+    onSimulate?: (() => void) | undefined;
+    /** Opens the restructure compare for this station's anti-pattern (replaces Simulate). Absent ⇒ no Restructure button. */
+    onRestructure?: (() => void) | undefined;
 }
 
 const NO_ENTER = { can: false, reason: 'deepest' } as const;
 const SATELLITE_BOX = 14;
 
-export function StageCard({ cardKey, map, drill, graph, labels, compact, onClose, onQuestion, onOpenPanel, onEnter, onCode }: StageCardProps) {
+export function StageCard({ cardKey, map, drill, graph, labels, compact, onClose, onQuestion, onOpenPanel, onEnter, onCode, facts, onSimulate, onRestructure }: StageCardProps) {
     const bus = useStageBus();
     const ref = useRef<HTMLDivElement | null>(null);
     const index = useMemo(() => nodeIndex(graph), [graph]);
@@ -81,7 +88,7 @@ export function StageCard({ cardKey, map, drill, graph, labels, compact, onClose
     const act = (run: () => void) => { run(); close(); };
     const card = buildCard({
         station, stations: map.stations.stations, labels, layerName: bandTitle(station.layer ?? OTHER_LAYER, labels), findings, index,
-        enter: drill.canEnter?.(station.id) ?? NO_ENTER, satellites: map.satellites(station), unfolded, leaf: drill.view?.leaves.has(station.id) ?? false,
+        enter: drill.canEnter?.(station.id) ?? NO_ENTER, satellites: map.satellites(station), unfolded, leaf: drill.view?.leaves.has(station.id) ?? false, facts,
     });
     return (
         <StationCard
@@ -93,6 +100,8 @@ export function StageCard({ cardKey, map, drill, graph, labels, compact, onClose
             onApi={() => act(() => onOpenPanel?.('api'))}
             onPatterns={() => act(() => onOpenPanel?.('patterns'))}
             onCode={onCode ? () => { close(); onCode(); } : undefined}
+            onSimulate={onSimulate ? () => act(onSimulate) : undefined}
+            onRestructure={onRestructure ? () => act(onRestructure) : undefined}
         />
     );
 }

@@ -13,6 +13,7 @@ import { CONTROL } from '../styles';
 import type { ViewMode } from '../types';
 import type { CameraDef } from './registry';
 import { Segmented } from './ui';
+import { cameraGlyph, Glyph } from './ui/glyphs';
 import { TYPE } from './ui/type';
 
 export interface CameraBarProps {
@@ -45,39 +46,6 @@ function IconButton({ label, onClick, testId, children }: { label: string; onCli
             {children}
         </button>
     );
-}
-
-function Glyph({ children }: { children: ReactNode }) {
-    return (
-        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style={{ display: 'block', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }}>
-            {children}
-        </svg>
-    );
-}
-
-/** One icon per switcher camera (ids from the registry, `cameras.tsx`); an unknown id keeps its text label. */
-function cameraGlyph(id: string): ReactNode {
-    switch (id) {
-        // Transit: an isometric map — two offset sheets.
-        case 'transit': return <Glyph><rect x="2.5" y="5.5" width="8" height="8" rx="1" /><rect x="5.5" y="2.5" width="8" height="8" rx="1" /></Glyph>;
-        // System: three stacked layers.
-        case 'system': return <Glyph><path d="M8 2.5 13.5 5 8 7.5 2.5 5 8 2.5z" /><path d="M2.5 8 8 10.5 13.5 8M2.5 11 8 13.5 13.5 11" /></Glyph>;
-        // Graph: three connected nodes.
-        case 'graph': return <Glyph><path d="M5.7 4.9l4.6 1.2M4.6 6.1l1.8 4.3M10.9 7.8l-2.7 2.9" /><circle cx="4" cy="4.5" r="1.7" /><circle cx="12" cy="6.5" r="1.7" /><circle cx="7" cy="12" r="1.7" /></Glyph>;
-        // Map: a radial mind-map — center dot, three spokes.
-        case 'map': return <Glyph><path d="M8 6.5V4.2M9.3 8.8l2.4 1.6M6.7 8.8l-2.4 1.6" /><circle cx="8" cy="8" r="1.5" fill="currentColor" stroke="none" /><circle cx="8" cy="3" r="1.2" /><circle cx="12.8" cy="11.2" r="1.2" /><circle cx="3.2" cy="11.2" r="1.2" /></Glyph>;
-        // 3D: a cube.
-        case '3d': return <Glyph><path d="M8 2.5 13 5v6l-5 2.5L3 11V5l5-2.5z" /><path d="M3 5l5 2.5L13 5M8 7.5v6" /></Glyph>;
-        // Heat: three rising bars.
-        case 'heat': return <Glyph><path d="M4 13V9.5M8 13V6M12 13V3" /></Glyph>;
-        // Style: a half-filled swatch circle.
-        case 'style': return <Glyph><circle cx="8" cy="8" r="5.5" /><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none" /></Glyph>;
-        // Features: a flag.
-        case 'features': return <Glyph><path d="M4 13.5V2.5M4 3h8l-2 2.5 2 2.5H4" /></Glyph>;
-        // List: three horizontal lines.
-        case 'list': return <Glyph><path d="M3 4.5h10M3 8h10M3 11.5h10" /></Glyph>;
-        default: return undefined;
-    }
 }
 
 export function CameraBar({ labels, cameras, mode, onMode, outTo, onOut, tools, stacked = false }: CameraBarProps) {

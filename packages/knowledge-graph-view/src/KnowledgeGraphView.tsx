@@ -234,6 +234,8 @@ export function KnowledgeGraphView({
         />
     );
     const panels = usePanelVisibility();
+    /** The stage's code pane has its own hide control (PRD 43 Part C1); its slot is remembered with the docks'. */
+    const toggleCode = () => panels.toggle('code');
     /** Simulate is a mode of the right rail: turning it on opens that rail if it was collapsed. */
     const toggleSimulate = () => {
         if (!simulateMode && !panels.visibility.right) panels.toggle('right');
@@ -285,6 +287,7 @@ export function KnowledgeGraphView({
                                             mode={mode} graph={graph} drawn={drawn} lens={lens} labels={labels} rootTitle={titleOf(graph.scope.rootId)}
                                             selected={selected} focus={kg.focus} reducedMotion={env.reducedMotion} surface={surface} onSelect={select} onShow={show} onCamera={setMode}
                                             onCompose={onCompose} evidence={evidenceOf} onOpenSource={onOpenSource}
+                                            codeShown={panels.visibility.code} onToggleCode={toggleCode}
                                         />
                                     </ZoomProvider>
                                 ) : (

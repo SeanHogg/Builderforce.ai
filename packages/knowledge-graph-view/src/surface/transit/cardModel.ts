@@ -1,6 +1,7 @@
 /**
  * What the station card says and offers: four stats, the station's open issues by name, and
- * which of its actions apply (go inside, unfold, who calls, API contract, patterns). Pure, so
+ * which of its actions apply (go inside, unfold, who calls, API contract, patterns), and the selection's facts (test reach,
+ * anti-pattern name; risk is the issues stat, not a second number). Pure, so
  * the card only draws it. A stat whose data was never collected reads "—", never zero.
  */
 
@@ -11,6 +12,7 @@ import { counted } from '../plural';
 import type { ThemeTone } from '../../scene/themeColors';
 import { SEVERITY_TONES } from '../overlays';
 import type { Station } from '../stations';
+import type { SymbolFacts } from '../symbolFacts';
 import type { EnterCheck } from './useDrill';
 
 export const MAX_ISSUES = 3;
@@ -38,6 +40,25 @@ export interface CardModel {
     hasApi: boolean;
     hasPatterns: boolean;
     leaf: boolean;
+    /** Test reach and the anti-pattern's name; absent when the wiring passed no facts. */
+    facts?: SelectionFacts | null;
+}
+
+/** What the selection's facts row and its Restructure action read: computed once by `symbolFacts`, only named here. */
+export interface SelectionFacts {
+    /** `none` = no test reaches it; null = unknown. */
+    tests: 'reached' | 'none' | null;
+    antiPattern: { kind: string; name: string; findingId: string } | null;
+}
+
+/** The facts of a selection made of `refs` (a symbol, or a station's files): the first anti-pattern found, untested if any ref is. */
+export function selectionFacts(facts: SymbolFacts | undefined, refs: readonly string[], labels: KnowledgeGraphLabels): SelectionFacts | null {
+    if (!facts || refs.length === 0) return null;
+    const found = refs.map((r) => facts.antiPatternOf(r)).find((a) => a !== null) ?? null;
+    return {
+        tests: refs.some((r) => facts.untested(r)) ? 'none' : 'reached',
+        antiPattern: found && { ...found, name: findingTitle({ kind: found.kind }, labels) },
+    };
 }
 
 export interface CardInput {
@@ -52,6 +73,8 @@ export interface CardInput {
     leaf: boolean;
     /** Every station, to rank this one's importance; absent ⇒ rank among itself. */
     stations?: readonly Station[] | undefined;
+    /** The graph's facts, computed once by the wiring; absent ⇒ the card shows none. */
+    facts?: SymbolFacts | undefined;
 }
 
 const ANTI_WORDS = ['none', 'low', 'medium', 'high', 'severe'] as const;
@@ -88,5 +111,6 @@ export function buildCard(i: CardInput): CardModel {
         hasApi: s.refs.some((ref) => i.index.get(ref)?.badges?.routes !== undefined),
         hasPatterns: s.patterns.length > 0,
         leaf: i.leaf,
+        facts: selectionFacts(i.facts, s.refs, labels),
     };
 }

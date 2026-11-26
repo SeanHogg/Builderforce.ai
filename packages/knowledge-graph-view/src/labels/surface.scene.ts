@@ -26,7 +26,9 @@ export interface SceneLabels {
         | 'outline' | 'outlineAria' | 'tabsAria'
         | 'layoutAria' | 'flow' | 'sequence' | 'viewAria' | 'view3d' | 'view2d' | 'followsEditor'
         | 'stateSelected' | 'stateReading' | 'statePinned' | 'methodsCount' | 'fieldsCount' | 'callsCount' | 'imported' | 'drillInAction' | 'showCode' | 'openFile'
-        | 'status' | 'following' | 'pinnedStatus' | 'statusLine' | 'resetView',
+        | 'status' | 'following' | 'pinnedStatus' | 'statusLine' | 'resetView'
+        | 'dockAria' | 'dockHide' | 'dockShow' | 'levelAria' | 'levelEmpty' | 'levelNoSource' | 'rowNoTest' | 'rowAntiPattern' | 'rowGoInside' | 'rowRestructure'
+        | 'paneSwitchAria' | 'paneCode' | 'panePicture' | 'lensOut' | 'lensSimulate' | 'lensRestructure' | 'gutterWarn',
         string
     >;
     /**
@@ -139,6 +141,26 @@ export const SCENE_DEFAULTS: SceneLabels = {
         pinnedStatus: 'pinned',
         statusLine: 'Ln {line}',
         resetView: 'Reset view',
+        /** The docked pane (PRD 43 Part C1): its name, its hide / show control, and the outline of the level (`{name}`, the marks on a member). */
+        dockAria: 'Code and outline',
+        dockHide: 'Hide code',
+        dockShow: 'Show code',
+        levelAria: 'Members of this level',
+        levelEmpty: 'Nothing at this level yet.',
+        levelNoSource: 'The source is not available here: showing the outline.',
+        rowNoTest: 'No test',
+        rowAntiPattern: 'Anti-pattern: {name}',
+        rowGoInside: 'Go inside {name}',
+        rowRestructure: 'Restructure {name}',
+        /** A box too narrow to split: the switch between the code and the picture of the same location. */
+        paneSwitchAria: 'Show the code or the picture',
+        paneCode: 'Code',
+        panePicture: 'Picture',
+        /** The lens line's added actions (PRD 43 Part C2): out of the level, simulate an untested symbol, restructure by its anti-pattern (`{name}`); the gutter's warning. */
+        lensOut: 'Out',
+        lensSimulate: 'No test · Simulate',
+        lensRestructure: '{name}',
+        gutterWarn: 'Anti-pattern: {name}',
     },
     nav: {
         group: 'Move the view',

@@ -6,14 +6,17 @@
  * disabled with its reason, never hidden.
  */
 
-import { useCallback, useEffect, useRef, type CSSProperties, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, type RefObject } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { Sheet } from '../../Sheet';
 import { cssVar } from '../../scene/themeColors';
-import { CONTROL } from '../../styles';
+import { actionGlyph } from '../ui/glyphs';
 import { TYPE } from '../ui/type';
 import { CARD_WIDTH } from './cardPlacement';
+import { CardAction, cardAction, cardActionRow, CardFacts, SelectionActions } from './CardActions';
 import type { CardModel } from './cardModel';
+
+export { cardAction };
 
 export interface CardActions {
     onClose(): void;
@@ -24,6 +27,10 @@ export interface CardActions {
     onPatterns(): void;
     /** Opens the docked code panel for this mark. Absent ⇒ no Code button. */
     onCode?(): void;
+    /** Opens the path simulator through this station. Absent ⇒ no Simulate button. */
+    onSimulate?(): void;
+    /** Opens the anti-pattern's restructure compare; shown INSTEAD of Simulate when the station carries one. Absent ⇒ none. */
+    onRestructure?(): void;
 }
 
 export interface StationCardProps extends CardActions {
@@ -38,19 +45,13 @@ export interface StationCardProps extends CardActions {
     loading?: boolean | undefined;
 }
 
-/** The look of a card action button; the stage's mark Code button reuses it. */
-export const cardAction: CSSProperties = {
-    minHeight: CONTROL, padding: '0 10px', borderRadius: 7, cursor: 'pointer', font: 'inherit', ...TYPE.pill,
-    border: `1px solid ${cssVar('border')}`, background: 'transparent', color: cssVar('text'),
-};
-const primary: CSSProperties = { ...cardAction, background: cssVar('accent'), borderColor: cssVar('accent'), color: cssVar('onAccent') };
-
-function CardBody({ card, labels, loading, onEnter, onUnfold, onCallers, onApi, onPatterns, onCode, first }: StationCardProps & { first: RefObject<HTMLButtonElement | null> }) {
+function CardBody({ card, labels, loading, onEnter, onUnfold, onCallers, onApi, onPatterns, onCode, onSimulate, onRestructure, first }: StationCardProps & { first: RefObject<HTMLButtonElement | null> }) {
     const t = labels.surface.map.card;
     const noSymbols = !card.enter.can && card.enter.reason === 'noSymbols';
     return (
         <div style={{ display: 'grid', gap: 8 }}>
             <span style={TYPE.meta}>{card.meta}{card.leaf ? ` · ${t.leaf}` : ''}</span>
+            <CardFacts labels={labels} facts={card.facts ?? null} risk={card.stats.find((k) => k.key === 'issues')} />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 4 }}>
                 {card.stats.map((k) => (
                     <span key={k.key} data-stat={k.key} title={k.title} style={{ display: 'flex', flexDirection: 'column', padding: '4px 6px', borderRadius: 6, background: cssVar('panel2'), minWidth: 0 }}>
@@ -65,13 +66,13 @@ function CardBody({ card, labels, loading, onEnter, onUnfold, onCallers, onApi, 
                     {card.issueMore > 0 && <li style={TYPE.meta}>{fillTemplate(t.issueMore, { count: card.issueMore })}</li>}
                 </ul>
             )}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <button ref={first} type="button" data-action="enter" disabled={!card.enter.can} style={{ ...primary, opacity: card.enter.can ? 1 : 0.5, cursor: card.enter.can ? 'pointer' : 'not-allowed' }} onClick={onEnter}>{t.goInside}</button>
-                {card.unfold > 0 && <button type="button" data-action="unfold" aria-pressed={card.unfolded} style={cardAction} onClick={onUnfold}>{card.unfolded ? t.fold : fillTemplate(t.unfold, { count: card.unfold })}</button>}
-                <button type="button" data-action="callers" style={cardAction} onClick={onCallers}>{t.whoCalls}</button>
-                {card.hasApi && <button type="button" data-action="api" style={cardAction} onClick={onApi}>{t.apiContract}</button>}
-                {card.hasPatterns && <button type="button" data-action="patterns" style={cardAction} onClick={onPatterns}>{t.patterns}</button>}
-                {onCode && <button type="button" data-action="code" aria-label={fillTemplate(labels.surface.code.buttonAria, { name: card.name })} style={cardAction} onClick={onCode}>{labels.surface.code.button}</button>}
+            <div style={cardActionRow}>
+                <CardAction id="enter" primary glyph="inside" label={t.goInside} disabled={!card.enter.can} buttonRef={first} onClick={onEnter} />
+                <SelectionActions labels={labels} facts={card.facts ?? null} onCallers={onCallers} onSimulate={onSimulate} onRestructure={onRestructure} />
+                {card.unfold > 0 && <CardAction id="unfold" pressed={card.unfolded} label={card.unfolded ? t.fold : fillTemplate(t.unfold, { count: card.unfold })} onClick={onUnfold} />}
+                {card.hasApi && <CardAction id="api" label={t.apiContract} onClick={onApi} />}
+                {card.hasPatterns && <CardAction id="patterns" label={t.patterns} onClick={onPatterns} />}
+                {onCode && <CardAction id="code" label={labels.surface.code.button} ariaLabel={fillTemplate(labels.surface.code.buttonAria, { name: card.name })} onClick={onCode} />}
             </div>
             {noSymbols && <span data-card-reason role="status" style={TYPE.meta}>{loading ? t.loading : t.noSymbols}</span>}
         </div>
@@ -127,7 +128,7 @@ export function StationCard(props: StationCardProps) {
         >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <b style={{ ...TYPE.monoTitle, overflowWrap: 'anywhere' }}>{card.name}</b>
-                <button type="button" aria-label={labels.surface.map.card.close} onClick={close} style={{ ...cardAction, border: 0, minHeight: 24, minWidth: 24, padding: 0, color: cssVar('muted') }}><span aria-hidden="true">×</span></button>
+                <button type="button" aria-label={labels.surface.map.card.close} onClick={close} style={{ ...cardAction, border: 0, minHeight: 24, minWidth: 24, padding: 0, justifyContent: 'center', color: cssVar('muted') }}>{actionGlyph('close')}</button>
             </div>
             {body}
         </div>

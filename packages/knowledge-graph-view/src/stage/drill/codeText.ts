@@ -14,6 +14,7 @@
 import type { CallSite } from '@seanhogg/builderforce-memory/knowledge';
 import { compareCallSites } from '../../compute/tasks/placement/callIndex';
 import { pathOf } from '../../graphModel';
+import { typeShape, type NodeShape } from '../../shapes';
 import { fileRefOf } from '../../surface/stations';
 import type { SymbolRecord } from '../../types';
 
@@ -88,6 +89,11 @@ const METHOD_KINDS: ReadonlySet<string> = new Set(['method', 'function']);
 export function railKindOf(kind: string): RailKind {
     return CLASS_KINDS.has(kind) ? 'class' : METHOD_KINDS.has(kind) ? 'method' : 'field';
 }
+
+const KIND_SHAPE: Readonly<Record<RailKind, NodeShape>> = { class: typeShape('class'), method: typeShape('function'), field: typeShape('data') };
+
+/** The stage's silhouette for a symbol kind (a field is drawn as the data drum): the outline's icon and the gutter's glyph. */
+export const railShape = (kind: RailKind): NodeShape => KIND_SHAPE[kind];
 
 /** A path's last segment. */
 export const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
