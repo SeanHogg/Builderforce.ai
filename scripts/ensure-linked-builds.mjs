@@ -17,16 +17,20 @@
  * in `dist/`; source-only packages (`exports: ./src/index.ts`) are bundled straight from
  * source and need nothing. The build digest covers source, manifests, lockfiles,
  * and config, including the linked packages that tsup bundles into the output.
- * Linked packages are built before the packages that link them.
+ * Linked packages are built before the packages that link them: stale packages are grouped
+ * into dependency levels, each level builds concurrently (at most availableParallelism() - 1
+ * at a time, output buffered and printed per package), and a level starts only when the one
+ * below it has finished.
  *
  * A failed build FAILS this script: shipping a stale dist is the bug this exists to stop.
  *
  * Usage: `node scripts/ensure-linked-builds.mjs [--include-roots] [consumerDir ...]` (default: cwd). Pass
  * every consumer of one build in a single run so shared links are walked once.
  */
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { availableParallelism } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { linkedTargets, readManifest } from './linkedPackages.mjs';
@@ -92,35 +96,86 @@ function shippedFiles(dir, manifest) {
 }
 
 const visited = new Set();
+const levelOf = new Map();
 const rebuilt = [];
 const failed = [];
+/** Packages whose dist is stale, grouped by dependency level: `pending[0]` has no stale link beneath it. */
+const pending = [];
 
-/** Post-order: a package's links are fresh before the package itself is checked. */
-function ensure(dir) {
+/**
+ * Post-order: a package's links are decided before the package itself is checked. Returns the
+ * deepest pending level in this package's subtree (-1 when nothing under it needs a build); a
+ * package that needs a build lands one level above its deepest pending link, so every build
+ * runs after the builds it depends on.
+ */
+function plan(dir) {
   let key;
   try {
     key = realpathSync(dir);
   } catch {
-    return;
+    return -1;
   }
-  if (visited.has(key)) return;
+  if (visited.has(key)) return levelOf.get(key) ?? -1;
   visited.add(key);
   const manifest = readManifest(dir);
-  if (!manifest) return;
-  for (const target of linkedTargets(dir, manifest)) ensure(target);
+  if (!manifest) return -1;
+  let below = -1;
+  for (const target of linkedTargets(dir, manifest)) below = Math.max(below, plan(target));
 
   const main = manifest.main?.replace(/^\.\//, '');
-  if (!manifest.scripts?.build || !main?.startsWith('dist/')) return;
+  if (!manifest.scripts?.build || !main?.startsWith('dist/')) {
+    levelOf.set(key, below);
+    return below;
+  }
   const stamp = join(dir, 'dist', STAMP);
   const outputs = shippedFiles(dir, manifest);
   const complete = () => outputs.every(existsSync);
   const digest = inputDigest(dir, manifest);
-  if (complete() && existsSync(stamp) && readFileSync(stamp, 'utf8').trim() === digest) return;
-  const name = manifest.name ?? dir;
-  console.log(`[ensure-linked-builds] ${name}: building from current inputs`);
-  const ok = spawnSync('npm', ['run', 'build'], { cwd: dir, stdio: 'inherit', shell: process.platform === 'win32' }).status === 0 && complete();
-  if (ok) writeFileSync(stamp, `${digest}\n`);
-  (ok ? rebuilt : failed).push(name);
+  if (complete() && existsSync(stamp) && readFileSync(stamp, 'utf8').trim() === digest) {
+    levelOf.set(key, below);
+    return below;
+  }
+  const level = below + 1;
+  (pending[level] ??= []).push({ dir, name: manifest.name ?? dir, stamp, digest, complete });
+  levelOf.set(key, level);
+  return level;
+}
+
+/** One `npm run build`, its output buffered so concurrent builds never interleave a line. */
+function build(job) {
+  console.log(`[ensure-linked-builds] ${job.name}: building from current inputs`);
+  return new Promise((done) => {
+    const chunks = [];
+    const child = spawn('npm', ['run', 'build'], { cwd: job.dir, shell: process.platform === 'win32' });
+    child.stdout.on('data', (chunk) => chunks.push(chunk));
+    child.stderr.on('data', (chunk) => chunks.push(chunk));
+    const finish = (status) => {
+      const text = Buffer.concat(chunks).toString('utf8').replace(/\s+$/, '');
+      if (text) console.log(text.split('\n').map((line) => `[${job.name}] ${line}`).join('\n'));
+      done(status === 0);
+    };
+    child.on('error', () => finish(1));
+    child.on('close', finish);
+  });
+}
+
+/** The builds of one level, at most `limit` at a time; a failure never stops its siblings. */
+async function runLevel(jobs, limit) {
+  let next = 0;
+  const worker = async () => {
+    while (next < jobs.length) {
+      const job = jobs[next++];
+      const ok = (await build(job)) && job.complete();
+      if (ok) writeFileSync(job.stamp, `${job.digest}\n`);
+      (ok ? rebuilt : failed).push(job.name);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, jobs.length) }, worker));
+}
+
+async function buildPending() {
+  const limit = Math.max(1, availableParallelism() - 1);
+  for (const jobs of pending) if (jobs?.length) await runLevel(jobs, limit);
 }
 
 // Several consumers in one run share visited packages and input hashes, so a package linked by
@@ -144,14 +199,15 @@ if (cacheKey) {
 }
 for (const { root, manifest } of consumers) {
   if (includeRoots) {
-    ensure(root);
+    plan(root);
     continue;
   }
   // A consumer is never built itself — but only from its own turn on, so a consumer that
   // an EARLIER consumer links is still checked as that one's link, as a separate run would.
   visited.add(realpathSync(root));
-  for (const target of linkedTargets(root, manifest)) ensure(target);
+  for (const target of linkedTargets(root, manifest)) plan(target);
 }
+await buildPending();
 
 if (rebuilt.length) console.log(`[ensure-linked-builds] rebuilt: ${rebuilt.join(', ')}`);
 if (failed.length) {
