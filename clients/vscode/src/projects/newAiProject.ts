@@ -1,12 +1,10 @@
 import * as vscode from "vscode";
 import { PROJECT_TYPES, projectTypeById, type ProjectTypeEntry } from "@builderforce/ide-templates/project-types";
-import * as bfApi from "../bfApi";
 import { getWebBaseUrl } from "../gateway/gateway";
 import { vscodeWorkspacePort } from "../composerCommands/vscodeWorkspacePort";
-import { chooseFolder } from "../composerCommands/workspacePort";
-import { invalidateProjectNames } from "../project/projectNames";
-import { setSelectedProject } from "../project/projectState";
-import { writeProjectManifest } from "./projectManifest";
+import { chooseFolder, type WorkspaceFolderRef } from "../composerCommands/workspacePort";
+import { createProjectInteractive } from "./createProjectInteractive";
+import { linkProject, readProjectLink } from "./projectLink";
 import { runProjectTypeActions } from "./projectTypeActions";
 import { projectTypeText } from "./projectTypeText";
 
@@ -19,25 +17,33 @@ async function pickProjectType(): Promise<ProjectTypeEntry | undefined> {
   return picked?.type;
 }
 
-/** Record the project in the open folder's manifest, merged into any existing one. */
-async function recordInWorkspace(projectId: number, projectType: string): Promise<void> {
-  const port = vscodeWorkspacePort();
-  const folder = await chooseFolder(port, vscode.l10n.t("Which folder is this project for?"));
-  if (!folder) return;
-  try {
-    const result = await writeProjectManifest(port, folder, { projectId, projectType });
-    if (!result.ok) {
-      void vscode.window.showWarningMessage(vscode.l10n.t("BuilderForce: the existing builderforce.json is not a JSON object, so it was left unchanged."));
-    }
-  } catch (error) {
-    void vscode.window.showErrorMessage(vscode.l10n.t("BuilderForce: could not write builderforce.json ({0}).", (error as Error).message));
-  }
+/**
+ * Re-binding a folder that already belongs to another project is destructive, so it asks
+ * (modal). True when there is nothing to replace or the person agreed.
+ */
+async function confirmRebind(port: ReturnType<typeof vscodeWorkspacePort>, folder: WorkspaceFolderRef): Promise<boolean> {
+  const current = await readProjectLink(port, folder);
+  if (!current.ok || !current.link) return true; // an unreadable file is reported when linking, never overwritten
+  const replace = vscode.l10n.t("Replace");
+  const answer = await vscode.window.showWarningMessage(
+    vscode.l10n.t("This folder is already linked to project {0} ({1}). Link it to the new project instead?", current.link.projectId, current.link.projectType),
+    { modal: true },
+    replace,
+  );
+  return answer === replace;
+}
+
+function refusalText(reason: "invalid-json" | "not-an-object"): string {
+  return reason === "invalid-json"
+    ? vscode.l10n.t("BuilderForce: .builderforce/project.json is not valid JSON, so it was left unchanged.")
+    : vscode.l10n.t("BuilderForce: .builderforce/project.json is not a JSON object, so it was left unchanged.");
 }
 
 /**
  * `builderforce.newAiProject`: create a server project of an AI type (modality from the
- * registry), record it in the open folder's manifest, then run the type's first-run actions.
- * `typeId` (the walkthrough passes it) skips the type pick.
+ * registry), link it to the open folder (`.builderforce/project.json`), then run the type's
+ * first-run actions. `typeId` (the walkthrough passes it) skips the type pick; an unknown
+ * string falls back to the picker.
  */
 export async function newAiProject(
   context: vscode.ExtensionContext,
@@ -45,32 +51,27 @@ export async function newAiProject(
   typeId?: string,
 ): Promise<void> {
   if (!(await ensureSignedIn())) return;
-  const type = typeId ? projectTypeById(typeId) : await pickProjectType();
+  const type = typeof typeId === "string" ? projectTypeById(typeId) ?? (await pickProjectType()) : await pickProjectType();
   if (!type) return;
-  const name = await vscode.window.showInputBox({
-    title: projectTypeText(type.labelKey),
-    prompt: vscode.l10n.t("Name your project"),
-    ignoreFocusOut: true,
-    validateInput: (value) => (value.trim() ? undefined : vscode.l10n.t("A project name is required")),
-  });
-  if (!name?.trim()) return;
-  let project: bfApi.BfProject;
-  try {
-    project = await bfApi.createProject(context.secrets, name.trim(), type.modality);
-  } catch (error) {
-    const message = (error as Error).message;
-    void vscode.window.showErrorMessage(
-      /HTTP 402/.test(message)
-        ? vscode.l10n.t("BuilderForce: your plan's project limit is reached. Upgrade your workspace to add more.")
-        : vscode.l10n.t("BuilderForce: could not create project ({0}).", message),
-    );
-    return;
+
+  // Settle the folder and any re-bind BEFORE creating anything on the server.
+  const port = vscodeWorkspacePort();
+  let folder: WorkspaceFolderRef | undefined;
+  if (port.folders().length > 0) {
+    folder = await chooseFolder(port, vscode.l10n.t("Which folder is this project for?"));
+    if (!folder || !(await confirmRebind(port, folder))) return;
   }
-  invalidateProjectNames();
-  setSelectedProject({ id: project.id, name: project.name });
-  bfApi.invalidateTasks(project.id);
-  void vscode.commands.executeCommand("builderforce.refreshProjects");
-  if ((vscode.workspace.workspaceFolders ?? []).length > 0) await recordInWorkspace(project.id, type.id);
-  void vscode.window.showInformationMessage(vscode.l10n.t("BuilderForce: created project “{0}”.", project.name));
+
+  const project = await createProjectInteractive(context, { modality: type.modality, title: projectTypeText(type.labelKey) });
+  if (!project) return;
+
+  if (folder) {
+    try {
+      const result = await linkProject(port, folder, { projectId: project.id, projectType: type.id }, { replace: true });
+      if (result.status === "refused") void vscode.window.showWarningMessage(refusalText(result.reason));
+    } catch (error) {
+      void vscode.window.showErrorMessage(vscode.l10n.t("BuilderForce: could not write .builderforce/project.json ({0}).", (error as Error).message));
+    }
+  }
   await runProjectTypeActions(type.firstRun, { projectId: project.id, webBaseUrl: getWebBaseUrl() });
 }

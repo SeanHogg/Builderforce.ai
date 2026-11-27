@@ -58,6 +58,7 @@ function fakeFs(after: WorkspaceFile[]): CodingDispatchFs & { materialized: Work
       materialized.push(...files);
     }),
     snapshot: vi.fn(async () => after),
+    missing: vi.fn(async (_dir: string, paths: string[]) => new Set(paths)),
   };
 }
 

@@ -32,7 +32,10 @@ import { codeCompareOf, paintDiffEntries, type CompareView } from '../../surface
 import { showsTowers } from '../../surface/useShowInTower';
 import { TYPE } from '../../surface/ui/type';
 import { onePaneStage } from '../../layout';
-import { codePaneWidth, maxCodePaneWidth, MIN_CODE_PANE_WIDTH } from '../overlay/CodeDock';
+import { codePaneWidth, maxCodePaneWidth, MIN_CODE_PANE_WIDTH, recordsForCode, targetForMark } from '../overlay/CodeDock';
+import type { DiagramId } from '../../surface/diagrams/catalog';
+import { fileRefOf } from '../../surface/stations';
+import { DiagramPicker } from './DiagramPicker';
 import { CodePaneSplitter } from './CodePaneSplitter';
 import { ColourLegend } from './ColourLegend';
 import { SystemVisibility, useSystemVisibility } from './SystemVisibility';
@@ -104,6 +107,31 @@ export interface StageHostProps extends SceneProps, StageCodeProps, StageCompare
 const BOX = { position: 'relative', width: '100%', height: '100%' } as const;
 const UNMEASURED = { width: 960, height: 600 } as const;
 
+function StageFallback({ fallback: Fallback, ...p }: StageHostProps) {
+    const [diagram, setDiagram] = useState<DiagramId | null>(null);
+    const { graph, surface } = p;
+    const frame = surface.drill.stack.at(-1);
+    const scope = p.codeRef ?? (frame?.level !== 'package' ? frame?.ref : undefined) ?? p.selected ?? surface.station?.refs[0] ?? null;
+    const symbols = surface.drill.symbols;
+    const load = surface.drill.loadFileSymbols;
+    useEffect(() => {
+        if (diagram && scope) load?.(fileRefOf(scope));
+    }, [diagram, scope, load]);
+    const records = useMemo(() => diagram ? recordsForCode(graph, { symbols }) : [], [diagram, graph, symbols]);
+    return <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {p.tools}
+        <DiagramPicker active={diagram} onPick={setDiagram} graph={graph} records={records} scope={scope}
+            stations={surface.stations.stations} flat labels={p.labels} onOpen={(ref) => {
+                const target = targetForMark(ref, ref, records);
+                if (target) p.onOpenSource?.({ path: target.path, startLine: target.startLine, endLine: target.startLine });
+            }} />
+        {!diagram && <div style={{ flex: 1, minHeight: 0, overflow: 'auto', position: 'relative' }}>
+            <Fallback {...p} /><ScaleFoot>{p.scale}</ScaleFoot>{p.notice}
+        </div>}
+        {p.journey}
+    </div>;
+}
+
 export default function StageHost({ fallback: Fallback, ...p }: StageHostProps) {
     const factory = useContext(StageFactoryContext);
     const renderer = useStageRenderer(factory);
@@ -119,11 +147,7 @@ export default function StageHost({ fallback: Fallback, ...p }: StageHostProps) 
     useEffect(() => {
         if (renderer !== null) trace('renderer', `${location} renderer=${renderer === false ? 'list (WebGL 2 unavailable)' : renderer.kind}`);
     }, [trace, renderer, location]);
-    const fallback = <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {p.tools}
-        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', position: 'relative' }}><Fallback {...p} /><ScaleFoot>{p.scale}</ScaleFoot>{p.notice}</div>
-        {p.journey}
-    </div>;
+    const fallback = <StageFallback key={p.graph.scope.rootId} {...p} fallback={Fallback} />;
     if (renderer === false || failedAt === location) return fallback;
     if (!renderer) return <div style={{ ...BOX, display: 'flex', flexDirection: 'column' }} data-stage-host>
         {p.tools}<div style={{ flex: 1, minHeight: 0, position: 'relative' }}><LayingOut labels={p.labels} /></div>{p.journey}
@@ -144,12 +168,24 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     const picture = useRef<HTMLDivElement>(null);
     const codePaneId = useId();
     const [preferredCodeWidth, setPreferredCodeWidth] = useState<number>();
+    const [diagramPick, setDiagramPick] = useState<{ root: string; camera: PlacementCamera; id: DiagramId } | null>(null);
     // Before the box is measured (and where nothing measures it: jsdom) the stage is laid out for a standard box.
     const measured = useContainerSize(box);
     const pictureSize = useContainerSize(picture);
     const boxWidth = measured.width || UNMEASURED.width, boxHeight = measured.height || UNMEASURED.height;
     const colors = useThemeColors(box.current);
-    const { graph, surface, labels } = p;
+    const { graph, surface, labels, codeRef, codeFiles } = p;
+    const activeDiagram = diagramPick?.root === graph.scope.rootId && diagramPick.camera === camera ? diagramPick.id : null;
+    const activeFrame = surface.drill.stack.at(-1);
+    const graphScope = activeFrame?.level !== 'package' ? activeFrame?.ref ?? null : null;
+    const activeFile = surface.station?.refs[0];
+    const diagramScope = codeRef ?? graphScope ?? (activeFile && codeFiles?.get(activeFile)?.isCode ? activeFile : null);
+    const loadedSymbols = surface.drill.symbols;
+    const loadDiagramSymbols = surface.drill.loadFileSymbols;
+    useEffect(() => {
+        if (activeDiagram && diagramScope) loadDiagramSymbols?.(fileRefOf(diagramScope));
+    }, [activeDiagram, diagramScope, loadDiagramSymbols]);
+    const diagramRecords = useMemo(() => activeDiagram ? recordsForCode(graph, { symbols: loadedSymbols }) : [], [activeDiagram, graph, loadedSymbols]);
     // The box's band, not the map's: opening the code pane does not lay the map out again.
     const band = viewportBandOf(boxWidth);
     const strings = useStageStrings(labels);
@@ -182,6 +218,10 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     const stations = surface.stations;
     const visibility = useSystemVisibility(graph.scope.rootId, stations.stations, surface.lines?.systems, labels.surface.systems.loose);
     const { hiddenStations } = visibility;
+    const diagramStations = useMemo(() => {
+        const hidden = new Set(hiddenStations);
+        return stations.stations.filter((station) => !hidden.has(station.id));
+    }, [stations.stations, hiddenStations]);
     const diff = useMemo(() => (compare?.diff.size ? paintDiffEntries(compare.diff, stations) : null), [compare?.diff, stations]);
     const paint = useComputed('markPaint', {
         graph, generation, lensId: p.lens.id, questionId: surface.question, overlay: bindings, lit, roles, family: surface.family, diff,
@@ -196,7 +236,7 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     // Flow and Sequence follow the selected line; at code depth the Sequence draws the open method's calls (`PlacementReq.method`);
     // Flow follows the drilled level (system, component, class).
     const walks = camera === 'sequence' || camera === 'flow';
-    const pathId = walks ? lineId : null;
+    const pathId = walks ? (diagramScope ? `node:${diagramScope}` : lineId) : null;
     const method = camera === 'sequence' ? wiring.method : null;
     const otherDrill = camera === 'flow' ? wiring.map.drill : null;
     const symbols = wiring.map.symbols;
@@ -306,7 +346,15 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
             )}
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
             {tools}
-            <div ref={picture} style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'auto' }}>
+            {!showCodeHalf && <DiagramPicker active={activeDiagram} onPick={(id) => {
+                setDiagramPick(id ? { root: graph.scope.rootId, camera, id } : null);
+            }} graph={graph} records={diagramRecords} scope={diagramScope} stations={diagramStations} flat={flat} labels={labels}
+                onOpen={(ref) => {
+                    const file = fileRefOf(ref);
+                    if (file !== ref) wiring.openDefinition(ref);
+                    else if (codeFiles?.has(file)) wiring.openFile(file);
+                }} />}
+            <div ref={picture} style={{ display: activeDiagram && !showCodeHalf ? 'none' : undefined, position: 'relative', flex: 1, minHeight: 0, overflow: 'auto' }}>
             {!!barPx && <div style={{ position: 'absolute', top: 0, insetInline: 0 }}>{code.bar}</div>}
             <div data-map-pane style={{ position: 'absolute', top: barPx, insetInlineStart: 0, width, height, ...(showCodeHalf ? { visibility: 'hidden', pointerEvents: 'none' } : null) }}>
                 {levelNote && <p data-level-note style={{ position: 'absolute', zIndex: 1, insetBlockEnd: 74, insetInlineStart: 10, maxWidth: 'calc(100% - 80px)', margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'), ...TYPE.bodyMuted }}>{levelNote}</p>}

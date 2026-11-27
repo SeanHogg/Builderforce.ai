@@ -1572,11 +1572,16 @@
   "New AI project": "Nouveau projet d'IA",
   "What kind of AI project?": "Quel type de projet d'IA ?",
   "Which folder is this project for?": "Pour quel dossier est ce projet ?",
-  "BuilderForce: the existing builderforce.json is not a JSON object, so it was left unchanged.": "BuilderForce : le fichier builderforce.json existant n'est pas un objet JSON ; il a donc été laissé inchangé.",
-  "BuilderForce: could not write builderforce.json ({0}).": "BuilderForce : impossible d'écrire builderforce.json ({0}).",
   "Name your project": "Nommez votre projet",
   "A project name is required": "Un nom de projet est requis",
   "BuilderForce: your plan's project limit is reached. Upgrade your workspace to add more.": "BuilderForce : la limite de projets de votre offre est atteinte. Mettez à niveau votre espace de travail pour en ajouter.",
   "BuilderForce: could not create project ({0}).": "BuilderForce : impossible de créer le projet ({0}).",
-  "BuilderForce: created project “{0}”.": "BuilderForce : projet « {0} » créé."
+  "BuilderForce: created project “{0}”.": "BuilderForce : projet « {0} » créé.",
+  "Open BuilderForce": "Ouvrir BuilderForce",
+  "Create BuilderForce project": "Créer un projet BuilderForce",
+  "e.g. Mobile App, Website Redesign": "p. ex. Application mobile, Refonte du site web",
+  "This folder is already linked to project {0} ({1}). Link it to the new project instead?": "Ce dossier est déjà lié au projet {0} ({1}). Le lier plutôt au nouveau projet ?",
+  "BuilderForce: .builderforce/project.json is not valid JSON, so it was left unchanged.": "BuilderForce : .builderforce/project.json n'est pas un JSON valide ; il a donc été laissé inchangé.",
+  "BuilderForce: .builderforce/project.json is not a JSON object, so it was left unchanged.": "BuilderForce : .builderforce/project.json n'est pas un objet JSON ; il a donc été laissé inchangé.",
+  "BuilderForce: could not write .builderforce/project.json ({0}).": "BuilderForce : impossible d'écrire .builderforce/project.json ({0})."
 }

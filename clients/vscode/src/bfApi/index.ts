@@ -88,12 +88,11 @@ import "./brainMessages";
 export {
   BfDispatchError,
   getAttention,
-  listHumanRequests,
-  resolveHumanRequest,
   submitExecution,
 } from "./runtime";
+export { createApproval, getApproval, listHumanRequests, resolveHumanRequest } from "./approvals";
+export type { BfApproval, CreateApprovalInput } from "./approvals";
 export type {
-  BfApproval,
   BfAttention,
   BfAttentionManager,
   BfAttentionState,

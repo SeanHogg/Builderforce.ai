@@ -370,7 +370,13 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
                 related: drill.view?.leaves, onSource: openFile, keyOf: map.keyOfStation, types: d.types, groups,
                 facts: d.facts, selected, canEnter: (id) => drill.canEnter(id).can, onSelect: (key) => {
                     onSelect(key);
-                    if (drill.stack.at(-1)?.level === 'package' && key.startsWith('node:')) openFile(key.slice(5));
+                    if (!key.startsWith('node:')) return;
+                    const ref = key.slice(5);
+                    if (drill.stack.at(-1)?.level === 'package') openFile(ref);
+                    else if (fileRefOf(ref) !== ref && !drill.hasMembers?.(ref)) {
+                        d.drillTo(ref);
+                        d.openCode();
+                    }
                 }, onEnter: (id) => { const station = map.stations.byId.get(id); if (station) onDrill(map.keyOfStation(station)); }, onHover: onHoverRow,
             }}
         />

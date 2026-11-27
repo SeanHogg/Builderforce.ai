@@ -1572,11 +1572,16 @@
   "New AI project": "新建 AI 项目",
   "What kind of AI project?": "哪种类型的 AI 项目？",
   "Which folder is this project for?": "此项目对应哪个文件夹？",
-  "BuilderForce: the existing builderforce.json is not a JSON object, so it was left unchanged.": "BuilderForce：现有的 builderforce.json 不是 JSON 对象，因此未作更改。",
-  "BuilderForce: could not write builderforce.json ({0}).": "BuilderForce：无法写入 builderforce.json（{0}）。",
   "Name your project": "为您的项目命名",
   "A project name is required": "需要填写项目名称",
   "BuilderForce: your plan's project limit is reached. Upgrade your workspace to add more.": "BuilderForce：您的套餐已达到项目数量上限。请升级您的工作区以添加更多项目。",
   "BuilderForce: could not create project ({0}).": "BuilderForce：无法创建项目（{0}）。",
-  "BuilderForce: created project “{0}”.": "BuilderForce：已创建项目“{0}”。"
+  "BuilderForce: created project “{0}”.": "BuilderForce：已创建项目“{0}”。",
+  "Open BuilderForce": "打开 BuilderForce",
+  "Create BuilderForce project": "创建 BuilderForce 项目",
+  "e.g. Mobile App, Website Redesign": "例如：移动应用、网站改版",
+  "This folder is already linked to project {0} ({1}). Link it to the new project instead?": "此文件夹已关联到项目 {0}（{1}）。是否改为关联到新项目？",
+  "BuilderForce: .builderforce/project.json is not valid JSON, so it was left unchanged.": "BuilderForce：.builderforce/project.json 不是有效的 JSON，因此未作更改。",
+  "BuilderForce: .builderforce/project.json is not a JSON object, so it was left unchanged.": "BuilderForce：.builderforce/project.json 不是 JSON 对象，因此未作更改。",
+  "BuilderForce: could not write .builderforce/project.json ({0}).": "BuilderForce：无法写入 .builderforce/project.json（{0}）。"
 }

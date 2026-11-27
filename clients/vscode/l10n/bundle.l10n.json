@@ -1572,11 +1572,16 @@
   "New AI project": "New AI project",
   "What kind of AI project?": "What kind of AI project?",
   "Which folder is this project for?": "Which folder is this project for?",
-  "BuilderForce: the existing builderforce.json is not a JSON object, so it was left unchanged.": "BuilderForce: the existing builderforce.json is not a JSON object, so it was left unchanged.",
-  "BuilderForce: could not write builderforce.json ({0}).": "BuilderForce: could not write builderforce.json ({0}).",
   "Name your project": "Name your project",
   "A project name is required": "A project name is required",
   "BuilderForce: your plan's project limit is reached. Upgrade your workspace to add more.": "BuilderForce: your plan's project limit is reached. Upgrade your workspace to add more.",
   "BuilderForce: could not create project ({0}).": "BuilderForce: could not create project ({0}).",
-  "BuilderForce: created project “{0}”.": "BuilderForce: created project “{0}”."
+  "BuilderForce: created project “{0}”.": "BuilderForce: created project “{0}”.",
+  "Open BuilderForce": "Open BuilderForce",
+  "Create BuilderForce project": "Create BuilderForce project",
+  "e.g. Mobile App, Website Redesign": "e.g. Mobile App, Website Redesign",
+  "This folder is already linked to project {0} ({1}). Link it to the new project instead?": "This folder is already linked to project {0} ({1}). Link it to the new project instead?",
+  "BuilderForce: .builderforce/project.json is not valid JSON, so it was left unchanged.": "BuilderForce: .builderforce/project.json is not valid JSON, so it was left unchanged.",
+  "BuilderForce: .builderforce/project.json is not a JSON object, so it was left unchanged.": "BuilderForce: .builderforce/project.json is not a JSON object, so it was left unchanged.",
+  "BuilderForce: could not write .builderforce/project.json ({0}).": "BuilderForce: could not write .builderforce/project.json ({0})."
 }

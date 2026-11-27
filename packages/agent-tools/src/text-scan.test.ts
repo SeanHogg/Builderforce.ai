@@ -13,8 +13,13 @@ describe("pattern helpers", () => {
   it("an invalid regex is searched literally instead of refused", () => {
     expect(isValidRegex("foo(bar")).toBe(false);
     expect(compileSearchPattern("foo(bar").test("call foo(bar) now")).toBe(true);
-    expect(compileSearchPattern("a[0]").test("x a[0] y")).toBe(true);
+    expect(compileSearchPattern("a[0").test("x a[0 y")).toBe(true);
     expect(compileSearchPattern("?task=").test("/x?task=1")).toBe(true);
+  });
+
+  it("uses regex syntax when the query is a valid pattern", () => {
+    expect(compileSearchPattern("a[0]").test("a0")).toBe(true);
+    expect(compileSearchPattern("a[0]").test("a[0]")).toBe(false);
   });
 });
 

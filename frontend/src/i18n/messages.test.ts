@@ -8,6 +8,7 @@ import zh from './messages/zh.json';
 import es from './messages/es.json';
 import fr from './messages/fr.json';
 import de from './messages/de.json';
+import { DIAGRAM_IDS } from '../../../packages/knowledge-graph-view/src/surface/diagrams/catalog';
 import { LOCALES, DEFAULT_LOCALE, type Locale } from './config';
 import {
   STALL_CAUSES,
@@ -153,6 +154,11 @@ const tagsFor = (message: string): Record<string, (chunks: unknown) => unknown> 
   );
 
 describe('message catalogs', () => {
+  it('labels every Visualizer diagram in all supported locales', () => {
+    for (const messages of [en, de, es, fr, zh]) {
+      for (const id of DIAGRAM_IDS) expect(messages.knowledgeGraph.surface.code[id]?.trim(), id).toBeTruthy();
+    }
+  });
   const enPaths = leaves(en as Record<string, unknown>).map((l) => l.path);
 
   /**

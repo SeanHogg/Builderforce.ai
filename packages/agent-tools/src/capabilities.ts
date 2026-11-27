@@ -652,7 +652,7 @@ export interface CapabilityProvider {
 // ── Result shapes (shared so both runtimes return identical tool output) ──────────
 
 /** Why a workspace operation failed, the same on every host (`workspace.ts` re-exports it). */
-export type WorkspaceErrorCode = "not_found" | "is_directory" | "outside_root" | "too_large" | "no_match" | "ambiguous" | "unsupported" | "io";
+export type WorkspaceErrorCode = "not_found" | "is_directory" | "outside_root" | "too_large" | "no_match" | "ambiguous" | "unsupported" | "invalid" | "io";
 
 /** How a listing is taken. */
 export interface RepoListOptions {
@@ -750,6 +750,7 @@ export interface RepoEditResult {
   change?: "modified";
   /** How many occurrences were replaced. */
   replaced?: number;
+  matchCount?: number;
   /** Model-facing guidance on a SUCCESSFUL edit (see {@link RepoWriteResult.note}). */
   note?: string;
   error?: string;

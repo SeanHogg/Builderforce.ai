@@ -108,7 +108,11 @@ const FILE_TYPE = { source: 'source', test: 'test', doc: 'doc', config: 'config'
 export function markTypeOf(n: Pick<KNode, 'kind' | 'ref' | 'label' | 'badges'>): MarkType {
     switch (n.kind) {
         case 'file': return FILE_TYPE[fileCategory(n)];
-        case 'symbol': { const sort = symbolSort(n); return sort === 'class' ? 'class' : sort === 'interface' ? 'interface' : 'function'; }
+        case 'symbol': {
+            if (n.badges?.symbolKind === 'field') return 'data';
+            const sort = symbolSort(n);
+            return sort === 'class' ? 'class' : sort === 'interface' ? 'interface' : 'function';
+        }
         case 'section': return 'section';
         case 'area': return 'source';
         case 'entity': return n.badges?.['type'] === DEPLOY_UNIT ? 'unit' : 'entity';

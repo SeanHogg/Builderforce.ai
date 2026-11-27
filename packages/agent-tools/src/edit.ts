@@ -26,6 +26,8 @@ export interface StringEditResult {
   content?: string;
   /** How many occurrences were replaced. */
   replaced?: number;
+  /** Number of matches on an ambiguous edit. */
+  matchCount?: number;
   /** Failure reason — present only when `!ok`. */
   error?: string;
   /** Only on the "not found" failure: where the file most likely holds what the agent
@@ -154,6 +156,7 @@ export function applyStringEdit(
     return {
       ok: false,
       error: "oldString is not unique; add more surrounding context or set replaceAll",
+      matchCount: match.matchCount,
     };
   }
   if (match) {

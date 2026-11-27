@@ -95,6 +95,16 @@ export function createWorkspace(workdir) {
     return { ok: true };
   }
 
+  // A node fs error's message embeds the clone's ABSOLUTE path; the model sees only the relative one.
+  // An error of our own (no `code`) already carries a path-free message.
+  const fsFailure = (op, rel, e) => {
+    const code = e && typeof e.code === 'string' ? e.code : '';
+    if (!code) return { ok: false, error: `${op} failed: ${e instanceof Error ? e.message : String(e)}` };
+    if (code === 'ENOENT') return { ok: false, error: `'${rel}' not found` };
+    if (code === 'EISDIR') return { ok: false, error: `'${rel}' is a directory, not a file` };
+    return { ok: false, error: `${op} failed for '${rel}' (${code})` };
+  };
+
   const ops = {
     async init() {
       await mkdir(root, { recursive: true, mode: 0o755 });
@@ -124,7 +134,7 @@ export function createWorkspace(workdir) {
           const truncated = bytesRead > READ_MAX_BYTES;
           return { ok: true, path: req.path, content: buf.subarray(0, Math.min(bytesRead, READ_MAX_BYTES)).toString('utf8'), ...(truncated ? { truncated: true } : {}) };
         } finally { await fh.close(); }
-      } catch (e) { return { ok: false, error: `read failed: ${e.message}` }; }
+      } catch (e) { return fsFailure('read', req.path, e); }
     },
     async stat(req) {
       const abs = await insideClone(root, req.path);
@@ -133,7 +143,7 @@ export function createWorkspace(workdir) {
         const s = await stat(abs);
         return { ok: true, exists: true, isDir: s.isDirectory() };
       } catch (e) {
-        return e && e.code === 'ENOENT' ? { ok: true, exists: false, isDir: false } : { ok: false, error: `stat failed: ${e.message}` };
+        return e && e.code === 'ENOENT' ? { ok: true, exists: false, isDir: false } : fsFailure('stat', req.path, e);
       }
     },
     async write(req) {
@@ -145,13 +155,13 @@ export function createWorkspace(workdir) {
         // The shell shares this tree: re-verify the parent now that it exists, not only as the guard saw it.
         if (!(await parentStillInside(root, abs))) throw new Error('path resolves outside the repository');
         await writeKeepingMode(abs, req.content);
-      } catch (e) { return { ok: false, error: `write failed: ${e.message}` }; }
+      } catch (e) { return fsFailure('write', req.path, e); }
       return { ok: true, path: req.path };
     },
     async delete(req) {
       const abs = await insideClone(root, req.path);
       if (!abs) return { ok: false, error: 'path is required and must stay inside the repository' };
-      try { await rm(abs, { force: true }); } catch (e) { return { ok: false, error: `delete failed: ${e.message}` }; }
+      try { await rm(abs, { force: true }); } catch (e) { return fsFailure('delete', req.path, e); }
       return { ok: true, path: req.path };
     },
     async mkdir(req) {
@@ -160,7 +170,7 @@ export function createWorkspace(workdir) {
       try {
         await mkdir(abs, { recursive: true, mode: 0o755 });
         if (!(await parentStillInside(root, join(abs, 'x')))) throw new Error('path resolves outside the repository');
-      } catch (e) { return { ok: false, error: `mkdir failed: ${e.message}` }; }
+      } catch (e) { return fsFailure('mkdir', req.path, e); }
       return { ok: true, path: req.path };
     },
     async exclude(req) {

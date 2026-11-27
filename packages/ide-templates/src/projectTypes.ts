@@ -32,8 +32,6 @@ export interface ProjectTypeEntry {
   labelKey: string;
   descriptionKey: string;
   modality: ProjectTypeModality;
-  /** A starter kit (`./kits`) to seed the workspace with, when the type has one. */
-  kit?: string;
   firstRun: readonly ProjectTypeAction[];
 }
 

@@ -43,7 +43,10 @@ runWorkspaceConformance(
           applyTaskWorkspaceChanges(fakeDb, bucket, { tenantId: 1, taskId: 7, executionId: 9, agent: 'coder', projectId: PROJECT_ID, changes }),
       }),
       async seed(files) {
-        for (const [path, content] of Object.entries(files)) await writeWorkspaceFile(bucket, PROJECT_ID, path, content);
+        for (const [path, content] of Object.entries(files)) {
+          const result = await writeWorkspaceFile(bucket, PROJECT_ID, path, content);
+          if (!result.ok) throw new Error(`Could not seed ${path}: ${result.reason}`);
+        }
       },
     };
   },

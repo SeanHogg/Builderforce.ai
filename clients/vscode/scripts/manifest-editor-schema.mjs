@@ -19,17 +19,7 @@ export function manifestEditorSchema(v1) {
     title,
     description: 'An app manifest v1 is validated in full; a file without "version" is the legacy format and is not validated.',
     if: { required: ['version'] },
-    then: { ...body, properties: { ...body.properties, ...PROJECT_LINK_PROPERTIES } },
+    then: body,
     $defs,
   };
 }
-
-/**
- * The members `builderforce.newAiProject` merges into the manifest (`src/projects/projectManifest.ts`):
- * the server project the folder belongs to and its AI project type. The runtime's validator ignores
- * unknown top-level members but its schema forbids them, so the editor schema declares them.
- */
-const PROJECT_LINK_PROPERTIES = {
-  projectId: { type: 'integer' },
-  projectType: { type: 'string' },
-};

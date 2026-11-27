@@ -34,6 +34,11 @@
       // Exact entries: the ONE coding provider (`createRepoCapabilities`) and its Node adapter, imported extensionless (NodeNext does not probe `.ts` through the `/*` form).
       "@builderforce/agent-tools/workspace": ["../packages/agent-tools/src/workspace.ts"],
       "@builderforce/agent-tools/node-workspace": ["../packages/agent-tools/src/node-workspace.ts"],
+      "@builderforce/agent-tools/node-index-layout": ["../packages/agent-tools/src/node-index-layout.ts"],
+      "@builderforce/agent-tools/node-symbols": ["../packages/agent-tools/src/node-symbols.ts"],
+      "@builderforce/agent-tools/node-watch-port": ["../packages/agent-tools/src/node-watch-port.ts"],
+      "@builderforce/agent-tools/watch-port": ["../packages/agent-tools/src/watch-port.ts"],
+      "@builderforce/agent-tools/workspace-conformance": ["../packages/agent-tools/src/workspaceConformance.test-util.ts"],
       "@builderforce/agent-tools/node-desktop": ["../packages/agent-tools/src/node-desktop.ts"],
       "@seanhogg/builderforce-mcp/protocol": ["../packages/builderforce-mcp/src/protocol.ts"],
       "@seanhogg/builderforce-mcp/config": ["../packages/builderforce-mcp/src/config.ts"],

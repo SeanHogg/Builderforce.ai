@@ -1,5 +1,7 @@
 minimumReleaseAgeExclude:
   - '@seanhogg/builderforce-memory-mcp@2026.10.85'
+  - '@seanhogg/builderforce-memory-mcp@2026.10.88'
+  - '@seanhogg/builderforce-memory@2026.10.88'
   - '@seanhogg/builderforce-memory@2026.10.87'
   - '@seanhogg/builderforce-webcontainers-core@2026.11.29'
   - '@seanhogg/builderforce-webcontainers@2026.11.29'

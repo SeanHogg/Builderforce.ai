@@ -30,6 +30,7 @@ describe("extractSymbols", () => {
       "7:type:Kind*",
       "8:const:LIMIT*",
       "9:class:Service*",
+      "10:field:cache",
       "11:method:find",
       "16:enum:Color",
     ]);
@@ -134,6 +135,7 @@ describe("extractSymbols — TS module and abstract shapes", () => {
       "4:module:pricing",
       "6:class:Gateway",
       "7:method:connect",
+      "8:field:name",
     ]);
   });
 });

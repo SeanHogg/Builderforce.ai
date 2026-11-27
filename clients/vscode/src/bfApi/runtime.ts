@@ -19,26 +19,6 @@ interface BfSubmitResult {
   awaitingApproval?: { approvalId: string; taskId: number; reason?: string };
 }
 
-/** A pending (or resolved) human-in-the-loop request from the tenant approvals queue.
- *  Mirrors the `approvals` row shape returned by GET/PATCH /api/approvals. */
-export interface BfApproval {
-  id: string;
-  kind?: "approval" | "question" | "feedback" | string;
-  actionType?: string;
-  description?: string;
-  status?: "pending" | "approved" | "rejected" | "answered" | "expired" | string;
-  reviewNote?: string | null;
-  responseText?: string | null;
-  executionId?: number | null;
-  agentHostId?: number | null;
-  cloudAgentRef?: string | null;
-  /** The project this approval belongs to (via its execution's task), or null when it
-   *  isn't tied to a task. Server-enriched so the Inbox can scope/label by project. */
-  projectId?: number | null;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
 /** Cross-surface "needs attention" state for a work item (GET /api/runtime/attention).
  *  `awaiting_input` = an agent paused on ask_human and a person must answer;
  *  `running` = actively executing. Idle items are omitted. */
@@ -154,57 +134,3 @@ export async function submitExecution(
     serverMessage ?? `/api/runtime/executions → HTTP ${status} ${text.slice(0, 200)}`,
     { httpStatus: status, code: typeof body?.code === "string" ? body.code : undefined, serverMessage },
   );
-}
-
-/**
- * List human-in-the-loop approvals for the active tenant — the SAME endpoint the web
- * HumanRequestsView uses (GET /api/approvals). Defaults to `pending`. Optionally narrows
- * to one on-prem agent host. Degrades to [] when the endpoint isn't deployed.
- */
-export async function listHumanRequests(
-  secrets: vscode.SecretStorage,
-  opts?: { status?: string; agentHostId?: number },
-): Promise<BfApproval[]> {
-  const status = opts?.status ?? "pending";
-  const params = new URLSearchParams();
-  if (status) params.set("status", status);
-  if (opts?.agentHostId != null) params.set("agentHostId", String(opts.agentHostId));
-  const qs = params.toString();
-  try {
-    const r = await authed<{ approvals: BfApproval[] }>(
-      secrets,
-      `/api/approvals${qs ? `?${qs}` : ""}`,
-    );
-    return r?.approvals ?? [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Resolve a human-in-the-loop request — the SAME endpoint the web ApprovalResolveControl
- * uses (PATCH /api/approvals/:id). `decision` maps to the backend status:
- *   - "approve" → "approved", "reject" → "rejected" (kind: approval)
- *   - "answer"  → "answered" (kind: question/feedback; requires `note` as responseText)
- * `note` is the review note for approve/reject, or the answer text for "answer".
- * Returns the updated approval (may carry `startedExecutionId` when an approval started a run).
- */
-export async function resolveHumanRequest(
-  secrets: vscode.SecretStorage,
-  id: string,
-  decision: "approve" | "reject" | "answer",
-  note?: string,
-): Promise<BfApproval & { startedExecutionId?: number | null }> {
-  const status = decision === "approve" ? "approved" : decision === "reject" ? "rejected" : "answered";
-  const payload: { status: string; reviewNote?: string; responseText?: string } = { status };
-  if (decision === "answer") payload.responseText = note ?? "";
-  else if (note) payload.reviewNote = note;
-
-  const r = await authed<BfApproval & { startedExecutionId?: number | null }>(
-    secrets,
-    `/api/approvals/${encodeURIComponent(id)}`,
-    { method: "PATCH", body: JSON.stringify(payload) },
-  );
-  if (!r) throw new Error("not signed in");
-  return r;
-}

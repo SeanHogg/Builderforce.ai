@@ -124,6 +124,8 @@ export interface CodingDispatchFs {
   materialize(dir: string, files: WorkspaceFile[]): Promise<void>;
   /** Every text file under `dir`, workspace-relative, for diffing after the run. */
   snapshot(dir: string): Promise<WorkspaceFile[]>;
+  /** Which of `paths` (workspace-relative) are really gone from `dir` (stat → ENOENT). A file the snapshot skipped (output dir, oversize, binary) is still on disk and is NOT listed. */
+  missing(dir: string, paths: string[]): Promise<Set<string>>;
 }
 
 export interface CodingDispatchAgent {
@@ -407,7 +409,20 @@ async function runWorkspaceDispatch(
     return;
   }
 
-  const changes = diffWorkspace(before, after, tree.truncated);
+  const seenAfter = new Set(after.map((f) => f.path));
+  let gone: Set<string>;
+  try {
+    gone = tree.truncated
+      ? new Set()
+      : await fs.missing(dir, [...before.keys()].filter((p) => !seenAfter.has(p)));
+  } catch (err) {
+    await http.reportResult(dispatchId, {
+      status: "failed",
+      error: `workspace snapshot failed: ${errText(err)}`,
+    });
+    return;
+  }
+  const changes = diffWorkspace(before, after, tree.truncated, gone);
   if (changes.writes.length === 0 && changes.deletes.length === 0) {
     await http.reportResult(dispatchId, {
       status: "completed",
@@ -452,12 +467,14 @@ async function runWorkspaceDispatch(
  * not re-uploaded; a file the agent deleted is only reported as a delete when the
  * tree we handed it was COMPLETE — on a truncated tree an absent file may simply
  * never have been materialised, and deleting real project files on that basis
- * would be destructive.
+ * would be destructive. Nor is a file the snapshot merely SKIPPED (output dir, oversize,
+ * binary): when `gone` is given, only a path in it — really absent from disk — is deleted.
  */
 export function diffWorkspace(
   before: Map<string, string>,
   after: WorkspaceFile[],
   truncated: boolean,
+  gone?: ReadonlySet<string>,
 ): WorkspaceChangeSet {
   const writes: WorkspaceFile[] = [];
   const seen = new Set<string>();
@@ -465,7 +482,7 @@ export function diffWorkspace(
     seen.add(file.path);
     if (before.get(file.path) !== file.content) writes.push(file);
   }
-  const deletes = truncated ? [] : [...before.keys()].filter((p) => !seen.has(p));
+  const deletes = truncated ? [] : [...before.keys()].filter((p) => !seen.has(p) && (!gone || gone.has(p)));
   return { writes, deletes };
 }
 

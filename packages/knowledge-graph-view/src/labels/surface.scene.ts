@@ -1,3 +1,5 @@
+import type { DiagramId } from '../surface/diagrams/catalog';
+
 /** The words of the 3D scene's link budget and the mind map's folded branches: the interface and its English defaults (a host overrides them per key). */
 
 export interface SceneLabels {
@@ -39,9 +41,11 @@ export interface SceneLabels {
         | 'followsEditor'
         | 'stateSelected' | 'stateReading' | 'statePinned' | 'methodsCount' | 'fieldsCount' | 'callsCount' | 'imported' | 'drillInAction' | 'showCode' | 'openFile'
         | 'status' | 'following' | 'pinnedStatus' | 'statusLine'
-        | 'dockAria' | 'dockHide' | 'dockShow' | 'levelAria' | 'levelEmpty' | 'levelNoSource' | 'classDiagram' | 'componentDiagram' | 'rowNoTest' | 'rowAntiPattern'
+        | 'dockAria' | 'dockHide' | 'dockShow' | 'levelAria' | 'levelEmpty' | 'levelNoSource' | 'rowNoTest' | 'rowAntiPattern'
         | 'paneCode' | 'panePicture' | 'architecture' | 'filesystem' | 'lensOut' | 'lensSimulate' | 'lensRestructure' | 'gutterWarn'
-        | 'samePlace' | 'sayLead' | 'sayHint' | 'fileLines' | 'fileLine',
+        | 'samePlace' | 'sayLead' | 'sayHint' | 'fileLines' | 'fileLine'
+        | DiagramId
+        | 'diagramUml' | 'diagramStructure' | 'diagramBehavior' | 'diagramInteraction' | 'diagramStandards' | 'diagramImport' | 'diagramIndexed' | 'diagramProvided' | 'diagramInvalid' | 'diagramNoData',
         string
     >;
     /**
@@ -170,8 +174,68 @@ export const SCENE_DEFAULTS: SceneLabels = {
         levelAria: 'Members of this level',
         levelEmpty: 'Nothing at this level yet.',
         levelNoSource: 'The source is not available here: showing the outline.',
-        classDiagram: 'Class diagram',
-        componentDiagram: 'Component diagram',
+        classDiagram: "Class diagram",
+        objectDiagram: "Object diagram",
+        packageDiagram: "Package diagram",
+        componentDiagram: "Component diagram",
+        compositeDiagram: "Composite structure diagram",
+        deploymentDiagram: "Deployment diagram",
+        profileDiagram: "Profile diagram",
+        useCaseDiagram: "Use case diagram",
+        activityDiagram: "Activity diagram",
+        stateDiagram: "State machine diagram",
+        sequenceDiagram: "Sequence diagram",
+        communicationDiagram: "Communication diagram",
+        timingDiagram: "Timing diagram",
+        interactionDiagram: "Interaction overview diagram",
+        diagramUml: "Diagrams",
+        diagramStructure: "Structure",
+        diagramBehavior: "Behavior",
+        diagramInteraction: "Interaction",
+        diagramStandards: "Other standards",
+        diagramImport: "Import diagram data",
+        diagramIndexed: "Indexed data",
+        diagramProvided: "Imported data",
+        diagramInvalid: "Invalid diagram data",
+        diagramNoData: "No data for this diagram. Import a model or trace for this view.",
+        c4Context: "C4 · System Context",
+        c4Containers: "C4 · Container",
+        c4Components: "C4 · Component",
+        c4Code: "C4 · Code",
+        archimate: "ArchiMate",
+        viewpoints: "4+1 / ISO/IEC/IEEE 42010",
+        arc42: "arc42",
+        sysml: "SysML v1",
+        sysmlV2: "SysML v2",
+        bpmnProcess: "BPMN · Process",
+        bpmnCollaboration: "BPMN · Collaboration",
+        bpmnChoreography: "BPMN · Choreography",
+        bpmnConversation: "BPMN · Conversation",
+        dmn: "DMN",
+        cmmn: "CMMN",
+        flowchart: "ISO 5807",
+        nassi: "Nassi–Shneiderman",
+        valueStream: "Value Stream Map",
+        erd: "ERD · Crow’s Foot",
+        erdChen: "ERD · Chen",
+        erdIdef1x: "ERD · IDEF1X",
+        dfd: "DFD · Yourdon/DeMarco",
+        dfdGane: "DFD · Gane–Sarson",
+        lineage: "OpenLineage",
+        threatDfd: "STRIDE · Threat Model",
+        contextMap: "DDD Context Map",
+        eventStorming: "Event Storming",
+        statechart: "Harel Statecharts",
+        petri: "Petri Net",
+        msc: "ITU MSC Z.120",
+        sdl: "SDL",
+        openapi: "OpenAPI",
+        asyncapi: "AsyncAPI",
+        codeCity: "CodeCity",
+        dsm: "DSM",
+        callGraph: "Call Graph",
+        hotspots: "Hotspots / Churn",
+        wardley: "Wardley Map",
         rowNoTest: 'No test',
         rowAntiPattern: 'Anti-pattern: {name}',
         /** The pane's heading, and (a box too narrow to split) the picture it trades places with. */

@@ -45,7 +45,7 @@ const MODULE_MANIFESTS = new Set(['package.json', 'Cargo.toml', 'go.mod', 'pypro
 export function modulesOfFiles(graph: KnowledgeGraph): ReadonlyMap<string, string> {
     const cached = fileModules.get(graph);
     if (cached) return cached;
-    const files = fileNodesOf(graph).filter(isArchitectureFile);
+    const files = fileNodesOf(graph);
     const manifests = new Set<string>();
     for (const node of files) {
         const path = pathOf(node.ref);
@@ -55,6 +55,7 @@ export function modulesOfFiles(graph: KnowledgeGraph): ReadonlyMap<string, strin
     }
     const modules = new Map<string, string>();
     for (const node of files) {
+        if (!isArchitectureFile(node)) continue;
         let app = appOfNode(node);
         if (!app) {
             const path = pathOf(node.ref) ?? '';

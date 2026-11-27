@@ -130,6 +130,8 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
   private files = new Map<string, FileEntry>();
   private readonly dirty = new Set<string>();
   private lastFullRefresh = 0;
+  /** A root-level change arrived: the next query re-walks the whole tree. */
+  private fullPending = false;
   private loadedSnapshot = false;
   private snapshotLoad?: Promise<void>;
   private partial = false;
@@ -156,8 +158,8 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
   }
 
   /** Mark every file `watch` reports under this root dirty; returns the unsubscribe. The one change feed (`WatchPort`). */
-  follow(watch: WatchPort): () => void {
-    return watch.subscribe(this.root, (absPaths) => { for (const abs of absPaths) this.markDirty(abs); });
+  follow(watch: WatchPort, onLost?: () => void): () => void {
+    return watch.subscribe(this.root, (absPaths) => { for (const abs of absPaths) this.markDirty(abs); }, onLost);
   }
 
   /** Repo-relative POSIX path for an absolute or relative path, or null when outside. */
@@ -170,6 +172,11 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
 
   /** Re-parse `p` (absolute or root-relative) on the next query. Cheap; safe to over-call. */
   markDirty(p: string): void {
+    // The root itself: the feed cannot vouch for the tree, so the next query re-walks it all.
+    if (path.resolve(this.root, p) === this.root) {
+      this.fullPending = true;
+      return;
+    }
     const rel = this.relative(p);
     if (!rel || this.skipped(rel)) return;
     if (isSymbolIndexable(rel)) {
@@ -247,7 +254,7 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
   /** Bring the index up to date for a query: build, re-parse dirty files, or re-walk. */
   private ensureFresh(): Promise<void> {
     if (this.inflight) return this.inflight;
-    if (!this.loadedSnapshot || this.lastFullRefresh === 0 || Date.now() - this.lastFullRefresh > this.fullRefreshMs) {
+    if (this.fullPending || !this.loadedSnapshot || this.lastFullRefresh === 0 || Date.now() - this.lastFullRefresh > this.fullRefreshMs) {
       return this.run(() => this.fullRefresh());
     }
     if (this.dirty.size > 0) return this.run(() => this.refreshDirty());
@@ -264,6 +271,7 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
   }
 
   private async fullRefresh(): Promise<void> {
+    this.fullPending = false;
     await this.ensureSnapshot();
     const { paths, truncated } = await this.walk();
     this.partial = truncated;

@@ -102,6 +102,39 @@ describe('canvas_edit_build_file', () => {
   });
 });
 
+describe('canvas write/edit failures report the real error', () => {
+  const failing = (over: Partial<ReturnType<typeof localFileStore>>) => {
+    const real = localFileStore('io-case');
+    return { ...real, ...over } as typeof real;
+  };
+  const runOn = async (store: ReturnType<typeof localFileStore>, name: string, args: unknown) => {
+    const actions = canvasBuildActions({
+      builds: () => [{ objectId: 'b1', title: 'Local', modality: 'designer', store }],
+      createBuild: async () => { throw new Error('unused'); },
+    });
+    return actions.find((candidate) => candidate.name === name)!.run(args as never) as Promise<Record<string, unknown>>;
+  };
+
+  it('edit: a missing file is the "No file" message', async () => {
+    const result = await runOn(localFileStore('io-missing'), 'canvas_edit_build_file', { path: 'nope.js', find: 'a', replace: 'b' });
+    expect(String(result.error)).toContain('No file "nope.js"');
+  });
+
+  it('edit: a read that fails for another reason keeps its own message, not "No file"', async () => {
+    const store = failing({ read: async () => { throw new Error('disk exploded'); } });
+    const result = await runOn(store, 'canvas_edit_build_file', { path: 'a.js', find: 'a', replace: 'b' });
+    expect(String(result.error)).toContain('disk exploded');
+    expect(String(result.error)).not.toContain('No file');
+  });
+
+  it('edit and write: a failing store write is reported with its message', async () => {
+    await seedLocalWorkspace('io-write', { 'a.js': 'a' });
+    const store = { ...localFileStore('io-write'), write: async () => { throw new Error('quota exceeded'); } } as ReturnType<typeof localFileStore>;
+    expect(String((await runOn(store, 'canvas_edit_build_file', { path: 'a.js', find: 'a', replace: 'b' })).error)).toContain('quota exceeded');
+    expect(String((await runOn(store, 'canvas_write_build_file', { path: 'a.js', content: 'b' })).error)).toContain('quota exceeded');
+  });
+});
+
 describe('searchWorkspaceFiles', () => {
   it('returns 1-indexed line numbers and trims long lines', async () => {
     const content = 'first\nconst Header = () => null;\nthird';

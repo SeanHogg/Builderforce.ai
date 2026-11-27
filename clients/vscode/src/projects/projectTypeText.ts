@@ -5,7 +5,7 @@ import * as vscode from "vscode";
  * registry holds KEYS because the package has no i18n; this is the ONE map from a key to the
  * editor's language. Each literal is a `vscode.l10n.t` call so the string is extractable and
  * lives in `l10n/bundle.l10n*.json`. A key the map does not know resolves to itself, which
- * the registry test (`newAiProject.test.ts`) fails on, so a new registry entry cannot ship
+ * the registry-wording test (`projectTypeActions.test.ts`) fails on, so a new registry entry cannot ship
  * unworded.
  */
 const TEXT: Record<string, () => string> = {

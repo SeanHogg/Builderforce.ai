@@ -7,6 +7,7 @@
  *    fetch, a fast-forward absorb, and a bundle of the workspace's new commit back out.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { PassThrough } from 'node:stream';
@@ -37,12 +38,26 @@ describe('the workspace helper protocol', () => {
     output.on('data', (chunk: Buffer) => { for (const line of chunk.toString().split('\n').filter(Boolean)) replies.push(JSON.parse(line)); });
     try {
     input.write(`${JSON.stringify({ id: 7, op: 'init' })}\n${JSON.stringify({ id: 8, op: 'write', path: 'a.txt', content: 'hi' })}\n${JSON.stringify({ id: 9, op: 'nope' })}\n`);
-    await new Promise((r) => setTimeout(r, 300));
+    await expect.poll(() => replies.length, { timeout: 10_000 }).toBe(3);
     expect(replies.find((r) => r.id === 7)).toMatchObject({ ok: true });
     expect(replies.find((r) => r.id === 8)).toMatchObject({ ok: true, path: 'a.txt' });
     expect(replies.find((r) => r.id === 9)).toMatchObject({ ok: false, error: expect.stringContaining("unknown workspace op 'nope'") });
     expect(await readFile(join(workdir, 'a.txt'), 'utf8')).toBe('hi');
     } finally { input.end(); } // never leave the readline interface open: a leaked one keeps the worker alive
+  });
+
+  it('names only the relative path in a read failure, never the clone\'s absolute path', async () => {
+    const w = ws();
+    await w.handle({ op: 'init' });
+    const missing = await w.handle({ op: 'read', path: 'src/missing.ts' });
+    expect(missing).toMatchObject({ ok: false, error: "'src/missing.ts' not found" });
+    await mkdir(join(workdir, 'adir'), { recursive: true });
+    const dir = await w.handle({ op: 'read', path: 'adir' });
+    expect(dir.ok).toBe(false);
+    for (const r of [missing, dir]) {
+      expect(JSON.stringify(r)).not.toContain(root);
+      expect(JSON.stringify(r)).not.toContain(workdir);
+    }
   });
 
   it('refuses every path that leaves the repository or reaches .git — for each file op', async () => {
@@ -113,6 +128,7 @@ describe('the workspace helper protocol', () => {
     const big = await w.handle({ op: 'list' });
     expect(big.ok).toBe(true);
     expect(big.truncated).toBe(true);
+    assert(Array.isArray(big.paths));
     expect(big.paths.length).toBeLessThan(40);
     expect(big.paths.every((p: string) => p.endsWith('/'))).toBe(true);
     const globbed = await w.handle({ op: 'list', glob: '**/*.ts' });

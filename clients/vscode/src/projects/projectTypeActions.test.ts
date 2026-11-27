@@ -30,9 +30,16 @@ describe("runProjectTypeActions", () => {
   });
 
   it("runs pickModel as the pickModel command, then openWeb with the project id filled in", async () => {
+    executeCommand.mockResolvedValueOnce(true as never);
     await runProjectTypeActions([{ kind: "pickModel" }, { kind: "openWeb", path: "/studio/project/{projectId}" }], context);
     expect(executeCommand).toHaveBeenCalledWith("builderforce.pickModel");
     expect(openExternal.mock.calls[0]![0]!.toString()).toBe("https://app.example/studio/project/7");
+  });
+
+  it("stops the sequence when the model pick is dismissed", async () => {
+    executeCommand.mockResolvedValueOnce(false as never);
+    await runProjectTypeActions([{ kind: "pickModel" }, { kind: "openWeb", path: "/x" }], context);
+    expect(openExternal).not.toHaveBeenCalled();
   });
 
   it("runs the option a choice picks, and nothing when it is dismissed", async () => {

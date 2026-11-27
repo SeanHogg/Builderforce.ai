@@ -31,7 +31,7 @@ export interface Splice {
 
 /** A match: its tier and splices (one, or every occurrence under `replaceAll`); `ambiguous`
  *  when a tier found more than one without `replaceAll`; `null` when no tier matched. */
-export type EditMatch = { tier: MatchTier; splices: Splice[] } | { ambiguous: true } | null;
+export type EditMatch = { tier: MatchTier; splices: Splice[] } | { ambiguous: true; matchCount: number } | null;
 
 export const toLF = (s: string): string => s.replace(/\r\n/g, "\n");
 export const countNewlines = (s: string): number => s.split("\n").length - 1;
@@ -256,7 +256,7 @@ function whitespaceSplice(
 export function matchEdit(content: string, oldString: string, newString: string, replaceAll: boolean, eol: Eol | null): EditMatch {
   const decide = (tier: MatchTier, splices: Splice[]): EditMatch => {
     if (splices.length === 0) return null;
-    if (splices.length > 1 && !replaceAll) return { ambiguous: true };
+    if (splices.length > 1 && !replaceAll) return { ambiguous: true, matchCount: splices.length };
     return { tier, splices };
   };
   const spliced = (spans: Array<[number, number]>, text: string): Splice[] => spans.map(([start, end]) => ({ start, end, text }));

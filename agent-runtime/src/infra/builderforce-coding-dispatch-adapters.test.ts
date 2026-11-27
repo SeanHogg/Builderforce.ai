@@ -29,4 +29,25 @@ describe("makeCodingFs snapshot", () => {
     const before = new Map(files.map((f) => [f.path, f.content]));
     expect(diffWorkspace(before, after, false)).toEqual({ writes: [], deletes: [] });
   });
+
+  it("regression: output-dir and oversize files present before and after produce no delete; a really removed file does", async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "coding-fs-"));
+    const big = "x".repeat(600 * 1024);
+    const files = [
+      { path: "dist/index.html", content: "<html/>" },
+      { path: "data.json", content: big },
+      { path: "src/gone.ts", content: "g" },
+      { path: "src/a.ts", content: "a" },
+    ];
+    const codingFs = makeCodingFs();
+    await codingFs.materialize(dir, files);
+    await fs.rm(path.join(dir, "src", "gone.ts"));
+
+    const after = await codingFs.snapshot(dir);
+    expect(after.map((f) => f.path)).toEqual(["src/a.ts"]);
+    const before = new Map(files.map((f) => [f.path, f.content]));
+    const gone = await codingFs.missing(dir, [...before.keys()].filter((p) => !after.some((f) => f.path === p)));
+    expect([...gone]).toEqual(["src/gone.ts"]);
+    expect(diffWorkspace(before, after, false, gone)).toEqual({ writes: [], deletes: ["src/gone.ts"] });
+  });
 });

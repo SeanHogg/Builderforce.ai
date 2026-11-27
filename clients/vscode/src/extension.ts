@@ -53,6 +53,8 @@ import { SELECTED_TENANT_KEY, getSelectedProject, initProjectState, onProjectCha
 import { clearLastSeen } from "./knowledge/knowledgeLastSeen";
 import { getProjectNames, invalidateProjectNames } from "./project/projectNames";
 import { newAiProject } from "./projects/newAiProject";
+import { createProjectInteractive } from "./projects/createProjectInteractive";
+import { handlePlanLimit } from "./projects/planLimit";
 import { ProjectsTreeProvider } from "./project/projectsTree";
 import { SessionsTreeProvider, chatOfSessionNode, type SessionTreeNode } from "./sessions/sessionsTree";
 import { InboxQuickActionsProvider, InboxTreeProvider } from "./tickets/inboxTree";
@@ -544,7 +546,7 @@ export function activate(context: vscode.ExtensionContext): BuilderforceApi {
       return openWorkspace(context, { kind: "focus", chatId });
     }),
     vscode.commands.registerCommand("builderforce.selectProject", () => selectProject(context, projects)),
-    vscode.commands.registerCommand("builderforce.createProject", () => createProject(context, projects)),
+    vscode.commands.registerCommand("builderforce.createProject", () => createProject(context)),
     vscode.commands.registerCommand("builderforce.newAiProject", (typeId?: string) => newAiProject(context, () => ensureSignedIn(context), typeId)),
     vscode.commands.registerCommand("builderforce.createWorkspace", () => manageWorkspace(context, projects)),
     // Bring-your-own MCP servers: the same owner-gated routes the web settings
@@ -900,16 +902,6 @@ async function ensureSignedIn(context: vscode.ExtensionContext): Promise<boolean
   return false;
 }
 
-/**
- * The shared 402 plan-limit response: show the surface-specific `message` with an
- * "Open BuilderForce" action that deep-links to workspace settings, where the upgrade
- * lives (a web-app action).
- */
-async function handlePlanLimit(message: string): Promise<void> {
-  const action = await vscode.window.showErrorMessage(message, "Open BuilderForce");
-  if (action) void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/settings`));
-}
-
 async function selectProject(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
@@ -929,7 +921,7 @@ async function selectProject(
   }
   // No projects yet → go straight to creation (the user needs one to manage tasks).
   if (!list.length) {
-    await createProject(context, projects);
+    await createProject(context);
     return;
   }
   const CREATE = "$(add) Create new project…";
@@ -942,7 +934,7 @@ async function selectProject(
   );
   if (!pick) return;
   if (pick.id === -1) {
-    await createProject(context, projects);
+    await createProject(context);
     return;
   }
   applySelectedProject(projects, { id: pick.id, name: pick.name });
@@ -981,35 +973,10 @@ async function selectProjectById(
 }
 
 /** Create a project in the current workspace and select it (the onboarding step a
- *  user needs before they can manage tasks). Routes plan-limit / errors to a clear
- *  message; an upgrade is a web-app action. */
-async function createProject(
-  context: vscode.ExtensionContext,
-  projects: ProjectsTreeProvider,
-): Promise<void> {
+ *  user needs before they can manage tasks). The shared flow is `createProjectInteractive`. */
+async function createProject(context: vscode.ExtensionContext): Promise<void> {
   if (!(await ensureSignedIn(context))) return;
-  const name = await vscode.window.showInputBox({
-    title: "Create BuilderForce project",
-    prompt: "Name your project",
-    placeHolder: "e.g. Mobile App, Website Redesign",
-    ignoreFocusOut: true,
-    validateInput: (v) => (v.trim() ? undefined : "A project name is required"),
-  });
-  if (!name?.trim()) return;
-  try {
-    const project = await bfApi.createProject(context.secrets, name.trim());
-    invalidateProjectNames(); // a new project must appear in the Sessions/Inbox labels
-    applySelectedProject(projects, { id: project.id, name: project.name });
-    vscode.window.showInformationMessage(`BuilderForce: created project “${project.name}”.`);
-  } catch (e) {
-    const message = (e as Error).message;
-    // 402 = plan project limit reached → upgrading is a web-app action.
-    if (/HTTP 402/.test(message)) {
-      await handlePlanLimit("BuilderForce: your plan's project limit is reached. Upgrade your workspace to add more.");
-      return;
-    }
-    vscode.window.showErrorMessage(`BuilderForce: could not create project (${message}).`);
-  }
+  await createProjectInteractive(context);
 }
 
 /**
@@ -1509,7 +1476,8 @@ async function pickLocalOnly(rows: ModelPickRow[]): Promise<boolean> {
   return true;
 }
 
-async function pickModel(context: vscode.ExtensionContext): Promise<void> {
+/** Resolves true only when a model was picked (a dismissed, failed or signed-out pick is false). */
+async function pickModel(context: vscode.ExtensionContext): Promise<boolean> {
   // Probed FIRST, and outside the try: the gateway lookup below throws when signed out,
   // and a local runtime must still be offerable in that state.
   const localModels = await listLocalModels(getLocalModelsConfig());
@@ -1543,7 +1511,7 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
       // about a runtime on this machine, so offer those before falling back to the
       // upgrade path — otherwise a developer with Ollama running is told to buy a plan to
       // use hardware they already own.
-      if (localRows.length > 0 && (await pickLocalOnly(localRows))) return;
+      if (localRows.length > 0 && (await pickLocalOnly(localRows))) return true;
       // A clear, not a person's pick: the mode they chose stays (Specific then says
       // `no_specific_model` rather than quietly running Auto).
       setSelectedModel(undefined);
@@ -1554,7 +1522,7 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
         vscode.l10n.t("Open settings"),
       );
       if (action) void vscode.commands.executeCommand("builderforce.openSettings");
-      return;
+      return false;
     }
 
     const labels = modelChoiceLabels();
@@ -1632,27 +1600,29 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
       matchOnDescription: true,
       matchOnDetail: true,
     });
-    if (pick === undefined) return;
+    if (pick === undefined) return false;
     if (pick.unlock) {
       void vscode.env.openExternal(
         vscode.Uri.parse(
           `${getWebBaseUrl()}${premiumInfo?.unlock === "upgrade" ? "/pricing?upgrade=pro" : "/pricing"}`,
         ),
       );
-      return;
+      return false;
     }
-    if (!pick.selection) return;
+    if (!pick.selection) return false;
     applyModelPick(pick.selection);
+    return true;
   } catch (e) {
     const message = (e as { message?: string }).message ?? String(e);
     if (message.includes(NOT_SIGNED_IN)) {
       // Signed out is not a dead end when this machine can serve the turn itself.
-      if (localRows.length > 0 && (await pickLocalOnly(localRows))) return;
+      if (localRows.length > 0 && (await pickLocalOnly(localRows))) return true;
       const action = await vscode.window.showWarningMessage(vscode.l10n.t("Sign in to BuilderForce first."), vscode.l10n.t("Sign In"));
       if (action) void vscode.commands.executeCommand("builderforce.signIn");
     } else {
       vscode.window.showErrorMessage(`BuilderForce: ${message}`);
     }
+    return false;
   }
 }
 

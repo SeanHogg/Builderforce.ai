@@ -67,9 +67,8 @@ export interface WorkspaceFs {
   search?(query: string, scope: string, opts: { signal?: AbortSignal }): Promise<SearchMatch[] | SearchFound>;
   /**
    * An optional resolver for ABSOLUTE paths (a drive letter or a leading "/"): the root-relative
-   * POSIX path, "" for the root itself, or undefined when the path is outside the root. Absent: a
-   * leading "/" is stripped (a repo-rooted path, the cloud and canvas convention) and a drive-letter
-   * path is refused. Receives the already-normalised path.
+   * POSIX path, "" for the root itself, or undefined when the path is outside the root.
+   * Without a resolver, absolute paths are refused. Receives the already-normalised path.
    *
    * Remote adapters: `list` of a prefix that does not exist may yield nothing rather than throw;
    * the provider reports that as an empty listing, not as `not_found`.
@@ -109,7 +108,7 @@ const messageOf = (e: unknown): string => (e instanceof Error ? e.message : Stri
 /** The code an adapter error names, else `io`. */
 function codeOf(e: unknown): WorkspaceErrorCode {
   const code = (e as { code?: unknown } | null)?.code;
-  return code === "not_found" || code === "is_directory" || code === "outside_root" || code === "too_large" || code === "no_match" || code === "ambiguous" || code === "unsupported" ? code : "io";
+  return code === "not_found" || code === "is_directory" || code === "outside_root" || code === "too_large" || code === "no_match" || code === "ambiguous" || code === "unsupported" || code === "invalid" ? code : "io";
 }
 
 /** True for a path that is absolute or climbs out of the root. */
@@ -142,20 +141,17 @@ export function createRepoCapabilities(fs: WorkspaceFs, opts: RepoCapabilityOpti
   /**
    * The path the adapter sees (root-relative POSIX, no leading "./"), or the refusal. The path is
    * normalised ONCE; the containment check runs on exactly the string handed to the adapter.
-   * An absolute path goes through the adapter's `toRelative` when it has one; else a leading "/" is
-   * stripped (a repo-rooted path) and a drive-letter path is refused. `unconfined` skips containment.
+   * Absolute paths are only accepted if the adapter maps them inside its root.
+   * `unconfined` skips containment.
    */
   const resolvePath = (raw: string | undefined, asDir = false): Resolved => {
     let p = normalisePath(raw ?? "");
     const refuse = (): Resolved => ({ bad: { ok: false, error: `'${raw ?? ""}' is outside the workspace`, code: "outside_root" } });
     if (!opts.unconfined) {
       if (isAbsolutePath(p)) {
-        if (fs.toRelative) {
-          const inside = fs.toRelative(p);
-          if (inside === undefined) return refuse();
-          p = normalisePath(inside);
-        } else if (p.startsWith("/")) p = p.replace(/^\/+/, "");
-        else return refuse();
+        const inside = fs.toRelative?.(p);
+        if (inside === undefined) return refuse();
+        p = normalisePath(inside);
       }
       if (escapesRoot(p)) return refuse();
     }
@@ -192,6 +188,7 @@ export function createRepoCapabilities(fs: WorkspaceFs, opts: RepoCapabilityOpti
     },
 
     async searchCode(query: string, scope?: string, searchOpts?: { signal?: AbortSignal }): Promise<RepoSearchResult> {
+      if (!query || !query.trim()) return { ok: false, query, error: "query is required", code: "invalid" };
       const r0 = resolvePath(scope, true);
       if ("bad" in r0) return { ...r0.bad, query };
       const dir = r0.path;
@@ -212,6 +209,7 @@ export function createRepoCapabilities(fs: WorkspaceFs, opts: RepoCapabilityOpti
     async writeFile(p: string, content: string): Promise<RepoWriteResult> {
       const r0 = resolvePath(p);
       if ("bad" in r0) return r0.bad;
+      if (isGzipPath(r0.path)) return GZ_UNSUPPORTED;
       // The read probe only learns the file's line endings and whether it is new. ONLY a definite
       // `not_found` means "new file"; a probe that fails or cannot answer (io, a capped read, a
       // directory-looking submodule or link) never fails the write: the content is written as given.
@@ -261,7 +259,9 @@ export function createRepoCapabilities(fs: WorkspaceFs, opts: RepoCapabilityOpti
         const edit = applyStringEdit(cur.content, oldString, newString, replaceAll);
         if (!edit.ok || edit.content == null) {
           const error = edit.error ?? "oldString not found in file";
-          return { ok: false, ...editFacts(edit), error, code: /not unique/i.test(error) ? "ambiguous" : "no_match" };
+          return edit.matchCount === undefined
+            ? { ok: false, ...editFacts(edit), error, code: "no_match" }
+            : { ok: false, error, code: "ambiguous", matchCount: edit.matchCount };
         }
         await fs.write(r0.path, edit.content);
         wrote(p, edit.content);

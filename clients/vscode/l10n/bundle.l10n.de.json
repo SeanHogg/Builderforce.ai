@@ -1572,11 +1572,16 @@
   "New AI project": "Neues KI-Projekt",
   "What kind of AI project?": "Welche Art von KI-Projekt?",
   "Which folder is this project for?": "Für welchen Ordner ist dieses Projekt?",
-  "BuilderForce: the existing builderforce.json is not a JSON object, so it was left unchanged.": "BuilderForce: Die vorhandene builderforce.json ist kein JSON-Objekt und blieb daher unverändert.",
-  "BuilderForce: could not write builderforce.json ({0}).": "BuilderForce: builderforce.json konnte nicht geschrieben werden ({0}).",
   "Name your project": "Geben Sie Ihrem Projekt einen Namen",
   "A project name is required": "Ein Projektname ist erforderlich",
   "BuilderForce: your plan's project limit is reached. Upgrade your workspace to add more.": "BuilderForce: Das Projektlimit Ihres Tarifs ist erreicht. Upgraden Sie Ihren Arbeitsbereich, um weitere hinzuzufügen.",
   "BuilderForce: could not create project ({0}).": "BuilderForce: Das Projekt konnte nicht erstellt werden ({0}).",
-  "BuilderForce: created project “{0}”.": "BuilderForce: Projekt „{0}“ erstellt."
+  "BuilderForce: created project “{0}”.": "BuilderForce: Projekt „{0}“ erstellt.",
+  "Open BuilderForce": "BuilderForce öffnen",
+  "Create BuilderForce project": "BuilderForce-Projekt erstellen",
+  "e.g. Mobile App, Website Redesign": "z. B. Mobile App, Website-Relaunch",
+  "This folder is already linked to project {0} ({1}). Link it to the new project instead?": "Dieser Ordner ist bereits mit Projekt {0} ({1}) verknüpft. Stattdessen mit dem neuen Projekt verknüpfen?",
+  "BuilderForce: .builderforce/project.json is not valid JSON, so it was left unchanged.": "BuilderForce: .builderforce/project.json ist kein gültiges JSON und blieb daher unverändert.",
+  "BuilderForce: .builderforce/project.json is not a JSON object, so it was left unchanged.": "BuilderForce: .builderforce/project.json ist kein JSON-Objekt und blieb daher unverändert.",
+  "BuilderForce: could not write .builderforce/project.json ({0}).": "BuilderForce: .builderforce/project.json konnte nicht geschrieben werden ({0})."
 }

@@ -143,7 +143,7 @@ export function runWorkspaceConformance(
       await harness.seed({
         ".secret/x.txt": "x",
         ".github/workflows/ci.yml": "x",
-        ".vscode/settings.json": "x",
+        ".vscode/settings.json": "{}",
         "node_modules/dep/index.js": "x",
         "a.ts": "x",
       });

@@ -18,8 +18,9 @@ function optionLabel(action: ProjectTypeAction): string {
 
 /**
  * Run a project type's `firstRun` actions in order. A `choice` asks which option to run and
- * stops the sequence when the person dismisses it. A step that throws is reported once and
- * ends the sequence (later steps build on earlier ones), never silently skipped.
+ * stops the sequence when the person dismisses it, as does a dismissed model pick. A step that
+ * throws is reported once and ends the sequence (later steps build on earlier ones): a failed or
+ * cancelled step always stops the sequence, and a failure is never silently skipped.
  */
 export async function runProjectTypeActions(actions: readonly ProjectTypeAction[], context: ProjectTypeRunContext): Promise<void> {
   for (const action of actions) {
@@ -38,8 +39,8 @@ async function runAction(action: ProjectTypeAction, context: ProjectTypeRunConte
       await vscode.commands.executeCommand(action.command);
       return undefined;
     case "pickModel":
-      await vscode.commands.executeCommand(PICK_MODEL_COMMAND);
-      return undefined;
+      // `builderforce.pickModel` resolves true only when a model was picked; a dismissed pick ends the sequence.
+      return (await vscode.commands.executeCommand<boolean>(PICK_MODEL_COMMAND)) === true ? undefined : "stop";
     case "openWeb":
       await vscode.env.openExternal(vscode.Uri.parse(`${context.webBaseUrl}${projectTypePath(action.path, context.projectId)}`));
       return undefined;

@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { surfaceFixture } from '../../testing';
 import type { SymbolRecord } from '../../types';
 import { buildStations } from '../stations';
-import { USE_CASE, withSymbols } from './testFixtures';
+import { CLASS_REF, USE_CASE, withSymbols } from './testFixtures';
 import { useDrill } from './useDrill';
 
 const graph = withSymbols();
@@ -28,8 +28,10 @@ describe('useDrill', () => {
         expect(result.current.view?.level).toBe('class');
         expect(result.current.parent?.name).toBe('API');
 
+        expect(result.current.view!.stations.stations.some((s) => s.name === 'run')).toBe(false);
+        expect(result.current.hasMembers?.(CLASS_REF)).toBe(true);
+        act(() => result.current.enter(CLASS_REF));
         const run = result.current.view!.stations.stations.find((s) => s.name === 'run')!;
-        act(() => result.current.enter(run.id));
         expect(result.current.view?.level).toBe('function');
         expect(result.current.canEnter(run.id)).toEqual({ can: false, reason: 'deepest' });
 
@@ -65,7 +67,10 @@ describe('useDrill', () => {
         await waitFor(() => expect(result.current.canEnter(USE_CASE)).toEqual({ can: true, level: 'class' }));
         act(() => result.current.enter(USE_CASE));
         const layers = Object.fromEntries(result.current.view!.stations.stations.map((s) => [s.name, s.layer]));
-        expect(layers).toMatchObject({ UseCase: 'symbol', run: 'methods' });
+        expect(layers).toMatchObject({ UseCase: 'symbol' });
+        expect(layers.run).toBeUndefined();
+        act(() => result.current.enter(cls));
+        expect(result.current.view?.stations.stations.find((s) => s.name === 'run')?.layer).toBe('methods');
     });
 
     it('asks once per package: going out and in again does not load again, and a failed read may be retried', async () => {

@@ -5,11 +5,34 @@
 
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import { coerceFileContent, validateFileContentForPath } from '@builderforce/ide-file-contract';
-import { applyStringEdit } from '@builderforce/agent-tools/edit';
+import { createRepoCapabilities, WorkspaceError, type WorkspaceFs } from '@builderforce/agent-tools/workspace';
+import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
+import { storeWorkspaceFs } from '@/lib/workspace/storeWorkspaceFs';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 import { workspacePathArg, resolveCanvasBuild, searchWorkspaceFiles, summarizeWorkspace } from '@/lib/canvasBuildContext';
 import type { CanvasBuildToolsContext, BuildWorkspaceHelpers } from '@/lib/canvasBuildContext';
 import { contentBytes, timeWrite } from '@/lib/browserRuntime/writeTiming';
+
+/**
+ * The shared coding provider over one canvas store. The content check is a decorator on the
+ * adapter's write, so a write and an edit are both validated before anything is stored, and a
+ * refusal comes back through the provider as its error. `stored()` is the exact text the
+ * provider wrote (after line-ending conforming), for the history/dependency report.
+ */
+function canvasProvider(store: WorkspaceFileStore) {
+  const base = storeWorkspaceFs(store);
+  let stored: string | undefined;
+  const fs: WorkspaceFs = {
+    ...base,
+    write: async (path, content) => {
+      const valid = validateFileContentForPath(path, content);
+      if (!valid.ok) throw new WorkspaceError('unsupported', valid.reason);
+      await base.write(path, content);
+    },
+  };
+  const caps = createRepoCapabilities(fs, { onWrite: (_path, written) => { stored = written?.content; } });
+  return { caps, stored: () => stored };
+}
 
 /** List, search, write and edit: the actions that work on the files of a Builder object's workspace. */
 export function canvasBuildFileActions(ctx: CanvasBuildToolsContext, helpers: BuildWorkspaceHelpers) {
@@ -98,14 +121,10 @@ export function canvasBuildFileActions(ctx: CanvasBuildToolsContext, helpers: Bu
       if ('error' in resolved) return resolved;
       // Models emit structured bodies (package.json especially) as objects.
       const content = coerceFileContent(args.content);
-      const valid = validateFileContentForPath(path, content);
-      if (!valid.ok) return { error: valid.reason };
-      try {
-        await timeWrite('perFile', { fileCount: 1, totalBytes: contentBytes(content), path, workflowId: String(resolved.build.store.id), taskId: resolved.build.objectId }, () => resolved.build.store.write(path, content));
-        return { ok: true, applied: true, path, bytes: content.length, ...await committed(resolved.build, path, content) };
-      } catch (error) {
-        return { error: toolErrorMessage(error, `"${path}" could not be written.`) };
-      }
+      const provider = canvasProvider(resolved.build.store);
+      const result = await timeWrite('perFile', { fileCount: 1, totalBytes: contentBytes(content), path, workflowId: String(resolved.build.store.id), taskId: resolved.build.objectId }, () => provider.caps.repoWrite.writeFile(path, content));
+      if (!result.ok) return { error: result.error || `"${path}" could not be written.` };
+      return { ok: true, applied: true, path, bytes: content.length, ...await committed(resolved.build, path, provider.stored() ?? content) };
     },
   };
 
@@ -130,34 +149,22 @@ export function canvasBuildFileActions(ctx: CanvasBuildToolsContext, helpers: Bu
       const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
       if ('error' in resolved) return resolved;
 
-      let source: string;
-      try {
-        source = await resolved.build.store.read(path);
-      } catch {
-        return { error: `No file "${path}" in this workspace. Use canvas_write_build_file to create it.` };
-      }
       const find = typeof args.find === 'string' ? args.find : '';
       const replace = typeof args.replace === 'string' ? args.replace : '';
       if (!find) return { error: 'find must not be empty. To replace a whole file use canvas_write_build_file.' };
-      // The shared matcher (EOL/escape/whitespace tolerant, literal splices: a `$&` in the
+      // The shared provider matches (EOL/escape/whitespace tolerant, literal splices: a `$&` in the
       // replacement is never a capture reference). Only the model-facing wording is the canvas's.
-      const edit = applyStringEdit(source, find, replace, args.replaceAll === true);
-      if (!edit.ok || edit.content === undefined) {
-        if (edit.error?.includes('not unique')) {
-          const occurrences = applyStringEdit(source, find, replace, true).replaced ?? 2;
-          return { error: `find matched ${occurrences} times. Include more surrounding lines so it matches once, or pass replaceAll: true to change every occurrence.` };
+      const provider = canvasProvider(resolved.build.store);
+      const result = await timeWrite('perFile', { fileCount: 1, totalBytes: contentBytes(replace), path, workflowId: String(resolved.build.store.id), taskId: resolved.build.objectId }, () => provider.caps.repoWrite.editFile(path, find, replace, args.replaceAll === true));
+      if (!result.ok) {
+        if (result.code === 'not_found') return { error: `No file "${path}" in this workspace. Use canvas_write_build_file to create it.` };
+        if (result.code === 'ambiguous') {
+          return { error: `find matched ${result.matchCount} times. Include more surrounding lines so it matches once, or pass replaceAll: true to change every occurrence.` };
         }
-        return { error: 'find did not match. Read the file with canvas_read_build_file and copy the exact text, including indentation and line breaks.' };
+        if (result.code === 'no_match') return { error: 'find did not match. Read the file with canvas_read_build_file and copy the exact text, including indentation and line breaks.' };
+        return { error: result.error || `"${path}" could not be written.` };
       }
-      const next = edit.content;
-      const valid = validateFileContentForPath(path, next);
-      if (!valid.ok) return { error: valid.reason };
-      try {
-        await timeWrite('perFile', { fileCount: 1, totalBytes: contentBytes(next), path, workflowId: String(resolved.build.store.id), taskId: resolved.build.objectId }, () => resolved.build.store.write(path, next));
-        return { ok: true, applied: true, path, replacements: edit.replaced ?? 1, ...await committed(resolved.build, path, next) };
-      } catch (error) {
-        return { error: toolErrorMessage(error, `"${path}" could not be written.`) };
-      }
+      return { ok: true, applied: true, path, replacements: result.replaced ?? 1, ...await committed(resolved.build, path, provider.stored()) };
     },
   };
 

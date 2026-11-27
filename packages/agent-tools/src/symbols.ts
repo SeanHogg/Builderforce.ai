@@ -27,6 +27,7 @@ import { CallbackOwnerScan } from "./callbackOwners.js";
 export type SymbolKind =
   | "function"
   | "method"
+  | "field"
   | "class"
   | "interface"
   | "type"
@@ -40,7 +41,7 @@ export type SymbolKind =
 
 /** The kinds a caller may filter on — every {@link SymbolKind}, as a list for schemas. */
 export const SYMBOL_KINDS: readonly SymbolKind[] = [
-  "function", "method", "class", "interface", "type", "enum", "const",
+  "function", "method", "field", "class", "interface", "type", "enum", "const",
   "struct", "trait", "module", "table", "heading",
 ];
 
@@ -143,6 +144,9 @@ const JS_ABSTRACT_METHOD = new RegExp(
 );
 /** Interface members are signatures; their lines have no body brace. */
 const JS_INTERFACE_METHOD = new RegExp(`^(?:\\t|  |    )(${ID})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`);
+const JS_FIELD = new RegExp(
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|declare)\\s+)*(#?${ID})[!?]?\\s*(?::|=(?!=))[^;]*;\\s*$`,
+);
 /** A member whose parameter list opens a multi-line signature: `  async find(` with the parameters on the lines below. */
 const JS_METHOD_OPEN = new RegExp(
   `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|async|get|set)\\s+)*\\*?\\s*(${ID})\\s*(?:<[^>]*>)?\\s*\\(\\s*$`,
@@ -166,6 +170,7 @@ function extractJs(lines: string[], out: CodeSymbol[], path = ""): void {
   // The class whose body we are in (its closing brace sits at column 0).
   let cls: string | undefined;
   let isInterface = false;
+  let memberIndent: string | undefined;
   // The callback owners (callbackOwners.ts): a route handler or a listener owns its callback's body.
   const owners = new CallbackOwnerScan(path);
   eachLine(lines, out, (line, lineNo) => {
@@ -183,6 +188,7 @@ function extractJs(lines: string[], out: CodeSymbol[], path = ""): void {
       if (rule.kind === "class" || rule.kind === "interface") {
         cls = /\}\s*;?\s*$/.test(line) ? undefined : name;
         isInterface = rule.kind === "interface";
+        memberIndent = undefined;
       }
       return;
     }
@@ -191,11 +197,22 @@ function extractJs(lines: string[], out: CodeSymbol[], path = ""): void {
       if (owner) out.push(owner);
       return;
     }
+    const indent = /^\s*/.exec(line)?.[0] ?? "";
+    if (memberIndent !== undefined && indent !== memberIndent) return;
     const open = JS_METHOD_OPEN.exec(line);
     const method = isInterface ? JS_INTERFACE_METHOD.exec(line)
       : JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line) ?? (open && closesWithBody(lines, lineNo - 1) ? open : null);
     const name = method ? group(method, 1) : "";
-    if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
+    if (name && !JS_KEYWORDS.has(name)) {
+      memberIndent ??= indent;
+      out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
+    } else {
+      const field = JS_FIELD.exec(line);
+      if (field && !JS_KEYWORDS.has(group(field, 1))) {
+        memberIndent ??= indent;
+        out.push({ name: group(field, 1), kind: "field", line: lineNo, exported: false, container: cls });
+      }
+    }
   });
 }
 
