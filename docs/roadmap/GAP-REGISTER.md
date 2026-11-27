@@ -443,7 +443,37 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
     - Bounding runs in the worker (`graphBuildJob` → `postBounded`), and the host spends about 58 ms of the 24 s load outside the worker phases.
     - The stall overlaps work running at the same time in the same window: `syncStatus` 5.9 s, `symbols` 12.2 s, or the request clone into the worker.
   - Instrumented (ships in `.227`): the load line gains `send`, `assemble`, `migrate`, `hostState` and `nearDuplicates=<pairs>`. Regression test: `graphWorker.bounded.test.ts`.
-  - Blocker: a live load trace from the `.227` reload, to name the step. Next step after that: per-call stall attribution if the step is still unnamed, then move it off the host thread.
+  - Named on `.227` (2026-11-26 21:16–21:35): 7 VS Code "UNRESPONSIVE extension host" CPU profiles (`%TEMP%\exthost-*.cpuprofile`).
+    - Live `extractAndApply` takes 14.7 s, of which 10.4 s is self time in the import-candidate expander (`Zy`). The resolver has no memo and is called per import, per candidate, per alias.
+    - The idle-pass badge `extract` takes 10.9 s. Within it, the code-shield secret scan (`tie`) takes 6.4 s per file on the host thread, and is likely worse since the rules were derived from all `SECRET_SHAPES`.
+  - Fixed (ships in `.228`, Opus review running):
+    - **Secret scan.** The seed passes `content.text=''`, so code-shield had been scanning empty text for 6,315 files. Now:
+      - `scanText('')` returns `[]`;
+      - each secret rule has a literal-prefix `requiresContext` hint (`secretRules.ts`).
+    - **Import resolution.** `moduleFileCandidates` is memoised, and `importResolver` memoises per (directory, language, specifier).
+    - **Index seed.** It yields every 500 files (`seedCode.ts`, `extractFromSymbolsYielding`).
+    - **Tests.** 229 pass, including new `secretPrefilter`, `importResolver.memo` and `seedCode.yield` tests.
+  - Shipping in `.229`; `.228` was taken by another session's build.
+  - Opus review: no blockers. Every hint is a literal that every match must contain, with the same case rules.
+  - Review follow-ups are done in the tree, for the next build:
+    - hints live on `SecretShape.hint` in secret-redaction, and `SHAPE_HINTS` is deleted;
+    - a sample-per-hinted-shape test plus a `re`/`hint` snapshot;
+    - the candidate memo holds 4,000 entries with FIFO eviction;
+    - `mapFit` skips non-finite points;
+    - the yield test asserts only that the timer got a turn.
+    - 124 code-shield, 11 agent-tools and 3 mapFit tests pass, and tsc is clean.
+  - Remaining blocker: confirmation on `.229` that VS Code no longer reports the extension as unresponsive during Run.
+- `AE-G068` **`.227` draws nothing on the 3D stage** (user, 2026-11-26).
+  - Symptoms: the diagnostics report 1497 nodes drawn, yet the screen shows an empty canvas with a small ring. There are no GPU crash dumps.
+  - The shader is cleared. The GPU repro shows every stage program compiling on this machine with no context loss, and marks drawing pixels in both themes. The guard test `stage/fixedColours.test.ts` passes 2/2, so AE-G066 is verified in the repro.
+  - Real cause: the view was on a **line** (`hired.video › index.ts`) with ONE stop (`stops=1 · stop=no-references`). The camera fit does not frame a 1-mark placement, so the stage looks empty apart from a tiny ring.
+  - Precise cause: the perspective Map orbit (`compute/tasks/placement/map.ts`) always framed the full 960-unit plate.
+  - Fixed, ships in `.228`:
+    - The new `placement/mapFit.ts` frames the drawn stations and route points, padded, clamped to the plate, with a floor of 180 units. One stop goes from radius ~500 to ~124, and full levels are unchanged.
+    - New `mapFit.test.ts` (3 cases).
+    - `renderer.layers.test.ts` updated: it was stale since `1958de654`, when Map labels moved to DOM chips.
+  - Blocker: none for the code. The perspective view is confirmed by the user's reload, since the pixel harness is orthographic.
+  - The 1-stop line itself is `AE-G058` (entry detection). It is queued after AE-G067, because both touch `agent-tools` knowledge extraction.
 - `AE-G064` **Six knowledge-view tests are still stale after the Visualizer redesign** (`1958de654`, 2026-11-26). The fixed part and the two product fixes are in DONE.md. Paused by the user after `.227`.
   - `KnowledgeGraphView.surface.test.tsx`, 4 failing:
     - transit-map legend/path lookup returns null;

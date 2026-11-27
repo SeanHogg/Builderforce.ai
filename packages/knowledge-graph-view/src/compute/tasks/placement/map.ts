@@ -23,6 +23,7 @@ import { anchorHidden, draftFor, show } from './anchor';
 import { linkBatch, type LinkPath } from './links';
 import { mapDecorations } from './mapDecor';
 import { widenMapBounds } from './mapBounds';
+import { contentPoints, mapFit } from './mapFit';
 import { roofMinis } from './roofMinis';
 import { channelBindings, placementKeyOf, VIEWPORT_BANDS, type PlacementReq } from './request';
 
@@ -85,7 +86,7 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
     // The perspective Map has no band captions (the design has none, and a ground caption drifts under a tilted camera); the
     // Layers camera keeps its band titles (`rows.ts`).
     const captions: Caption[] = [];
-    const cx = layout.width / 2, cz = layout.height / 2;
+    const { cx, cz, radius } = mapFit(layout, contentPoints(layout.positions, layout.drawn, layout.routes), top);
     const decor = g ? mapDecorations(g, stations, layout) : [];
     const bounds = widenMapBounds(layout, widths, neutralWidth, CASING_EXTRA, top, decor);
     return {
@@ -103,7 +104,7 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
             home: { position: [cx, 1000, cz], target: [cx, top * 0.35, cz], up: [0, 1, 0] },
             depth: { tilt: [5, 83], orbit: true },
             // Fit-to-content: the rig derives the distance from the stage's own aspect (and again on every resize).
-            view: { yaw: HOME_YAW, pitch: HOME_PITCH, distance: 1000, fov: HOME_FOV, radius: Math.hypot(layout.width, layout.height, top) / 2 + 12, flatDepth: FLAT_DEPTH },
+            view: { yaw: HOME_YAW, pitch: HOME_PITCH, distance: 1000, fov: HOME_FOV, radius, flatDepth: FLAT_DEPTH },
         },
     };
 }

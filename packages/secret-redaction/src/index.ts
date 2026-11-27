@@ -39,45 +39,51 @@ export interface SecretShape {
   id: string;
   label: string;
   re: RegExp;
+  /**
+   * A literal NECESSARY condition of `re` (the prefix every match starts with; a substring test, never narrower than the
+   * shape). A scanner tests it once on a whole text to skip the per-line scan of a file that cannot hold the shape. Absent =
+   * no cheap prefilter, scan per line.
+   */
+  hint?: RegExp;
 }
 
-const shape = (id: string, label: string, re: RegExp): SecretShape => ({ id, label, re });
+const shape = (id: string, label: string, re: RegExp, hint?: RegExp): SecretShape => (hint ? { id, label, re, hint } : { id, label, re });
 
 export const SECRET_SHAPES: readonly SecretShape[] = [
   // PEM blocks, and PGP armor (`-----BEGIN PGP PRIVATE KEY BLOCK-----`). An unterminated block (a capped tool output) is
   // redacted to the end of the text: the body is the secret.
-  shape('private-key', 'private key block', /-----BEGIN [A-Z ]*PRIVATE KEY(?: BLOCK)?-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY(?: BLOCK)?-----|[\s\S]*)/gi),
+  shape('private-key', 'private key block', /-----BEGIN [A-Z ]*PRIVATE KEY(?: BLOCK)?-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY(?: BLOCK)?-----|[\s\S]*)/gi, /-----BEGIN /i),
   // OpenAI / Anthropic / OpenRouter style keys: `sk-proj-…`, `sk-ant-api03-…`, test/live-mode `sk-test-…` / `sk-live-…`, legacy
   // `sk-` + base62. A bare `sk-` needs a hyphen-free run of 16+ chars, so a package name like `sk-learn-components` is not a key.
-  shape('openai-key', 'OpenAI-style key', /\b(sk-(?:(?:proj|svcacct|admin|ant\d*|or-v\d|test|live)-[A-Za-z0-9_-]{16,}|[A-Za-z0-9_]{16,}))(?![A-Za-z0-9_])/gi),
-  shape('github-token', 'GitHub token', /\b(gh[pousr]_[A-Za-z0-9]{20,})\b/gi),
-  shape('github-pat', 'GitHub fine-grained token', /\b(github_pat_[A-Za-z0-9_]{20,})\b/gi),
-  shape('slack-token', 'Slack token', /\b(xox[baprs]-[A-Za-z0-9-]{10,})\b/gi),
-  shape('slack-rotating-token', 'Slack rotating token', /\b(xoxe[.-][A-Za-z0-9._-]{10,})/g),
-  shape('slack-app-token', 'Slack app token', /\b(xapp-[A-Za-z0-9-]{10,})\b/gi),
-  shape('groq-key', 'Groq key', /\b(gsk_[A-Za-z0-9_-]{10,})\b/gi),
-  shape('google-api-key', 'Google API key', /\b(AIza[0-9A-Za-z\-_]{20,})\b/gi),
-  shape('google-oauth-token', 'Google OAuth access token', /\b(ya29\.[A-Za-z0-9_-]{20,})/g),
-  shape('google-client-secret', 'Google OAuth client secret', /\b(GOCSPX-[A-Za-z0-9_-]{20,})/g),
-  shape('perplexity-key', 'Perplexity key', /\b(pplx-[A-Za-z0-9_-]{10,})\b/gi),
-  shape('npm-token', 'npm token', /\b(npm_[A-Za-z0-9]{10,})\b/gi),
+  shape('openai-key', 'OpenAI-style key', /\b(sk-(?:(?:proj|svcacct|admin|ant\d*|or-v\d|test|live)-[A-Za-z0-9_-]{16,}|[A-Za-z0-9_]{16,}))(?![A-Za-z0-9_])/gi, /sk-/i),
+  shape('github-token', 'GitHub token', /\b(gh[pousr]_[A-Za-z0-9]{20,})\b/gi, /gh[pousr]_/i),
+  shape('github-pat', 'GitHub fine-grained token', /\b(github_pat_[A-Za-z0-9_]{20,})\b/gi, /github_pat_/i),
+  shape('slack-token', 'Slack token', /\b(xox[baprs]-[A-Za-z0-9-]{10,})\b/gi, /xox[baprs]-/i),
+  shape('slack-rotating-token', 'Slack rotating token', /\b(xoxe[.-][A-Za-z0-9._-]{10,})/g, /xoxe[.-]/),
+  shape('slack-app-token', 'Slack app token', /\b(xapp-[A-Za-z0-9-]{10,})\b/gi, /xapp-/i),
+  shape('groq-key', 'Groq key', /\b(gsk_[A-Za-z0-9_-]{10,})\b/gi, /gsk_/i),
+  shape('google-api-key', 'Google API key', /\b(AIza[0-9A-Za-z\-_]{20,})\b/gi, /AIza/i),
+  shape('google-oauth-token', 'Google OAuth access token', /\b(ya29\.[A-Za-z0-9_-]{20,})/g, /ya29\./),
+  shape('google-client-secret', 'Google OAuth client secret', /\b(GOCSPX-[A-Za-z0-9_-]{20,})/g, /GOCSPX-/),
+  shape('perplexity-key', 'Perplexity key', /\b(pplx-[A-Za-z0-9_-]{10,})\b/gi, /pplx-/i),
+  shape('npm-token', 'npm token', /\b(npm_[A-Za-z0-9]{10,})\b/gi, /npm_/i),
   // AWS access key ids (long-term AKIA, temporary ASIA).
-  shape('aws-access-key', 'AWS access key id', /\b((?:AKIA|ASIA)[A-Z0-9]{16})\b/g),
+  shape('aws-access-key', 'AWS access key id', /\b((?:AKIA|ASIA)[A-Z0-9]{16})\b/g, /AKIA|ASIA/),
   // Stripe secret/restricted keys and webhook secrets.
-  shape('stripe-key', 'Stripe secret key', /\b((?:sk|rk)_(?:live|test)_[A-Za-z0-9]{8,})\b/g),
-  shape('stripe-webhook-secret', 'Stripe webhook secret', /\b(whsec_[A-Za-z0-9]{8,})\b/g),
-  shape('gitlab-token', 'GitLab token', /\b(glpat-[A-Za-z0-9_-]{20,})/g),
-  shape('huggingface-token', 'Hugging Face token', /\b(hf_[A-Za-z0-9]{20,})\b/g),
-  shape('sendgrid-key', 'SendGrid key', /\b(SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,})\b/g),
+  shape('stripe-key', 'Stripe secret key', /\b((?:sk|rk)_(?:live|test)_[A-Za-z0-9]{8,})\b/g, /(?:sk|rk)_(?:live|test)_/),
+  shape('stripe-webhook-secret', 'Stripe webhook secret', /\b(whsec_[A-Za-z0-9]{8,})\b/g, /whsec_/),
+  shape('gitlab-token', 'GitLab token', /\b(glpat-[A-Za-z0-9_-]{20,})/g, /glpat-/),
+  shape('huggingface-token', 'Hugging Face token', /\b(hf_[A-Za-z0-9]{20,})\b/g, /hf_/),
+  shape('sendgrid-key', 'SendGrid key', /\b(SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,})\b/g, /SG\./),
   // Our own credentials: `<prefix>_<hex>` (api `generateApiKey`): bfk workspace, bfa agent-host, bfr site, bfq/bff/bfx ingest and
   // LRS keys, clk/clu legacy agent-host keys. The body is random hex, so it holds a digit: an all-letter word with the same
   // prefix (`bfi_unavailable`, a code/reason string) is not a key.
-  shape('builderforce-key', 'BuilderForce API key', /\b((?:bf[a-z]|cl[ku])_(?=[A-Za-z]*\d)[A-Za-z0-9]{8,})\b/g),
+  shape('builderforce-key', 'BuilderForce API key', /\b((?:bf[a-z]|cl[ku])_(?=[A-Za-z]*\d)[A-Za-z0-9]{8,})\b/g, /(?:bf[a-z]|cl[ku])_/),
   // A bare JWT (header.payload.signature, all base64url).
-  shape('jwt', 'JSON web token', /\b(eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})/g),
+  shape('jwt', 'JSON web token', /\b(eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})/g, /eyJ/),
   // Telegram Bot API URLs embed the token as `/bot<token>/...`.
-  shape('telegram-bot-url', 'Telegram bot token', /\bbot(\d{6,}:[A-Za-z0-9_-]{20,})\b/gi),
-  shape('telegram-bot-token', 'Telegram bot token', /\b(\d{6,}:[A-Za-z0-9_-]{20,})\b/gi),
+  shape('telegram-bot-url', 'Telegram bot token', /\bbot(\d{6,}:[A-Za-z0-9_-]{20,})\b/gi, /bot\d{6}/i),
+  shape('telegram-bot-token', 'Telegram bot token', /\b(\d{6,}:[A-Za-z0-9_-]{20,})\b/gi, /\d{6}:/),
 ];
 
 /** The shapes found in `text` (detection only; nothing is changed). */

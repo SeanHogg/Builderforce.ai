@@ -17,6 +17,7 @@ import type { CodeSymbol } from '../../symbols.js';
 import { buildCodeGraph } from '../codeGraph.js';
 import { isCodePath } from '../codePack.js';
 import { knowledgePacks } from '../knowledgePacks.js';
+import { mapYielding } from '../yieldLoop.js';
 import type { HostKnowledgeIndexCore } from './contract.js';
 
 /** Files per graph: headroom under `MAX_NODES_CAP` for the nodes `buildGraph` adds. */
@@ -27,24 +28,36 @@ export interface SymbolFile {
     symbols: readonly CodeSymbol[];
 }
 
-/** The code pack's Extracted for each code file, from its indexed symbols. */
-export function extractFromSymbols(rootId: string, files: readonly SymbolFile[], partitions?: PartitionRegistry): Extracted[] {
+/** The code files in path order and the per-file extract of the code pack's parser, shared by the sync and the yielding loops. */
+function symbolExtractor(rootId: string, files: readonly SymbolFile[], partitions?: PartitionRegistry): { sorted: SymbolFile[]; one: (f: SymbolFile) => Extracted | undefined } {
     const byPath = new Map(files.map((f) => [f.path, f.symbols] as const));
     const [codePack] = knowledgePacks({ symbolsOf: (path) => byPath.get(path) ?? [], ...(partitions ? { partitions } : {}) });
     const parser = codePack!.parsers[0]!;
     const ctx = { rootId, knownKeys: new Map<string, NodeRef>(), resolvePath: () => undefined };
-    const out: Extracted[] = [];
-    for (const f of [...files].sort((a, b) => compareStr(a.path, b.path))) {
-        if (!isCodePath(f.path)) continue;
-        // The symbols ARE what the card is made of: their hash stands in for the content's.
-        const source: SourceDocument = {
-            id: f.path, tenantId: 'local', content: { kind: 'text', text: '' },
-            metadata: { [CONTENT_HASH_FIELD]: hashText(JSON.stringify(f.symbols.map((s) => [s.name, s.kind, s.exported]))) },
-        };
-        const ex = parser.extract?.(source, [], ctx);
-        if (ex) out.push(ex);
-    }
-    return out;
+    return {
+        sorted: files.filter((f) => isCodePath(f.path)).sort((a, b) => compareStr(a.path, b.path)),
+        one: (f) => {
+            // The symbols ARE what the card is made of: their hash stands in for the content's.
+            const source: SourceDocument = {
+                id: f.path, tenantId: 'local', content: { kind: 'text', text: '' },
+                metadata: { [CONTENT_HASH_FIELD]: hashText(JSON.stringify(f.symbols.map((s) => [s.name, s.kind, s.exported]))) },
+            };
+            return parser.extract?.(source, [], ctx) ?? undefined;
+        },
+    };
+}
+
+/** The code pack's Extracted for each code file, from its indexed symbols. */
+export function extractFromSymbols(rootId: string, files: readonly SymbolFile[], partitions?: PartitionRegistry): Extracted[] {
+    const { sorted, one } = symbolExtractor(rootId, files, partitions);
+    return sorted.flatMap((f) => one(f) ?? []);
+}
+
+/** {@link extractFromSymbols} releasing the event loop every `YIELD_EVERY` files (the host's thread is also the editor's). Null when aborted. */
+export async function extractFromSymbolsYielding(rootId: string, files: readonly SymbolFile[], partitions?: PartitionRegistry, signal?: AbortSignal): Promise<Extracted[] | null> {
+    const { sorted, one } = symbolExtractor(rootId, files, partitions);
+    const out = await mapYielding(sorted, one, signal);
+    return out === null ? null : out.flatMap((e) => e ?? []);
 }
 
 /** Whole areas per chunk, in order; an area larger than a chunk is split. */
@@ -106,7 +119,8 @@ export async function seedCodeCards(
     opts: { partitions?: PartitionRegistry; previous?: ReadonlySet<string>; signal?: AbortSignal } = {},
 ): Promise<Set<string>> {
     const rootId = index.rootId;
-    const extracted = extractFromSymbols(rootId, files, opts.partitions);
+    const extracted = await extractFromSymbolsYielding(rootId, files, opts.partitions, opts.signal);
+    if (extracted === null) return new Set(opts.previous ?? []);
     const packs = knowledgePacks(opts.partitions ? { partitions: opts.partitions } : {});
     const seen = new Set<string>();
     for (const chunk of chunkByArea(extracted)) {

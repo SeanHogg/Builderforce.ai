@@ -55,9 +55,12 @@ export function scanText(
   profileId: ScanProfileId,
   only?: readonly ThreatCategory[],
 ): ScanFinding[] {
+  const text = subject.content;
+  // Nothing to read: no rule matches an empty text (pinned by `engine.test.ts`), and the knowledge seed scans thousands of
+  // path-only files with `''` (its cards are made of symbols, not content), which cost seconds of the host's thread.
+  if (text === '') return [];
   const profile = SCAN_PROFILES[profileId];
   const path = norm(subject.path);
-  const text = subject.content;
   let split: string[] | undefined;
   const lines = (): string[] => (split ??= text.split('\n'));
   const out: ScanFinding[] = [];

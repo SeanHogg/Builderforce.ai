@@ -78,14 +78,27 @@ export function moduleFileOf(modulePath: string, has: (path: string) => boolean)
     return moduleFileCandidates(modulePath).find(has);
 }
 
-/** The files a module path may name, in the order {@link moduleFileOf} tries them (a host probing a disk tries the same). */
-export function moduleFileCandidates(modulePath: string): string[] {
+const CANDIDATE_MEMO_MAX = 4_000;
+const candidateMemo = new Map<string, readonly string[]>();
+
+/**
+ * The files a module path may name, in the order {@link moduleFileOf} tries them (a host probing a disk tries the same).
+ * A pure function of the path, so the list is computed once per path (bounded memo; callers must not mutate it): a 6,000-file
+ * re-resolve asks for the same few thousand module paths tens of thousands of times.
+ */
+export function moduleFileCandidates(modulePath: string): readonly string[] {
+    const hit = candidateMemo.get(modulePath);
+    if (hit) return hit;
     const base = modulePath.replace(JS_EXT, '');
-    return [
-        ...(JS_EXT.test(modulePath) ? [modulePath] : []),
-        ...CANDIDATE_EXTS.map((ext) => base + ext),
-        ...CANDIDATE_EXTS.map((ext) => `${base}/index${ext}`),
-    ].filter((p, i, all) => all.indexOf(p) === i);
+    const out = new Set<string>();
+    if (JS_EXT.test(modulePath)) out.add(modulePath);
+    for (const ext of CANDIDATE_EXTS) out.add(base + ext);
+    for (const ext of CANDIDATE_EXTS) out.add(`${base}/index${ext}`);
+    const list = Object.freeze([...out]);
+    // FIFO eviction (Map iterates in insertion order): the oldest entry goes, the memo never exceeds the cap.
+    if (candidateMemo.size >= CANDIDATE_MEMO_MAX) candidateMemo.delete(candidateMemo.keys().next().value as string);
+    candidateMemo.set(modulePath, list);
+    return list;
 }
 
 /** A {@link ModuleResolution} whose `exists` answers from a root's listing (`paths`, root-relative files). */

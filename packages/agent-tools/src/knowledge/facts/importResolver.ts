@@ -29,11 +29,24 @@ export function pythonModuleCandidates(fromPath: string, specifier: string): str
     return rest.length === 0 ? [`${base ? `${base}/` : ''}__init__.py`] : [`${base}.py`, `${base}/__init__.py`];
 }
 
-/** A resolver over `exists(rootRelativeFile)` and the root's aliases. */
+/**
+ * A resolver over `exists(rootRelativeFile)` and the root's aliases. The answer is a function of the listing, the aliases and
+ * (importing directory, specifier) alone (alias scopes are directories), so it is memoised per resolver: a resolver lives for ONE
+ * listing (the caller builds a new one when the listing moves), which is the invalidation on file add/remove. A 6,000-file
+ * re-resolve asks the same (directory, specifier) many times (`resolutionKey` and `resolveFileFacts` both resolve every import).
+ */
 export function importResolver(exists: (file: string) => boolean, aliases: ModuleAliases = NO_MODULE_ALIASES): ImportResolver {
-    return (fromPath, specifier) => {
+    const memo = new Map<string, string | undefined>();
+    const resolveOnce = (fromPath: string, specifier: string): string | undefined => {
         if (fromPath.endsWith('.py')) return pythonModuleCandidates(fromPath, specifier).find(exists);
         const modulePath = resolveImportPath(fromPath, specifier, aliases, (m) => moduleFileCandidates(m).some(exists));
         return modulePath === undefined ? undefined : moduleFileCandidates(modulePath).find(exists);
+    };
+    return (fromPath, specifier) => {
+        const key = `${fromPath.slice(0, fromPath.lastIndexOf('/') + 1)}\u0000${fromPath.endsWith('.py') ? 'py' : 'js'}\u0000${specifier}`;
+        if (memo.has(key)) return memo.get(key);
+        const out = resolveOnce(fromPath, specifier);
+        memo.set(key, out);
+        return out;
     };
 }

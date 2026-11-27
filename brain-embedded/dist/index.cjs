@@ -8110,17 +8110,23 @@ var ANNOUNCE_SUBJECT = "\\b(?:i(?: will|'ll| am going to|'m going to| am about t
 var ANNOUNCE_FILLER = "(?:\\s+(?:now|then|first|next|quickly|briefly|just|also|actually|go ahead and|try to|attempt to))*";
 var ANNOUNCE_VERB = "(?:call|use|invoke|run|execute|trigger|query|fetch|retrieve|request|look|search|scan|find|locate|examine|inspect|review|read|list|check|verify|confirm|get|grab|pull|load|open|gather|dig|explore|investigate|analy[sz]e|start|begin|take|do|act|see|walk|trace|map)";
 var ANNOUNCE_GERUND = "(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)";
-var TOOL_IDENT = "(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)";
+var TOOL_IDENT = [
+  "builtin_[a-z0-9]+(?:_[a-z0-9]+)+",
+  "mcp__[a-z0-9_]+",
+  "mcp_[a-f0-9]{8}_[a-z0-9_]+",
+  "(?:platform|workspace|memory|catalog|(?:ext|connector)-[a-z0-9-]+)__[a-z0-9]+(?:[_-][a-z0-9]+)*"
+].join("|");
+var TOOL_REFERENCE = `(?<![A-Za-z0-9_-])(?:${TOOL_IDENT})(?![A-Za-z0-9_-])`;
 function toolNamesMentionedIn(text2) {
-  return [...new Set(text2.match(new RegExp(TOOL_IDENT, "gi")) ?? [])];
+  return [...new Set(text2.match(new RegExp(TOOL_REFERENCE, "gi")) ?? [])];
 }
 var PSEUDO_CALL = [
-  // "call builtin_x", "run tool builtin_x", "invoke the function mcp__srv__x"
-  `(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool\\s+|function\\s+)?${TOOL_IDENT}`,
+  // "call platform__tasks_get", "invoke the function mcp__srv__x"
+  `(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool\\s+|function\\s+)?${TOOL_REFERENCE}`,
   // "builtin_x({…})" / "builtin_x(" — the call written as code
-  `${TOOL_IDENT}\\s*[({]`,
+  `${TOOL_REFERENCE}\\s*[({]`,
   // "builtin_x with chatId is 85" — the call written as an argument clause
-  `${TOOL_IDENT}\\s+(?:with|args|arguments)\\b`
+  `${TOOL_REFERENCE}\\s+(?:with|args|arguments)\\b`
 ];
 var ANNOUNCED_ACTION = new RegExp(
   [
@@ -8170,8 +8176,8 @@ var UNCALLED_TOOL_CLAIM = new RegExp(
     // The same claim with the TOOL NAMED instead of the word "tool" — "no results from
     // manager.digest", "missing builtin_manager_policy results". The name IS the
     // discriminator here: prose does not carry tool identifiers by accident.
-    `\\bno\\s+(?:new\\s+)?(?:results?|data|outputs?|returns?)\\s+(?:from|for|on)\\s+(?:the\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`,
-    `\\b(?:missing|awaiting|pending|without)\\s+(?:the\\s+|those\\s+)?(?:results?\\s+(?:from|of|for)\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`
+    `\\bno\\s+(?:new\\s+)?(?:results?|data|outputs?|returns?)\\s+(?:from|for|on)\\s+(?:the\\s+)?(?:${TOOL_REFERENCE}|${DOTTED_TOOL_IDENT})`,
+    `\\b(?:missing|awaiting|pending|without)\\s+(?:the\\s+|those\\s+)?(?:results?\\s+(?:from|of|for)\\s+)?(?:${TOOL_REFERENCE}|${DOTTED_TOOL_IDENT})`
   ].join("|"),
   "i"
 );
@@ -11057,7 +11063,7 @@ function number(value) {
 }
 var workspaceMemorySearchTool = defineTool({
   name: "workspace__memory_search",
-  description: "Search this agent's Markdown workspace notes (.builderforce/MEMORY.md, .builderforce/memory/*.md and any configured session sources) for earlier work, decisions, preferences, or todos. Returns snippets with file paths and line ranges.",
+  description: "Search this agent's Markdown workspace notes (.builderforce/MEMORY.md, .builderforce/memory/*.md and any configured session sources) for earlier work, decisions, preferences, or todos. Results include snippets, file paths and line ranges, with a ref for readable Markdown excerpts.",
   parameters: {
     type: "object",
     properties: { query: { type: "string" }, maxResults: { type: "number" }, minScore: { type: "number" } },
@@ -15241,6 +15247,31 @@ var FULL_SEVERITY_IN_TESTS = /* @__PURE__ */ new Set([
 var ATTACK_PRIVATE_KEY = "T1552.004";
 var ATTACK_CREDENTIALS = "T1552.001";
 var stateless = (re) => new RegExp(re.source, re.flags.replace(/[gy]/g, ""));
+var SHAPE_HINTS = {
+  "private-key": /-----BEGIN /i,
+  "openai-key": /sk-/i,
+  "github-token": /gh[pousr]_/i,
+  "github-pat": /github_pat_/i,
+  "slack-token": /xox[baprs]-/i,
+  "slack-rotating-token": /xoxe[.-]/,
+  "slack-app-token": /xapp-/i,
+  "groq-key": /gsk_/i,
+  "google-api-key": /AIza/i,
+  "google-oauth-token": /ya29\./,
+  "google-client-secret": /GOCSPX-/,
+  "perplexity-key": /pplx-/i,
+  "npm-token": /npm_/i,
+  "aws-access-key": /AKIA|ASIA/,
+  "stripe-key": /(?:sk|rk)_(?:live|test)_/,
+  "stripe-webhook-secret": /whsec_/,
+  "gitlab-token": /glpat-/,
+  "huggingface-token": /hf_/,
+  "sendgrid-key": /SG\./,
+  "builderforce-key": /(?:bf[a-z]|cl[ku])_/,
+  "jwt": /eyJ/,
+  "telegram-bot-url": /bot\d{6}/i,
+  "telegram-bot-token": /\d{6}:/
+};
 function secretRuleFor(shape2) {
   const critical = !HIGH_SHAPES.has(shape2.id);
   return {
@@ -15254,6 +15285,7 @@ function secretRuleFor(shape2) {
     paths: "secret",
     title: shape2.id === "private-key" ? "Private key committed" : `${shape2.label} committed`,
     pattern: stateless(shape2.re),
+    ...SHAPE_HINTS[shape2.id] ? { requiresContext: SHAPE_HINTS[shape2.id] } : {},
     remediation: shape2.id === "private-key" ? "Remove the key from the repository, rotate it, and load it from the secret store." : "Revoke and rotate the credential with its provider; never commit it, load it from the secret store.",
     ...FULL_SEVERITY_IN_TESTS.has(shape2.id) ? {} : { testPathSeverity: "MEDIUM" }
   };
@@ -15272,6 +15304,7 @@ var SECRET_RULES = [
     paths: "secret",
     title: "Hard-coded credential assignment",
     pattern: /\b(?:password|passwd|secret|api[_-]?key|access[_-]?token)\s*[:=]\s*['"][^'"\s]{12,}['"]/i,
+    requiresContext: /(?:password|passwd|secret|api[_-]?key|access[_-]?token)\s*[:=]\s*['"]/i,
     remediation: "Move the value to configuration / the secret store and reference it by name.",
     // A generic assignment in a test or fixture is usually a fake: reported, but as MEDIUM (informs, never holds a merge).
     testPathSeverity: "MEDIUM"

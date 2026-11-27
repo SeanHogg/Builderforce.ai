@@ -39,6 +39,12 @@ const ATTACK_CREDENTIALS = 'T1552.001';
 /** The shape's regex without `g`/`y`: the engine calls `exec` per line, and a global regex carries `lastIndex` between calls. */
 const stateless = (re: RegExp): RegExp => new RegExp(re.source, re.flags.replace(/[gy]/g, ''));
 
+/**
+ * Each shape's `hint` (a literal NECESSARY condition of its regex, declared on the shape in `@builderforce/secret-redaction`) is
+ * the rule's `requiresContext`: the engine tests it once on the whole text and skips the per-line scan of a file that cannot hold
+ * the shape, which is nearly every file (25 shapes x every line of 6,000 files was seconds on the extension host). A shape with
+ * no hint is simply scanned per line.
+ */
 export function secretRuleFor(shape: SecretShape): Rule {
   const critical = !HIGH_SHAPES.has(shape.id);
   return {
@@ -52,6 +58,7 @@ export function secretRuleFor(shape: SecretShape): Rule {
     paths: 'secret',
     title: shape.id === 'private-key' ? 'Private key committed' : `${shape.label} committed`,
     pattern: stateless(shape.re),
+    ...(shape.hint ? { requiresContext: shape.hint } : {}),
     remediation: shape.id === 'private-key'
       ? 'Remove the key from the repository, rotate it, and load it from the secret store.'
       : 'Revoke and rotate the credential with its provider; never commit it, load it from the secret store.',
@@ -67,6 +74,7 @@ export const SECRET_RULES: readonly Rule[] = [
     id: 'secret.hardcoded-credential', category: 'secret', severity: 'HIGH', weight: 30, cwe: 'CWE-798', attack: 'T1552.001', scope: 'line', paths: 'secret',
     title: 'Hard-coded credential assignment',
     pattern: /\b(?:password|passwd|secret|api[_-]?key|access[_-]?token)\s*[:=]\s*['"][^'"\s]{12,}['"]/i,
+    requiresContext: /(?:password|passwd|secret|api[_-]?key|access[_-]?token)\s*[:=]\s*['"]/i,
     remediation: 'Move the value to configuration / the secret store and reference it by name.',
     // A generic assignment in a test or fixture is usually a fake: reported, but as MEDIUM (informs, never holds a merge).
     testPathSeverity: 'MEDIUM',

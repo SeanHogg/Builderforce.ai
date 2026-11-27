@@ -64,8 +64,9 @@ describe('the stage layers (PRD 43 B3)', () => {
         expect(map.planes.filter((p) => p.kind === 'room')).toHaveLength(1);
         expect(meshes(stage.object!, 'rooms')[0]!.count).toBe(1);
         expect(meshes(stage.object!, 'planes')[0]!.count).toBe(map.planes.filter((p) => p.kind !== 'room').length);
-        // The map's names went to the label pass (a font is available, the fixture's names are latin).
-        expect(text.created()).toBeGreaterThan(0);
+        // The map's names are DOM chips (map.ts sets `chip` on every run, 1958de654), so they never reach the SDF text pass.
+        expect(stage.chips.length).toBeGreaterThan(0);
+        expect(text.created()).toBe(0);
         // A switch away and back still creates no mesh, links included.
         const graph = place('graph');
         stage.setPlacement(graph, 0, 400); while (stage.tick(10_000));
