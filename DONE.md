@@ -1,3 +1,34 @@
+## ✅ RESOLVED 2026-11-27 — Synapse batches 2 and 3: AI project types; Teach-once, Self-Directed Agents and phone approvals rebuilt (UP-G015 §4, UP-G018 code)
+
+- **AI project types (§4):**
+  - `packages/ide-templates/src/projectTypes.ts` registers Scratch, Existing model and Knowledge pack as data. The `builderforce.newAiProject` command and the "Start an AI project" walkthrough read from it.
+  - The link is `.builderforce/project.json`, separate from the app manifest. Writing it is merge-safe and compare-and-swap, and a re-bind asks first.
+  - One `createProjectInteractive` flow, with the plan-limit upgrade prompt, serves both create commands.
+- **Native helper:** `builderforce-inference/crates/bf-teach` is back, with the `bf-teach-helper` JSON-lines stdio binary (a734e1d, d20a9fd, 8eb98e5).
+  - An approval answer counts only for the open gate of the same `runId` and step. A closed stdin, Stop or timeout counts as no.
+  - Errors never echo secret values.
+  - Recording and running exclude each other.
+  - CI runs its tests.
+- **Memory 2026.10.88 and 2026.10.89:** `@seanhogg/builderforce-memory-mcp/experience` runs skills, routines and the run audit trail in-process. The engine, the memory module and an IndexedDB factory can be injected, so a bundled host works without `node_modules`.
+- **Extension (`clients/vscode/src/experience/`):**
+  - the helper client and the Skills view (teach, review, run, schedule, history, live run);
+  - secrets in SecretStorage;
+  - the phone-approval relay on `/api/approvals` (`synapse.step`), racing the in-window answer;
+  - the 30 s routine scheduler;
+  - a machine-wide runner lock across windows;
+  - private-model training.
+  - `bfApi/approvals.ts` is the only approvals client.
+  - A post-build guard (`scripts/check-bundle-dynamic-imports.mjs`) fails the build if a peer is loaded by name without injection. This also fixed the same latent bug in `embedderPort.ts`.
+- **Reviews:**
+  - Opus reviewed the helper, the batch 2 fixes and piece C. Every finding was fixed, including a gate that a pre-sent answer could approve, a stale gate carried across runs, two windows racing, and a VSIX that could not load the engine.
+- **Verified:**
+  - `cargo test -p bf-teach` (23 tests);
+  - memory-mcp experience tests (24);
+  - extension vitest on `src/experience`, `src/bfApi` and `src/projects`;
+  - the extension typecheck (the remaining webview and harness errors belong to other in-flight work);
+  - the esbuild bundle and the unchanged-tests guard.
+- **Left:** `UP-G018` release steps (helper binaries, then a VSIX) and `UP-G015` (the first Synapse CI build).
+
 ## ✅ RESOLVED 2026-11-27 — Synapse batch 1: scoped Spawn tokens, extension API v2, `bfi-serve` runtime id (SEC-G017, INF-G012 push 1)
 
 - **SEC-G017:** the VS Code extension exported the tenant JWT, its sign-in sessions exposed the raw editor key, and a workspace could redirect the gateway. All three are fixed:

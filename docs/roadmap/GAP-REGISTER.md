@@ -609,11 +609,16 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
   - offers three AI-model project types: Scratch, Existing model and Knowledge pack (as starter kits, `UP-G002`);
   - takes extensions from Open VSX and from manually installed VSIX files (the Microsoft marketplace is not licensed for forks).
   - Downloads: the Synapse links use `builderforce-inference` `releases/latest`, and headless `bfi`/`bf-context` releases are published with `--latest=false` so that link stays on the last installer release. Spawn's button (`/api/spawn/downloads`, a stub) resolves the newest release that has installers. Repoint both when the fork ships. The product name and copy stay "Synapse".
-  - Design: [synapse-vscode-fork.md](../specs/tasks/synapse-vscode-fork.md). Repo `builderforce-inference/app` (user, 2026-11-27). Batch 1 is in progress: the build recipe, the extension API, the Spawn extension and the runtime-id rename.
-  - Batch 2 (§4): the project-type registry (`packages/ide-templates/src/projectTypes.ts`), the `builderforce.newAiProject` command (`clients/vscode/src/projects/`) and the "Start an AI project" walkthrough are implemented, pending review.
+  - Design: [synapse-vscode-fork.md](../specs/tasks/synapse-vscode-fork.md). Repo `builderforce-inference/app` (user, 2026-11-27).
+  - Shipped: batch 1 (the extension API, the Spawn extension and the runtime-id rename) and batch 2 (the AI project types). See DONE.md.
+  - Still open: the first CI run of the build recipe (`synapse.yml`), which proves the fork builds.
 - `UP-G017` **Spawn's VS Code extension is implemented.** The Roblox project-type registration and distribution through Synapse remain open. The `builderforce-spawn` repo owns `bf-roblox` and keeps `bf-cloud`, `bf-vault`, and the Tauri shell during the transition. The Spawn download route currently resolves Synapse installers.
-- `UP-G018` **Features that existed only in the Tauri Synapse app have no host since its source was removed (2026-11-27).** They are Teach-once desktop automation (`bf-teach`), Self-Directed Agents with their scheduler and run history, and phone approvals for self-owned `synapse.step` steps. The API keeps the existing `synapse.step` rows private. The memory-mcp `experience_*` tools remain. **Decision (user, 2026-11-27): rebuild them in Synapse**, inside the Builderforce extension ([design §5](../specs/tasks/synapse-vscode-fork.md#5-features-only-the-tauri-app-had-up-g018)). *Blocker: the §5 design pass is scheduled after the project types (batch 3). Teach-once needs a native desktop-automation helper.*
-  - *2026-11-27: the extension side (piece C, `clients/vscode/src/experience/`) is built: helper client, runner, relay, scheduler, Skills view, settings and vendoring. Remaining, not code: publish the three `bf-teach-helper` binaries in a release and run `packages/bf-teach-helper/fetch.mjs`, signing/notarization of those binaries, and a live run of the packaged VSIX (the memory-mcp optional peers must resolve at runtime).*
+- `UP-G018` **The rebuilt Teach-once, Self-Directed Agents and phone approvals are not yet in users' hands.** The code is shipped (see DONE.md). Nothing reaches users until three steps happen, all release steps rather than code:
+  1. A `builderforce-inference` headless release publishes the three `bf-teach-helper` binaries. *Blocker: the release tag is the user's to cut.*
+  2. `node packages/bf-teach-helper/fetch.mjs` vendors them into `clients/vscode`.
+  3. A VSIX release.
+
+  Without the binaries the Skills view shows "Not available on this system". The macOS binaries also need signing for the Accessibility and Input Monitoring permissions.
 
 ### MCP consolidation `[platform]` `[agents]`
 
