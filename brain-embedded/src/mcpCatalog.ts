@@ -82,9 +82,8 @@ function isErrorResult(out: unknown): boolean {
 export async function fetchMcpToolEntries(
   transport: Pick<BrainTransport, 'baseUrl' | 'getToken'>,
   skipExtensionIds: readonly string[] = [],
-  catalogNames?: 'canonical',
 ): Promise<McpToolEntry[]> {
-  const tools = await createMcpRelay({ baseUrl: transport.baseUrl, token: transport.getToken(), catalogNames }).list();
+  const tools = await createMcpRelay({ baseUrl: transport.baseUrl, token: transport.getToken() }).list();
   const skip = new Set(skipExtensionIds);
   return tools.filter((t) => !skip.has(t.extensionId));
 }
@@ -100,10 +99,9 @@ export function mcpActionsFrom(
   transport: Pick<BrainTransport, 'baseUrl' | 'getToken'>,
   onToolResult?: (info: McpToolResultInfo) => void,
   localTools?: LocalToolRouter,
-): (BrainAction & { legacyName?: string })[] {
+): BrainAction[] {
   return entries.map((entry) => ({
     name: entry.name,
-    ...(entry.legacyName ? { legacyName: entry.legacyName } : {}),
     description: entry.description,
     parameters: entry.parameters,
     // Gate writes off the advertised flag; only an explicit mutates=false is

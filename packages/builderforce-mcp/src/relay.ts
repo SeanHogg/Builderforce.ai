@@ -4,9 +4,8 @@ export const PLATFORM_EXTENSION_ID = "builtin";
 export const MCP_CATALOG_TTL_MS = 60_000;
 export const MCP_CALL_PATH = "/llm/v1/mcp/call";
 
-export function mcpCatalogPath(surface?: string, names?: "canonical"): string {
-  const query = [surface && `surface=${encodeURIComponent(surface)}`, names && `names=${names}`].filter(Boolean);
-  return "/llm/v1/mcp/tools" + (query.length ? `?${query.join("&")}` : "");
+export function mcpCatalogPath(surface?: string): string {
+  return "/llm/v1/mcp/tools" + (surface ? `?surface=${encodeURIComponent(surface)}` : "");
 }
 
 export interface RelayToolCall {
@@ -33,7 +32,7 @@ export interface RelayCallResult {
 }
 
 /** Optional projection for hosts consuming the relay from a native runtime. */
-export function toRelayModelTool(entry: RelayToolEntry) {
+export function toRelayModelTool(entry: RelayToolEntry & { legacyName?: string }) {
   const { extensionId, tool, name, legacyName } = entry;
   return {
     extensionId, tool, name,
@@ -63,7 +62,6 @@ export function createMcpRelay(options: {
   fetch?: typeof fetch;
   headers?: Record<string, string>;
   timeoutMs?: number;
-  catalogNames?: "canonical";
 }) {
   const fetcher = options.fetch ?? fetch;
   const baseUrl = options.baseUrl.replace(/\/+$/, "");
@@ -81,7 +79,7 @@ export function createMcpRelay(options: {
 
   return {
     list: async (surface?: string, failure?: (status: number) => string) =>
-      readMcpRelayCatalog(await request(mcpCatalogPath(surface, options.catalogNames)), failure),
+      readMcpRelayCatalog(await request(mcpCatalogPath(surface)), failure),
     call: (call: RelayToolCall) => request(MCP_CALL_PATH, mcpCallRequest(call)),
   };
 }

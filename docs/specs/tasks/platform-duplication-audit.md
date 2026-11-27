@@ -291,6 +291,17 @@ Following decision 4 (interface first; Rust only where a benchmark proves a gain
 
 **Windows lexical baseline (2026-11-26).** A tracked snapshot of Builderforce.ai took 333 seconds from an empty TS cache to the first result. Its 30 warm queries measured 125 ms p50 and 370 ms p95, with 619 MiB process RSS. On hired.video, reopening and validating an existing TS snapshot took 83 seconds. Warm queries measured 116 ms p50 and 685 ms p95, with 361 MiB RSS. Both searches reported partial coverage. On cold unscoped Workspace MCP calls, the server reports indexing in progress after five seconds while the shared build continues. The native loopback service, with embeddings disabled, was still scanning both repos at the seven-minute cutoff. This run shared the machine with other builds. A controlled comparison with matched coverage, cold measurements for both engines, and dense retrieval quality remains the retirement gate.
 
+**Matched-file Windows lexical sample (2026-11-26).** Both engines searched the same 400 tracked source files per repository in fresh scratch directories, with embeddings disabled. The TypeScript search reported complete coverage and the native service reported 400 indexed files per repo. Warm latency is from 30 queries per run. Other local work ran during this sample, and the processes contain different runtime overhead.
+
+| Repository | Engine | Cold first result | Warm p50 / p95 | Process RSS |
+|---|---|---:|---:|---:|
+| hired.video | TypeScript | 89.5 s | 188 / 827 ms | 214 MiB |
+| hired.video | Native loopback | 10.2 s | 39 / 64 ms | 18 MiB |
+| Builderforce.ai | TypeScript | 79.6 s | 193 / 599 ms | 202 MiB |
+| Builderforce.ai | Native loopback | 13.4 s | 44 / 172 ms | 18 MiB |
+
+The native service was faster on both lexical samples. Keep it until a full-repository comparison with matched coverage and a dense retrieval quality check supports a replacement.
+
 ### 2.6 Granular gaps
 
 | ID | Gap | Fix | Where |
@@ -310,7 +321,7 @@ Following decision 4 (interface first; Rust only where a benchmark proves a gain
 | CIX-G013 | Change detection: watcher + blake3 (Synapse) vs mtime snapshot (VS Code) vs 5-min staleness (agent-runtime) | Content-hash incremental + host watcher port | `watcher.rs`, `indexWatcher.ts`, `node-code-tools.ts` |
 | CIX-G014 | `check_references` exists only in Rust | Port it to `code-index/refs` | `bf-index/refs.rs` |
 | CIX-G015 | Result caps disagree (8/25/20/100/30), as do file caps (1 MB / 256 KB; 5k / 6k / 40k files) | One cap policy per tool, documented | §2.2 |
-| CIX-G016 | No benchmark compares the TS and native index | Run the benchmark gate in §2.5 before retiring bf-index | — |
+| CIX-G016 | Partial comparison only | §2.5 records a full-repo smoke and matched lexical samples. Full-repo matched coverage and dense quality remain open | — |
 | CIX-G017 | API `knowledge.search` is SOP/doc search (`recallSops.ts`), but its name suggests code | Rename it to `docs.search`, or document it | `builtinMcpService.ts:1402` |
 
 ---

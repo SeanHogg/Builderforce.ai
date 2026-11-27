@@ -139,8 +139,7 @@ describe('finding rows', () => {
   // The Findings list lives inside the Act rail's collapsed Details (each finding is an action card at the top of the rail, named "Show: …",
   // "Prompt: …"), so open Details and look for the group header within the Findings region only.
   const expandGroup = (name: RegExp) => {
-    const toggle = screen.getByTestId('kg-act-details-toggle');
-    if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
+    openDetails({ fireEvent });
     fireEvent.click(within(screen.getByRole('region', { name: L.findingsTitle })).getByRole('button', { name }));
   };
 

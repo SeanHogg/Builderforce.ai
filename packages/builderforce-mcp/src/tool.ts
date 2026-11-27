@@ -20,7 +20,6 @@ export interface RelayToolEntry {
   extensionId: string;
   tool: string;
   name: string;
-  legacyName?: string;
   description: string;
   parameters: Record<string, unknown>;
   mutates?: boolean;

@@ -1,10 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import type { RunCatalog } from '../host/rovrRunHost';
 import { createPlatformCatalog, isPlatformTool, PLATFORM_CATALOG_TTL_MS, withPlatformTools } from './platformTools';
 import { ADD_TASK_TOOL, BROWSER_TOOL } from './toolNames';
-
-afterEach(() => vi.unstubAllGlobals());
 
 const action = (name: string, mutates: boolean, result: unknown = { ok: name }): BrainAction => ({
   name,
@@ -52,27 +50,6 @@ describe('withPlatformTools — the platform catalog beside the browser tools', 
     expect(merged.needsConfirm({ name: external.name, args: {} })).toBe(true);
   });
 
-  it('lets canonical platform actions keep a unique old alias without shadowing browser tools', async () => {
-    const canonical = { ...action('platform__tasks_create', true), legacyName: 'builtin_tasks_create' };
-    const browser = browserCatalog();
-    const merged = withPlatformTools(browser, [
-      canonical,
-      { ...action('ext-one__x', true), legacyName: 'mcp_conflict' },
-      { ...action('ext-two__x', true), legacyName: 'mcp_conflict' },
-      { ...action('ext-three__x', true), legacyName: BROWSER_TOOL.click },
-    ]);
-
-    expect(merged.specs.map((s) => s.function.name)).toContain('platform__tasks_create');
-    expect(merged.specs.map((s) => s.function.name)).not.toContain('builtin_tasks_create');
-    expect(merged.needsConfirm({ name: canonical.legacyName, args: {} })).toBe(true);
-    await merged.run(canonical.legacyName, { title: 'via old alias' });
-    expect(canonical.run).toHaveBeenCalledWith({ title: 'via old alias' });
-    await merged.run(BROWSER_TOOL.click, { ref: 'e1' });
-    expect(browser.run).toHaveBeenCalledWith(BROWSER_TOOL.click, { ref: 'e1' });
-    await merged.run('mcp_conflict', {});
-    expect(browser.run).toHaveBeenCalledWith('mcp_conflict', {});
-  });
-
   it("tells Rovr's own tools from platform ones", () => {
     expect(isPlatformTool(BROWSER_TOOL.navigate)).toBe(false);
     expect(isPlatformTool(ADD_TASK_TOOL)).toBe(false);
@@ -81,17 +58,6 @@ describe('withPlatformTools — the platform catalog beside the browser tools', 
 });
 
 describe('createPlatformCatalog', () => {
-  it('fetches the canonical REST catalog in the production loader', async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ tools: [{
-      extensionId: 'builtin', tool: 'tasks.list', name: 'platform__tasks_list',
-      legacyName: 'builtin_tasks_list', description: 'List', parameters: { type: 'object' }, mutates: false,
-    }] })));
-    vi.stubGlobal('fetch', fetcher);
-    const catalog = createPlatformCatalog({ baseUrl: 'https://gw', key: async () => 'fixture' });
-    expect(await catalog.actions()).toMatchObject([{ name: 'platform__tasks_list', legacyName: 'builtin_tasks_list' }]);
-    expect(fetcher).toHaveBeenCalledWith('https://gw/llm/v1/mcp/tools?names=canonical', expect.anything());
-  });
-
   it('offers nothing signed out, and never reads the catalog', async () => {
     const load = vi.fn(async () => [action('builtin_tasks_list', false)]);
     const catalog = createPlatformCatalog({ baseUrl: 'https://gw', key: async () => null, load });

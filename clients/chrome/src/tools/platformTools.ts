@@ -29,14 +29,13 @@ export const PLATFORM_CATALOG_TTL_MS = MCP_CATALOG_TTL_MS;
 const ROVR_TOOL_NAMES: ReadonlySet<string> = new Set<string>([...Object.values(BROWSER_TOOL), ADD_TASK_TOOL]);
 
 type CatalogTransport = Pick<BrainTransport, 'baseUrl' | 'getToken'>;
-type PlatformAction = BrainAction & { legacyName?: string };
 
 export interface PlatformCatalogDeps {
   baseUrl: string;
   /** The gateway credential, or null signed out (no platform tools). */
   key(): Promise<string | null>;
   /** The catalog read — the shared client by default; a test passes its own. */
-  load?(transport: CatalogTransport): Promise<PlatformAction[]>;
+  load?(transport: CatalogTransport): Promise<BrainAction[]>;
   now?(): number;
   /** A catalog read failed: the run continues on the browser tools, and the reason is reported. */
   onError?(error: unknown): void;
@@ -44,15 +43,15 @@ export interface PlatformCatalogDeps {
 
 export interface PlatformCatalog {
   /** The platform actions for the next run — empty signed out or while the catalog is unreadable. */
-  actions(): Promise<PlatformAction[]>;
+  actions(): Promise<BrainAction[]>;
 }
 
-const sharedLoad = async (transport: CatalogTransport): Promise<PlatformAction[]> =>
-  mcpActionsFrom(await fetchMcpToolEntries(transport, [], 'canonical'), transport);
+const sharedLoad = async (transport: CatalogTransport): Promise<BrainAction[]> =>
+  mcpActionsFrom(await fetchMcpToolEntries(transport), transport);
 
 export function createPlatformCatalog(deps: PlatformCatalogDeps): PlatformCatalog {
   const load = deps.load ?? sharedLoad;
-  const catalog = createMcpCatalogCache<PlatformAction[]>(deps.now);
+  const catalog = createMcpCatalogCache<BrainAction[]>(deps.now);
 
   return {
     async actions() {
@@ -83,25 +82,17 @@ function writes(action: BrainAction, args: unknown): boolean {
  * own dispatcher and safety gate; a platform tool runs through the gateway relay and
  * pauses for confirmation whenever it writes.
  */
-export function withPlatformTools(browser: RunCatalog, platform: readonly PlatformAction[]): RunCatalog {
-  const reserved = new Set([...ROVR_TOOL_NAMES, ...browser.specs.map((spec) => spec.function.name)]);
-  const available = platform.filter((action) => !reserved.has(action.name));
-  if (available.length === 0) return browser;
-  const byName = new Map(available.map((action) => [action.name, action]));
-  const byAlias = new Map<string, PlatformAction | null>();
-  for (const action of available) {
-    const alias = action.legacyName;
-    if (alias && !reserved.has(alias)) byAlias.set(alias, byAlias.has(alias) ? null : action);
-  }
-  const find = (name: string) => byName.get(name) ?? byAlias.get(name);
+export function withPlatformTools(browser: RunCatalog, platform: readonly BrainAction[]): RunCatalog {
+  if (platform.length === 0) return browser;
+  const byName = new Map(platform.map((action) => [action.name, action]));
   return {
-    specs: [...browser.specs, ...toolSpecsFor(available)],
+    specs: [...browser.specs, ...toolSpecsFor(platform)],
     async run(name, args) {
-      const action = find(name);
+      const action = byName.get(name);
       return action ? action.run(args) : browser.run(name, args);
     },
     needsConfirm(req) {
-      const action = find(req.name);
+      const action = byName.get(req.name);
       return action ? writes(action, req.args) : browser.needsConfirm(req);
     },
   };

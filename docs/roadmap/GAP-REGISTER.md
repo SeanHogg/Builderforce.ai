@@ -659,7 +659,7 @@ Gaps:
 - `CIX-G015` **Result caps and file caps disagree.**
   - Result caps: 8 / 25 / 20 / 100 / 30.
   - File caps: 1 MB / 256 KB.
-- `CIX-G016` **No benchmark compares the TS and native index.**
+- `CIX-G016` **Benchmark partial.** The TypeScript and native engines were compared on 400 matched source files per repository. Native was faster on both lexical samples. Full-repo matched coverage and dense retrieval quality still gate retirement. [Audit §2.5](../specs/tasks/platform-duplication-audit.md#25-target-design-one-code-index-every-host)
 - `CIX-G017` **API `knowledge.search` searches SOPs and docs (`recallSops.ts`), but its name suggests code search.**
 
 ### Inference, catalog and routing consolidation `[platform]` `[agents]`
