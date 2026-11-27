@@ -304,6 +304,10 @@ Following decision 4 (interface first; Rust only where a benchmark proves a gain
 
 The native service was faster on both lexical samples. Keep it until a full-repository comparison with matched coverage and a dense retrieval quality check supports a replacement.
 
+**Reproducible comparison.** `scripts/benchmark-code-index.mjs` pins tracked Git blobs, builds a common corpus, and checks the indexed file set of each engine before reporting latency. In matched 1,000-file lexical runs, hired.video (`27dbdf38dfb`) measured 31.1 s cold and 149/299 ms warm p50/p95 for TypeScript, and 27.2 s cold and 62/99 ms warm for native. Builderforce.ai (`56755a50276`) measured 25.2 s and 37/71 ms for TypeScript, and 52.0 s and 81/114 ms for native. Native RSS was 19–24 MiB compared with 238–271 MiB for the TypeScript process. Cold and warm latency varied by repository.
+
+Full coverage cannot be matched at the current TypeScript limits. Of 5,385 eligible hired.video files, at most 4,548 fit the 24 MiB budget. Of 19,389 eligible Builderforce.ai files, at most 4,428 fit. Both ceilings precede the 20,000-chunk cap. These bounds and a larger judged dense query set remain part of the retirement decision.
+
 ### 2.6 Granular gaps
 
 | ID | Gap | Fix | Where |

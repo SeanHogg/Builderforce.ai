@@ -12,11 +12,13 @@
  * - PULSE: the changed-tone ring breathing out and back over 2 s (`uTime`; static when `uMotion` is 0 — reduced motion);
  * - DIM blends every colour toward the background colour, never alpha.
  *
- * Colours are tone indices into one palette uniform (sRGB, written as-is), so a theme flip is one uniform.
+ * Colours are tone indices into one palette uniform (sRGB, written as-is), read in the VERTEX stage only; the few fixed theme
+ * colours the fragment needs are `vec3` uniforms resolved on the CPU (`fixedColours.ts`). A theme flip is one palette write.
  */
 
 import { GLSL3, DoubleSide, LessEqualDepth, ShaderMaterial, Vector2, Vector3, type IUniform } from 'three';
 import { SHAPE_EXTENT } from '../../shapes';
+import { fixedColourUniforms, type FixedColourUniforms } from '../fixedColours';
 import { LIGHT_GLSL } from '../lighting';
 import { PALETTE_SIZE, toneIndex } from '../tones';
 import { STAGGER_MS, STAGGER_STEPS } from '../tween';
@@ -228,12 +230,12 @@ void main() {
         c = mix(c, vColor2, inBand * on);
     }
     c = mix(c, uViolation, outlineA * (1.0 - edge));
-    c = mix(c, toneOf(uChangedTone), pulseBand);
+    c = mix(c, uChanged, pulseBand);
     fragColor = vec4(dim ? mix(c, uBg, 0.7) : c, alpha);
 }`;
 
 /** Uniforms every mark material shares (one object each, so a write reaches every batch). */
-export interface SharedMarkUniforms {
+export interface SharedMarkUniforms extends FixedColourUniforms {
     uT: IUniform<number>;
     /** The tween's LINEAR progress (0..1 over `uSpan`), the per-mark stagger clock; `uDur` is one mark's run, ms. */
     uLin: IUniform<number>;
@@ -250,17 +252,8 @@ export interface SharedMarkUniforms {
     uTime: IUniform<number>;
     /** 0 under reduced motion: the pulse ring stays still. */
     uMotion: IUniform<number>;
-    uTextTone: IUniform<number>;
-    uViolationTone: IUniform<number>;
-    uChangedTone: IUniform<number>;
     /** An extruded mark's side walls: the `towerSide` token. */
     uWallTone: IUniform<number>;
-    /** The hover tint (the lit accent) and the slab's edge line. */
-    uHoverTone: IUniform<number>;
-    uEdgeTone: IUniform<number>;
-    /** The lighter top a box / prism cap and a drum lid lean toward (`nodeTop`, `storeTop`). */
-    uNodeTopTone: IUniform<number>;
-    uStoreTopTone: IUniform<number>;
     /** 1 where a placement set's heights lower with the depth (`Placement.liftWithDepth`; set A in x, B in y). */
     uLiftDepth: IUniform<Vector2>;
     /** The least drawn mark size, CSS px across, per placement set (`Placement.minMarkPx`; set A in x, B in y; 0 = world size). */
@@ -273,9 +266,8 @@ export function sharedMarkUniforms(): SharedMarkUniforms {
         uPalette: { value: Array.from({ length: PALETTE_SIZE }, () => new Vector3(0.5, 0.5, 0.5)) },
         uBg: { value: new Vector3(1, 1, 1) },
         uDepth: { value: 0 }, uTime: { value: 0 }, uMotion: { value: 1 }, uMinMarkPx: { value: new Vector2(0, 0) },
-        uTextTone: { value: toneIndex('text') }, uViolationTone: { value: toneIndex('violation') }, uChangedTone: { value: toneIndex('changed') }, uWallTone: { value: toneIndex('towerSide') },
-        uHoverTone: { value: toneIndex('lit') }, uEdgeTone: { value: toneIndex('edge') },
-        uNodeTopTone: { value: toneIndex('nodeTop') }, uStoreTopTone: { value: toneIndex('storeTop') }, uLiftDepth: { value: new Vector2(0, 0) },
+        uWallTone: { value: toneIndex('towerSide') }, uLiftDepth: { value: new Vector2(0, 0) },
+        ...fixedColourUniforms(),
     };
 }
 

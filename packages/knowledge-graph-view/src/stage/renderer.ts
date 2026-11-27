@@ -174,6 +174,7 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
         setPalette(next) {
             colors = next;
             paletteOf(next, uniforms.uPalette.value);
+            resolveFixedColours(uniforms.uPalette.value, uniforms);
             const bg = new Color(), rgb = { r: 0, g: 0, b: 0 };
             bg.setStyle(next.bg ?? '#ffffff').getRGB(rgb, SRGBColorSpace);
             uniforms.uBg.value.set(rgb.r, rgb.g, rgb.b);

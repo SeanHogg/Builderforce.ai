@@ -51,6 +51,15 @@
   - The agent-runtime, VS Code and harness typechecks are clean.
   - The source-package-graph guard passes.
 
+## ✅ RESOLVED 2026-11-26 — Reviews panel opens from the empty Visualizer; the List shows its node cap again (AE-G064, part)
+
+- **Reviews from the empty state.** `1958de654` mounted the drawer only when a graph existed (`{real && <Drawer>}`), so "Review a folder" set `panel='run'` with nothing to show it. `KnowledgeGraphView.tsx` now mounts the drawer on `drawerMounted = !!real || panel === 'run'`, and the stage-width column uses the same value.
+- **"Showing the top 60 nodes." and Show all.** The same commit moved the scale line into the stage's colour legend, so the List camera and the no-WebGL fallback lost it. The new `surface/ScaleFoot.tsx` is rendered by `ViewSurface.tsx` (DOM cameras) and by the `StageHost.tsx` fallback.
+- **Tests.**
+  - `testPicks.ts` gains shared helpers: `openSearch`, `openAct`, `openDetails`, `cameraNames`, `cameraIsPicked` and the Seg-based `pickLens`/`lensIsPicked`.
+  - Passing: `run` (5/5), `flows` (12/12), `review`, `header`, `KnowledgeGraphView.test`, `useCodeDock` and `bandCaptions`. The apostrophe parse errors in `bandCaptions`, `useCodeDock` and `rig` are fixed.
+  - The remaining stale tests stay under `AE-G064` in the register.
+
 ## ✅ RESOLVED 2026-11-26 — VSIX 2026.11.226 activates again (AE-G065)
 
 - `.225` failed on activation with `Cannot find module './impl/format'`. `packages/builderforce-mcp/src/config.ts` imports `jsonc-parser`, and esbuild bundled its UMD `main`, which `require`s `./impl/*` at runtime.

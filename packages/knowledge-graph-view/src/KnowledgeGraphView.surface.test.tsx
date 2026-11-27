@@ -8,7 +8,7 @@ import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L, fillTemplate } from './labels';
 import { lensesFor } from './lenses';
 import { counted } from './surface/plural';
 import { expandAllFindings, fixtureSource, surfaceFixture } from './testing';
-import { lensIsPicked, pickLens } from './testPicks';
+import { cameraIsPicked, cameraNames, lensIsPicked, openAct, openSearch, pickCamera, pickLens } from './testPicks';
 import { StageFactoryContext } from './stage/host/StageFactoryContext';
 import { createNoopStage } from './stage/renderer';
 
@@ -33,18 +33,18 @@ async function mount(graph: KnowledgeGraph = surfaceFixture(), props: Partial<Pa
     await waitFor(() => expect(document.querySelectorAll('[data-stage-proxies] [data-id]').length).toBeGreaterThan(0));
 }
 const deps = { fireEvent };
-const cameras = () => within(screen.getByRole('radiogroup', { name: L.viewModesLabel }));
 /** A station's a11y proxy on the stage: the proxy layer only, matched by its exact name. */
 const proxies = () => within(document.querySelector('[data-stage-proxies]') as HTMLElement);
 const station = (name: string) => proxies().getByRole('button', { name: new RegExp(`^${name}$`) });
-const aside = () => document.querySelector(`aside[aria-label="${L.findingsTitle}"]`) as HTMLElement;
+/** The drawer, opened on its Act tab (the Act cards and the Details list live there). */
+const aside = () => openAct(deps);
 
 describe('the surface', () => {
     it('opens on the transit map when the graph has entry points, with the cameras in registry order', async () => {
         await mount();
-        expect(cameras().getByRole('radio', { name: L.viewTransit }).getAttribute('aria-checked')).toBe('true');
+        expect(cameraIsPicked(L.viewTransit)).toBe(true);
         // Flow and Sequence are cameras now (PRD 43 C7): they join the switcher where the lines are.
-        expect([...screen.getByRole('radiogroup', { name: L.viewModesLabel }).querySelectorAll('button')].map((b) => b.textContent))
+        expect(cameraNames())
             .toEqual([L.viewTransit, L.viewSystem, L.viewGraph, L.viewMap, L.viewHeat, L.viewStyle, L.viewFeatures, L.viewFlow, L.viewSequence, L.viewList]);
         expect(screen.getByTestId('kg-path')).toBeTruthy();
         expect(screen.getByTestId('kg-surface-legend')).toBeTruthy();
@@ -112,6 +112,7 @@ describe('the surface', () => {
         // The matched stations' proxies are on the map (which stations the pinpoint lit is paint, not DOM).
         const proxyNames = () => [...document.querySelectorAll('[data-stage-proxies] [data-id]')].map((p) => p.getAttribute('aria-label') ?? '');
 
+        openSearch(deps, L); // the screenshot picker sits inside the revealed search form
         fireEvent.change(screen.getByTestId('kg-pinpoint-file'), { target: { files: [new File(['x'], 'shot.png', { type: 'image/png' })] } });
         await screen.findByText(result.description);
         expect(source.pinpoint).toHaveBeenCalledWith(expect.any(File), 'sys');
@@ -164,7 +165,7 @@ describe('the surface', () => {
         await waitFor(() => expect(spine().getAllByRole('button').map((b) => b.textContent)).toEqual(['Builderforce', lineCrumb().textContent, 'cron']));
         expect(spine().getByRole('button', { name: 'cron' }).getAttribute('aria-current')).toBe('location');
         fireEvent.click(lineCrumb());
-        expect(screen.getByTestId('kg-act-title').textContent).toMatch(/^On this path/);
+        expect(within(aside()).getByTestId('kg-act-title').textContent).toMatch(/^On this path/);
         expect(spine().getAllByRole('button').map((b) => b.textContent)).toEqual(['Builderforce', lineCrumb().textContent]);
     });
 
@@ -216,15 +217,15 @@ describe('the surface', () => {
         const strip = within(screen.getByTestId('kg-path'));
         expect(strip.getAllByRole('button').map((b) => b.textContent)).toContain('cron');
         fireEvent.click(strip.getByRole('button', { name: L.surface.pathNext }));
-        await waitFor(() => expect(screen.getByTestId('kg-act-title').textContent).toMatch(/^At /));
+        await waitFor(() => expect(within(aside()).getByTestId('kg-act-title').textContent).toMatch(/^At /));
     });
 
     it('switches cameras and keeps the selection', async () => {
         await mount();
         const stageCamera = () => document.querySelector('[data-stage-host]')?.getAttribute('data-stage-camera');
-        fireEvent.click(cameras().getByRole('radio', { name: L.viewGraph }));
+        pickCamera(deps, L.viewGraph);
         await waitFor(() => expect(stageCamera()).toBe('graph'));
-        fireEvent.click(cameras().getByRole('radio', { name: L.viewTransit }));
+        pickCamera(deps, L.viewTransit);
         await waitFor(() => expect(stageCamera()).toBe('map'));
     });
 

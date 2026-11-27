@@ -426,7 +426,8 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
   - Suspects: the `.223` shader changes (`1958de654..e56a790e6`):
     - the marks fragment shader gained palette lookups through `capOf`/`shaded`/`toneOf` and runs `sdPolygon` in two branches;
     - the hall fragment shader gained a dynamic `uDash` index, and the ball fragment shader a palette lookup.
-  - Fix (in progress): reproduce each stage program under Chromium ANGLE D3D11 on the affected machine. Then move uniform-indexed palette lookups out of the fragment shaders into CPU-resolved `vec3` uniforms through one resolver, and add a guard test.
+  - Fix (in progress, for `.227`): reproduce each stage program under Chromium ANGLE D3D11 on the affected machine. Then move uniform-indexed palette lookups out of the fragment shaders into CPU-resolved `vec3` uniforms through one resolver, and add a guard test.
+  - The user paused Visualizer work after `.227`. If `.227` still crashes, the remaining blocker is the user's go-ahead to resume. The diagnosis steps are in the `vscode-host-crash-diagnosis-minidumps` memory.
 - `AE-G067` **A bounded hired.video load still stalls the extension host for 8.3 s** (knowledge log, 2026-11-27T00:58Z: `build=23614ms … payload~8583KB lagMax=8284ms`).
   - The 2,763-node / 12,000-edge result is still about 8.6 MB of JSON. It is posted to the webview and written as a 6.7 MB `lastSeen`, and something on the host thread runs for seconds.
   - Diagnosed (2026-11-26): not the load itself.
@@ -434,11 +435,16 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
     - The stall overlaps work running at the same time in the same window: `syncStatus` 5.9 s, `symbols` 12.2 s, or the request clone into the worker.
   - Instrumented (ships in `.227`): the load line gains `send`, `assemble`, `migrate`, `hostState` and `nearDuplicates=<pairs>`. Regression test: `graphWorker.bounded.test.ts`.
   - Blocker: a live load trace from the `.227` reload, to name the step. Next step after that: per-call stall attribution if the step is still unnamed, then move it off the host thread.
-- `AE-G064` **7 knowledge-view tests are stale after the Visualizer header change** (`1958de654`, 2026-11-26).
-  - `KnowledgeGraphView.header.test.tsx` (2 tests) expects the synced status chip to open the Review tab. It now opens Runs (`syncPill` `upToDate` → `'runs'`), and that stays.
-  - `KnowledgeGraphView.run.test.tsx` (5 tests) uses `testing.ts` `openList`/`pickCamera`, which look for a "List" radio the camera bar no longer renders.
-  - Fix: the tests open the Review tab themselves, and the helpers are updated to the current camera bar. Queued.
-  - Same pass: 3 test files committed in `a44de213b` do not parse (apostrophes inside single-quoted test names): `src/compute/tasks/placement/bandCaptions.test.ts`, `src/stage/overlay/useCodeDock.test.tsx`, `src/stage/rig/rig.test.ts`.
+- `AE-G064` **Six knowledge-view tests are still stale after the Visualizer redesign** (`1958de654`, 2026-11-26). The fixed part and the two product fixes are in DONE.md. Paused by the user after `.227`.
+  - `KnowledgeGraphView.surface.test.tsx`, 4 failing:
+    - transit-map legend/path lookup returns null;
+    - the pinpoint path strip no longer reads `['API','repositories']`;
+    - `getByRole('region','Findings')` matches several regions;
+    - the "1cron" case. Verdict: stale. `surface/PathStrip.tsx:60` renders the step number in the chip, so the test should match `/cron$/`.
+  - `KnowledgeGraphView.views.test.tsx`, 1 failing: "opens on the 2D graph, not the list" (a null lookup).
+  - `stage/host/StageHost.regenerate.test.tsx`, 1 failing: drill level `undefined`, expected `'package'`. No verdict yet on whether this is stale or real.
+  - `KnowledgeGraphView.lenses.test.tsx`: last edited after its final run, so it is unverified.
+  - The edited test files and `testPicks.ts` have not been typechecked since the last edits.
 - `AE-G059` **The 3D view is copied per surface, the canvas Room is a separate scene, and app components and agents are not drawn in 3D** (user, 2026-11-26).
   - There are four `<Canvas>` roots and three camera systems: the KG `stage/*`, `world3d/WorldViewport`+`Scene3D`, `RoomScene` and `Model3dViewport`.
   - Agents appear only as generic Room seats, and nothing renders an `AppBlueprint`.
