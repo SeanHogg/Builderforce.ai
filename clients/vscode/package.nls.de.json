@@ -32,7 +32,7 @@
   "command.toggleShowArchived": "BuilderForce: Archivierte anzeigen",
   "command.selectProject": "BuilderForce: Projekt auswählen",
   "command.createProject": "BuilderForce: Neues Projekt",
-  "command.newAiProject": "BuilderForce: Neues KI-Projekt",
+  "command.newAiProject": "BuilderForce: Neues Projekt aus einer Vorlage",
   "walkthrough.aiProject.title": "Ein KI-Projekt starten",
   "walkthrough.aiProject.description": "Wählen Sie, wie Sie beginnen möchten: ein neues Modell aufbauen, ein vorhandenes verbessern oder mit einem Wissenspaket arbeiten.",
   "walkthrough.aiProject.scratch.title": "Von Grund auf beginnen",

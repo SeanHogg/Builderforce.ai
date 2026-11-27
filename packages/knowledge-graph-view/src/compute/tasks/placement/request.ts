@@ -79,7 +79,7 @@ export const channelBindings = (c: PlacementChannels = NO_CHANNELS): Bindings =>
  */
 export const placementCacheKey = (build: string, r: PlacementReq): string => {
     const c = r.channels ?? NO_CHANNELS;
-    return [build, r.camera, r.drill ?? '', r.unfolded ?? '', r.pathId ?? '', r.viewportBand, r.lod, r.depth ?? 'rest', c.size, c.width, r.drill || r.camera === 'sequence' ? r.symbols?.length ?? 0 : 0, r.method ?? '', ...(r.hiddenStations?.length ? [JSON.stringify(r.hiddenStations)] : [])].join('|');
+    return [build, r.camera, r.drill ?? '', r.unfolded ?? '', r.pathId ?? '', r.viewportBand, r.lod, r.depth ?? 'rest', c.size, c.width, r.symbols?.length ?? 0, r.method ?? '', ...(r.hiddenStations?.length ? [JSON.stringify(r.hiddenStations)] : [])].join('|');
 };
 
 /**

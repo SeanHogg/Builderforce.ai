@@ -16,7 +16,8 @@ import { parseArgs } from 'node:util';
 
 const mib = 1024 ** 2;
 const warmRuns = 30;
-const timeout = 30 * 60_000;
+const sampleTimeoutMs = 30 * 60_000;
+const fullComparisonTimeoutMs = 60 * 60_000;
 const round = (value) => Math.round(value * 10) / 10;
 const source = (path) => new URL(path, import.meta.url).href;
 
@@ -63,7 +64,7 @@ async function typescriptWorker(manifestPath) {
   };
 }
 
-async function nativeRun(binary, scratch, root, queries) {
+async function nativeRun(binary, scratch, root, queries, timeoutMs) {
   const nativeHome = join(scratch, 'native');
   const discovery = join(scratch, 'native.json');
   const child = spawn(binary, ['serve'], {
@@ -96,7 +97,7 @@ async function nativeRun(binary, scratch, root, queries) {
     await request('ensure', { root });
     let status;
     do {
-      if (performance.now() - start > timeout) throw new Error('Native indexing exceeded the 30-minute budget');
+      if (performance.now() - start > timeoutMs) throw new Error(`Native indexing exceeded the ${timeoutMs / 60_000}-minute budget`);
       status = await request('status', { root });
       if (status.phase.state !== 'ready') await delay(150);
     } while (status.phase.state !== 'ready');
@@ -212,10 +213,11 @@ async function main() {
   const manifest = join(scratch, 'manifest.json');
   await writeFile(manifest, JSON.stringify({ root, paths, queries: values.query, fullComparison }));
   const nodeFlags = fullComparison ? ['--max-old-space-size=12288'] : [];
+  const timeoutMs = fullComparison ? fullComparisonTimeoutMs : sampleTimeoutMs;
   const typescript = JSON.parse(execFileSync(process.execPath, [...nodeFlags, '--import', 'tsx', fileURLToPath(import.meta.url), '--ts-worker', manifest], {
-    encoding: 'utf8', maxBuffer: 16 * mib, timeout, windowsHide: true,
+    encoding: 'utf8', maxBuffer: 16 * mib, timeout: timeoutMs, windowsHide: true,
   }));
-  const native = await nativeRun(resolve(values.native), scratch, root, values.query);
+  const native = await nativeRun(resolve(values.native), scratch, root, values.query, timeoutMs);
   const expected = new Set(paths);
   function summarize({ paths: indexed, ...results }) {
     const unique = new Set(indexed);

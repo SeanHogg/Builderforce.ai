@@ -56,4 +56,16 @@ describe('the Spawn installers', () => {
     expect(picked.version).toBe('2026.11.1');
     expect(picked.windows).toBe('https://dl/v2026.11.1/Synapse_2026.11.1_x64-setup.exe');
   });
+
+  it('routes every platform to the installers emitted by the Code-OSS workflow', () => {
+    const tag = 'v2026.11.27';
+    const names = [
+      'Synapse_2026.11.27_x64-setup.exe',
+      'Synapse_2026.11.27_aarch64.dmg',
+      'Synapse_2026.11.27_x64.dmg',
+      'Synapse_2026.11.27_amd64.deb',
+    ];
+    const { windows, macArm, macIntel, linux } = pickDesktopInstallers([release(tag, names)]);
+    expect([windows, macArm, macIntel, linux]).toEqual(names.map((name) => `https://dl/${tag}/${name}`));
+  });
 });

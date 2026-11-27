@@ -8,11 +8,14 @@ import { linkProject, readProjectLink } from "./projectLink";
 import { runProjectTypeActions } from "./projectTypeActions";
 import { projectTypeText } from "./projectTypeText";
 
-/** Pick a type from the registry; undefined when dismissed. */
+function availableInEditor(type: ProjectTypeEntry): boolean {
+  return !type.editorExtension || Boolean(vscode.extensions.getExtension(type.editorExtension));
+}
+
 async function pickProjectType(): Promise<ProjectTypeEntry | undefined> {
   const picked = await vscode.window.showQuickPick(
-    PROJECT_TYPES.map((type) => ({ label: projectTypeText(type.labelKey), description: projectTypeText(type.descriptionKey), type })),
-    { title: vscode.l10n.t("New AI project"), placeHolder: vscode.l10n.t("What kind of AI project?"), ignoreFocusOut: true },
+    PROJECT_TYPES.filter(availableInEditor).map((type) => ({ label: projectTypeText(type.labelKey), description: projectTypeText(type.descriptionKey), type })),
+    { title: vscode.l10n.t("Choose a project type"), ignoreFocusOut: true },
   );
   return picked?.type;
 }
@@ -48,7 +51,7 @@ function refusalText(reason: "invalid-json" | "not-an-object"): string {
 }
 
 /**
- * `builderforce.newAiProject`: create a server project of an AI type (modality from the
+ * `builderforce.newAiProject`: create a server project from a starter (modality from the
  * registry), link it to the open folder (`.builderforce/project.json`), then run the type's
  * first-run actions. `typeId` (the walkthrough passes it) skips the type pick; an unknown
  * string falls back to the picker.
@@ -59,7 +62,8 @@ export async function newAiProject(
   typeId?: string,
 ): Promise<void> {
   if (!(await ensureSignedIn())) return;
-  const type = typeof typeId === "string" ? projectTypeById(typeId) ?? (await pickProjectType()) : await pickProjectType();
+  const requested = projectTypeById(typeId);
+  const type = requested && availableInEditor(requested) ? requested : await pickProjectType();
   if (!type) return;
 
   // Settle the folder and any re-bind BEFORE creating anything on the server.

@@ -8,9 +8,9 @@ function walk(actions: readonly ProjectTypeAction[]): ProjectTypeAction[] {
 }
 
 describe('PROJECT_TYPES', () => {
-  it('has the three AI types with unique ids', () => {
+  it('has the AI, Roblox and movie types with unique ids', () => {
     const ids = PROJECT_TYPES.map((t) => t.id);
-    expect(ids).toEqual(['ai-scratch', 'ai-existing', 'ai-knowledge-pack']);
+    expect(ids).toEqual(['roblox', 'movie', 'ai-scratch', 'ai-existing', 'ai-knowledge-pack']);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -18,7 +18,7 @@ describe('PROJECT_TYPES', () => {
     const keys = PROJECT_TYPES.flatMap((t) => [t.labelKey, t.descriptionKey]);
     expect(new Set(keys).size).toBe(keys.length);
     for (const t of PROJECT_TYPES) {
-      expect(['evermind', 'finetune']).toContain(t.modality);
+      expect(['evermind', 'finetune', 'roblox', 'video']).toContain(t.modality);
       expect(t.labelKey).toBeTruthy();
       expect(t.firstRun.length).toBeGreaterThan(0);
     }
@@ -27,7 +27,7 @@ describe('PROJECT_TYPES', () => {
   it('only declares valid action kinds, with their required fields', () => {
     for (const action of PROJECT_TYPES.flatMap((t) => walk(t.firstRun))) {
       expect(KINDS.has(action.kind)).toBe(true);
-      if (action.kind === 'command') expect(action.command).toMatch(/^builderforce\./);
+      if (action.kind === 'command') expect(action.command).toMatch(/^(builderforce|spawn)\./);
       if (action.kind === 'openWeb') expect(action.path.startsWith('/')).toBe(true);
       if (action.kind === 'choice') {
         expect(action.options.length).toBeGreaterThan(1);

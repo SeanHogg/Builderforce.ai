@@ -152,7 +152,8 @@ describe('the Sequence at code depth (`req.method`, PRD 43 C7)', () => {
         const p = code();
         expect(participants(p)).toEqual([`node:${HANDLE}`, PG, `node:${RUN_REF}`, `node:${LOG}`]);
         expect(family(p, 'arrow')!.callSites!.map((s) => s!.order)).toEqual([0, 1, 2]);
-        expect(p.captions.map((c) => c.text)).toEqual([expect.stringMatching(/^1 · /), expect.stringMatching(/^2 · /), expect.stringMatching(/^3 · /)]);
+        expect(p.captions.filter((caption) => caption.role === 'step').map((caption) => caption.text)).toEqual(['1', '2', '3']);
+        expect(p.rig).toMatchObject({ projection: 'perspective', depth: { orbit: true } });
         expect(p.caption).toEqual({ shown: 3, total: 3, capped: false });
     });
 
@@ -166,5 +167,14 @@ describe('the Sequence at code depth (`req.method`, PRD 43 C7)', () => {
     it('keys the cache by the method', () => {
         const other = run(graph, req({ lod: 0, method: LOG, symbols: records }));
         expect(code().cacheKey).not.toBe(other.cacheKey);
+    });
+
+    it('numbers the same reads and calls as the code gutter, including a read before the first call', () => {
+        const extra = records.map((record) => record.ref === HANDLE ? { ...record, relations: [
+            { kind: 'uses', to: LOG, sites: [site(-1, 1)] }, ...record.relations!,
+        ] } : record);
+        const p = run(graph, req({ method: HANDLE, symbols: extra }));
+        expect(family(p, 'arrow')!.callSites?.map((item) => item?.line)).toEqual([1, 2, 3, 4]);
+        expect(p.captions.filter((caption) => caption.role === 'step').map((caption) => caption.text)).toEqual(['1', '2', '3', '4']);
     });
 });

@@ -18,7 +18,7 @@ import { loadProjectInTenant } from './projectOwnership';
  *  `designer` (which is how `webmobile` projects lost their Mobile identity).
  *  `llm` is the retired combined modality, accepted for backward compatibility
  *  (the frontend aliases it to `evermind`). */
-export const IDE_MODALITIES = new Set(['designer', 'mobile', 'webmobile', 'video', 'evermind', 'finetune', 'voice', 'llm']);
+export const IDE_MODALITIES = new Set(['designer', 'mobile', 'webmobile', 'video', 'evermind', 'finetune', 'voice', 'llm', 'roblox']);
 
 export function toIdeModality(value: string | null | undefined): string {
   return value && IDE_MODALITIES.has(value) ? value : 'designer';

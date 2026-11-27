@@ -2,7 +2,7 @@ import { onPremRootId } from "../../agents/knowledge/index/onPremRootId.js";
 import { buildNodeCapabilityProvider } from "../../agents/node-capability-provider.js";
 import { onPremTreeSitterDir } from "../../agents/on-prem-symbol-index.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
-import { workspaceCodeEmbedder } from "@seanhogg/builderforce-code-index";
+import { onPremCodeEmbedder } from "../../agents/knowledge/index/onPremCodeEmbedder.js";
 import { searchWorkspaceMcpIndex } from "@builderforce/workspace-mcp";
 
 const log = createSubsystemLogger("workspace/code-search");
@@ -28,7 +28,7 @@ export async function searchWorkspace(options: SearchOptions, lexicalOnly: boole
     const files = buildNodeCapabilityProvider({ workspaceRoot: root }).repoRead!;
     const result = await searchWorkspaceMcpIndex({
       root, files, query, limit: 3 * limit, lexicalOnly, rebuild, extension, wasmDir, rootId: onPremRootId(root),
-    }, () => workspaceCodeEmbedder().catch(() => {
+    }, () => onPremCodeEmbedder().catch(() => {
       log.debug("Workspace embedder unavailable, using lexical search");
       return undefined;
     }));

@@ -70,6 +70,11 @@ export function placeLabels(
         const x = p.position[r.slot * 3]! + (r.offsetWorld?.[0] ?? 0) + r.offsetPx[0] * unit;
         const y = (p.extrude[r.slot] ?? 0) * view.depth + LIFT;
         if (r.chip) { chips.push({ slot: r.slot, text: r.text, ...(r.chip.title ? { title: r.chip.title } : {}), position: [p.position[r.slot * 3]!, y, p.position[r.slot * 3 + 2]!], risky: r.chip.risky, ghost: p.ghost?.[r.slot] === 1, priority: r.priority }); continue; }
+        if (r.screenText) {
+            dom.push({ text: r.text, position: [p.position[r.slot * 3]! + (r.offsetWorld?.[0] ?? 0), y, p.position[r.slot * 3 + 2]! + (r.offsetWorld?.[1] ?? 0)],
+                offsetPx: r.offsetPx, anchor: r.anchor, tone: r.tone, font: 'mono', project: true });
+            continue;
+        }
         const z = p.position[r.slot * 3 + 2]! + (r.offsetWorld?.[1] ?? 0) + r.offsetPx[1] * unit;
         if (!sdfAvailable || !monoCovers(r.text) || (r.note && !monoCovers(r.note.text))) {
             dom.push({ text: r.text, position: [x, y, z], anchor: r.anchor, tone: r.tone, font: 'mono' });

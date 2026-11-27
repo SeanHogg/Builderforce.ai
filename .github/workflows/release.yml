@@ -66,6 +66,7 @@ env:
   NPM_CONFIG_FETCH_RETRIES: "5"
   NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "20000"
   NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "120000"
+  RUNTIME_ID_MIGRATION_COMMIT: b549e456397c965b2550f4bc6d9247b199358557
 
 jobs:
   plan:
@@ -206,10 +207,15 @@ jobs:
         if: github.event_name != 'pull_request'
         working-directory: ${{ matrix.dir }}
         env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           PACKAGE_NAME: ${{ matrix.package }}
           PACK_WITH_PNPM: ${{ matrix.pack-with-pnpm }}
           STAGE_ON_OIDC_DENIAL: ${{ matrix.stage-on-oidc-denial }}
         run: |
+          if [[ "$PACKAGE_NAME" == '@seanhogg/builderforce-brain-embedded' ]]; then
+            bash "$GITHUB_WORKSPACE/.github/scripts/assert-api-revision.sh" "$RUNTIME_ID_MIGRATION_COMMIT"
+          fi
           args=()
           if [ "$PACK_WITH_PNPM" = "true" ]; then
             pack_dir=$(mktemp -d)
@@ -457,6 +463,7 @@ jobs:
       - name: Build and package the VSIX
         working-directory: clients/vscode
         env:
+          GH_TOKEN: ${{ github.token }}
           # `vscode:prepublish` runs the webview's vite build and ensure-linked-builds.mjs,
           # whose tsup dts builds run on the TypeScript 6 JS API; both inherit this. The
           # native `tsc` ignores it. Same ceiling as the verify legs, which this step
@@ -464,6 +471,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
         run: |
           pnpm install --frozen-lockfile
+          node ../../packages/bf-teach-helper/fetch.mjs
           npx --yes @vscode/vsce package --no-dependencies --out builderforce.vsix
 
       # The gate that the offline suites structurally CANNOT be: it launches a real
@@ -520,6 +528,12 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
+
+      - name: Confirm the runtime ID migration is live
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash .github/scripts/assert-api-revision.sh "$RUNTIME_ID_MIGRATION_COMMIT"
 
       - uses: actions/setup-node@v6
         with:
@@ -898,6 +912,7 @@ jobs:
           # Likewise packages/agent-run (its imports of @seanhogg/builderforce-memory/handoff).
           pnpm --dir ../packages/agent-tools install --frozen-lockfile
           pnpm --dir ../packages/agent-run install --frozen-lockfile
+          pnpm --dir ../packages/builderforce-mcp install --frozen-lockfile
           ${{ matrix.run }}
 
   # The kernel-side packages' OWN suites. `Verify API (vitest)` runs a source-only package's tests only from its `src/`
@@ -1086,6 +1101,7 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm --dir ../packages/agent-tools install --frozen-lockfile
           pnpm --dir ../packages/agent-run install --frozen-lockfile
+          pnpm --dir ../packages/builderforce-mcp install --frozen-lockfile
           npm run db:migrate
 
           # GIT_SHA stamps the deployed commit: GET /health `commit` and the

@@ -14,9 +14,11 @@
  * Selection stays out (rule 6). A stepping task: the layout and the edge ranking yield between slices. Pure.
  */
 
-import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import { isSymbolEdgeKind, type KNode, type KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { layout2dTask, nodeRadius, type Band, type Bounds, type Layout2D } from '../../../graph2d/layout2d';
 import { byImportance, focusGraph } from '../../../graphModel';
+import { fileRefOf } from '../../../surface/stations';
+import { withSymbolRecords } from '../../../surface/transit/symbols';
 import { placementLabel, planeKeyOf, type PlacementWords } from '../../../placement';
 import { MAX_DRAWN_EDGES, pickEdges, rankTask, type RankedEdges } from '../../../scene/edgeBudget';
 import { NONE_PARTITION } from '../../../scene/planeOrder';
@@ -30,6 +32,7 @@ import { anchorHidden, draftFor, hide, show, VISIBLE, type Draft } from './ancho
 import { bandTitleCaption, graphCaptionRuns, type BandTitle, type GraphCaptionNode } from './graphCaptions';
 import { graphEdgeLinks, graphLodOf, GRAPH_LOD } from './graphEdges';
 import { placementKeyOf, VIEWPORT_BANDS, type PlacementReq } from './request';
+import { symbolSlots } from './symbolSlots';
 
 /** Nodes the Graph camera shows per LOD band (`GRAPH_LOD`): band 0 is today's 2,000-node cap; band 1 every node. */
 export const GRAPH_SHOWN_BY_LOD: readonly number[] = GRAPH_LOD.map((b) => b.shown);
@@ -49,15 +52,19 @@ const BAND_TONES = [toneIndex('plane'), toneIndex('bg')];
 const MAX_NAMES = Math.max(...CAPTION_ZOOM_BANDS.map((b) => b.names));
 
 export function placeGraph(g: KnowledgeGraph, model: StageModel, req: PlacementReq): IdleTask<Placement> {
-    const band = graphLodOf(req.lod);
-    const shown = focusGraph(g, band.shown, []);
+    const scope = req.pathId?.startsWith('node:') ? req.pathId.slice(5) : null;
+    const band = graphLodOf(scope ? 2 : req.lod);
+    const full = scope ? withSymbolRecords(g, req.symbols ?? []) : g;
+    const slots = scope ? symbolSlots(model, full, g.nodes.length) : null;
+    if (slots) model = { ...model, marks: slots.marks, nodeSlot: slots.nodeSlot };
+    const shown = scope ? scopedGraph(full, scope, req.symbols ?? []) : focusGraph(full, band.shown, []);
     const task = layout2dTask(g.scope.rootId, shown.nodes, shown.edges);
     let rank: IdleTask<RankedEdges> | null = null;
     // After the layout and the ranking, the tail runs one slice per step (nodes, edges, captions), so no single step
     // holds the worker for the whole assembly.
     let nodes: PlacedNodes | null = null, edges: BundledEdges | null = null, labels: LabelRun[] | null = null;
     let built: Placement | null = null;
-    const placed = () => (nodes ??= placeNodes(g, model, req, shown.nodes, task.result()));
+    const placed = () => (nodes ??= placeNodes(full, model, req, shown.nodes, task.result()));
     const bundled = () => (edges ??= bundleFor(model, placed(), rank!.result(), band));
     const runs = () => (labels ??= captionRunsFor(model, placed(), shown.nodes));
     return {
@@ -70,8 +77,42 @@ export function placeGraph(g: KnowledgeGraph, model: StageModel, req: PlacementR
             runs();
             return true;
         },
-        result: () => (built ??= assemble(model, req, placed(), bundled(), runs(), rank!.result().total)),
+        result: () => (built ??= { ...assemble(model, req, placed(), bundled(), runs(), rank!.result().total, scope ? shown.nodes.length : g.nodes.length),
+            ...(slots?.append ? { append: slots.append } : {}) }),
     };
+}
+
+/** The selected definition, its members and one hop of its actual incoming and outgoing relationships. */
+function scopedGraph(graph: KnowledgeGraph, scope: string, records: NonNullable<PlacementReq['symbols']>) {
+    const file = fileRefOf(scope);
+    const found = graph.nodes.some((node) => node.ref === scope);
+    const subject = found ? scope : file;
+    const names = new Set([subject]);
+    for (const node of graph.nodes) {
+        if ((subject === file && fileRefOf(node.ref) === file) || node.badges?.parent === subject) names.add(node.ref);
+    }
+    const refs = new Map(graph.nodes.map(({ ref }) => [ref.replace(/@\d+$/, ''), ref]));
+    const edges = graph.edges.filter((edge) => names.has(edge.from) || names.has(edge.to));
+    const seen = new Set(edges.map((edge) => JSON.stringify([edge.from, edge.to, edge.kind])));
+    for (const record of records) {
+        const from = refs.get(record.parent.replace(/@\d+$/, '')), to = refs.get(record.ref.replace(/@\d+$/, ''));
+        if (!from || !to || !names.has(from) || !names.has(to) || seen.has(JSON.stringify([from, to, 'contains']))) continue;
+        edges.push({ from, to, kind: 'contains', weight: 1, origin: 'extracted' });
+    }
+    for (const record of records) for (const relation of record.relations ?? []) {
+        if (!isSymbolEdgeKind(relation.kind)) continue;
+        const from = refs.get(record.ref.replace(/@\d+$/, '')), to = refs.get(relation.to.replace(/@\d+$/, ''));
+        if (!from || !to || !names.has(from) && !names.has(to)) continue;
+        const key = JSON.stringify([from, to, relation.kind]);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        edges.push({ from, to, kind: relation.kind, weight: 1, origin: 'extracted' });
+    }
+    const neighbors = new Set(edges.flatMap(({ from, to }) => [from, to]));
+    const nodes = graph.nodes.filter(({ ref }) => names.has(ref) || neighbors.has(ref))
+        .sort((a, b) => Number(names.has(b.ref)) - Number(names.has(a.ref)) || byImportance(a, b)).slice(0, 140);
+    const visible = new Set(nodes.map(({ ref }) => ref));
+    return { nodes, edges: edges.filter(({ from, to }) => visible.has(from) && visible.has(to)) };
 }
 
 /** Layout units → world: x from the layout's left, z from its top, one scale `k` fitted into the band's width. */
@@ -92,16 +133,17 @@ function placeNodes(g: KnowledgeGraph, model: StageModel, req: PlacementReq, nod
     const { marks } = model;
     const f = graphFrameOf(layout, req.viewportBand);
     const d = draftFor(marks.keys.length);
+    const nodeByRef = new Map(nodes.map((node) => [node.ref as string, node]));
     const a11y: Placement['a11y'] = [];
     for (const [ref, [px, py]] of layout.positions) {
         const slot = model.nodeSlot.get(ref);
         if (slot === undefined) continue;
         // A node's slot is its index in the graph's nodes.
-        show(d, slot, f.x(px), 0, f.z(py), nodeRadius(g.nodes[slot]?.importance ?? 0) * f.k);
+        show(d, slot, f.x(px), 0, f.z(py), nodeRadius(nodeByRef.get(ref)?.importance ?? 0) * f.k);
         a11y.push({ slot, label: marks.label[slot] ?? ref });
     }
     // The reading order is the 2D graph's: importance first, ties by ref.
-    a11y.sort((a, b) => byImportance(g.nodes[a.slot]!, g.nodes[b.slot]!));
+    a11y.sort((a, b) => byImportance(nodeByRef.get(marks.keys[a.slot]!.slice(5))!, nodeByRef.get(marks.keys[b.slot]!.slice(5))!));
     anchorAtCommunity(g, model, d, nodes);
     anchorHidden(marks, d, 'station', [f.width / 2, 0, f.height / 2]);
     const planes: PlaneSpec[] = layout.bands.map((band, i) => ({ kind: 'partition', min: [0, -0.5, f.z(band.top)], max: [f.width, -0.5, f.z(band.top + band.height)], tone: BAND_TONES[i % 2]! }));
@@ -142,7 +184,7 @@ function captionRunsFor(model: StageModel, p: PlacedNodes, nodes: readonly KNode
     return graphCaptionRuns(named, p.titles, p.bounds);
 }
 
-function assemble(model: StageModel, req: PlacementReq, p: PlacedNodes, bundled: BundledEdges, labels: LabelRun[], total: number): Placement {
+function assemble(model: StageModel, req: PlacementReq, p: PlacedNodes, bundled: BundledEdges, labels: LabelRun[], total: number, nodeTotal: number): Placement {
     const { marks } = model;
     const { d, f, layout } = p;
     const nodeAt = (ref: string) => { const slot = shownSlot(model, d, ref); return slot === undefined ? undefined : groundOf(d, slot); };
@@ -151,7 +193,7 @@ function assemble(model: StageModel, req: PlacementReq, p: PlacedNodes, bundled:
         position: d.position, scale: d.scale, extrude: d.extrude,
         links: [graphEdgeLinks(bundled, nodeAt, (slot) => groundOf(d, slot))], planes: p.planes, labels, captions: p.captions, a11y: p.a11y,
         caption: {
-            shown: layout.positions.size, total: model.nodeSlot.size, capped: layout.positions.size < model.nodeSlot.size,
+            shown: layout.positions.size, total: nodeTotal, capped: layout.positions.size < nodeTotal,
             edges: { shown: bundled.drawn, total, capped: bundled.drawn < total },
         },
         bounds: { min: [0, 0, 0], max: [f.width, 0, f.height] },
@@ -179,7 +221,9 @@ function anchorAtCommunity(g: KnowledgeGraph, model: StageModel, d: Draft, shown
         const s = sum.get(key) ?? sum.set(key, [0, 0, 0, 0]).get(key)!;
         s[0] += d.position[slot * 3]!; s[1] += d.position[slot * 3 + 1]!; s[2] += d.position[slot * 3 + 2]!; s[3]++;
     }
-    g.nodes.forEach((n, slot) => {
+    g.nodes.forEach((n) => {
+        const slot = model.nodeSlot.get(n.ref);
+        if (slot === undefined) return;
         if (d.placed[slot] !== 0 || marks.parentStation[slot]! >= 0) return;
         const s = sum.get(planeKeyOf(n, shown) ?? NONE_PARTITION);
         if (s) hide(d, slot, s[0] / s[3], s[1] / s[3], s[2] / s[3]);

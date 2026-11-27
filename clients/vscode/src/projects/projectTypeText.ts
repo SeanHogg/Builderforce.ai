@@ -9,6 +9,10 @@ import * as vscode from "vscode";
  * unworded.
  */
 const TEXT: Record<string, () => string> = {
+  "projectType.roblox.label": () => vscode.l10n.t("Roblox game"),
+  "projectType.roblox.description": () => vscode.l10n.t("Build a game in Roblox Studio with Spawn."),
+  "projectType.movie.label": () => vscode.l10n.t("Movie or video"),
+  "projectType.movie.description": () => vscode.l10n.t("Edit clips, audio, and captions on a video timeline."),
   "projectType.aiScratch.label": () => vscode.l10n.t("Start from scratch"),
   "projectType.aiScratch.description": () => vscode.l10n.t("Grow a new Evermind model that learns from your project."),
   "projectType.aiExisting.label": () => vscode.l10n.t("Improve an existing model"),

@@ -45,7 +45,8 @@ export interface SceneLabels {
         | 'paneCode' | 'panePicture' | 'architecture' | 'filesystem' | 'lensOut' | 'lensSimulate' | 'lensRestructure' | 'gutterWarn'
         | 'samePlace' | 'sayLead' | 'sayHint' | 'fileLines' | 'fileLine'
         | DiagramId
-        | 'diagramUml' | 'diagramStructure' | 'diagramBehavior' | 'diagramInteraction' | 'diagramStandards' | 'diagramImport' | 'diagramIndexed' | 'diagramProvided' | 'diagramInvalid' | 'diagramNoData',
+        | 'diagramUml' | 'diagramStructure' | 'diagramBehavior' | 'diagramInteraction' | 'diagramStandards' | 'diagramImport' | 'diagramIndexed' | 'diagramProvided' | 'diagramInvalid' | 'diagramNoData'
+        | 'logicalView' | 'processView' | 'developmentView' | 'physicalView' | 'scenarioView' | 'evolutionAxis' | 'visibilityAxis',
         string
     >;
     /**
@@ -197,6 +198,13 @@ export const SCENE_DEFAULTS: SceneLabels = {
         diagramIndexed: "Indexed data",
         diagramProvided: "Imported data",
         diagramInvalid: "Invalid diagram data",
+        logicalView: "Logical view",
+        processView: "Process view",
+        developmentView: "Development view",
+        physicalView: "Physical view",
+        scenarioView: "Scenarios",
+        evolutionAxis: "Evolution",
+        visibilityAxis: "Visibility",
         diagramNoData: "No data for this diagram. Import a model or trace for this view.",
         c4Context: "C4 · System Context",
         c4Containers: "C4 · Container",

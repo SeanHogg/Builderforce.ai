@@ -174,6 +174,15 @@ describe('the app surface', () => {
     expect(screen.queryByRole('button', { name: /Evermind/ })).toBeNull();
   });
 
+  it('starts a movie on the current board through the shared starter registry', async () => {
+    const actions = session([]);
+    const onStartProject = vi.fn();
+    renderSurface(<CanvasAppSurface nodes={[]} session={actions} persistence="local" sessionTitle="" onExit={vi.fn()} onStartProject={onStartProject} />);
+    fireEvent.click(screen.getByRole('button', { name: /Movie or video/ }));
+    await waitFor(() => expect(onStartProject).toHaveBeenCalledWith('video', 'Movie or video'));
+    expect(actions.createApp).not.toHaveBeenCalled();
+  });
+
   /** The operator's decision: code cards on the board become the app without asking. */
   it('makes the app a board of code cards already is, once, without asking', async () => {
     const actions = session(SESSION);

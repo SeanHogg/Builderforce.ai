@@ -1,4 +1,10 @@
 {
+  "projectType": {
+    "movie": {
+      "label": "Film ou vidéo",
+      "description": "Montez des clips, du son et des sous-titres sur une timeline vidéo."
+    }
+  },
   "projectAnalytics": {
     "pulse": "Pouls de santé",
     "overall": "Santé globale",
@@ -40220,6 +40226,13 @@
         "diagramIndexed": "Données indexées",
         "diagramProvided": "Données importées",
         "diagramInvalid": "Données du diagramme invalides",
+        "logicalView": "Vue logique",
+        "processView": "Vue des processus",
+        "developmentView": "Vue de développement",
+        "physicalView": "Vue physique",
+        "scenarioView": "Scénarios",
+        "evolutionAxis": "Évolution",
+        "visibilityAxis": "Visibilité",
         "diagramNoData": "Aucune donnée pour ce diagramme. Importez un modèle ou une trace pour cette vue.",
         "c4Context": "C4 · System Context",
         "c4Containers": "C4 · Container",

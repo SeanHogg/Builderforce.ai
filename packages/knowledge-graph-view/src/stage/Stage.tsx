@@ -20,6 +20,7 @@ import type { ThemeColors } from '../scene/themeColors';
 import { CameraProjector } from './projector';
 import { StageBusContext, stageBus, type StageBus } from './anchor/stageBus';
 import { CaptionLayer } from './captions/CaptionLayer';
+import { ProjectedCaptions } from './captions/ProjectedCaptions';
 import { ChipLayer } from './labels/ChipLayer';
 import type { PlacedChip } from './labels/runs';
 import { applyCaptionTransform, groundAffine, type Affine2 } from './captions/transform';
@@ -304,6 +305,10 @@ export function Stage(p: StageProps) {
 
     const scene: SceneProps = { renderer, rig, inputs: { marks: p.marks, paint: p.paint, placement, colors: p.colors, reducedMotion: p.reducedMotion }, captions, onContextLost: p.onContextLost, onRenderError: p.onRenderError };
     const frame = placement?.rig.frame ?? 'fill';
+    const groundCaptions = useMemo(() => placement?.captions.filter((caption) => !caption.project) ?? [], [placement]);
+    const groundNames = useMemo(() => names.filter((caption) => !caption.project), [names]);
+    const projectedCaptions = useMemo(() => [...(placement?.captions.filter((caption) => caption.project) ?? []),
+        ...names.filter((caption) => caption.project)], [placement, names]);
     return (
         <StageBusContext.Provider value={bus}>
             {/* `overflow: clip` (not hidden): it clips without becoming a scroll container. */}
@@ -315,7 +320,8 @@ export function Stage(p: StageProps) {
                         </Canvas>
                     )
                     : <NoCanvas {...scene} bus={bus} />}
-                {placement && <CaptionLayer ref={captions} captions={placement.captions} names={names} hidden={tweening} />}
+                {placement && <CaptionLayer ref={captions} captions={groundCaptions} names={groundNames} hidden={tweening} />}
+                {projectedCaptions.length > 0 && <ProjectedCaptions captions={projectedCaptions} bus={bus} hidden={tweening} />}
                 {placement && chips.length > 0 && <ChipLayer bus={bus} chips={chips} selected={p.selected} hidden={tweening} onSelect={p.onSelect} onDrill={p.onDrill} />}
                 {placement && <StageInteraction bus={bus} renderer={renderer} keys={keys} placement={placement} tweening={tweening} selected={p.selected} description={p.description} onSelect={p.onSelect} onOut={p.onOut} onDrill={p.onDrill} onClear={p.onClear} />}
                 {placement && (

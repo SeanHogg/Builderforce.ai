@@ -51,13 +51,20 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
     const a11y: Placement['a11y'] = [];
     let top = 0;
     const overlay = makeOverlay(channelBindings(req.channels), stations.stations);
+    const methodCounts = new Map<string, number>();
+    if (req.camera === '3d' && req.drill) for (const record of req.symbols ?? []) {
+        if (record.kind === 'method') methodCounts.set(record.parent, (methodCounts.get(record.parent) ?? 0) + 1);
+    }
 
     for (const id of layout.drawn) {
         const slot = model.stationSlot.get(id), at = layout.positions.get(id), s = stations.byId.get(id);
         if (slot === undefined || !at || !s) continue;
-        const size = overlay.style(s).size;
+        const size = architecture ? Math.min(28, 10 + 3 * Math.log2(Math.max(1, s.files))) : overlay.style(s).size;
         const form = TYPE_FORM[MARK_TYPE_ORDER[marks.type[slot]!] ?? 'source'];
-        const extrude = depth * towerHeight(size, s.cx) * FORM_RISE[form];
+        const methods = methodCounts.get(s.refs[0] ?? '');
+        const height = architecture ? 18 + 16 * Math.log2(Math.max(1, s.files))
+            : methods === undefined ? towerHeight(size, s.cx) : Math.min(100, 16 + methods * 7);
+        const extrude = depth * height * FORM_RISE[form];
         top = Math.max(top, extrude);
         show(d, slot, at.x, 0, at.y, size, extrude);
         labels.push({
@@ -101,7 +108,7 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
         captions.push({ role: 'band', anchor: 'start', tone: TEXT, position: [area.x + 10, 0, area.z + 12], text: tailOf(area.app) });
     }
     const { cx, cz, radius } = mapFit(layout, contentPoints(layout.positions, layout.drawn, layout.routes), top);
-    const decor = g ? mapDecorations(g, stations, layout) : [];
+    const decor = g && !architecture ? mapDecorations(g, stations, layout) : [];
     const bounds = widenMapBounds(layout, widths, neutralWidth, CASING_EXTRA, top, decor);
     return {
         generation: marks.generation, cacheKey: placementKeyOf(marks, req), anchor: 'station',

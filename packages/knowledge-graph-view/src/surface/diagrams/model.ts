@@ -17,6 +17,8 @@ export interface DiagramNode {
     members?: DiagramMember[];
     /** Positions from authored evidence. Timing uses x as the measured time. */
     x?: number; y?: number;
+    /** Optional enclosing pool, trust boundary, context or layer. */
+    group?: string;
 }
 export interface DiagramEdge { from: string; to: string; kind: string; label?: string; count?: number; time?: number }
 export interface Diagram { nodes: DiagramNode[]; edges: DiagramEdge[] }
@@ -37,7 +39,7 @@ export function checkedDiagram(value: unknown): Diagram | null {
     for (const node of nodes) {
         // Imported models carry display data only. Source navigation is reserved for refs produced by the reviewed index.
         if (!node || !string(node.id) || ids.has(node.id) || !string(node.label) || !string(node.kind, 40) || node.ref !== undefined
-            || !coordinate(node.x) || !coordinate(node.y)) return null;
+            || !coordinate(node.x) || !coordinate(node.y) || node.group !== undefined && !string(node.group, 160)) return null;
         if (node.members !== undefined && (!Array.isArray(node.members) || node.members.length > 100 ||
             node.members.some((member) => !member || !string(member.text) || member.ref !== undefined))) return null;
         ids.add(node.id);
@@ -240,14 +242,44 @@ function endpoints(graph: KnowledgeGraph): Diagram {
 }
 
 function dataFlow(graph: KnowledgeGraph): Diagram {
-    const edges = graph.edges.filter((edge) => edge.kind === 'reads').slice(0, MAX_EDGES);
+    const edges = graph.edges.filter((edge) => edge.kind === 'reads' || edge.kind === 'writes').slice(0, MAX_EDGES);
     const seen = new Set(edges.flatMap(({ from, to }) => [from, to]));
     const nodes = graph.nodes.filter((node) => seen.has(node.ref)).slice(0, MAX_NODES).map((node) => ({
         id: node.ref, label: node.label, kind: node.kind === 'file' ? 'process' : 'data',
         ...(node.kind === 'file' ? { ref: node.ref } : {}),
     }));
     const visible = new Set(nodes.map(({ id }) => id));
-    return { nodes, edges: edges.filter(({ from, to }) => visible.has(from) && visible.has(to)).map(({ from, to, kind }) => ({ from, to, kind })) };
+    return { nodes, edges: edges.filter(({ from, to }) => visible.has(from) && visible.has(to))
+        .map(({ from, to, kind }) => kind === 'reads' ? { from: to, to: from, kind } : { from, to, kind }) };
+}
+
+function contextMap(graph: KnowledgeGraph, scope: string | null): Diagram {
+    const byFile = new Map<string, string>();
+    const groups = new Map<string, DiagramNode>();
+    for (const node of fileNodesOf(graph)) {
+        if (!isArchitectureFile(node)) continue;
+        const path = pathOf(node.ref);
+        const boundary = path?.match(/^((?:.*\/)?domains\/)([^/]+)(?:\/|$)/);
+        if (!boundary) continue;
+        const id = boundary[1]! + boundary[2]!;
+        byFile.set(node.ref, id);
+        if (!groups.has(id)) groups.set(id, { id, label: boundary[2]!, kind: 'component', ref: node.ref, group: systemOfNode(node) });
+    }
+    const routes = new Map<string, DiagramEdge>();
+    const owner = scope ? byFile.get(fileRefOf(scope)) : undefined;
+    for (const edge of mapEdges(graph)) {
+        if (!['imports', 'uses', 'calls', 'references'].includes(edge.kind)) continue;
+        const from = byFile.get(fileRefOf(edge.from)), to = byFile.get(fileRefOf(edge.to));
+        if (!from || !to || from === to || owner && from !== owner && to !== owner) continue;
+        const key = JSON.stringify([from, to]), previous = routes.get(key);
+        if (previous) previous.count = (previous.count ?? 1) + 1;
+        else if (routes.size < MAX_EDGES) routes.set(key, { from, to, kind: 'references', count: 1 });
+    }
+    const visible = new Set<string>();
+    for (const { from, to } of routes.values()) { visible.add(from); visible.add(to); }
+    const nodes = [...groups.values()].filter((node) => !owner || owner === node.id || visible.has(node.id)).slice(0, MAX_NODES);
+    const selected = new Set(nodes.map((node) => node.id));
+    return { nodes, edges: [...routes.values()].filter(({ from, to }) => selected.has(from) && selected.has(to)) };
 }
 
 /** An overview groups recorded messages into their calling interactions. */
@@ -297,6 +329,7 @@ export function sourceDiagram(id: DiagramId, graph: KnowledgeGraph, records: rea
         case 'communicationDiagram': case 'callGraph':
             return calls(graph, records, scope);
         case 'dfd': case 'dfdGane': case 'lineage': return dataFlow(graph);
+        case 'contextMap': return contextMap(graph, scope);
         case 'hotspots': return {
             nodes: [...stations].sort((a, b) => (b.churn ?? 0) - (a.churn ?? 0)).filter((s) => s.churn !== undefined).slice(0, MAX_NODES)
                 .map((s) => ({ id: s.id, label: s.name, kind: 'component', members: [{ text: ((s.churn ?? 0) * 100).toFixed(0) + '%' }] })),

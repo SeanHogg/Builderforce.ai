@@ -21,7 +21,8 @@ function add(dir) {
   linkedTargets(dir, manifest).forEach(add);
 }
 
-for (const dir of ['brain-embedded', 'packages/brain-ui']) add(resolve(root, dir));
+// The frontend and editor also compile shared MCP sources through the Workspace tools.
+for (const dir of ['brain-embedded', 'packages/brain-ui', 'packages/builderforce-mcp']) add(resolve(root, dir));
 const entries = [...packages].map((dir) => `  - ${JSON.stringify(relative(root, dir).split(sep).join('/'))}`);
 
 // Use the same locks as standalone installs during the pilot. Only the two Brain

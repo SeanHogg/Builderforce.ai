@@ -4,7 +4,7 @@
  * at make-default, PRD 43 P1 — `fourPlusOne.ts`). Offered for code, hidden on a graph with no source files; through
  * `ViewSurface` each renders on the one stage host, never as the retired DOM markup.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../labels';
@@ -36,6 +36,11 @@ function mount(mode: ViewMode, graph: KnowledgeGraph = surfaceFixture(), onSelec
 }
 
 describe('the architecture cameras', () => {
+    beforeAll(async () => {
+        // Keep the lazy stage's first Vite transform outside the render assertions.
+        await import('../stage/host/StageHost');
+    }, 120_000);
+
     it('are offered for code and hidden for a graph with no source files', () => {
         const ids = (g: KnowledgeGraph) => CAMERAS.filter((c) => ARCH.includes(c.id) && c.available(g, env)).map((c) => c.id);
         expect(ids(surfaceFixture())).toEqual(ARCH);

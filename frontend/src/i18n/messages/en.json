@@ -1,4 +1,10 @@
 {
+  "projectType": {
+    "movie": {
+      "label": "Movie or video",
+      "description": "Edit clips, audio, and captions on a video timeline."
+    }
+  },
   "careerAi": {
     "title": "Résumé workbench",
     "lede": "Four model-assisted tools built on what this platform already measures: rewrite a bullet into the XYZ form, merge several versions into one, grade the document with the gaps named, and put it in front of a colleague for review.",
@@ -39307,6 +39313,13 @@
         "diagramIndexed": "Indexed data",
         "diagramProvided": "Imported data",
         "diagramInvalid": "Invalid diagram data",
+        "logicalView": "Logical view",
+        "processView": "Process view",
+        "developmentView": "Development view",
+        "physicalView": "Physical view",
+        "scenarioView": "Scenarios",
+        "evolutionAxis": "Evolution",
+        "visibilityAxis": "Visibility",
         "diagramNoData": "No data for this diagram. Import a model or trace for this view.",
         "c4Context": "C4 · System Context",
         "c4Containers": "C4 · Container",

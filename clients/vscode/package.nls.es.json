@@ -32,7 +32,7 @@
   "command.toggleShowArchived": "BuilderForce: Mostrar archivados",
   "command.selectProject": "BuilderForce: Seleccionar proyecto",
   "command.createProject": "BuilderForce: Nuevo proyecto",
-  "command.newAiProject": "BuilderForce: Nuevo proyecto de IA",
+  "command.newAiProject": "BuilderForce: Nuevo proyecto desde una plantilla",
   "walkthrough.aiProject.title": "Iniciar un proyecto de IA",
   "walkthrough.aiProject.description": "Elija cómo empezar: hacer crecer un modelo nuevo, mejorar uno que ya tiene o trabajar con un paquete de conocimiento.",
   "walkthrough.aiProject.scratch.title": "Empezar desde cero",

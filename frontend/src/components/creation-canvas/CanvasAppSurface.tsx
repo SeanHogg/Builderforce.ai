@@ -14,6 +14,7 @@ import { appCardSignature, type SessionApp } from '@/lib/canvasSessionApp';
 import { canvasLensDefinition, canvasLensExit } from '@/lib/canvasLens';
 import type { ProjectModality } from '@/lib/modality';
 import { CanvasAppStart } from './CanvasAppStart';
+import type { CanvasProjectStarter } from '@builderforce/ide-templates/project-types';
 import type { CanvasSessionAppActions } from './hooks/useCanvasSessionApp';
 import { useCanvasSessionFacts } from './chrome/canvasSessionContext';
 import styles from './styles/surfaces.module.css';
@@ -59,9 +60,10 @@ export interface CanvasAppSurfaceProps {
   entryAppPending?: boolean;
   /** Escape and the header's "Back to the board" hand the board back. */
   onExit: () => void;
+  onStartProject?: (kind: CanvasProjectStarter['kind'], title: string) => void;
 }
 
-export function CanvasAppSurface({ nodes, session, persistence, sessionTitle, entryAppPending = false, onExit }: CanvasAppSurfaceProps) {
+export function CanvasAppSurface({ nodes, session, persistence, sessionTitle, entryAppPending = false, onExit, onStartProject }: CanvasAppSurfaceProps) {
   const t = useTranslations('creationCanvas.surface.app');
   const tc = useTranslations('creationCanvas');
   const { app, apps, createApp, importCards, selectApp } = session;
@@ -117,7 +119,7 @@ export function CanvasAppSurface({ nodes, session, persistence, sessionTitle, en
         ) : hasCodeCards || entryAppPending ? (
           <div className={styles.appEmpty} role="status"><strong>{t('preparing')}</strong></div>
         ) : (
-          <CanvasAppStart durable={persistence === 'server'} onCreate={create} />
+          <CanvasAppStart durable={persistence === 'server'} onCreate={create} onStartProject={onStartProject} />
         )}
       </div>
     </section>

@@ -107,6 +107,6 @@ function runOf(n: GraphCaptionNode, rank: number, anchor: PlacedCaption['anchor'
         offsetWorld: [sign * n.r, 0], offsetPx: [sign * CAPTION_GAP_EM * CAPTION_FONT_PX, -(CAPTION_FONT_PX * LINE_EM) / 2],
         tone: TEXT, halo: { tone: BG_TONE, px: CAPTION_FONT_PX * HALO_EM },
         // The 2D graph's always-named nodes outrank every other name, so the label LOD drops them last.
-        priority: rank < LEADING ? 1 : Math.min(0.99, Math.max(0, n.importance)), scale: 'screen', zoomPx,
+        priority: rank < LEADING ? 1 : Math.min(0.99, Math.max(0, n.importance)), scale: 'screen', screenText: true, zoomPx,
     };
 }

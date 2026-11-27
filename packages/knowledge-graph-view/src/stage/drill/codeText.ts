@@ -51,6 +51,10 @@ const STEP_KIND: Readonly<Record<string, StepKind>> = { calls: 'calls', reads: '
 
 /** `ref`'s sites in call order (its record's `calls`, `reads` / `uses` and `extends` relations, `compareCallSites`), one step per site with a line. */
 export function callStepsOf(ref: string, records: readonly SymbolRecord[]): CallStep[] {
+    return numberedSitesOf(ref, records).map(({ site, to, kind }) => ({ line: site.line, to, kind }));
+}
+
+export function numberedSitesOf(ref: string, records: readonly SymbolRecord[]): { site: CallSite; to: string; kind: StepKind }[] {
     const r = records.find((x) => x.ref === ref);
     if (!r?.relations) return [];
     const sites: { site: CallSite; to: string; kind: StepKind }[] = [];
@@ -58,7 +62,7 @@ export function callStepsOf(ref: string, records: readonly SymbolRecord[]): Call
         const kind = STEP_KIND[rel.kind];
         if (kind) for (const site of rel.sites ?? []) sites.push({ site, to: rel.to, kind });
     }
-    return sites.sort((a, b) => compareCallSites(a.site, b.site)).filter((s) => s.site.line > 0).map((s) => ({ line: s.site.line, to: s.to, kind: s.kind }));
+    return sites.sort((a, b) => compareCallSites(a.site, b.site)).filter((s) => s.site.line > 0);
 }
 
 const CALLERS = new WeakMap<readonly SymbolRecord[], ReadonlyMap<string, readonly string[]>>();

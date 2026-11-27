@@ -14,6 +14,7 @@ import { protectToolOutput } from "@seanhogg/builderforce-mcp/policy";
 import { ErrorCode, mcpRejection, safeToolError } from "@seanhogg/builderforce-mcp/protocol";
 import { serveStatelessMcp } from "@seanhogg/builderforce-mcp/server";
 import { onPremRootId } from "../agents/knowledge/index/onPremRootId.js";
+import { onPremCodeEmbedder } from "../agents/knowledge/index/onPremCodeEmbedder.js";
 import { buildNodeCapabilityProvider } from "../agents/node-capability-provider.js";
 import { onPremTreeSitterDir } from "../agents/on-prem-symbol-index.js";
 import { agentFleetTool } from "../builderforce/tools/agent-fleet-tool.js";
@@ -81,6 +82,7 @@ const WORKSPACE_TOOLS = createWorkspaceMcpTools((projectRoot) => {
   return { root, caps: buildNodeCapabilityProvider({ workspaceRoot: root }) };
 }, {
   requireRoot: true,
+  embedder: onPremCodeEmbedder,
   grammar: () => {
     const wasmDir = onPremTreeSitterDir();
     return wasmDir ? { wasmDir } : {};

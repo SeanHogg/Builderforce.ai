@@ -1,4 +1,10 @@
 {
+  "projectType": {
+    "movie": {
+      "label": "Film oder Video",
+      "description": "Bearbeite Clips, Ton und Untertitel auf einer Video-Zeitleiste."
+    }
+  },
   "projectAnalytics": {
     "pulse": "Gesundheitspuls",
     "overall": "Gesamtzustand",
@@ -40220,6 +40226,13 @@
         "diagramIndexed": "Indexierte Daten",
         "diagramProvided": "Importierte Daten",
         "diagramInvalid": "Ungültige Diagrammdaten",
+        "logicalView": "Logische Sicht",
+        "processView": "Prozesssicht",
+        "developmentView": "Entwicklungssicht",
+        "physicalView": "Physische Sicht",
+        "scenarioView": "Szenarien",
+        "evolutionAxis": "Entwicklung",
+        "visibilityAxis": "Sichtbarkeit",
         "diagramNoData": "Keine Daten für dieses Diagramm. Importieren Sie ein Modell oder einen Trace für diese Ansicht.",
         "c4Context": "C4 · System Context",
         "c4Containers": "C4 · Container",

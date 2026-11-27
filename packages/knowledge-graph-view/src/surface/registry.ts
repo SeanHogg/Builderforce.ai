@@ -37,6 +37,7 @@ export interface SurfaceEnv {
 
 /** Everything a camera is handed; a camera takes what it draws from here. */
 export interface SceneProps {
+    agentRuns?: import('../types').AgentRunsPort | undefined;
     mode: ViewMode;
     graph: KnowledgeGraph;
     /** What is drawn: the focused nodes and the lens's edges. */

@@ -1,4 +1,9 @@
 {
+  "Movie or video": "Movie or video",
+  "Edit clips, audio, and captions on a video timeline.": "Edit clips, audio, and captions on a video timeline.",
+  "Roblox game": "Roblox game",
+  "Build a game in Roblox Studio with Spawn.": "Build a game in Roblox Studio with Spawn.",
+  "Choose a project type": "Choose a project type",
   "BuilderForce Workspace": "BuilderForce Workspace",
   " on {target}": " on {target}",
   " — {bytes} so far": " — {bytes} so far",
@@ -1569,8 +1574,6 @@
   "Create a knowledge pack": "Create a knowledge pack",
   "Load a knowledge pack": "Load a knowledge pack",
   "BuilderForce: could not finish setting up the project ({0}).": "BuilderForce: could not finish setting up the project ({0}).",
-  "New AI project": "New AI project",
-  "What kind of AI project?": "What kind of AI project?",
   "Which folder is this project for?": "Which folder is this project for?",
   "Name your project": "Name your project",
   "A project name is required": "A project name is required",

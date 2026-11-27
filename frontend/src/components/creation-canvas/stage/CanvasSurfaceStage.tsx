@@ -31,7 +31,7 @@ export interface CanvasSurfaceStageProps {
   /** The object the active surface is about, or null. */
   surfaceNode: CreationFlowNode | null;
   exitSurface: () => void;
-  setSurface: (surface: CanvasSurfaceId) => void;
+  setSurface: (surface: CanvasSurfaceId, targetId?: string, origin?: CanvasSurfaceId) => void;
   /** The SITE the reader arrived by opening, so the App modality shows that object. */
   sessionApp: CanvasSessionAppActions;
   sessionTitle: string;
@@ -41,7 +41,7 @@ export interface CanvasSurfaceStageProps {
   /** Direct edits made on a surface can land — role and lock both allow it. */
   editable: boolean;
   updateNodeData: (nodeId: string, patch: Partial<CreationNodeData>) => void;
-  appendAtCenter: (kind: CreationObjectKind, data?: Partial<CreationNodeData>) => unknown;
+  appendAtCenter: (kind: CreationObjectKind, data?: Partial<CreationNodeData>) => CreationFlowNode;
   revealObject: (nodeId: string) => void;
   conversation: CanvasConversationProps;
   /** THE ONE composer while it is docked into the Chat lens (Brain IS the surface); null
@@ -114,7 +114,15 @@ export function CanvasSurfaceStage({
             // below it takes the nodes rather than a single object: `backend/server.js`,
             // `frontend/index.html` and the page they render are three cards and one
             // artifact, and there is no card to enter it from.
-            app: <CanvasAppSurface nodes={nodes} session={sessionApp} persistence={persistence} sessionTitle={sessionTitle} entryAppPending={entryAppPending} onExit={exitToBoard} />,
+            app: <CanvasAppSurface
+              nodes={nodes}
+              session={sessionApp}
+              persistence={persistence}
+              sessionTitle={sessionTitle}
+              entryAppPending={entryAppPending}
+              onExit={exitToBoard}
+              onStartProject={editable ? (kind, title) => setSurface('timeline', appendAtCenter(kind, { title }).id, 'app') : undefined}
+            />,
             // What the session is worth, read back. Board-scoped for the same reason
             // `app` is — the metrics are about the whole session, not one card.
             // What is RUNNING (from Run): deployments, releases, the app — see the component.

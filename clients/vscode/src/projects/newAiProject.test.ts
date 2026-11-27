@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const showWarningMessage = vi.fn();
 const showQuickPick = vi.fn();
+const getExtension = vi.fn();
 const createProjectInteractive = vi.fn();
 const runProjectTypeActions = vi.fn();
 const files = new Map<string, string>();
@@ -15,6 +16,7 @@ vi.mock("vscode", () => ({
     showQuickPick: (...a: unknown[]) => showQuickPick(...a),
     showErrorMessage: vi.fn(),
   },
+  extensions: { getExtension: (...args: unknown[]) => getExtension(...args) },
   l10n: { t: (message: string, ...args: unknown[]) => message.replace(/\{(\d+)\}/g, (_m, i) => String(args[Number(i)])) },
 }));
 vi.mock("../gateway/gateway", () => ({ getWebBaseUrl: () => "https://app.example" }));
@@ -41,6 +43,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   files.clear();
   createProjectInteractive.mockResolvedValue({ id: 5, name: "Demo" });
+  getExtension.mockReturnValue(undefined);
 });
 
 describe("newAiProject", () => {
@@ -48,7 +51,17 @@ describe("newAiProject", () => {
     showQuickPick.mockResolvedValue(undefined);
     await newAiProject(context, signedIn, "nope");
     expect(showQuickPick).toHaveBeenCalledTimes(1);
+    expect(showQuickPick.mock.calls[0]![0]).not.toEqual(expect.arrayContaining([expect.objectContaining({ label: "Roblox game" })]));
     expect(createProjectInteractive).not.toHaveBeenCalled();
+  });
+
+  it("creates and links a Roblox project when Spawn is installed", async () => {
+    getExtension.mockReturnValue({ id: "builderforce.spawn" });
+    await newAiProject(context, signedIn, "roblox");
+    expect(getExtension).toHaveBeenCalledWith("builderforce.spawn");
+    expect(createProjectInteractive).toHaveBeenCalledWith(context, { modality: "roblox", title: "Roblox game" });
+    expect(JSON.parse(files.get(file)!)).toMatchObject({ projectId: 5, projectType: "roblox" });
+    expect(runProjectTypeActions).toHaveBeenCalledWith(expect.arrayContaining([{ kind: "command", command: "spawn.open" }]), expect.anything());
   });
 
   it("creates nothing when the existing link file is unreadable", async () => {

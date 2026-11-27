@@ -36,6 +36,8 @@
     "paths": {
       "@builderforce/agent-tools/workspace": ["../../../packages/agent-tools/src/workspace.ts"],
       "@seanhogg/builderforce-mcp": ["../../../packages/builderforce-mcp/src/index.ts"],
+      "@seanhogg/builderforce-mcp/server": ["../../../packages/builderforce-mcp/src/server.ts"],
+      "@modelcontextprotocol/sdk/*": ["../node_modules/@modelcontextprotocol/sdk/dist/esm/*"],
       "react": ["../node_modules/@types/react/index.d.ts"],
       "react/*": ["../node_modules/@types/react/*"],
       "react-dom": ["../node_modules/@types/react-dom/index.d.ts"],
@@ -84,6 +86,7 @@
       "@builderforce/agent-skills": ["../../../packages/agent-skills/src/index.ts"],
       "@builderforce/ide-file-contract": ["../../../packages/ide-file-contract/src/index.ts"],
       "@builderforce/ide-templates": ["../../../packages/ide-templates/src/index.ts"],
+      "@builderforce/ide-templates/project-types": ["../../../packages/ide-templates/src/projectTypes.ts"],
       "@builderforce/app-detect": ["../../../packages/app-detect/src/index.ts"],
       "@builderforce/app-detect/manifest": ["../../../packages/app-detect/src/manifest/manifestShape.ts"],
       "@builderforce/canvas-widget-protocol": ["../../../packages/canvas-widget-protocol/src/index.ts"],

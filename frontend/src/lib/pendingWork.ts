@@ -313,6 +313,14 @@ export function createLocalCreationBoard(input: { title?: string; text?: string;
   return boardId;
 }
 
+/** A starter supplies its authored board before the first sync. */
+export function createLocalStarterBoard(snapshot: LocalCreationSnapshot): string {
+  const boardId = crypto.randomUUID();
+  const destination = studioDestination();
+  track(async () => (await loadBoards()).writeNewStudioBoard(boardId, snapshot, destination));
+  return boardId;
+}
+
 /** Load the verbs once every pending creation has landed. */
 async function ready() {
   await awaitBoardCreated();

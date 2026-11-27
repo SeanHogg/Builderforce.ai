@@ -1,4 +1,9 @@
 {
+  "Movie or video": "电影或视频",
+  "Edit clips, audio, and captions on a video timeline.": "在视频时间轴上编辑片段、音频和字幕。",
+  "Roblox game": "Roblox 游戏",
+  "Build a game in Roblox Studio with Spawn.": "使用 Spawn 在 Roblox Studio 中制作游戏。",
+  "Choose a project type": "选择项目类型",
   "BuilderForce Workspace": "BuilderForce 工作区",
   " on {target}": "，目标 {target}",
   " — {bytes} so far": " — 已收到 {bytes}",
@@ -1569,8 +1574,6 @@
   "Create a knowledge pack": "创建知识包",
   "Load a knowledge pack": "加载知识包",
   "BuilderForce: could not finish setting up the project ({0}).": "BuilderForce：无法完成项目设置（{0}）。",
-  "New AI project": "新建 AI 项目",
-  "What kind of AI project?": "哪种类型的 AI 项目？",
   "Which folder is this project for?": "此项目对应哪个文件夹？",
   "Name your project": "为您的项目命名",
   "A project name is required": "需要填写项目名称",

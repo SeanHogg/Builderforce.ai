@@ -1,4 +1,10 @@
 {
+  "projectType": {
+    "movie": {
+      "label": "电影或视频",
+      "description": "在视频时间轴上编辑片段、音频和字幕。"
+    }
+  },
   "careerAi": {
     "title": "简历工作台",
     "lede": "四个以模型辅助的工具，全部建立在平台已经测量出的结果之上：把一条要点改写成 XYZ 句式、把多个版本合并为一份、指出扣分点并评分，以及把简历交给同事评审。",
@@ -40220,6 +40226,13 @@
         "diagramIndexed": "已索引数据",
         "diagramProvided": "已导入数据",
         "diagramInvalid": "无效的图表数据",
+        "logicalView": "逻辑视图",
+        "processView": "进程视图",
+        "developmentView": "开发视图",
+        "physicalView": "物理视图",
+        "scenarioView": "场景",
+        "evolutionAxis": "演化",
+        "visibilityAxis": "可见性",
         "diagramNoData": "此图表没有数据。请为此视图导入模型或跟踪记录。",
         "c4Context": "C4 · System Context",
         "c4Containers": "C4 · Container",

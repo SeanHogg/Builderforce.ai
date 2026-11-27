@@ -25,6 +25,7 @@ import { PRESETS } from '../surface/overlays';
 import { createNoopStage } from './renderer';
 import { Stage } from './Stage';
 import { FLAG, SLOT_NODE, type Placement } from './types';
+import type { SymbolRecord } from '../types';
 
 const g = codeFixture();
 const strings = Object.fromEntries(PLACEMENT_WORD_KEYS.map((k) => [k, L[k]]));
@@ -44,6 +45,22 @@ const mount = (over: Partial<Parameters<typeof Stage>[0]> = {}) => {
 };
 
 describe('the Graph camera on the stage (was Graph2D)', () => {
+    it('shows the selected class, its methods and its indexed neighbors on the same stage slots', () => {
+        const file = g.nodes[0]!.ref, neighbor = g.nodes[3]!.ref;
+        const owner = `${file}#Controller@10`, method = `${file}#Controller.run@12`;
+        const records: SymbolRecord[] = [
+            { ref: owner, parent: file, name: 'Controller', kind: 'class', exported: true, line: 10 },
+            { ref: method, parent: owner, name: 'run', kind: 'method', exported: false, line: 12,
+                relations: [{ kind: 'calls', to: neighbor }] },
+        ];
+        const scoped = PLACEMENTS.graph(g, model, { ...req, pathId: `node:${owner}`, symbols: records });
+        while (!scoped.step());
+        const result = scoped.result();
+        expect(result.a11y.map(({ label }) => label)).toEqual(expect.arrayContaining(['Controller', 'run']));
+        expect(result.a11y).toHaveLength(3);
+        expect(result.append?.keys).toEqual(expect.arrayContaining([`node:${owner}`, `node:${method}`]));
+        expect(result.links[0]?.group.length).toBeGreaterThanOrEqual(2);
+    });
     it('lays every partition out as a band: one partition plane and one band caption each', () => {
         const partitions = new Set(g.nodes.map((n) => n.partition ?? ''));
         expect(graph.planes.filter((p) => p.kind === 'partition')).toHaveLength(partitions.size);

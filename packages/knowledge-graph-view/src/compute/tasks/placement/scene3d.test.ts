@@ -24,12 +24,13 @@ const place = (camera: PlacementReq['camera'], opts: Partial<PlacementReq> = {})
 const p3 = place('3d');
 
 describe('the 3D architecture placement', () => {
-    it('lays out named systems and modules using the map’s semantic marks and journey links', () => {
+    it('lays out named systems and module districts without journey routes', () => {
         expect(p3.planes.filter((plane) => plane.kind === 'room')).toHaveLength(2);
         expect(p3.captions.filter((caption) => caption.role === 'band').map(({ text }) => text)).toEqual(expect.arrayContaining(['api', 'db', 'site']));
         expect(p3.a11y.length).toBeGreaterThan(0);
         expect(p3.a11y.every(({ slot }) => marks.slotKind[slot] === SLOT_STATION && p3.extrude[slot]! > 0)).toBe(true);
         expect(p3.links.some((batch) => batch.family === 'edge')).toBe(false);
+        expect(p3.links.find((batch) => batch.family === 'hall')?.group).toHaveLength(0);
         expect(p3.position.every(Number.isFinite)).toBe(true);
         expect(p3.rig).toMatchObject({ projection: 'perspective', depth: { orbit: true } });
     });

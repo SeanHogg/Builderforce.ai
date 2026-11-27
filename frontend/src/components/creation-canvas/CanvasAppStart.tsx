@@ -7,6 +7,8 @@ import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import { hasCodeWorkspace } from '@/lib/canvasBuildTools';
 import { useLocalizedModalities } from '@/lib/useModalityCopy';
+import { useCanvasProjectStarters } from '@/lib/useCanvasProjectStarters';
+import type { CanvasProjectStarter } from '@builderforce/ide-templates/project-types';
 import type { ProjectModality } from '@/lib/modality';
 import styles from './styles/surfaces.module.css';
 
@@ -16,25 +18,38 @@ import styles from './styles/surfaces.module.css';
  * attached to this board. Asking Brain does the same thing, so the chooser says so.
  *
  * The kinds are the modality registry's, already localized. A board with no account can
- * only run the code kinds, because the studios (Evermind, fine-tune, voice) need a
- * project behind them; it is offered exactly those rather than doors that would fail.
+ * run code in the browser. Other starters can open a local editing surface on the board.
  */
-export function CanvasAppStart({ durable, onCreate }: {
+export function CanvasAppStart({ durable, onCreate, onStartProject }: {
   /** Whether the board has an account behind it. */
   durable: boolean;
   onCreate: (modality: ProjectModality) => Promise<void>;
+  onStartProject?: (kind: CanvasProjectStarter['kind'], title: string) => void;
 }) {
   const t = useTranslations('creationCanvas.surface.app.start');
   const modalities = useLocalizedModalities().filter((modality) => !modality.comingSoon && (durable || hasCodeWorkspace(modality.id)));
-  const [creating, setCreating] = useState<ProjectModality | null>(null);
+  const projectStarters = useCanvasProjectStarters();
+  const [creating, setCreating] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
-  const create = (modality: ProjectModality) => {
-    setCreating(modality);
+  const choices = [
+    ...modalities.map((modality) => ({ ...modality, run: () => onCreate(modality.id) })),
+    ...(onStartProject ? projectStarters.map((starter) => ({
+      ...starter,
+      run: () => onStartProject(starter.kind, starter.label),
+    })) : []),
+  ];
+
+  const create = async (choice: (typeof choices)[number]) => {
+    setCreating(choice.id);
     setFailed(false);
-    onCreate(modality)
-      .catch(() => setFailed(true))
-      .finally(() => setCreating(null));
+    try {
+      await choice.run();
+    } catch {
+      setFailed(true);
+    } finally {
+      setCreating(null);
+    }
   };
 
   return (
@@ -42,11 +57,11 @@ export function CanvasAppStart({ durable, onCreate }: {
       <strong>{t('title')}</strong>
       <p>{durable ? t('body') : t('bodyLocal')}</p>
       <div className={styles.appStartKinds}>
-        {modalities.map((modality) => (
-          <button key={modality.id} type="button" disabled={creating !== null} onClick={() => create(modality.id)} aria-busy={creating === modality.id}>
-            <span aria-hidden><Icon source={modality.icon} size={18} /></span>
-            <b>{modality.label}</b>
-            <small>{creating === modality.id ? t('creating') : modality.tagline}</small>
+        {choices.map((choice) => (
+          <button key={choice.id} type="button" disabled={creating !== null} onClick={() => void create(choice)} aria-busy={creating === choice.id}>
+            <span aria-hidden><Icon source={choice.icon} size={18} /></span>
+            <b>{choice.label}</b>
+            <small>{creating === choice.id ? t('creating') : choice.tagline}</small>
           </button>
         ))}
       </div>

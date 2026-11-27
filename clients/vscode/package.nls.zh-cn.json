@@ -32,7 +32,7 @@
   "command.toggleShowArchived": "BuilderForce：显示已归档对话",
   "command.selectProject": "BuilderForce：选择项目",
   "command.createProject": "BuilderForce：新建项目",
-  "command.newAiProject": "BuilderForce：新建 AI 项目",
+  "command.newAiProject": "BuilderForce：从模板新建项目",
   "walkthrough.aiProject.title": "开始一个 AI 项目",
   "walkthrough.aiProject.description": "选择开始的方式：培育一个新模型、改进已有模型，或基于知识包工作。",
   "walkthrough.aiProject.scratch.title": "从零开始",

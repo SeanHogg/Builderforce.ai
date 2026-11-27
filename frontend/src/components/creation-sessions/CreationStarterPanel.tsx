@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
+import { useCanvasProjectStarters } from '@/lib/useCanvasProjectStarters';
 import { useLocalizedModalities } from '@/lib/useModalityCopy';
 import { Icon } from '@/components/ui/Icon';
 import { useCreateCanvas } from './useCreateCanvas';
@@ -48,15 +50,19 @@ interface Starter {
   /** The request the new board opens with. Null is the blank canvas. */
   prompt: string | null;
   comingSoon?: boolean;
+  href?: string;
 }
 
 export function CreationStarterPanel() {
   const t = useTranslations('creationCanvas');
+  const projectStarters = useCanvasProjectStarters();
+  const router = useRouter();
   const modalities = useLocalizedModalities();
   const create = useCreateCanvas();
 
   const starters = useMemo<Starter[]>(() => [
     { id: 'blank', icon: '＋', label: t('blankCanvas'), tagline: t('blankCanvasTagline'), prompt: null },
+    ...projectStarters.map((starter) => ({ ...starter, prompt: null })),
     ...modalities.map((modality) => ({
       id: modality.id,
       icon: modality.icon,
@@ -72,9 +78,10 @@ export function CreationStarterPanel() {
       tagline: t(template.descriptionKey),
       prompt: t(template.descriptionKey),
     })),
-  ], [modalities, t]);
+  ], [modalities, projectStarters, t]);
 
   const start = (starter: Starter) => {
+    if (starter.href) return router.push(starter.href);
     if (starter.prompt === null) return void create.createBlank();
     void create.createFrom(starter.label, starter.prompt);
   };
@@ -93,7 +100,7 @@ export function CreationStarterPanel() {
             key={starter.id}
             type="button"
             className={styles.starterCard}
-            data-blank={starter.prompt === null ? 'true' : undefined}
+            data-blank={starter.id === 'blank' ? 'true' : undefined}
             disabled={create.creating || create.limitReached || !!starter.comingSoon}
             onClick={() => start(starter)}
           >

@@ -49,6 +49,7 @@ jobs:
       # packages/agent-tools is compiled from source (tsconfig paths); its npm imports
       # (@seanhogg/builderforce-memory/working) resolve from ITS node_modules.
       - run: pnpm --dir ../packages/agent-tools install --frozen-lockfile
+      - run: pnpm --dir ../packages/builderforce-mcp install --frozen-lockfile
       - run: pnpm run ${{ matrix.script }}
 
   # The on-prem agent CLI every installer (install.sh / install.ps1 / install-cli.sh,
@@ -79,6 +80,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir ../packages/agent-tools install --frozen-lockfile
+      - run: pnpm --dir ../packages/builderforce-mcp install --frozen-lockfile
 
       # agent-runtime/vendor/ is gitignored (Docker builds exclude it too), so a
       # fresh checkout here has neither the A2UI renderer sources nor a prebuilt

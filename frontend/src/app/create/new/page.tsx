@@ -12,6 +12,8 @@ import { getActiveGuestRoom } from '@/lib/guestRoomApi';
 import { GuestRoomJoinCard } from '@/components/guest/GuestRoomJoinCard';
 import { modelComparisonCanvasHref, readModelComparison } from '@/lib/modelComparisonRequest';
 import { CANVAS_PROMPT_MAX } from '@/lib/canvasIntent';
+import { projectTypeById, type ProjectTypeEntry } from '@builderforce/ide-templates/project-types';
+import { startMovieStarter } from '@/lib/canvas/startMovieStarter';
 
 export const runtime = 'edge';
 
@@ -26,6 +28,7 @@ export const runtime = 'edge';
  */
 export default function NewCreationSessionPage() {
   const t = useTranslations('creationCanvas');
+  const projectTypeText = useTranslations();
   const router = useRouter();
   const { authReady, isAuthenticated, hasTenant } = useAuth();
   const started = useRef(false);
@@ -35,6 +38,8 @@ export default function NewCreationSessionPage() {
   const [modelComparisonIds, setModelComparisonIds] = useState<string[]>([]);
   const [checkedInvite, setCheckedInvite] = useState(false);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
+  const [starter, setStarter] = useState<ProjectTypeEntry>();
+  const [projectId, setProjectId] = useState<number>();
 
   // Read the invite BEFORE deciding what this page is: a room link must not be
   // consumed by the ordinary "create a canvas and redirect" path below.
@@ -50,6 +55,9 @@ export default function NewCreationSessionPage() {
       // truncated prompt reads as a complete instruction that happens to be wrong.
       setInitialPrompt(params.get('prompt')?.trim().slice(0, CANVAS_PROMPT_MAX) || '');
       setModelComparisonIds(readModelComparison(params));
+      setStarter(projectTypeById(params.get('starter')));
+      const id = Number(params.get('projectId'));
+      if (Number.isSafeInteger(id) && id > 0) setProjectId(id);
     } catch {
       code = null; // no URL access — fall through to the ordinary new-canvas path
     }
@@ -66,6 +74,11 @@ export default function NewCreationSessionPage() {
     if (!authReady || !checkedInvite || inviteCode || started.current) return;
     started.current = true;
     setMessage(t('creatingCanvas'));
+    if (starter?.canvasStarter?.kind === 'video') {
+      void startMovieStarter(projectTypeText(starter.labelKey), hasTenant ? projectId : undefined)
+        .then(({ sessionId, videoId }) => router.replace(`/create/${sessionId}?surface=timeline&focus=${videoId}`));
+      return;
+    }
     // THE one start-a-session use case (`lib/canvas/startCreationSession.ts`): the board is
     // created on this device first — in the workspace when there is one — and synced.
     void startCreationSession({ prompt: initialPrompt, isAuthenticated, hasTenant, surface: 'landing' })
@@ -77,7 +90,7 @@ export default function NewCreationSessionPage() {
         if (isPlanLimitError(error)) setPlanError(error);
         setMessage('');
       });
-  }, [authReady, checkedInvite, hasTenant, initialPrompt, inviteCode, isAuthenticated, modelComparisonIds, router, t]);
+  }, [authReady, checkedInvite, hasTenant, initialPrompt, inviteCode, isAuthenticated, modelComparisonIds, projectId, projectTypeText, router, starter, t]);
 
   if (inviteCode) {
     return (

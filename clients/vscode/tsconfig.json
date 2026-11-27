@@ -17,6 +17,7 @@
       "@modelcontextprotocol/sdk/types.js": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/types.d.ts", "./node_modules/@modelcontextprotocol/sdk/dist/esm/types.js"],
       "@modelcontextprotocol/sdk/server/index.js": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.d.ts", "./node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js"],
       "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/server/webStandardStreamableHttp.d.ts", "./node_modules/@modelcontextprotocol/sdk/dist/esm/server/webStandardStreamableHttp.js"],
+      "@modelcontextprotocol/sdk/*": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/*"],
       "@seanhogg/builderforce-mcp/config": ["../../packages/builderforce-mcp/src/config.ts"],
       "jsonc-parser": ["./node_modules/jsonc-parser"],
       "smol-toml": ["./node_modules/smol-toml"],

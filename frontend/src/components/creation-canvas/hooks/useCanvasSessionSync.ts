@@ -62,6 +62,7 @@ export interface UseCanvasSessionSyncDeps {
   sendPresence: (state: CanvasPresenceState) => void;
   sessionId: string;
   openApp: (nodeId: string) => void;
+  setSurface: (surface: CanvasSurfaceId, targetId: string) => void;
   setCurrentUserId: Dispatch<SetStateAction<string | null>>;
   setJoinedCollaborator: Dispatch<SetStateAction<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number; } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null; } | null>>;
   setMembers: Dispatch<SetStateAction<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; avatarUrl?: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number; } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null; }[]>>;
@@ -75,7 +76,7 @@ export interface UseCanvasSessionSyncDeps {
   viewportRef: RefObject<{ x: number; y: number; zoom: number; }>;
 }
 
-export function useCanvasSessionSync({ activeMemberIdsRef, activePresenceInitializedRef, ensureBoardSession, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialSurface, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, mobileViewportFittedRef, nodes, noteSaveState, persistence, presenceLive, presenceRelay, receivePresence, refreshFromServer, revisionRef, selectedIds, serverReady, sendPresence, sessionId, openApp, setCurrentUserId, setJoinedCollaborator, setMembers, setNotice, setRealtimeState, setSelectedId, setTimeline, t, thinking, timeline, viewportRef }: UseCanvasSessionSyncDeps) {
+export function useCanvasSessionSync({ activeMemberIdsRef, activePresenceInitializedRef, ensureBoardSession, brainRunStartedAt, canEdit, clearPresence, currentGraphRef, currentUserId, cursorRef, edges, flowRef, followingUserId, hydratedRef, initialSurface, initialFocusId, isComposingPrompt, joinedCollaborator, lastSavedGraphRef, liveSocketRef, loadingSession, mobileViewportFittedRef, nodes, noteSaveState, persistence, presenceLive, presenceRelay, receivePresence, refreshFromServer, revisionRef, selectedIds, serverReady, sendPresence, sessionId, openApp, setSurface, setCurrentUserId, setJoinedCollaborator, setMembers, setNotice, setRealtimeState, setSelectedId, setTimeline, t, thinking, timeline, viewportRef }: UseCanvasSessionSyncDeps) {
   useEffect(() => { currentGraphRef.current = JSON.stringify({ nodes, edges }); }, [currentGraphRef, edges, nodes]);
 
   // A persisted viewport is expressed in screen pixels, so restoring a camera
@@ -100,17 +101,20 @@ export function useCanvasSessionSync({ activeMemberIdsRef, activePresenceInitial
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: [{ id: initialFocusId }], padding: 0.45, duration: 350 }), 0);
   }, [flowRef, initialFocusId, nodes, setSelectedId]);
 
-  // An entry that asked for the App surface AND focused a Builder object opens THAT build
-  // there, once (`?surface=app&focus=<id>`, and the legacy `?build=1`).
-  const focusedAppOpenedRef = useRef(false);
-  const openFocusedApp = initialSurface === 'app' ? initialFocusId : null;
+  // A focused build or video opens in the corresponding surface once its board object loads.
+  const focusedSurfaceOpened = useRef<string | null>(null);
   useEffect(() => {
-    if (!openFocusedApp || focusedAppOpenedRef.current) return;
-    const target = nodes.find((node) => node.id === openFocusedApp && node.data.kind === 'build');
-    if (!target) return;
-    focusedAppOpenedRef.current = true;
-    openApp(target.id);
-  }, [nodes, openApp, openFocusedApp]);
+    if (!initialFocusId || !initialSurface || focusedSurfaceOpened.current === initialFocusId) return;
+    const target = nodes.find((node) => node.id === initialFocusId);
+    if (initialSurface === 'app' && target?.data.kind === 'build') {
+      openApp(target.id);
+    } else if (initialSurface === 'timeline' && target?.data.kind === 'video') {
+      setSurface('timeline', target.id);
+    } else {
+      return;
+    }
+    focusedSurfaceOpened.current = initialFocusId;
+  }, [initialFocusId, initialSurface, nodes, openApp, setSurface]);
 
   /**
    * AUTOSAVE. Debounced 300ms behind the edit that triggered it.

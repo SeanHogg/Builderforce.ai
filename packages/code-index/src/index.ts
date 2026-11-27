@@ -20,6 +20,7 @@ import { codeIndexStorage, type CodeFileRecord, type StoredCodeIndex } from "./s
 
 export type { EmbedderPort } from "@seanhogg/builderforce-memory/knowledge";
 export { workspaceCodeEmbedder } from "./embedder.js";
+export { cachedBgeSnapshot, loadBgeCodeEmbedder, type LoadBgePipeline } from "./bgeEmbedder.js";
 
 interface SearchInput {
   root: string;

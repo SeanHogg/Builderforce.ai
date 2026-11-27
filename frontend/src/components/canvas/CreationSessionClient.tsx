@@ -24,13 +24,13 @@ import { canvasLensSessionPath, type CanvasLens } from '@/lib/canvasLens';
 import { canvasSurfaceDefinition, isCanvasSurfaceId, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 
 /**
- * The board surface an ENTRY asked for — `?surface=<id>`, accepted only for a BOARD-scoped
- * surface (an object surface needs the object it is about, which a URL does not carry).
+ * A board surface, or the timeline of a video identified by `focus`.
  * `?build=1` is the legacy spelling of `surface=app`, kept because published deep links
  * still carry it.
  */
 function entrySurface(params: { get: (name: string) => string | null }): CanvasSurfaceId | null {
   const asked = params.get('surface');
+  if (asked === 'timeline' && params.get('focus')) return asked;
   if (isCanvasSurfaceId(asked) && canvasSurfaceDefinition(asked).scope === 'board') return asked;
   return params.get('build') === '1' ? 'app' : null;
 }

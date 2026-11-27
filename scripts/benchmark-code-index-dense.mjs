@@ -8,20 +8,22 @@
  * Default sample is all judged files plus evenly spaced distractors up to 64 files. `--files` overrides it.
  * `--prepare-only` writes the sampled corpus and computed overlap without running either engine.
  */
-import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { createReadStream } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, readdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
+import {
+  CODE_EMBEDDING_MODEL as modelId,
+  CODE_EMBEDDING_DIMENSIONS as dimensions,
+  cachedBgeSnapshot,
+  loadBgeCodeEmbedder,
+} from '../packages/code-index/src/bgeEmbedder.ts';
 
 const topK = 8;
 const lowOverlap = 0.25;
-const modelId = 'Xenova/bge-small-en-v1.5';
-const dimensions = 384;
 const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
 const stops = new Set('a an and are as at be before but by could does for from get give how in into is it its let of on or out same so than that the their them then through to up use using was what when where which while who with without would'.split(' '));
 
@@ -106,10 +108,6 @@ async function typescript(study, snapshot) {
   const { codeIndexStorage } = await import('../packages/code-index/src/storage.ts');
   const { root, paths, qrels } = study;
   const files = { async listFiles() { return { ok: true, paths }; } };
-  const hash = createHash('sha256');
-  for await (const chunk of createReadStream(join(snapshot, 'onnx', 'model.onnx'))) hash.update(chunk);
-  const checkpointSha256 = hash.digest('hex');
-  const fingerprint = `${modelId}:fp32:cls:${checkpointSha256}`;
   let model;
   let embeddedInputs = 0;
   const nativeFetch = globalThis.fetch;
@@ -117,13 +115,14 @@ async function typescript(study, snapshot) {
   env.useFSCache = false;
   globalThis.fetch = async () => { throw new Error('Network fetch disabled during offline embedding'); };
   try {
-    model = await pipeline('feature-extraction', snapshot, { local_files_only: true, device: 'cpu', dtype: 'fp32' });
+    model = await loadBgeCodeEmbedder(snapshot, pipeline);
+    const { checkpointSha256, port } = model;
+    const { fingerprint } = port;
     const embedder = {
-      fingerprint, dims: dimensions,
+      ...port,
       async embed(texts) {
         embeddedInputs += texts.length;
-        const batch = await model(texts, { pooling: 'cls', normalize: true });
-        return batch.tolist().map((row) => Float32Array.from(row));
+        return port.embed(texts);
       },
     };
     const search = (lexicalOnly) => async (query) => {
@@ -226,10 +225,10 @@ console.log(JSON.stringify({ scratch: study.scratch, revision: study.revision, f
   judgments: study.qrels.length, lowOverlap: study.qrels.filter(({ overlap }) => overlap <= lowOverlap).length }));
 if (!values['prepare-only']) {
   const models = await realpath(values.models);
-  const cache = join(models, 'models--Xenova--bge-small-en-v1.5');
-  const modelRevision = (await readFile(join(cache, 'refs', 'main'), 'utf8')).trim();
-  if (!/^[a-f0-9]{40}$/i.test(modelRevision)) throw new Error('Invalid cached BGE revision');
-  const ts = await typescript(study, join(cache, 'snapshots', modelRevision));
+  const snapshot = await cachedBgeSnapshot(models);
+  if (!snapshot) throw new Error('Missing or invalid cached BGE revision');
+  const modelRevision = basename(snapshot);
+  const ts = await typescript(study, snapshot);
   const nativeLexical = await native(study, resolve(values['native-lexical']));
   const nativeHybrid = await native(study, resolve(values['native-hybrid']), models);
   const byMode = { typescriptLexical: ts.lexical, typescriptHybrid: ts.hybrid, nativeLexical: nativeLexical.rows, nativeHybrid: nativeHybrid.rows };

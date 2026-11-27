@@ -3,13 +3,16 @@ import { resolve } from 'node:path';
 import { DEFAULT_TIMELINE_LABELS } from '@seanhogg/builderforce-brain-ui';
 import { describe, it, expect } from 'vitest';
 import { createTranslator } from 'next-intl';
+import { PROJECT_TYPES } from '@builderforce/ide-templates/project-types';
 import en from './messages/en.json';
 import zh from './messages/zh.json';
 import es from './messages/es.json';
 import fr from './messages/fr.json';
 import de from './messages/de.json';
 import { DIAGRAM_IDS } from '../../../packages/knowledge-graph-view/src/surface/diagrams/catalog';
+import { VIEWPOINT_LABELS } from '../../../packages/knowledge-graph-view/src/stage/host/DiagramPicker';
 import { LOCALES, DEFAULT_LOCALE, type Locale } from './config';
+
 import {
   STALL_CAUSES,
   PROVIDER_PROBE_STATES,
@@ -97,6 +100,14 @@ const MENU_COLUMNS = [...PRODUCT_COLUMNS, ...LEARN_COLUMNS];
 
 const CATALOGS: Record<Locale, Record<string, unknown>> = { en, zh, es, fr, de } as never;
 
+it.each(LOCALES)('resolves canvas project starters in %s', (locale) => {
+  const t = createTranslator({ locale, messages: CATALOGS[locale] });
+  for (const type of PROJECT_TYPES.filter(({ canvasStarter }) => canvasStarter)) {
+    expect(t.has(type.labelKey as never)).toBe(true);
+    expect(t.has(type.descriptionKey as never)).toBe(true);
+  }
+});
+
 type Leaf = { path: string; message: string };
 
 /** Flatten a catalog to dotted leaf paths, ignoring non-string leaves. */
@@ -157,6 +168,7 @@ describe('message catalogs', () => {
   it('labels every Visualizer diagram in all supported locales', () => {
     for (const messages of [en, de, es, fr, zh]) {
       for (const id of DIAGRAM_IDS) expect(messages.knowledgeGraph.surface.code[id]?.trim(), id).toBeTruthy();
+      for (const key of Object.values(VIEWPOINT_LABELS)) expect(messages.knowledgeGraph.surface.code[key]?.trim(), key).toBeTruthy();
     }
   });
   const enPaths = leaves(en as Record<string, unknown>).map((l) => l.path);

@@ -561,11 +561,12 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
 - `UP-G001` **Starter kit and `AppBlueprint` are two shapes, and the manifest has no model, knowledge or IDE-component sections.**
   - The shapes are `ide-templates` kits plus the `builderforce.json` v1 manifest on one side, and `creation-canvas-contract` `AppBlueprint` on the other, bridged by `manifestToBlueprintOverrides`.
   - Fix: one environment manifest, from which `AppBlueprint` is derived.
-- `UP-G002` **AI, knowledge, agent, game (Spawn/Roblox) and Movie/Video editor starters are not kits.**
+- `UP-G002` **The starter-kit picker is still split across entry points.**
   - The user decided on 2026-11-26 that Spawn becomes a project type and that a Movie/Video editor project type is required. Both are built on existing pieces: `bf-roblox` and `canvasVideoTools`.
   - Starter entry points are split three ways: `CreationStarterPanel`, `create/*` and `CanvasAppStart`.
   - Kits are not marketplace items.
   - Fix: one picker fed by the kit registry, mountable in every host.
+  - The project-type registry now includes Roblox and Movie or Video. The editor creates both project types. The Create launcher and the empty App surface use that registry to open a new video timeline.
 - `UP-G003` **Shell logic is implemented twice.**
   - The web uses `browserRuntime/workspaceShell.ts`; VS Code uses `src/tools/localShell*.ts`.
   - Fix: one `ShellPort` with WebContainer and local adapters.
@@ -611,11 +612,11 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
   - Downloads: the Synapse links use `builderforce-inference` `releases/latest`, and headless `bfi`/`bf-context` releases are published with `--latest=false` so that link stays on the last installer release. Spawn's button (`/api/spawn/downloads`, a stub) resolves the newest release that has installers. Repoint both when the fork ships. The product name and copy stay "Synapse".
   - Design: [synapse-vscode-fork.md](../specs/tasks/synapse-vscode-fork.md). Repo `builderforce-inference/app` (user, 2026-11-27).
   - Shipped: batch 1 (the extension API, the Spawn extension and the runtime-id rename) and batch 2 (the AI project types). See DONE.md.
-  - Still open: the first CI run of the build recipe (`synapse.yml`), which proves the fork builds.
-- `UP-G017` **Spawn's VS Code extension is implemented.** The Roblox project-type registration and distribution through Synapse remain open. The `builderforce-spawn` repo owns `bf-roblox` and keeps `bf-cloud`, `bf-vault`, and the Tauri shell during the transition. The Spawn download route currently resolves Synapse installers.
+  - The installer workflow built Apple Silicon and Intel macOS DMGs and the Linux Debian package with both extensions. The public release requires the Windows installer and the production API migration. [macOS verification](https://github.com/SeanHogg/builderforce-inference/actions/runs/46071723312) · [Linux verification](https://github.com/SeanHogg/builderforce-inference/actions/runs/46073705911)
+- `UP-G017` **The editor registers Roblox projects when the Spawn extension is installed.** The Spawn VSIX builds successfully. Public distribution through Synapse and retirement of the standalone app follow the installer rollout. The `builderforce-spawn` repo owns `bf-roblox` and keeps `bf-cloud`, `bf-vault`, and the Tauri shell during the transition.
 - `UP-G018` **The rebuilt Teach-once, Self-Directed Agents and phone approvals are not yet in users' hands.** The code is shipped (see DONE.md). Nothing reaches users until three steps happen, all release steps rather than code:
-  1. A `builderforce-inference` headless release publishes the three `bf-teach-helper` binaries. *Blocker: the release tag is the user's to cut.*
-  2. `node packages/bf-teach-helper/fetch.mjs` vendors them into `clients/vscode`.
+  1. A `builderforce-inference` headless release publishes the three `bf-teach-helper` binaries. The workflow signs and verifies the macOS helpers before publishing the draft. *Blocker: the Apple Developer ID signing secrets and the release tag.*
+  2. The VSIX packaging job runs `node packages/bf-teach-helper/fetch.mjs` to vendor the published helpers into `clients/vscode`.
   3. A VSIX release.
 
   Without the binaries the Skills view shows "Not available on this system". The macOS binaries also need signing for the Accessibility and Input Monitoring permissions.
@@ -680,7 +681,7 @@ Gaps:
 - `CIX-G015` **Result caps and file caps disagree.**
   - Result caps: 8 / 25 / 20 / 100 / 30.
   - File caps: 1 MB / 256 KB.
-- `CIX-G016` **Benchmark partial.** The harness verified 1,000 matched files per repository, and latency varied by corpus. An offline BGE-small smoke verified both engines can be evaluated with the same model. Full matched coverage, a representative judged dense comparison, and a production TypeScript embedder still gate native retirement. [Audit §2.5](../specs/tasks/platform-duplication-audit.md#25-target-design-one-code-index-every-host)
+- `CIX-G016` **Native retirement remains gated.** The hired.video benchmark matched all 5,385 files and native led on latency and memory. Across both repositories, native hybrid found 12 of 15 low-overlap judgments in the top eight to TypeScript hybrid's 9. The headless TypeScript path uses the cached BGE checkpoint from the judged harness. The full matched Builderforce.ai lexical comparison remains open. [Audit §2.5](../specs/tasks/platform-duplication-audit.md#25-target-design-one-code-index-every-host)
 - `CIX-G017` **API `knowledge.search` searches SOPs and docs (`recallSops.ts`), but its name suggests code search.**
 
 ### Inference, catalog and routing consolidation `[platform]` `[agents]`
@@ -718,6 +719,7 @@ Gaps:
 - `INF-G014` **agent-runtime uses node-llama-cpp as a second native GGUF engine**, beside `bfi-node`.
 - `INF-G016` **The memory-engine GGUF export cannot be run by llama.cpp**, and the docs may imply that it can.
 - `INF-G019` **Contract step: drop the `synapse` runtime-id aliases** (normalizer branch, deprecated setting, Chrome old-key read, API accept) one release after push 1.
+  - The production API health check on 2026-11-27 returned `e56a790e6`, which predates the migration in `b549e4563`. The deploy was skipped in the main release workflow. The VSIX, embedded Brain package and Synapse publishing jobs now check that the production API includes the migration. [Release workflow](https://github.com/SeanHogg/Builderforce.ai/actions/runs/46043101453)
   - **Accepted rollout risk:** new clients write `bfi-serve`, so shared or synced data (model refs, telemetry, stored engine names) is unreadable by clients one release behind. Ship order is API first (it deploys on push to main, together with the frontend); release the VSIX, Chrome and the npm `brain-embedded` only after the API is live.
 
 ### Agent memory consolidation `[agents]`

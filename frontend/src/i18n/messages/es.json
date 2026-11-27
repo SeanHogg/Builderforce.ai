@@ -1,4 +1,10 @@
 {
+  "projectType": {
+    "movie": {
+      "label": "Película o vídeo",
+      "description": "Edita clips, audio y subtítulos en una línea de tiempo de vídeo."
+    }
+  },
   "projectAnalytics": {
     "pulse": "Pulso de salud",
     "overall": "Salud general",
@@ -40220,6 +40226,13 @@
         "diagramIndexed": "Datos indexados",
         "diagramProvided": "Datos importados",
         "diagramInvalid": "Datos de diagrama no válidos",
+        "logicalView": "Vista lógica",
+        "processView": "Vista de procesos",
+        "developmentView": "Vista de desarrollo",
+        "physicalView": "Vista física",
+        "scenarioView": "Escenarios",
+        "evolutionAxis": "Evolución",
+        "visibilityAxis": "Visibilidad",
         "diagramNoData": "No hay datos para este diagrama. Importa un modelo o una traza para esta vista.",
         "c4Context": "C4 · System Context",
         "c4Containers": "C4 · Container",

@@ -18,6 +18,8 @@
       "@modelcontextprotocol/sdk/server/index.js": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.d.ts", "./node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js"],
       "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/server/webStandardStreamableHttp.d.ts", "./node_modules/@modelcontextprotocol/sdk/dist/esm/server/webStandardStreamableHttp.js"],
       "@modelcontextprotocol/sdk/client/streamableHttp.js": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.d.ts", "./node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js"],
+      "@modelcontextprotocol/sdk/client/index.js": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.d.ts", "./node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js"],
+      "@modelcontextprotocol/sdk/inMemory.js": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/inMemory.d.ts", "./node_modules/@modelcontextprotocol/sdk/dist/esm/inMemory.js"],
       "@seanhogg/builderforce-mcp": ["../packages/builderforce-mcp/src/index.ts"],
       "@seanhogg/builderforce-mcp/policy": ["../packages/builderforce-mcp/src/policy.ts"],
       "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],

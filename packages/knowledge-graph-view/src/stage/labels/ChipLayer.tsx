@@ -73,19 +73,31 @@ export const ChipLayer = memo(function ChipLayer({ bus, chips, selected, hidden,
             const { chips: list, hidden: off } = live.current;
             const selSlot = bus.slotOf(live.current.selected);
             const o = out.current;
+            const occupied: { left: number; top: number; right: number; bottom: number }[] = [];
             list.forEach((c, i) => {
                 const el = els.current[i];
                 if (!el) return;
-                if (off || !pr.project(c.position[0], c.position[1], c.position[2], o)) { el.style.visibility = 'hidden'; return; }
+                if (off || !pr.project(c.position[0], c.position[1], c.position[2], o)
+                    || o[0]! < 0 || o[0]! > W || o[1]! < 0 || o[1]! > H) { el.style.visibility = 'hidden'; return; }
                 const [w, h] = sizes[i] ?? [0, 0];
                 // Centred over the mark's top, floating RISE_PX above it, then kept inside the stage box.
-                const x = Math.min(Math.max(o[0]! - w / 2, GUTTER_PX), Math.max(GUTTER_PX, W - w - GUTTER_PX));
-                const y = Math.min(Math.max(o[1]! - h - RISE_PX, GUTTER_PX), Math.max(GUTTER_PX, H - h - GUTTER_PX));
-                el.style.transform = `translate(${x}px, ${y}px)`;
+                const x = Math.round(Math.min(Math.max(o[0]! - w / 2, GUTTER_PX), Math.max(GUTTER_PX, W - w - GUTTER_PX)));
+                const y = Math.round(Math.min(Math.max(o[1]! - h - RISE_PX, GUTTER_PX), Math.max(GUTTER_PX, H - h - GUTTER_PX)));
+                const overlaps = (left: number, top: number, right: number, bottom: number) => occupied.some((r) =>
+                    left < r.right + 3 && right > r.left - 3 && top < r.bottom + 2 && bottom > r.top - 2);
+                const rotate = overlaps(x, y, x + w, y + h);
+                const rise = rotate ? Math.ceil(w * 0.53) : 0;
+                const labelY = rotate ? Math.min(H - h, Math.max(y, rise + GUTTER_PX)) : y;
+                let laneY = labelY;
+                while (rotate && laneY + h < H && overlaps(x, laneY - rise, x + w, laneY + h)) laneY += h + 6;
+                if (laneY + h > H && c.slot !== selSlot) { el.style.visibility = 'hidden'; return; }
+                occupied.push({ left: x, top: laneY - rise, right: x + w, bottom: laneY + h });
+                const pose = { left: `${x}px`, top: `${laneY}px`, transform: rotate ? 'rotate(-32deg)' : 'none', transformOrigin: 'left bottom' };
+                Object.assign(el.style, pose);
                 el.style.visibility = 'visible';
                 const on = c.slot === selSlot;
                 // A selection flip restyles (bolder) the one chip and re-reads its size: once per flip, not per frame.
-                if (el.dataset.on !== String(on)) { el.dataset.on = String(on); Object.assign(el.style, chipStyle(c.risky, on, c.ghost), { visibility: 'visible', transform: `translate(${x}px, ${y}px)` }); sizes[i] = [el.offsetWidth, el.offsetHeight]; }
+                if (el.dataset.on !== String(on)) { el.dataset.on = String(on); Object.assign(el.style, chipStyle(c.risky, on, c.ghost), pose, { visibility: 'visible' }); sizes[i] = [el.offsetWidth, el.offsetHeight]; }
             });
         };
         move();

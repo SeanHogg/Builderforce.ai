@@ -1,4 +1,9 @@
 {
+  "Movie or video": "Film ou vidéo",
+  "Edit clips, audio, and captions on a video timeline.": "Montez des clips, du son et des sous-titres sur une timeline vidéo.",
+  "Roblox game": "Jeu Roblox",
+  "Build a game in Roblox Studio with Spawn.": "Créez un jeu dans Roblox Studio avec Spawn.",
+  "Choose a project type": "Choisir un type de projet",
   "BuilderForce Workspace": "Espace de travail BuilderForce",
   " on {target}": " sur {target}",
   " — {bytes} so far": " — {bytes} jusqu’ici",
@@ -1569,8 +1574,6 @@
   "Create a knowledge pack": "Créer un pack de connaissances",
   "Load a knowledge pack": "Charger un pack de connaissances",
   "BuilderForce: could not finish setting up the project ({0}).": "BuilderForce : impossible de terminer la configuration du projet ({0}).",
-  "New AI project": "Nouveau projet d'IA",
-  "What kind of AI project?": "Quel type de projet d'IA ?",
   "Which folder is this project for?": "Pour quel dossier est ce projet ?",
   "Name your project": "Nommez votre projet",
   "A project name is required": "Un nom de projet est requis",

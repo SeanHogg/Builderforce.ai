@@ -14,7 +14,11 @@ describe('Map systems', () => {
         }) as KNode;
         const nodes = [file('frontend/dashboard/gauge.ts', 'frontend'), file('frontend/dashboard/tiles.ts', 'frontend'),
             file('api/actions/logs.ts', 'api'), file('api/actions/users.ts', 'api')];
-        const graph = { ...base, nodes, edges: [], findings: [], outline: { communities: [{ id: 9, label: 'repo/frontend/dashboard/gauge.ts' }] } } as typeof base;
+        const graph: typeof base = {
+            ...base, nodes, edges: [], findings: [],
+            outline: { prefix: 'src:sys::', areas: [], partitions: [], files: [], links: [], capped: false,
+                communities: [{ id: 9, label: 'repo/frontend/dashboard/gauge.ts', size: nodes.length }] },
+        };
         const model = buildStageModel(graph);
         const map = placeMap(model, { graph: 1, generation: model.marks.generation, camera: 'map',
             viewportBand: 2, lod: 0, drill: null, unfolded: null, pins: [], pathId: null }, graph);

@@ -86,9 +86,10 @@ export function placeSequence(g: KnowledgeGraph, model: StageModel, req: Placeme
     const muted = toneIndex('muted');
     for (const p of participants) {
         const slot = slotOf(p)!, [x, y, z] = column.get(p)!;
-        show(d, slot, x, y, z, MARK);
+        show(d, slot, x, y, z, MARK, 10);
         lifelines.push({ pts: [[x, y, z + MARK], [x, y, bottom]], tone: muted, width: 1, dash: DASH_DESCRIBES, flags: 0 });
-        labels.push({ slot, text: marks.label[slot] ?? p, offsetPx: [0, -(MARK + 10)], font: 'mono', size: 11, weight: 500, anchor: 'middle', tone: toneIndex('text'), halo: { tone: BG_TONE, px: 3 }, priority: 1, scale: 'world' });
+        labels.push({ slot, text: marks.label[slot] ?? p, offsetPx: [0, 0], font: 'mono', size: 11, weight: 500, anchor: 'middle', tone: toneIndex('text'), halo: { tone: BG_TONE, px: 3 }, priority: 1, scale: 'screen', minMarkPx: 0,
+            chip: { risky: false, title: marks.tooltip[slot] } });
         a11y.push({ slot, label: marks.label[slot] ?? p });
     }
     if (band !== 'system') parkSplit(d, band, flow, full, nodeSlot, column);
@@ -111,14 +112,19 @@ export function placeSequence(g: KnowledgeGraph, model: StageModel, req: Placeme
             ...(stubs.length ? [polylineBatch('describes', stubs, 'px')] : []),
         ],
         planes: [], labels,
-        captions: messages.map((m, i) => ({ text: messageText(m, band, model.strings, method ? i + 1 : 0), position: midOf(calls[i]!), anchor: 'middle' as const, tone: muted })),
+        captions: [
+            ...messages.map((m, i) => ({ text: String(m.ordinal ?? i + 1), position: [MARGIN - 22, 6, rows.rowZ(i)] as Vec3,
+                anchor: 'end' as const, tone: toneIndex('accent'), project: true, role: 'step' as const })),
+            ...messages.map((m, i) => ({ text: messageText(m, band, model.strings), position: midOf(calls[i]!), anchor: 'middle' as const, tone: muted, project: true })),
+        ],
         a11y,
         caption: { shown: messages.length, total: Math.max(messages.length, flow.total), capped: messages.length < flow.total },
         bounds: { min: [0, -sink * 8, 0], max: [right, method ? BAR_LIFT : 0, bottom + ROW] },
         rig: {
-            projection: 'orthographic', frame: 'document',
+            projection: 'perspective', frame: 'fill',
             home: { position: [right / 2, 1000, bottom / 2], target: [right / 2, 0, bottom / 2], up: [0, 0, -1] },
-            depth: { tilt: [0, 60], orbit: false },
+            depth: { tilt: [15, 89], orbit: true },
+            view: { yaw: -13, pitch: 59, distance: 1000, fov: 38, radius: Math.hypot(right, bottom + ROW, sink * 8) / 2, flatDepth: 0.03 },
         },
         ...(append ? { append } : {}),
     };
@@ -158,12 +164,12 @@ function parkSplit(d: Draft, band: SequenceBand, flow: Flow, full: KnowledgeGrap
 /** Message `i` at row `i` down the time axis, from the caller's lifeline to the callee's (a self-call loops out and back). */
 function messagePath(m: FlowMessage, i: number, column: ReadonlyMap<string, Vec3>, bar = false): WorldPath {
     // A code-depth call is a bar raised toward the viewer (world +y) and thicker than an arrow.
-    const lift = bar ? BAR_LIFT : 0;
+    const lift = bar ? BAR_LIFT + (i % 4) * 3 : Math.min(20, m.depth * 6);
     const a = column.get(m.from)!, b = column.get(m.to)!, z = HEAD + ROW * (i + 1), ay = a[1] + lift, by = b[1] + lift;
     const pts: Vec3[] = m.from === m.to
         ? [[a[0], ay, z], [a[0] + SELF, ay, z], [a[0] + SELF, ay, z + ROW / 3], [a[0], ay, z + ROW / 3]]
         : [[a[0], ay, z], [b[0], by, z]];
-    return { pts, tone: toneIndex('edge'), width: bar ? BAR_WIDTH : 1.5, dash: DASH_SOLID, flags: FLAG.SELECTABLE };
+    return { pts, tone: toneIndex(i % 2 ? 'l1' : 'l2'), width: bar ? BAR_WIDTH : 2, dash: DASH_SOLID, flags: FLAG.SELECTABLE };
 }
 
 const midOf = (p: WorldPath): Vec3 => {
@@ -171,8 +177,8 @@ const midOf = (p: WorldPath): Vec3 => {
     return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, a[2] - 6];
 };
 
-/** A message's words: the callee (data) below the system band, numbered when `n` > 0; a hop's reference count (catalog words) at it. */
-function messageText(m: FlowMessage, band: SequenceBand, strings: Readonly<Record<string, string>>, n = 0): string {
-    if (band !== 'system') return n > 0 ? `${n} · ${m.label}` : m.label;
+/** The callee below the system band, or the indexed hop's reference count. */
+function messageText(m: FlowMessage, band: SequenceBand, strings: Readonly<Record<string, string>>): string {
+    if (band !== 'system') return m.label;
     return m.count === 0 ? strings['sequence.noReference'] ?? '' : fillTemplate(strings['sequence.hop'], { count: m.count });
 }

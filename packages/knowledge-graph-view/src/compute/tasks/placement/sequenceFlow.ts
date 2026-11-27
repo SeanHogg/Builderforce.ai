@@ -19,7 +19,8 @@ import type { Line } from '../../../surface/lines';
 import { fileRefOf, stationOfRef, type StationModel } from '../../../surface/stations';
 import { isSymbol, parentName, shortName } from '../../../surface/transit/symbols';
 import type { SymbolRecord } from '../../../types';
-import { callIndex, externalName, isExternal, type Association } from './callIndex';
+import { numberedSitesOf } from '../../../stage/drill/codeText';
+import { callIndex, externalKey, externalName, isExternal, type Association } from './callIndex';
 
 /** Nested call levels followed from an entry (the entry's own calls are depth 0). */
 export const SEQUENCE_MAX_DEPTH = 4;
@@ -40,6 +41,7 @@ export interface FlowMessage {
     depth: number;
     /** Index of the last message inside this call (itself when the callee calls nothing shown): activation end, return row. */
     end: number;
+    ordinal?: number;
 }
 export interface Flow {
     participants: string[];
@@ -122,6 +124,20 @@ export function sequenceFlow(input: FlowInput): Flow {
     const fold = band === 'class' ? classOf : identity;
     const names = new Map(symbols.map((n) => [n.ref as string, shortName(n)] as const));
     const index = callIndex(full, input.records);
+    const subject = entry?.startsWith('node:') && input.maxDepth === 1 ? entry.slice(5) : undefined;
+    const numbered = subject ? numberedSitesOf(subject, input.records) : [];
+    if (subject && numbered.length) {
+        const refs = new Set(full.nodes.map((node) => node.ref as string));
+        const bare = new Map([...refs].map((ref) => [ref.replace(/@\d+$/, ''), ref]));
+        const messages = numbered.slice(0, SEQUENCE_MAX_MESSAGES).map(({ site, to: raw }, i) => {
+            const to = refs.has(raw) ? raw : bare.get(raw.replace(/@\d+$/, '')) ?? externalKey(raw);
+            return { from: subject, to, site, label: isExternal(to) ? externalName(to) : names.get(to) ?? full.nodes.find((n) => n.ref === to)?.label ?? to,
+                count: 1, depth: 0, end: i, ordinal: i + 1 };
+        });
+        const participants = [...new Set([subject, ...messages.map(({ to }) => to)])];
+        return { messages, participants, total: numbered.length, classOf, stubs: [],
+            externals: [...new Set([...index.externals, ...participants.filter(isExternal)])].sort() };
+    }
     const participants: string[] = [], messages: FlowMessage[] = [];
     const seenParticipant = new Set<string>();
     const meet = (p: string) => { if (!seenParticipant.has(p)) { seenParticipant.add(p); participants.push(p); } };

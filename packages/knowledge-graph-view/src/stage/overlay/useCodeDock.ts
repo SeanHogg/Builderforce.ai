@@ -22,7 +22,7 @@ import { stationTypes } from '../../surface/transit/stationType';
 import type { MarkType } from '../../shapes';
 import type { SymbolRecord } from '../../types';
 import type { StageBus } from '../anchor/stageBus';
-import { codeTargetOf, fileTargetOf, symbolChain, type CodeTarget } from '../drill/codeText';
+import { codeTargetOf, fileTargetOf, numberedSitesOf, symbolChain, type CodeTarget } from '../drill/codeText';
 import { useCodeReading, type CodeReading } from '../drill/useCodeReading';
 import type { SemanticZoom } from '../drill/useSemanticZoom';
 import type { StageMap } from '../drill/useStageMap';
@@ -136,17 +136,21 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     const records = useMemo(() => needRecords ? recordsForCode(graph, { symbols: drillSymbols }) : NO_RECORDS, [needRecords, graph, drillSymbols]);
     const acrossTarget = across ? codeTargetOf(across, records) : null;
     // The method whose calls are numbered: the one opened across, else the code level's.
-    const methodTarget = acrossTarget ?? zoom.code?.target ?? null;
+    const openedMethod = acrossTarget ?? zoom.code?.target ?? null;
+    const selectedSymbol = a.codeRef ?? p.selected ?? drillSource?.ref;
+    const methodTarget = openedMethod ?? (reading && sequence && selectedSymbol && numberedSitesOf(selectedSymbol, records).length
+        ? codeTargetOf(selectedSymbol, records) : null);
     const methodRef = methodTarget?.ref ?? null;
     const previousMethod = useRef<string | null>(null);
     const { codeRef, onCodeRef } = a;
     useEffect(() => {
         const previous = previousMethod.current;
-        previousMethod.current = methodRef;
-        if (methodRef === previous) return;
-        if (methodRef) onCodeRef?.(methodRef);
+        const openedRef = openedMethod?.ref ?? null;
+        previousMethod.current = openedRef;
+        if (openedRef === previous) return;
+        if (openedRef) onCodeRef?.(openedRef);
         else if (previous && codeRef === previous) onCodeRef?.(fileRefOf(previous));
-    }, [methodRef, codeRef, onCodeRef]);
+    }, [openedMethod?.ref, codeRef, onCodeRef]);
     // A station key is not a symbol. Resolve it to the station's first file so the pane has a source line and the station's name.
     const stationPick = selected?.startsWith('st:') ? map.stationOfKey(selected) : null;
     const subject = codeSubject(selected, stationPick);

@@ -120,6 +120,8 @@ export interface LabelRun {
     note?: { text: string; tone: number };
     priority: number;
     scale: 'world' | 'screen';
+    /** Draw at native screen resolution rather than by scaling a texture on the stage. */
+    screenText?: boolean;
     /** A world-unit offset added before `offsetPx` (a `screen` run beside its mark: the mark's radius, then a px gap). */
     offsetWorld?: [number, number];
     /**
@@ -147,7 +149,9 @@ export interface LabelRun {
  */
 export interface Caption {
     text: string; position: Vec3; anchor: 'start' | 'middle' | 'end'; tone: number;
-    role?: 'band' | 'wall' | 'describes' | 'terminus' | 'plane';
+    role?: 'band' | 'wall' | 'describes' | 'terminus' | 'plane' | 'step';
+    /** A label at its actual 3D point, projected at native screen resolution each frame. */
+    project?: boolean;
     /** `mono` for a name the SDF font cannot draw (a glyph outside its range): the DOM gives it the i18n glyph fallback. */
     font?: 'ui' | 'mono';
     /**

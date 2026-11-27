@@ -49,7 +49,8 @@ export function useCanvasSurfaceState({ initialModelComparisonIds, initialSurfac
    * models side by side is to read the results in depth.
    */
   const comparisonModelIds = useMemo(() => normalizeModelComparisonIds(initialModelComparisonIds), [initialModelComparisonIds]);
-  const [surface, setSurfaceState] = useState<CanvasSurfaceId>(comparisonModelIds.length >= 2 ? 'room' : initialSurface ?? 'graph');
+  const initialBoardSurface = initialSurface && canvasSurfaceDefinition(initialSurface).scope === 'board' ? initialSurface : 'graph';
+  const [surface, setSurfaceState] = useState<CanvasSurfaceId>(comparisonModelIds.length >= 2 ? 'room' : initialBoardSurface);
   /**
    * The object an object-scoped surface is about. Null for every board surface, and
    * the reason a surface can be `page` at all: a page is a page OF something.

@@ -352,6 +352,20 @@ Full coverage cannot be matched at the current TypeScript limits. Of 5,385 eligi
 
 An offline check used the same cached BGE-small ONNX model with native and a scratch TypeScript `EmbedderPort`. The native engine embedded all 207 chunks from the 40-file matched corpus. Both engines ranked the judged file first for all three questions, as did TypeScript’s lexical-only search. The sample confirms the offline evaluation path. Native retirement still requires matched full coverage, a larger judged set with low-lexical-overlap queries, and a production TypeScript embedder for the chosen model.
 
+**Full matched Windows lexical run (2026-11-27).** Both engines indexed the same 5,385 files at hired.video commit `27dbdf38dfb`, with zero missing or extra paths. TypeScript measured 503.1 s cold, 810/2,019 ms warm p50/p95 and 583 MiB RSS. Native measured 375.0 s, 369/850 ms and 19 MiB RSS. The run used the in-memory TypeScript benchmark budget and shared the host with other builds. Native leads on cold latency, warm latency and memory on this corpus.
+
+The judged retrieval harness and the headless Workspace code search now load the same local BGE checkpoint through `loadBgeCodeEmbedder`. The headless runtime uses that adapter for `workspace__find` and saved semantic search when the checkpoint is installed. It falls back to a warm Ollama embedder or lexical search. A production-path smoke loaded the pinned checkpoint and returned a normalized 384-dimensional vector. The editor still uses the existing Ollama path.
+
+The judged comparison evaluated 12 queries on each repository, with 64 matched files per repository and 15 low-overlap queries overall. Each hybrid run used the same cached BGE checkpoint. The table reports the number of judged files found in the top eight and mean reciprocal rank at eight.
+
+| Repository | TypeScript lexical | TypeScript hybrid | Native lexical | Native hybrid |
+|---|---:|---:|---:|---:|
+| hired.video | 10 / 12, 0.505 | 10 / 12, 0.694 | 10 / 12, 0.479 | 11 / 12, 0.704 |
+| Builderforce.ai | 8 / 12, 0.343 | 8 / 12, 0.451 | 6 / 12, 0.458 | 9 / 12, 0.468 |
+| Low overlap across both | 9 / 15, 0.274 | 9 / 15, 0.461 | 9 / 15, 0.350 | 12 / 15, 0.504 |
+
+The judged samples favor native hybrid on recall at eight. They support retaining the native index pending a replacement that matches its retrieval and resource use.
+
 ### 2.6 Granular gaps
 
 | ID | Gap | Fix | Where |

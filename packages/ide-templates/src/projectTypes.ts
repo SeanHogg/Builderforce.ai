@@ -1,5 +1,5 @@
 /**
- * The AI-model project types: the ONE registry, stored as data.
+ * The editor project types and their starter actions.
  *
  * A host (the VS Code extension's `builderforce.newAiProject` command and its
  * walkthrough) renders this list and runs each entry's `firstRun`; adding a type is
@@ -22,10 +22,15 @@ export type ProjectTypeAction =
   /** Offer the options as a choice and run the one picked. */
   | { kind: 'choice'; placeholderKey: string; options: readonly ProjectTypeAction[] };
 
-export type ProjectTypeId = 'ai-scratch' | 'ai-existing' | 'ai-knowledge-pack';
+export type ProjectTypeId = 'ai-scratch' | 'ai-existing' | 'ai-knowledge-pack' | 'roblox' | 'movie';
 
-/** The modalities an AI project type is created with. */
-export type ProjectTypeModality = 'evermind' | 'finetune';
+export type ProjectTypeModality = 'evermind' | 'finetune' | 'roblox' | 'video';
+
+export interface CanvasProjectStarter {
+  kind: 'video';
+  icon: string;
+  href: string;
+}
 
 export interface ProjectTypeEntry {
   id: ProjectTypeId;
@@ -33,9 +38,29 @@ export interface ProjectTypeEntry {
   descriptionKey: string;
   modality: ProjectTypeModality;
   firstRun: readonly ProjectTypeAction[];
+  editorExtension?: string;
+  canvasStarter?: CanvasProjectStarter;
 }
 
+const movieStarter = { kind: 'video', icon: '▶', href: '/create/new?starter=movie' } as const;
+
 export const PROJECT_TYPES: readonly ProjectTypeEntry[] = [
+  {
+    id: 'roblox',
+    labelKey: 'projectType.roblox.label',
+    descriptionKey: 'projectType.roblox.description',
+    modality: 'roblox',
+    editorExtension: 'builderforce.spawn',
+    firstRun: [{ kind: 'command', command: 'spawn.open' }],
+  },
+  {
+    id: 'movie',
+    labelKey: 'projectType.movie.label',
+    descriptionKey: 'projectType.movie.description',
+    modality: 'video',
+    canvasStarter: movieStarter,
+    firstRun: [{ kind: 'openWeb', path: `${movieStarter.href}&projectId={projectId}` }],
+  },
   {
     id: 'ai-scratch',
     labelKey: 'projectType.aiScratch.label',
