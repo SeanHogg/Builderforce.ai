@@ -4,7 +4,7 @@
 - VS Code presents Platform HTTP and native stdio offers in one chooser and discovers supported host configs. The existing native review flow handles local installation.
 - Both legacy headless code-search calls use the shared Workspace index, and the runtime’s earlier keyword ranker and persistent semantic index were removed.
 - Native Platform relay clients request canonical names and accept saved aliases. Chrome and VS Code share the remote tool effect policy.
-- Shared MCP `0.1.1` is public on npm. Memory pins it in the frozen lockfile, and all 76 Memory MCP tests passed with the registry build. The cutover is ready for the next Memory package release.
+- Shared MCP `0.1.1` is public on npm. Memory MCP `2026.10.86` pins it, passed all 76 Memory MCP tests, and is published to npm and the MCP Registry.
 - The [MCP gap register](docs/roadmap/GAP-REGISTER.md#mcp-consolidation-platform-agents) records pending rollout and compatibility work.
 
 ## ✅ RESOLVED 2026-11-26 — Web sessions use short-lived tokens that renew in the background (AUTH-G011, AUTH-G015)

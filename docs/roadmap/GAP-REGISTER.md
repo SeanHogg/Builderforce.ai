@@ -590,13 +590,13 @@ The target is one `@seanhogg/builderforce-mcp` package with three servers for Pl
 | MCP-G001–G002 | **Resolved.** Platform, Workspace, outbound HTTP, and the marketplace probe use the official TypeScript SDK. Synapse’s private Evermind stdio client uses the official Rust SDK for framing and protocol negotiation. |
 | MCP-G003 | **Resolved.** The TypeScript relay consumers share the package's tool contract. |
 | MCP-G004–G006 | **First-party Brain and Canvas cutover implemented.** OpenAI and Anthropic share the tool converters. Native clients, normal web, VS Code and Chrome Brain runs, and direct Creation Canvas use canonical model-facing names for first-party Platform tools. Stable policy IDs still drive routing, review gates, and approval. Headless and older REST callers and host-specific consent flows remain. |
-| MCP-G007 | **Resolved in code.** Platform, Workspace, and Memory apply shared output limits and redaction. Memory’s frozen install pins the published `0.1.1`. Existing Memory npm installations pick up the cutover in the next Memory release. |
+| MCP-G007 | **Resolved.** Platform, Workspace, and Memory apply shared output limits and redaction. Memory MCP `2026.10.86` pins the published `0.1.1` and is available on npm and the MCP Registry. |
 | MCP-G008–G012 | **Resolved for the implemented transports.** Memory reports its package version and binds to loopback. Agent-runtime uses the SDK and no longer advertises duplicate Platform write tools. Standard MCP calls use `arguments`. The legacy REST compatibility route still accepts its original payload. |
 | MCP-G013 | **Resolved for Platform.** The authenticated interactive profile exposes catalog-change notifications, a catalog guide resource, and a discovery prompt. Registry clients use the stateless default profile. |
 | MCP-G014–G016 | **Resolved.** The outbound client reuses sessions, marketplace review uses the shared client, and the VS Code example points to `/mcp`. |
 | MCP-G017 | **Shared model projection implemented.** TypeScript consumers share relay plumbing and catalog caching. Rust and mobile use the gateway’s canonical tool schema, approval decision, and protected result text. Native HTTP transports and old-server response compatibility remain. |
 | MCP-G018 | **Resolved.** One VS Code chooser consumes the shared Platform connector catalog for HTTP setup and native stdio installation. |
-| MCP-G019 | **Resolved in code.** VS Code discovers VS Code, Claude Code, and Cursor configs, including the active Claude project, and imports legacy Synapse settings through native review. Local credentials stay in their host config. The Memory installer uses the shared codec. |
+| MCP-G019 | **Resolved.** VS Code discovers VS Code, Claude Code, and Cursor configs, including the active Claude project, and imports legacy Synapse settings through native review. Local credentials stay in their host config. The released Memory installer uses the shared codec. |
 | MCP-G020 | **Resolved.** Memory’s installer and Claude plugin define the launch spec. Synapse consumes generated Windows and POSIX launch data and retains the explicit executable override. |
 | MCP-G021 | **Workspace MCP cutover implemented.** VS Code and headless runtime share the persisted TypeScript index. Both legacy `codebase_*` calls use it, and the old runtime keyword ranker and `search-index.json` writer were removed. Broader index migration and the native retirement benchmark remain tracked in Area 2. |
 | MCP-G022 | **Partial.** Memory’s default runtime uses the public shared package. Editor fact recall and writes use the shared `MemoryCapability` and canonical provider names with the original dispatch aliases. The active headless Markdown tools still return path-and-line snippets through their own contract. |
@@ -677,7 +677,7 @@ Gaps:
 - `CIX-G015` **Result caps and file caps disagree.**
   - Result caps: 8 / 25 / 20 / 100 / 30.
   - File caps: 1 MB / 256 KB.
-- `CIX-G016` **Benchmark partial.** The TypeScript and native engines were compared on 400 matched source files per repository. Native was faster on both lexical samples. Full-repo matched coverage and dense retrieval quality still gate retirement. [Audit §2.5](../specs/tasks/platform-duplication-audit.md#25-target-design-one-code-index-every-host)
+- `CIX-G016` **Benchmark partial.** The harness verified 1,000 matched files per repository, and latency varied by corpus. An offline BGE-small smoke verified both engines can be evaluated with the same model. Full matched coverage, a representative judged dense comparison, and a production TypeScript embedder still gate native retirement. [Audit §2.5](../specs/tasks/platform-duplication-audit.md#25-target-design-one-code-index-every-host)
 - `CIX-G017` **API `knowledge.search` searches SOPs and docs (`recallSops.ts`), but its name suggests code search.**
 
 ### Inference, catalog and routing consolidation `[platform]` `[agents]`

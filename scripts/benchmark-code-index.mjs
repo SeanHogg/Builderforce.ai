@@ -1,5 +1,5 @@
 /**
- * Local lexical comparison against pinned, tracked source. From agent-runtime:
+ * Local lexical comparison against pinned, tracked source on Node 24+. From agent-runtime:
  * node --import tsx ../scripts/benchmark-code-index.mjs --repo <checkout> --inventory
  * node --import tsx ../scripts/benchmark-code-index.mjs --repo <checkout>
  *   --native <bf-context built with --no-default-features> --files 400 --query <term> --query <term>
@@ -121,7 +121,10 @@ async function main() {
   } });
   if (!values.repo) throw new Error('--repo is required');
   const { DEFAULT_REPO_MAP_LIMITS: limits, isMapCandidate } = await import(source('../packages/repo-map/src/filePolicy.ts'));
-  const git = (args, opts = {}) => execFileSync('git', ['-C', values.repo, ...args], { maxBuffer: 64 * mib, windowsHide: true, ...opts });
+  const git = (args, opts = {}) => execFileSync('git', ['-c', 'protocol.allow=never', '-C', values.repo, ...args], {
+    env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0' },
+    maxBuffer: 64 * mib, windowsHide: true, ...opts,
+  });
   const revision = git(['rev-parse', '--verify', '--end-of-options', `${values.commit}^{commit}`], { encoding: 'utf8' }).trim();
   const tracked = git(['ls-tree', '-r', '-l', '-z', revision], { encoding: 'utf8' }).split('\0').flatMap((line) => {
     const [, object, size, path] = /^100[0-7]{3} blob ([\da-f]+)\s+(\d+)\t([^]*?)$/u.exec(line) ?? [];
@@ -198,7 +201,10 @@ async function main() {
     const coverageMatches = !missing.length && !unexpected.length;
     return { ...results, indexedFiles: unique.size, coverageMatches, missing: missing.slice(0, 10), unexpected: unexpected.slice(0, 10) };
   }
-  const result = { revision, corpusFiles: paths.length, requestedFiles: fileCount, warmRuns, typescript: summarize(typescript), native: summarize(native) };
+  const result = {
+    revision, corpusFiles: paths.length, requestedFiles: fileCount, warmRuns, engineOrder: ['typescript', 'native'],
+    typescript: summarize(typescript), native: summarize(native),
+  };
   await writeFile(join(scratch, 'result.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
   if (!result.typescript.coverageMatches || !result.native.coverageMatches || result.typescript.partial) process.exitCode = 1;
