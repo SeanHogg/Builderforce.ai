@@ -40197,6 +40197,8 @@
         "levelAria": "Mitglieder dieser Ebene",
         "levelEmpty": "Auf dieser Ebene gibt es noch nichts.",
         "levelNoSource": "Der Quelltext ist hier nicht verfügbar: Die Gliederung wird angezeigt.",
+        "classDiagram": "Klassendiagramm",
+        "componentDiagram": "Komponentendiagramm",
         "rowNoTest": "Kein Test",
         "rowAntiPattern": "Anti-Pattern: {name}",
         "paneCode": "Code",

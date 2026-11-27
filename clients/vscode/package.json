@@ -157,6 +157,36 @@
         }
       ]
     },
+    "walkthroughs": [
+      {
+        "id": "builderforce.aiProject",
+        "title": "%walkthrough.aiProject.title%",
+        "description": "%walkthrough.aiProject.description%",
+        "steps": [
+          {
+            "id": "builderforce.aiProject.scratch",
+            "title": "%walkthrough.aiProject.scratch.title%",
+            "description": "%walkthrough.aiProject.scratch.description%",
+            "media": { "image": "media/walkthrough/ai-scratch.svg", "altText": "%walkthrough.aiProject.scratch.alt%" },
+            "completionEvents": ["onCommand:builderforce.newAiProject"]
+          },
+          {
+            "id": "builderforce.aiProject.existing",
+            "title": "%walkthrough.aiProject.existing.title%",
+            "description": "%walkthrough.aiProject.existing.description%",
+            "media": { "image": "media/walkthrough/ai-existing.svg", "altText": "%walkthrough.aiProject.existing.alt%" },
+            "completionEvents": ["onCommand:builderforce.newAiProject"]
+          },
+          {
+            "id": "builderforce.aiProject.knowledgePack",
+            "title": "%walkthrough.aiProject.knowledgePack.title%",
+            "description": "%walkthrough.aiProject.knowledgePack.description%",
+            "media": { "image": "media/walkthrough/ai-knowledge-pack.svg", "altText": "%walkthrough.aiProject.knowledgePack.alt%" },
+            "completionEvents": ["onCommand:builderforce.newAiProject"]
+          }
+        ]
+      }
+    ],
     "viewsWelcome": [
       {
         "view": "builderforce.welcome",
@@ -331,6 +361,12 @@
         "command": "builderforce.createProject",
         "title": "%command.createProject%",
         "icon": "$(new-folder)"
+      },
+      {
+        "command": "builderforce.newAiProject",
+        "title": "%command.newAiProject%",
+        "category": "BuilderForce",
+        "icon": "$(sparkle)"
       },
       {
         "command": "builderforce.createWorkspace",
@@ -902,6 +938,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "builderforce.newAiProject",
+          "when": "builderforce.capability.account"
+        },
         {
           "command": "builderforce.localWork.setStatus",
           "when": "false"

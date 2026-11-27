@@ -52,7 +52,9 @@ describe("the editor schema built from the runtime's", () => {
   it("holds a file with a version to the v1 schema in full, with its definitions", () => {
     const { $id: _id, $schema: _meta, title: _title, $defs, ...body } = APP_MANIFEST_SCHEMA_V1 as unknown as Record<string, unknown>;
     expect(schema.if).toEqual({ required: ["version"] });
-    expect(schema.then).toEqual(body);
+    // The runtime's schema, plus the two members `builderforce.newAiProject` writes (`projectId`, `projectType`).
+    const properties = body.properties as Record<string, unknown>;
+    expect(schema.then).toEqual({ ...body, properties: { ...properties, projectId: { type: "integer" }, projectType: { type: "string" } } });
     expect(schema.$defs).toEqual($defs);
   });
 

@@ -35,6 +35,7 @@ import { onePaneStage } from '../../layout';
 import { codePaneWidth, maxCodePaneWidth, MIN_CODE_PANE_WIDTH } from '../overlay/CodeDock';
 import { CodePaneSplitter } from './CodePaneSplitter';
 import { ColourLegend } from './ColourLegend';
+import { SystemVisibility, useSystemVisibility } from './SystemVisibility';
 import { LevelRail, useLevelRail } from './LevelRail';
 import { depthCrumbs } from '../../surface/DepthTrail';
 import { PanelChevron } from '../../surface/ui/PanelChevron';
@@ -179,6 +180,8 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     const roles = useMemo(() => (highlight ? [...highlight.roles] : null), [highlight]);
     // Compare: how each ref differs on the side shown (a diff tone over the slot's own); a station mark is painted by its id.
     const stations = surface.stations;
+    const visibility = useSystemVisibility(graph.scope.rootId, stations.stations, surface.lines?.systems, labels.surface.systems.loose);
+    const { hiddenStations } = visibility;
     const diff = useMemo(() => (compare?.diff.size ? paintDiffEntries(compare.diff, stations) : null), [compare?.diff, stations]);
     const paint = useComputed('markPaint', {
         graph, generation, lensId: p.lens.id, questionId: surface.question, overlay: bindings, lit, roles, family: surface.family, diff,
@@ -207,14 +210,15 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
         graph, generation, camera: cam, drill, unfolded: null, pins: [], pathId: path, viewportBand: band, lod: l, channels,
         ...(depth === undefined ? {} : { depth }),
         ...(m ? { method: m } : {}),
+        ...(cam === 'map' && !drill && hiddenStations.length ? { hiddenStations } : {}),
         // Flow reads symbols only inside a drilled level; at system level they are not an input (nor part of its key).
         ...(drill || cam === 'sequence' ? { symbols } : {}),
     });
-    const mapResult = useComputed('placement', place('map', mapDepth, wiring.map.drill, 0, null), [graph, generation, band, channels, wiring.map.drill, symbols, mapDepth], null, { enabled: !!marks, scope: [generation, wiring.map.drill] });
+    const mapResult = useComputed('placement', place('map', mapDepth, wiring.map.drill, 0, null), [graph, generation, band, channels, wiring.map.drill, symbols, mapDepth, hiddenStations], null, { enabled: !!marks, scope: [generation, wiring.map.drill] });
     const map = mapResult.value;
     const other = camera === 'map' ? 'graph' : camera;
     // The zoom's nesting survives a rebuilt world: its entries are re-derived from the ancestor levels' placements of the new generation.
-    const nestBasis = useNestBasis(marks, surface.drill.stack, camera === 'map' && wiring.zoom.nests, (d) => place('map', mapDepth, d, 0, null), [graph, generation, band, channels, symbols, mapDepth]);
+    const nestBasis = useNestBasis(marks, surface.drill.stack, camera === 'map' && wiring.zoom.nests, (d) => place('map', mapDepth, d, 0, null), [graph, generation, band, channels, symbols, mapDepth, hiddenStations]);
     const setBasis = wiring.zoom.setBasis;
     useEffect(() => { setBasis(nestBasis.basis); }, [setBasis, nestBasis.basis]);
     const otherDepth = other === '3d' ? 1 : flat ? 0 : undefined;
@@ -306,7 +310,8 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
             {!!barPx && <div style={{ position: 'absolute', top: 0, insetInline: 0 }}>{code.bar}</div>}
             <div data-map-pane style={{ position: 'absolute', top: barPx, insetInlineStart: 0, width, height, ...(showCodeHalf ? { visibility: 'hidden', pointerEvents: 'none' } : null) }}>
                 {levelNote && <p data-level-note style={{ position: 'absolute', zIndex: 1, insetBlockEnd: 74, insetInlineStart: 10, maxWidth: 'calc(100% - 80px)', margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'), ...TYPE.bodyMuted }}>{levelNote}</p>}
-                <LevelRail zoom={zoom} rail={rail} narrow={narrowStage} />
+                <LevelRail zoom={zoom} rail={rail} narrow={narrowStage} filters={camera === 'map' && !wiring.map.drill
+                    ? <SystemVisibility label={labels.surface.code.architecture} {...visibility} /> : undefined} />
                 {ready && <ColourLegend labels={labels} surface={surface} types={legendTypesOf(shownMarks?.type)} comparing={!!compare} narrow={narrowStage} scale={scale} />}
                 {shownMarks && (
                     <Stage

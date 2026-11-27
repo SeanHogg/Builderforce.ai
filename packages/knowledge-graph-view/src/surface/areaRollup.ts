@@ -5,6 +5,8 @@
  * `foldGroups` (communityGroups.ts) groups by community instead whenever the communities fit.
  */
 
+import { pathOf } from '../graphModel';
+import { appOfNode, systemOfNode } from './systems';
 import type { KNode } from '@seanhogg/builderforce-memory/knowledge';
 
 export const MAX_STATIONS = 400;
@@ -24,7 +26,10 @@ export function rollUpAreas(groups: Map<string, Group>, nameOf: (id: string) => 
         const next = new Map<string, Group>();
         let folded = false;
         for (const g of current.values()) {
-            const parent = g.kind === 'area' ? parentAreaRef(g.id) : null;
+            const candidate = g.kind === 'area' ? parentAreaRef(g.id) : null;
+            const boundary = g.nodes[0] && (appOfNode(g.nodes[0]) || systemOfNode(g.nodes[0]));
+            const path = candidate && pathOf(candidate);
+            const parent = !boundary || path === boundary || path?.startsWith(`${boundary}/`) ? candidate : null;
             const id = parent ?? g.id;
             if (parent) folded = true;
             const into = next.get(id) ?? { id, name: parent ? nameOf(id) : g.name, kind: g.kind, nodes: [] };

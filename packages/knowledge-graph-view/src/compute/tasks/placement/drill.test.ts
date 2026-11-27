@@ -57,7 +57,10 @@ describe('drill on the stage (PRD 43 B7: symbol slots appended + a new placement
         expect(p.append?.parentStation[0]).toBe(apiSlot);
         expect(p.scale.length).toBe(base + 2);
         expect(p.position.length).toBe((base + 2) * 3);
-        expect(shownSlots(p)).toEqual(expect.arrayContaining([base, base + 1]));
+        expect(shownSlots(p)).toContain(base);
+        expect(shownSlots(p)).not.toContain(base + 1);
+        const methods = placeDrill(graph, model, req(drillKeyOf({ level: 'function', ref: CLS }), records));
+        expect(shownSlots(methods)).toContain(base + 1);
         // Append-only: a later answer with more records keeps the first two slots.
         const more = placeDrill(graph, model, req(drillKeyOf({ level: 'class', ref: USE_CASE }), [...records, { ref: `${CLS}.stop`, name: 'stop', kind: 'method', parent: CLS, line: 9, exported: false }]));
         expect(more.append?.keys.slice(0, 2)).toEqual(p.append?.keys);

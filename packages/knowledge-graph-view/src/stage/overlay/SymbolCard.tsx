@@ -4,6 +4,7 @@
  * show code, open the file). Station cards keep their own card; the open code level has the step card.
  */
 
+import type { ReactNode } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { kindLabel } from '../../names';
 import { typeLegendKey, typeShape, type MarkType } from '../../shapes';
@@ -38,6 +39,8 @@ export interface SymbolCardProps {
     facts?: SymbolFacts | undefined;
     /** Each is optional: absent ⇒ its button is not shown. Restructure replaces Simulate when the symbol carries an anti-pattern. */
     onCallers?: (() => void) | undefined;
+    callersActive?: boolean | undefined;
+    callersDetail?: ReactNode;
     onSimulate?: (() => void) | undefined;
     onRestructure?: (() => void) | undefined;
     /** False while the restructure's file is being read: Restructure shows disabled. Default true. */
@@ -47,7 +50,7 @@ export interface SymbolCardProps {
     narrow?: boolean | undefined;
 }
 
-export function SymbolCard({ slotKey, symbolRef, name, state, records, markType, labels, onDrill, onCode, onOpenSource, facts: symbolFacts, onCallers, onSimulate, onRestructure, restructureReady, answer, narrow }: SymbolCardProps) {
+export function SymbolCard({ slotKey, symbolRef, name, state, records, markType, labels, onDrill, onCode, onOpenSource, facts: symbolFacts, onCallers, callersActive, callersDetail, onSimulate, onRestructure, restructureReady, answer, narrow }: SymbolCardProps) {
     if (!slotKey) return null;
     const t = labels.surface.code;
     const target = codeTargetOf(symbolRef, records);
@@ -62,7 +65,7 @@ export function SymbolCard({ slotKey, symbolRef, name, state, records, markType,
     const selection = selectionFacts(symbolFacts, [symbolRef], labels);
     return (
         <NoteCard
-            role="symbol" ariaLabel={shown} name={shown} kind={kindLabel(labels, typeLegendKey(markType))} narrow={narrow} answer={answer}
+            role="symbol" ariaLabel={shown} name={shown} kind={kindLabel(labels, typeLegendKey(markType))} narrow={narrow} answer={answer} detail={callersDetail}
             glyph={<ShapeGlyph shape={typeShape(markType)} size={14} />}
             meta={(
                 <span data-state={state} style={{ display: 'grid', gap: 4 }}>
@@ -73,8 +76,8 @@ export function SymbolCard({ slotKey, symbolRef, name, state, records, markType,
             facts={<CardFacts labels={labels} facts={selection} risk={riskFactOf(selection?.antiPattern ? { level: 'high', tone: 'sev4' } : null, labels)} />}
             acts={(
                 <>
-                    <CardAction id="drill-in" primary glyph="inside" label={t.drillInAction} disabled={counts.calls === 0} onClick={onDrill} />
-                    <SelectionActions labels={labels} facts={selection} onCallers={onCallers} onSimulate={onSimulate} onRestructure={onRestructure} restructureReady={restructureReady} />
+                    <CardAction id="drill-in" primary glyph="inside" label={t.drillInAction} disabled={!target} onClick={onDrill} />
+                    <SelectionActions labels={labels} facts={selection} onCallers={onCallers} callersActive={callersActive} onSimulate={onSimulate} onRestructure={onRestructure} restructureReady={restructureReady} />
                     <CardAction id="show-code" label={t.showCode} onClick={onCode} />
                     {target && onOpenSource && (
                         <CardAction id="open-file" label={t.openFile} onClick={() => onOpenSource({ path: target.path, startLine: target.startLine, endLine: target.startLine })} />

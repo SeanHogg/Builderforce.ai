@@ -13,6 +13,7 @@
 
 import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { communityIdOf, communityKey, communityName } from '../placement';
+import { appOfNode, systemOfNode } from './systems';
 import { MAX_STATIONS, rollUpAreas, type Group } from './areaRollup';
 
 /** The ONE station of top-level config files (LICENSE, Dockerfile, dotfiles, root docs). */
@@ -24,6 +25,12 @@ export type CommunityName = (id: number) => string;
 /** A graph's community names (`communityName`): the table label, else `fallback` (the host's `labels.communityFallback`; English when absent). */
 export function communityNamer(graph: KnowledgeGraph, fallback?: string): CommunityName {
     return (id) => communityName(graph, id, fallback);
+}
+
+/** Communities describe references. A visual station must still belong to one system and module. */
+export function scopedCommunityKey(node: KNode, community: number): string {
+    const system = systemOfNode(node), app = appOfNode(node);
+    return system || app ? `${communityKey(community)}:${JSON.stringify([system, app])}` : communityKey(community);
 }
 
 /** A file's community station (id and name); undefined when it has no community. */
@@ -43,7 +50,7 @@ export function groupByCommunity(groups: ReadonlyMap<string, Group>, nameOf: Com
     for (const g of groups.values()) {
         for (const n of g.nodes) {
             const community = g.id === REPO_CONFIG_STATION_ID ? undefined : communityIdOf(n);
-            const id = community === undefined ? g.id : communityKey(community);
+            const id = community === undefined ? g.id : scopedCommunityKey(n, community);
             let into = out.get(id);
             if (!into) {
                 // Named once per station, never per file.

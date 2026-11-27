@@ -5,7 +5,7 @@
  * action is offered only when it applies.
  */
 
-import type { RefObject } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { kindLabel } from '../../names';
 import { typeLegendKey, typeShape, type MarkType } from '../../shapes';
@@ -45,15 +45,17 @@ export interface StationCardProps extends CardActions {
     boxRef?: RefObject<HTMLElement | null> | undefined;
     /** Definitions are being read: a station with no symbols yet says so rather than "none". */
     loading?: boolean | undefined;
+    callersActive?: boolean | undefined;
+    callersDetail?: ReactNode;
 }
 
-export function StationCard({ card, labels, type, answer, narrow, boxRef, loading, onEnter, onUnfold, onCallers, onApi, onPatterns, onCode, onSimulate, onRestructure }: StationCardProps) {
+export function StationCard({ card, labels, type, answer, narrow, boxRef, loading, onEnter, onUnfold, onCallers, callersActive, callersDetail, onApi, onPatterns, onCode, onSimulate, onRestructure }: StationCardProps) {
     const t = labels.surface.map.card;
     const noSymbols = !card.enter.can && card.enter.reason === 'noSymbols';
     const complexity = card.stats.find((k) => k.key === 'complexity');
     return (
         <NoteCard
-            role="station" ariaLabel={card.name} name={card.name} kind={kindLabel(labels, typeLegendKey(type))} narrow={narrow} boxRef={boxRef} answer={answer}
+            role="station" ariaLabel={card.name} name={card.name} kind={kindLabel(labels, typeLegendKey(type))} narrow={narrow} boxRef={boxRef} answer={answer} onKind={type === 'source' ? onCode : undefined} detail={callersDetail}
             glyph={<ShapeGlyph shape={typeShape(type)} size={14} />}
             meta={<span style={TYPE.meta}>{card.meta}{card.leaf ? ` · ${t.leaf}` : ''}</span>}
             facts={(
@@ -65,7 +67,7 @@ export function StationCard({ card, labels, type, answer, narrow, boxRef, loadin
             acts={(
                 <>
                     <CardAction id="enter" primary glyph="inside" label={t.goInside} disabled={!card.enter.can} title={card.enter.can ? undefined : noSymbols ? (loading ? t.loading : t.noSymbols) : t.leaf} onClick={onEnter} />
-                    <SelectionActions labels={labels} facts={card.facts ?? null} onCallers={onCallers} onSimulate={onSimulate} onRestructure={onRestructure} restructureReady={card.restructureReady ?? true} />
+                    <SelectionActions labels={labels} facts={card.facts ?? null} onCallers={onCallers} callersActive={callersActive} onSimulate={onSimulate} onRestructure={onRestructure} restructureReady={card.restructureReady ?? true} />
                     {card.unfold > 0 && <CardAction id="unfold" pressed={card.unfolded} label={card.unfolded ? t.fold : fillTemplate(t.unfold, { count: card.unfold })} onClick={onUnfold} />}
                     {card.hasApi && <CardAction id="api" label={t.apiContract} onClick={onApi} />}
                     {card.hasPatterns && <CardAction id="patterns" label={t.patterns} onClick={onPatterns} />}

@@ -58,10 +58,12 @@ export interface CodeTreeProps {
     /** A row is hovered (its slot key) or left (null): the stage lights its shape. */
     onHover(key: string | null): void;
     labels: KnowledgeGraphLabels;
+    related?: ReadonlySet<string> | undefined;
+    onSource?: ((ref: string) => void) | undefined;
     groups?: ReadonlyMap<string, readonly ArchitectureGroup[]> | undefined;
 }
 
-export function CodeTree({ ancestors, onClimb, stations, keyOf, types, facts, selected, canEnter, onSelect, onEnter, onHover, labels, groups }: CodeTreeProps) {
+export function CodeTree({ ancestors, onClimb, stations, keyOf, types, facts, selected, canEnter, onSelect, onEnter, onHover, labels, groups, onSource, related }: CodeTreeProps) {
     const t = labels.surface.code;
     const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
     const rows: Row[] = ancestors.map((a, i) => ({ kind: 'ancestor', id: a.id ?? `up:${a.depth}`, depth: i, name: a.name, up: a.depth }));
@@ -80,7 +82,13 @@ export function CodeTree({ ancestors, onClimb, stations, keyOf, types, facts, se
             if (expanded) addMembers(members, depth + 1, id, groupIndex + 1);
         }
     }
-    addMembers(stations, ancestors.length, '', 0);
+    addMembers(related ? stations.filter((station) => !related.has(station.id)) : stations, ancestors.length, '', 0);
+    if (related?.size) {
+        const id = 'related';
+        const expanded = !collapsed.has(id);
+        rows.push({ kind: 'group', id, depth: 1, name: labels.surface.map.bands.leaves, expanded });
+        if (expanded) addMembers(stations.filter((station) => related.has(station.id)), 2, id, 0);
+    }
     const v = useVirtualRows<HTMLUListElement>(rows.length, ROW_PX);
     const selectedIndex = selected === null ? -1 : rows.findIndex((r) => r.kind === 'member' && r.key === selected);
     const { reveal } = v;
@@ -117,12 +125,13 @@ export function CodeTree({ ancestors, onClimb, stations, keyOf, types, facts, se
                     const anti = sel?.antiPattern ?? null, untested = sel?.tests === 'none';
                     const type = types.get(s.id);
                     return (
-                        <li key={row.id} role="none" data-outline-member={ref} aria-setsize={rows.length} aria-posinset={v.from + i + 1}>
+                        <li key={row.id} role="none" data-outline-member={ref} aria-setsize={rows.length} aria-posinset={v.from + i + 1}
+                            style={{ display: 'flex', alignItems: 'center' }}>
                             <button
                                 type="button" role="treeitem" aria-level={row.depth + 1} aria-selected={on} aria-current={on ? 'true' : undefined} title={s.path ?? s.name}
                                 onClick={() => { if (on && canEnter(s.id)) onEnter(s.id); else onSelect(row.key); }}
                                 onMouseEnter={() => onHover(row.key)} onMouseLeave={() => onHover(null)} onFocus={() => onHover(row.key)} onBlur={() => onHover(null)}
-                                style={button(on, false, row.depth)}
+                                style={{ ...button(on, false, row.depth), flex: 1, minWidth: 0 }}
                             >
                                 {type && <ShapeGlyph shape={typeShape(type)} size={ICON_PX} />}
                                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{s.name}</span>
@@ -133,8 +142,11 @@ export function CodeTree({ ancestors, onClimb, stations, keyOf, types, facts, se
                                 )}
                                 {untested
                                     ? <span data-mark="no-test" style={{ ...TYPE.meta, marginInlineStart: 'auto', paddingInlineEnd: 6, whiteSpace: 'nowrap', color: cssVar('violation') }}>{t.rowNoTest}</span>
-                                    : type && <span data-mark="kind" style={{ ...TYPE.meta, marginInlineStart: 'auto', paddingInlineEnd: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kindLabel(labels, typeLegendKey(type))}</span>}
+                                    : type && (!onSource || type !== 'source') && <span data-mark="kind" style={{ ...TYPE.meta, marginInlineStart: 'auto', paddingInlineEnd: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kindLabel(labels, typeLegendKey(type))}</span>}
                             </button>
+                            {!untested && type === 'source' && onSource && <button type="button" data-mark="kind"
+                                style={{ ...TYPE.meta, border: 0, background: 'transparent', textDecoration: 'underline', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                onClick={() => onSource(ref)}>{kindLabel(labels, typeLegendKey(type))}</button>}
                         </li>
                     );
                 })}

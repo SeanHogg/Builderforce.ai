@@ -62,16 +62,13 @@ function membersOf(graph: KnowledgeGraph, world: StationModel, frame: DrillFrame
     if (frame.level === 'class') {
         const own = symbolsOfFile(symbols, frame.ref);
         if (own.length === 0) {
-            const station = stationOfRef(world, frame.ref);
-            return { members: asFiles(world.byId.get(station ?? '')?.refs ?? []), order: [...LAYER_ORDER], filesOnly: true, extra: [], anchors: [] };
+            return { members: asFiles([frame.ref]), order: [...LAYER_ORDER], filesOnly: true, extra: [], anchors: [] };
         }
-        const members = own.map((node) => ({ node, role: isErrorish(node) ? 'errors' : isClassLike(symbolSort(node)) ? 'symbol' : 'methods' }));
-        // A class stands above its methods.
-        const extra: KEdge[] = [];
-        for (const cls of own.filter((n) => isClassLike(symbolSort(n)))) {
-            for (const m of membersOfClass(own, cls)) extra.push({ from: cls.ref, to: m.ref, kind: 'references', weight: 1, origin: 'extracted' });
-        }
-        return { members, order: ['symbol', 'methods', 'errors'], filesOnly: false, extra, anchors: [frame.ref] };
+        const owned = new Set(own.filter((node) => isClassLike(symbolSort(node))).flatMap((owner) => membersOfClass(own, owner).map((node) => node.ref)));
+        const members = own.filter((node) => !owned.has(node.ref)).map((node) => ({
+            node, role: isClassLike(symbolSort(node)) ? 'symbol' : isErrorish(node) ? 'errors' : 'methods',
+        }));
+        return { members, order: ['symbol', 'methods', 'errors'], filesOnly: false, extra: [], anchors: [frame.ref] };
     }
     const focus = byRef.get(frame.ref);
     if (!focus) return { members: [], order: ['body', 'callees'], filesOnly: false, extra: [], anchors: [] };

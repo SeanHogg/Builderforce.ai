@@ -141,6 +141,8 @@ const JS_METHOD = new RegExp(
 const JS_ABSTRACT_METHOD = new RegExp(
   `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`,
 );
+/** Interface members are signatures; their lines have no body brace. */
+const JS_INTERFACE_METHOD = new RegExp(`^(?:\\t|  |    )(${ID})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`);
 /** A member whose parameter list opens a multi-line signature: `  async find(` with the parameters on the lines below. */
 const JS_METHOD_OPEN = new RegExp(
   `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|async|get|set)\\s+)*\\*?\\s*(${ID})\\s*(?:<[^>]*>)?\\s*\\(\\s*$`,
@@ -163,10 +165,11 @@ function closesWithBody(lines: readonly string[], at: number): boolean {
 function extractJs(lines: string[], out: CodeSymbol[], path = ""): void {
   // The class whose body we are in (its closing brace sits at column 0).
   let cls: string | undefined;
+  let isInterface = false;
   // The callback owners (callbackOwners.ts): a route handler or a listener owns its callback's body.
   const owners = new CallbackOwnerScan(path);
   eachLine(lines, out, (line, lineNo) => {
-    if (/^\}/.test(line)) cls = undefined;
+    if (/^\}/.test(line)) { cls = undefined; isInterface = false; }
     if (owners.inBody(line)) return;
     owners.track(line);
     for (const rule of JS_RULES) {
@@ -177,7 +180,10 @@ function extractJs(lines: string[], out: CodeSymbol[], path = ""): void {
       if (!exported && /^\s/.test(line)) continue;
       const name = group(m, 2).replace(/^["']|["']$/g, "");
       out.push({ name, kind: rule.kind, line: lineNo, exported });
-      if (rule.kind === "class") cls = name;
+      if (rule.kind === "class" || rule.kind === "interface") {
+        cls = /\}\s*;?\s*$/.test(line) ? undefined : name;
+        isInterface = rule.kind === "interface";
+      }
       return;
     }
     if (cls === undefined) {
@@ -186,7 +192,8 @@ function extractJs(lines: string[], out: CodeSymbol[], path = ""): void {
       return;
     }
     const open = JS_METHOD_OPEN.exec(line);
-    const method = JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line) ?? (open && closesWithBody(lines, lineNo - 1) ? open : null);
+    const method = isInterface ? JS_INTERFACE_METHOD.exec(line)
+      : JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line) ?? (open && closesWithBody(lines, lineNo - 1) ? open : null);
     const name = method ? group(method, 1) : "";
     if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
   });

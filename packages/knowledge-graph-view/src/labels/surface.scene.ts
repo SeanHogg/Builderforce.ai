@@ -39,7 +39,7 @@ export interface SceneLabels {
         | 'followsEditor'
         | 'stateSelected' | 'stateReading' | 'statePinned' | 'methodsCount' | 'fieldsCount' | 'callsCount' | 'imported' | 'drillInAction' | 'showCode' | 'openFile'
         | 'status' | 'following' | 'pinnedStatus' | 'statusLine'
-        | 'dockAria' | 'dockHide' | 'dockShow' | 'levelAria' | 'levelEmpty' | 'levelNoSource' | 'rowNoTest' | 'rowAntiPattern'
+        | 'dockAria' | 'dockHide' | 'dockShow' | 'levelAria' | 'levelEmpty' | 'levelNoSource' | 'classDiagram' | 'componentDiagram' | 'rowNoTest' | 'rowAntiPattern'
         | 'paneCode' | 'panePicture' | 'architecture' | 'filesystem' | 'lensOut' | 'lensSimulate' | 'lensRestructure' | 'gutterWarn'
         | 'samePlace' | 'sayLead' | 'sayHint' | 'fileLines' | 'fileLine',
         string
@@ -170,6 +170,8 @@ export const SCENE_DEFAULTS: SceneLabels = {
         levelAria: 'Members of this level',
         levelEmpty: 'Nothing at this level yet.',
         levelNoSource: 'The source is not available here: showing the outline.',
+        classDiagram: 'Class diagram',
+        componentDiagram: 'Component diagram',
         rowNoTest: 'No test',
         rowAntiPattern: 'Anti-pattern: {name}',
         /** The pane's heading, and (a box too narrow to split) the picture it trades places with. */

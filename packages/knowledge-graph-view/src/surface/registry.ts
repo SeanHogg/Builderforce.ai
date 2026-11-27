@@ -25,6 +25,7 @@ export interface SurfaceEnv {
     reducedMotion: boolean;
     /** The graph has entry points, so the transit map has lines to draw. */
     hasLines: boolean;
+    hasSymbolScope?: boolean;
     compact: boolean;
     /** The source records its reviews as runs, so the Run drawer has something to show. */
     hasRun?: boolean;

@@ -17,6 +17,7 @@
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { buildDrillView, type DrillFrame } from '../../../surface/transit/drillView';
+import { fileNodesOf } from '../../../surface/outlineGraph';
 import { withSymbolRecords } from '../../../surface/transit/symbols';
 import type { Placement } from '../../../stage/types';
 import type { SymbolRecord } from '../../../types';
@@ -28,9 +29,13 @@ import { symbolSlots } from './symbolSlots';
 
 /** A drilled level as a StageModel (its stations, lines and slots) plus what built it: the Map and the Flow place the SAME level. */
 export function drillLevel(g: KnowledgeGraph, model: StageModel, frame: Pick<DrillFrame, 'level' | 'ref'>, symbols: readonly SymbolRecord[]) {
-    const full = withSymbolRecords(g, symbols);
+    const enriched = withSymbolRecords(g, symbols);
+    const view = buildDrillView(enriched, model.stations, { ...frame, name: '' } as DrillFrame, symbols);
+    const missing = new Set(view.stations.stations.filter((station) => !view.leaves.has(station.id)).flatMap((station) => station.refs)
+        .filter((ref) => !model.nodeSlot.has(ref)));
+    const files = missing.size ? fileNodesOf(g).filter((node) => missing.has(node.ref)) : [];
+    const full = files.length ? { ...enriched, nodes: [...enriched.nodes, ...files] } : enriched;
     const { marks, append, nodeSlot } = symbolSlots(model, full, g.nodes.length);
-    const view = buildDrillView(full, model.stations, { ...frame, name: '' } as DrillFrame);
 
     const stationSlot = new Map<string, number>();
     for (const s of view.stations.stations) {

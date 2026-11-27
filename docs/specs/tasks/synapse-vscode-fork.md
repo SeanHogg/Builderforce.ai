@@ -100,13 +100,94 @@ One registry, stored as data: `packages/ide-templates/src/projectTypes.ts` expor
 
 ## 5. Features only the Tauri app had (`UP-G018`)
 
-These are rebuilt in the Builderforce extension, and need their own design pass:
+These features are rebuilt in the Builderforce extension.
 
-| Feature | Rebuild |
-|---|---|
-| Self-Directed Agents and their scheduler | On the existing agent run kernel. |
-| Phone approvals | Raises `synapse.step` through `/api/approvals` (the API side exists). |
-| Teach-once | Needs a native desktop-automation helper. The old Rust `bf-teach` is in git history at `887ef12~1`. |
+### What they were, from the inventory of `887ef12~1`
+
+- **One feature, three faces.**
+  - A **Self-Directed Agent run** replays a Teach-once *skill*: a list of recorded UI steps (click, set value, keys) driven on the real desktop.
+  - A run makes **no model call**. It is deterministic.
+  - **The scheduler** runs a skill's routine. **Phone approvals** answer a step's approval gate.
+  - All three sit on Teach-once.
+  - This is a different thing from the chat agent run kernel. It does not run on `agent-run`.
+- **Already portable, in TypeScript:** the whole domain lives in the memory packages, with its own tests:
+  - `memory-engine/src/experience`: `trainOnce`, the approval defaults, `isDue`/`dueSkills`, the types and the store contract;
+  - `memory-mcp/src/experience`: `FileExperienceStore`, the host and training.
+- **Native:** only the recorder and replayer (`crates/bf-teach`, about 2,270 lines, Windows UIA and macOS AX behind a `Platform` trait). The vault was `bf-vault`.
+- **The API side exists:** `/api/approvals` with the self-owned `synapse.step` action type. It is owner-only, never auto-approved, and claimed atomically.
+
+### Pieces
+
+| Piece | Where | Contents |
+|---|---|---|
+| **A. Native helper** | `builderforce-inference/crates/bf-teach`, restored from `887ef12~1`, plus a new bin `bf-teach-helper` | The JSON-lines stdio protocol below, and nothing else. It is a separate process, because the hooks and UIA/AX are thread-affine, need OS permissions, and must not be able to crash the extension host. `release.yml` publishes it for win32-x64, darwin-arm64 and darwin-x64. Linux reports `supported:false`. |
+| **B. Experience export** | `builderforce-memory/packages/memory-mcp`, new `./experience` subpath | `createExperienceHost({ memoryFile, modelFile? })` without the env gate. It re-exports `FileExperienceStore`, `trainExperience` and `asEpisode`. The extension uses it in-process: no MCP server is spawned, and no opt-in env is needed. A memory release follows. |
+| **C. Extension** | `clients/vscode/src/experience/` | The modules below. The helper is vendored like `bfi-node` (`packages/bf-teach-helper/bin/<platform>/`, copied by `esbuild.mjs`, packaged per platform by `vsce-platform`). |
+
+### Helper protocol (A ↔ C)
+
+- **Framing:** one JSON object per line on stdin and stdout.
+  - The host sends requests `{id, method, params}`.
+  - The helper answers `{id, result}` or `{id, error:{code, message}}`, and pushes `{event, ...}`.
+  - Secrets travel only on stdin, never in argv or env.
+- **Methods:**
+
+| Method | Params | Result |
+|---|---|---|
+| `hello` | none | `{protocol:1, platform, supported}` |
+| `record.start` | `{program, args, shotsDir}` | `{}` |
+| `record.stop` | none | `{episode}` in the engine's `Episode` JSON, or `{episode:null}` when it is empty |
+| `run.start` | `{skill, values}` | `{}`. One run at a time, otherwise error `busy`. |
+| `run.stop` | none | `{}` |
+| `approve.answer` | `{idx, approved}` | `{}` |
+
+- **Events:**
+  - `run.stepStarted {idx}`
+  - `run.stepFinished {idx, outcome, detail?}`
+  - `run.approvalNeeded {idx}`: the helper blocks until `approve.answer` arrives.
+  - `run.finished {status: succeeded|failed|stopped|denied, error?}`
+  - `record.step {count}`
+- **Esc takeover** stays inside the helper and ends the run as `stopped`.
+- A missing secret fails `run.start` before anything moves.
+
+### Extension modules (C), one concern each
+
+- **`teachHelper.ts`:** spawns the vendored helper and implements the protocol client behind a `TeachHelperPort`. Tests use a fake port.
+- **`experienceHost.ts`:** builds B's host beside the extension's existing memory file.
+- **`skillSecrets.ts`:** secret params in `vscode.SecretStorage` (the OS keychain), keyed `skill:<id>:<param>`. This replaces `bf-vault`.
+- **`skillRunner.ts`:** one run at a time. It:
+  - resolves values (given, then routine values, then secrets);
+  - writes the audit trail through `run_start` / `run_step` / `run_finish` on the store;
+  - marks orphaned `running` runs as failed on activation;
+  - races approvals: the in-window answer against the phone relay, first answer wins;
+  - treats a timeout (15 min) or a Stop as **no**;
+  - writes the `synapse.skill.<id>.last-run` fact.
+- **`phoneApprovalRelay.ts`:** `open` posts `/api/approvals` with `{kind:"approval", actionType:"synapse.step", description, metadata:{runId, skill, step, action}, expiresAt}`. `answer` polls `GET /api/approvals/:id` every 3 s. `close` sends `PATCH` with `reviewNote "Answered in Synapse"`.
+  - The HTTP calls live in one `bfApi/approvals.ts` client. The list and resolve calls in `bfApi/runtime.ts` move into that client, and callers migrate.
+  - The relay runs only while signed in and with `builderforce.agents.phoneApprovals` on.
+- **`routineScheduler.ts`:** a 30 s tick. It does nothing when the agents are off or a run is active. Otherwise it runs the first skill from `engine.dueSkills(...)` with trigger `routine`.
+- **`skillsView.ts` plus a webview:** a "Skills" view with:
+  - Teach (pick a program, record, stop, review edits, compile with `trainOnce`);
+  - skill cards (Run, Schedule, Delete);
+  - the run form, with password inputs for secrets and "remember";
+  - the routine form;
+  - run history with per-step outcomes;
+  - the live run card (Stop, step N, the approval prompt);
+  - the phone-approvals opt-in.
+  - All strings are l10n in 5 locales. Colours come only from theme tokens.
+- **`trainPrivateModel` command:** `trainExperience` on the configured `.evermind` file.
+- **Settings:**
+  - `builderforce.agents.enabled` (off by default; the first enable asks for consent and stores `consentedAt`);
+  - `builderforce.agents.phoneApprovals`;
+  - `builderforce.agents.modelFile`.
+- **Gating:** on Linux, or when `hello` says `supported:false`, the view shows a "Not available on this system" state, and the commands are hidden by a `when` context key.
+
+### Order
+
+1. A and B in parallel.
+2. Release memory.
+3. C. It starts after batch 2 leaves `clients/vscode`.
+4. One review (Opus: native input automation, secrets and approvals), then verification, then ship.
 
 ## 6. Runtime id rename (`INF-G012`), done expand/contract
 

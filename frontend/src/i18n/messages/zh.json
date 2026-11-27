@@ -40197,6 +40197,8 @@
         "levelAria": "此层级的成员",
         "levelEmpty": "此层级暂无内容。",
         "levelNoSource": "此处无法获取源码：正在显示大纲。",
+        "classDiagram": "类图",
+        "componentDiagram": "组件图",
         "rowNoTest": "无测试",
         "rowAntiPattern": "反模式：{name}",
         "paneCode": "代码",

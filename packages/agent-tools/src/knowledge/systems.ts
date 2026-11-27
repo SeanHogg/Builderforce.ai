@@ -117,20 +117,20 @@ async function appsOf(system: string, paths: readonly string[], has: ReadonlySet
     const only = (file: string): Promise<string | undefined> => (has.has(joinPath(system, file)) ? read(joinPath(system, file)) : Promise.resolve(undefined));
     const [pkg, pnpm] = await Promise.all([only("package.json"), only("pnpm-workspace.yaml")]);
     const globs = workspaceGlobs(pkg, pnpm);
-    if (globs.length === 0) return [];
     const include = globs.filter((g) => !g.startsWith('!')).map(globTest);
     const exclude = globs.filter((g) => g.startsWith('!')).map((g) => globTest(g.slice(1)));
     const dirs = paths
-        .filter((p) => baseOf(p) === 'package.json' && within(p, system))
+        .filter((p) => (globs.length ? baseOf(p) === 'package.json' : PROJECT_MANIFESTS.includes(baseOf(p))) && within(p, system))
         .map((p) => rel(dirOf(p), system))
-        .filter((d) => d !== '' && include.some((t) => t(d)) && !exclude.some((t) => t(d)))
-        .sort(byDepthThenPath)
-        .slice(0, MAX_APPS_PER_SYSTEM);
+        .filter((d) => d !== '' && (globs.length === 0 || include.some((t) => t(d))) && !exclude.some((t) => t(d)));
+    const candidates = [...new Set(dirs)].sort(byDepthThenPath);
     const apps: DetectedApp[] = [];
-    for (const d of dirs) {
+    for (const d of candidates) {
         const full = joinPath(system, d);
-        const name = manifestProjectName('package.json', (await read(joinPath(full, 'package.json'))) ?? '') ?? baseOf(full);
-        apps.push({ path: full, name });
+        const project = await projectOf(full, has, read);
+        if (!project && globs.length === 0) continue;
+        apps.push({ path: full, name: project?.name ?? baseOf(full) });
+        if (apps.length === MAX_APPS_PER_SYSTEM) break;
     }
     return apps;
 }

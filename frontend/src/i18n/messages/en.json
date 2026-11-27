@@ -39284,6 +39284,8 @@
         "levelAria": "Members of this level",
         "levelEmpty": "Nothing at this level yet.",
         "levelNoSource": "The source is not available here: showing the outline.",
+        "classDiagram": "Class diagram",
+        "componentDiagram": "Component diagram",
         "rowNoTest": "No test",
         "rowAntiPattern": "Anti-pattern: {name}",
         "paneCode": "Code",

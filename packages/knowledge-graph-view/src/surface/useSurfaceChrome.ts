@@ -70,17 +70,20 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
     let spineItems = legacySpine;
     const drill = surface.drill;
     const ref = i.codeRef ?? selected ?? drill.view?.stations.byId.get(drill.selected ?? '')?.refs[0];
-    const file = ref ? i.codeFiles.get(fileRefOf(ref)) : undefined;
-    if (file && (i.hierarchy === 'filesystem' || (i.hierarchy === 'architecture' && file.isCode))) {
+    const fileFrame = drill.stack.find((frame) => frame.level === 'class');
+    const file = i.codeFiles.get(ref ? fileRefOf(ref) : fileFrame?.ref ?? '');
+    if (file && (i.hierarchy === 'filesystem' || ((i.hierarchy === 'architecture' || i.hierarchy === 'picture') && file.isCode))) {
         spineItems = [
             root,
-            ...file[i.hierarchy].map(({ id, name }): SpineItem => ({ kind: 'folder', id, label: name })),
+            ...file[i.hierarchy === 'filesystem' ? 'filesystem' : 'architecture'].map(({ id, name }): SpineItem => ({ kind: 'folder', id, label: name })),
             { kind: 'file', id: file.ref, label: file.name },
         ];
-        if (ref && ref !== file.ref) {
-            const chain = symbolChain(ref, new Map(drill.symbols.map((symbol) => [symbol.ref, symbol])));
+        const definition = ref && fileRefOf(ref) === file.ref && ref !== file.ref
+            ? ref : drill.stack.find((frame) => frame.level === 'function')?.ref;
+        if (definition) {
+            const chain = symbolChain(definition, new Map(drill.symbols.map((symbol) => [symbol.ref, symbol])));
             if (chain.length) spineItems.push(...chain.map((symbol): SpineItem => ({ kind: 'symbol', id: symbol.ref, label: symbol.name })));
-            else spineItems.push({ kind: 'symbol', id: ref, label: labelFor(index, ref) });
+            else spineItems.push({ kind: 'symbol', id: definition, label: labelFor(index, definition) });
         }
     } else if (i.hierarchy === 'picture' || i.hierarchy === 'architecture') {
         const component = surface.stations.byId.get(drill.stack[0]?.ref ?? '') ?? spineStation;

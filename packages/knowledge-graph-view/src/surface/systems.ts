@@ -9,7 +9,8 @@
 
 import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from '../order';
-import { fileNodesOf } from './outlineGraph';
+import { pathOf } from '../graphModel';
+import { fileNodesOf, isArchitectureFile } from './outlineGraph';
 
 export interface SystemInfo {
     /** The system's folder under the review root. */
@@ -36,6 +37,37 @@ export const systemOfNode = (n: KNode): string => (n as Tagged).system ?? '';
 export const appOfNode = (n: KNode): string => (n as Tagged).app ?? '';
 
 const tailOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1) || path;
+
+const fileModules = new WeakMap<KnowledgeGraph, ReadonlyMap<string, string>>();
+const MODULE_MANIFESTS = new Set(['package.json', 'Cargo.toml', 'go.mod', 'pyproject.toml']);
+
+/** Module roots from stored app tags, plus package manifests in saved reviews that lack those tags. */
+export function modulesOfFiles(graph: KnowledgeGraph): ReadonlyMap<string, string> {
+    const cached = fileModules.get(graph);
+    if (cached) return cached;
+    const files = fileNodesOf(graph).filter(isArchitectureFile);
+    const manifests = new Set<string>();
+    for (const node of files) {
+        const path = pathOf(node.ref);
+        if (!path || !MODULE_MANIFESTS.has(tailOf(path))) continue;
+        const folder = path.slice(0, path.lastIndexOf('/'));
+        if (folder && path.includes('/') && folder !== systemOfNode(node)) manifests.add(folder);
+    }
+    const modules = new Map<string, string>();
+    for (const node of files) {
+        let app = appOfNode(node);
+        if (!app) {
+            const path = pathOf(node.ref) ?? '';
+            for (let end = path.lastIndexOf('/'); end > 0; end = path.lastIndexOf('/', end - 1)) {
+                const folder = path.slice(0, end);
+                if (manifests.has(folder)) { app = folder; break; }
+            }
+        }
+        if (app) modules.set(node.ref, app);
+    }
+    fileModules.set(graph, modules);
+    return modules;
+}
 
 const bySize = (a: SystemInfo, b: SystemInfo): number => b.files - a.files || cmp(a.path, b.path);
 

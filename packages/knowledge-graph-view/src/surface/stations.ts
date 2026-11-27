@@ -17,12 +17,12 @@ import { fileCategory } from '../fileCategory';
 import { dataCoverage, hasMeasuredCoverage } from './dataCoverage';
 import { LAYER_ORDER, layerRank, type Provenance } from './layers';
 import type { Group } from './areaRollup';
-import { communityNamer, foldGroups, REPO_CONFIG_STATION_ID, type CommunityName } from './communityGroups';
-import { communityIdOf, communityKey } from '../placement';
+import { communityNamer, foldGroups, REPO_CONFIG_STATION_ID, scopedCommunityKey, type CommunityName } from './communityGroups';
+import { communityIdOf } from '../placement';
 import { fileNodesOf, isArchitectureFile, outlineView } from './outlineGraph';
 import { reachOf, staticReach } from './staticReach';
 import { isRepoConfigFile, REPO_CONFIG_NAME, stationNames } from './stationName';
-import { appOfNode, copyMap, foldedSystem, systemOfNode, systemsOf } from './systems';
+import { appOfNode, copyMap, foldedSystem, modulesOfFiles, systemOfNode, systemsOf } from './systems';
 
 export interface Station {
     id: string;
@@ -128,6 +128,11 @@ export function antiLevel(score: number): number {
  */
 export const fileRefOf = (ref: string): string => memoryFileRefOf(ref as NodeRef);
 
+/** An entry station with one file is a source entry, so it opens at file composition. */
+export function entryFileOf(station: Station | undefined | null): string | undefined {
+    return station?.entry && station.refs.length === 1 ? station.refs[0] : undefined;
+}
+
 export function stationOfRef(model: Pick<StationModel, 'stationOf'>, ref: string): string | undefined {
     return model.stationOf.get(ref) ?? model.stationOf.get(fileRefOf(ref));
 }
@@ -152,13 +157,13 @@ function baseGroups(files: KNode[], index: ReadonlyMap<string, KNode>, repoConfi
             id = n.area; name = index.get(n.area)?.label ?? tail(n.area); kind = 'area';
         } else if (community !== undefined) {
             // No area: its community (PRD 38 P1), grouped by cohesion rather than by top folder; named once per station.
-            id = communityKey(community); kind = 'community';
+            id = scopedCommunityKey(n, community); kind = 'community';
             const held = groups.get(id);
             name = held ? held.name : communityName(community);
         } else {
             const path = pathOf(n.ref) ?? n.label;
             const slash = path.indexOf('/');
-            const top = slash > 0 ? path.slice(0, slash) : '';
+            const top = appOfNode(n) || (slash > 0 ? path.slice(0, slash) : '');
             id = `folder:${top}`; name = top || '(root)'; kind = 'folder';
         }
         const group = groups.get(id) ?? { id, name, kind, nodes: [] };
@@ -246,7 +251,11 @@ function isMapDocument(node: KNode): boolean {
 export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}): StationModel {
     const index = nodeIndex(graph);
     // A truncated graph's stations come from its outline (every file of the full graph), badges limited to the outline's keys.
-    const allFiles = fileNodesOf(graph);
+    const modules = modulesOfFiles(graph);
+    const allFiles = fileNodesOf(graph).map((node) => {
+        const app = modules.get(node.ref);
+        return app && app !== appOfNode(node) ? { ...node, app } : node;
+    });
     const files = allFiles.some(isArchitectureFile)
         ? allFiles.filter((node) => isArchitectureFile(node) || isMapDocument(node))
         : allFiles;
@@ -360,9 +369,9 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
         if (own) {
             station.system = foldedSystem(copies, own);
             if (copies.has(own)) station.copy = own;
-            const app = dominant(g.nodes.map((n) => appOfNode(n) || undefined), () => 0);
-            if (app) station.app = app;
         }
+        const app = dominant(g.nodes.map((n) => appOfNode(n) || undefined), () => 0);
+        if (app) station.app = app;
         const cx = cxLevels.get(g.id);
         if (cx !== undefined) station.cx = cx;
         if (r.cov !== undefined) { station.cov = r.cov; station.covProvenance = reach ? 'heuristic' : 'runtime'; }

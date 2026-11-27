@@ -21,10 +21,12 @@ export async function listProjects(secrets: vscode.SecretStorage): Promise<BfPro
 export async function createProject(
   secrets: vscode.SecretStorage,
   name: string,
+  modality?: string,
 ): Promise<BfProject> {
   const project = await authed<BfProject>(secrets, "/api/projects", {
     method: "POST",
-    body: JSON.stringify({ name }),
+    // `modality` is the IDE project type the API accepts on this route (`CreateProjectBody`).
+    body: JSON.stringify(modality ? { name, modality } : { name }),
   });
   if (!project) throw new Error("not signed in");
   return project;

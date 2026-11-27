@@ -50,6 +50,7 @@ export interface PlacementReq {
     symbols?: readonly SymbolRecord[];
     /** The stage model's inputs (`protocol.ts` `ModelInputs`), copied in by the codec: any realm builds the same model. */
     model?: ModelInputs;
+    hiddenStations?: readonly string[];
 }
 
 /** `drill` names the innermost drill frame as `<level>:<ref>` (a ref may hold ':' itself; the first one splits). */
@@ -78,7 +79,7 @@ export const channelBindings = (c: PlacementChannels = NO_CHANNELS): Bindings =>
  */
 export const placementCacheKey = (build: string, r: PlacementReq): string => {
     const c = r.channels ?? NO_CHANNELS;
-    return [build, r.camera, r.drill ?? '', r.unfolded ?? '', r.pathId ?? '', r.viewportBand, r.lod, r.depth ?? 'rest', c.size, c.width, r.drill || r.camera === 'sequence' ? r.symbols?.length ?? 0 : 0, r.method ?? ''].join('|');
+    return [build, r.camera, r.drill ?? '', r.unfolded ?? '', r.pathId ?? '', r.viewportBand, r.lod, r.depth ?? 'rest', c.size, c.width, r.drill || r.camera === 'sequence' ? r.symbols?.length ?? 0 : 0, r.method ?? '', ...(r.hiddenStations?.length ? [JSON.stringify(r.hiddenStations)] : [])].join('|');
 };
 
 /**

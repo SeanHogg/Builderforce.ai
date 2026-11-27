@@ -71,6 +71,16 @@ describe('detectSystems', () => {
         expect(d.systems[0]!.apps).toEqual([{ path: 'm/packages/web', name: '@m/web' }, { path: 'm/tools/cli', name: 'cli' }]);
     });
 
+    it('discovers named modules in a system without a workspace manifest', async () => {
+        const detected = await detectSystems({
+            rootName: 'work', paths: ['app/package.json', 'app/api/package.json', 'app/frontend/package.json', 'app/tools/Cargo.toml'],
+        }, reader({
+            'app/package.json': pkg('app'), 'app/api/package.json': pkg('backend'), 'app/frontend/package.json': pkg('web'),
+            'app/tools/Cargo.toml': '[package]\nname = "tools"\n',
+        }));
+        expect(detected.systems[0]!.apps.map(({ path }) => path)).toEqual(['app/api', 'app/frontend', 'app/tools']);
+    });
+
     it('is deterministic whatever the listing order', async () => {
         const paths = ['b/.git/HEAD', 'a/.git/HEAD', 'c/package.json'];
         const files = { 'c/package.json': pkg('c') };

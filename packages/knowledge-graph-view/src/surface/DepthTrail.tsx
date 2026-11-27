@@ -26,6 +26,7 @@ const LEVEL_OF: Record<DepthFrame['level'], DepthLevel> = { package: 'module', c
 export function depthCrumbs(stack: readonly DepthFrame[], systemName: string | null | undefined, labels: DepthLabels): DepthCrumb[] {
     const crumbs: DepthCrumb[] = [{ depth: 0, level: 'system', name: systemName?.trim() || labels.system }];
     stack.forEach((frame, i) => {
+        if (frame.level === 'class' && stack[i - 1]?.level === 'package' && stack[i - 1]?.name === frame.name) crumbs.pop();
         crumbs.push({ depth: i + 1, level: LEVEL_OF[frame.level], name: frame.name });
     });
     return crumbs;

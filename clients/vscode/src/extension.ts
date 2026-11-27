@@ -52,6 +52,7 @@ import { watchDroppedWorkspace } from "./workspace/workspaceDrop";
 import { SELECTED_TENANT_KEY, getSelectedProject, initProjectState, onProjectChange, setSelectedProject, type SelectedProject } from "./project/projectState";
 import { clearLastSeen } from "./knowledge/knowledgeLastSeen";
 import { getProjectNames, invalidateProjectNames } from "./project/projectNames";
+import { newAiProject } from "./projects/newAiProject";
 import { ProjectsTreeProvider } from "./project/projectsTree";
 import { SessionsTreeProvider, chatOfSessionNode, type SessionTreeNode } from "./sessions/sessionsTree";
 import { InboxQuickActionsProvider, InboxTreeProvider } from "./tickets/inboxTree";
@@ -544,6 +545,7 @@ export function activate(context: vscode.ExtensionContext): BuilderforceApi {
     }),
     vscode.commands.registerCommand("builderforce.selectProject", () => selectProject(context, projects)),
     vscode.commands.registerCommand("builderforce.createProject", () => createProject(context, projects)),
+    vscode.commands.registerCommand("builderforce.newAiProject", (typeId?: string) => newAiProject(context, () => ensureSignedIn(context), typeId)),
     vscode.commands.registerCommand("builderforce.createWorkspace", () => manageWorkspace(context, projects)),
     // Bring-your-own MCP servers: the same owner-gated routes the web settings
     // panel drives, so a server registered from either surface serves both.

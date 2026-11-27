@@ -144,7 +144,7 @@ export function sequenceFlow(input: FlowInput): Flow {
         }
     };
     for (const start of entrySymbols(entry, symbols, stations, line, classOf)) {
-        if (!index.calls.has(start)) continue;
+        if (!index.calls.has(start) && !entry?.startsWith('node:')) continue;
         meet(fold(start));
         walk(start, 0, new Set([start]));
     }

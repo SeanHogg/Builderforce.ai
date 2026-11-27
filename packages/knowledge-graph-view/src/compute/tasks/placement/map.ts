@@ -11,7 +11,9 @@
 
 import { makeOverlay, segmentUntested } from '../../../surface/overlays';
 import { towerHeight } from '../../../surface/transit/towerHeight';
-import { layoutTransit } from '../../../surface/transitLayout';
+import { layoutFloors } from './mapFloors';
+import { systemName } from '../../../surface/systems';
+import { CAMERA_WORD, wordIn } from './cameraStrings';
 import { RESTING_DEPTH } from '../../../stage/depth';
 import { FORM_RISE, TYPE_FORM } from '../../../stage/marks/forms';
 import { MARK_TYPE_ORDER } from '../../../shapes';
@@ -38,7 +40,9 @@ const PLATE_THICKNESS = 0.02;
 export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<KnowledgeGraph, 'nodes' | 'edges'>): Placement {
     const { stations, lines, marks } = model;
     const width = VIEWPORT_BANDS[req.viewportBand] ?? VIEWPORT_BANDS[2]!;
-    const layout = layoutTransit(stations.stations, lines.lines, width, model.order ? { order: model.order } : {});
+    const hidden = new Set(req.hiddenStations);
+    const visible = stations.stations.filter((station) => !hidden.has(station.id));
+    const { layout, floors } = layoutFloors(visible, lines.lines, width, model.order);
     const depth = Math.max(0, Math.min(1, req.depth ?? RESTING_DEPTH));
     const d = draftFor(marks.keys.length);
     const labels: LabelRun[] = [];
@@ -80,12 +84,16 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
         };
     });
 
-    // ONE floor plate per level (the layer bands belong to the Layers camera): the floor at the top level, the room inside a shape.
     const thick = Math.max(4, layout.width * PLATE_THICKNESS), inside = req.drill != null;
-    const planes: PlaneSpec[] = [{ kind: 'room', min: [0, -thick, 0], max: [layout.width, 0, layout.height], tone: toneIndex(inside ? 'room' : 'floor'), edge: toneIndex(inside ? 'lit' : 'edge') }];
-    // The perspective Map has no band captions (the design has none, and a ground caption drifts under a tilted camera); the
-    // Layers camera keeps its band titles (`rows.ts`).
-    const captions: Caption[] = [];
+    const planes: PlaneSpec[] = visible.length ? floors.map((floor) => ({
+        kind: 'room', min: [0, -thick, floor.offset], max: [floor.width, 0, floor.offset + floor.depth],
+        tone: toneIndex(inside ? 'room' : 'floor'), edge: toneIndex(inside ? 'lit' : 'edge'),
+    })) : [];
+    const captions: Caption[] = !inside && (floors.length > 1 || (lines.systems?.length ?? 0) > 1) && visible.length
+        ? floors.map((floor) => ({
+            role: 'plane', anchor: 'start', tone: TEXT, position: [20, 0, floor.offset + 16],
+            text: systemName(lines.systems, floor.system) || wordIn(model.strings, CAMERA_WORD.systemLoose),
+        })) : [];
     const { cx, cz, radius } = mapFit(layout, contentPoints(layout.positions, layout.drawn, layout.routes), top);
     const decor = g ? mapDecorations(g, stations, layout) : [];
     const bounds = widenMapBounds(layout, widths, neutralWidth, CASING_EXTRA, top, decor);
@@ -97,7 +105,7 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
         planes, labels, captions, a11y,
         // The roof miniatures stand on their parents' roofs: their y lowers with the extrude in Flat.
         liftWithDepth: true,
-        caption: { shown: layout.drawn.length, total: stations.stations.length, capped: layout.drawn.length < stations.stations.length },
+        caption: { shown: layout.drawn.length, total: visible.length, capped: layout.drawn.length < visible.length },
         bounds,
         rig: {
             projection: 'perspective', frame: 'fill',

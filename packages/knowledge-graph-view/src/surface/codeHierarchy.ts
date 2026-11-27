@@ -2,7 +2,7 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { nodeIndex, pathOf } from '../graphModel';
 import { fileNodesOf, isArchitectureFile, tailOf } from './outlineGraph';
 import type { Station } from './stations';
-import { appOfNode, systemName, systemOfNode, systemsOf, type SystemInfo } from './systems';
+import { modulesOfFiles, systemName, systemOfNode, systemsOf, type SystemInfo } from './systems';
 
 export type HierarchyView = 'architecture' | 'filesystem' | 'picture';
 export interface ArchitectureGroup { id: string; name: string }
@@ -25,6 +25,7 @@ export function buildCodeHierarchy(graph: KnowledgeGraph, rootTitle: string, lay
     const systems = systemsOf(graph);
     const systemPaths = systems.map((system) => system.path).sort((a, b) => b.length - a.length);
     const files = new Map<string, CodeFile>();
+    const modules = modulesOfFiles(graph);
     for (const file of fileNodesOf(graph)) {
         const path = pathOf(file.ref)?.replaceAll('\\', '/');
         if (!path) continue;
@@ -39,7 +40,7 @@ export function buildCodeHierarchy(graph: KnowledgeGraph, rootTitle: string, lay
         const system = systemOfNode(file) || systemPaths.find((folder) => containsPath(folder, path)) || '';
         const systemLabel = systemName(systems, system);
         if (systemLabel && systemLabel !== rootTitle) architecture.push({ id: `system:${system}`, name: systemLabel });
-        const app = appOfNode(file);
+        const app = modules.get(file.ref) ?? '';
         const appLabel = app ? tailOf(app) : '';
         if (appLabel && appLabel !== systemLabel && appLabel !== rootTitle) architecture.push({ id: `app:${app}`, name: appLabel });
         if (file.area) {
@@ -47,8 +48,13 @@ export function buildCodeHierarchy(graph: KnowledgeGraph, rootTitle: string, lay
             const area = pathOf(file.area)?.replaceAll('\\', '/');
             if (area && containsPath(area, path)) {
                 const base = [app, system].find((folder) => containsPath(folder, area)) ?? '';
-                const component = declared && declared !== area ? declared : area.slice(base ? base.length + 1 : 0);
-                if (component && component !== architecture.at(-1)?.name) architecture.push({ id: `area:${area}`, name: component });
+                const relative = area.slice(base ? base.length + 1 : 0);
+                const parts = relative.split('/').filter(Boolean);
+                for (const [i, part] of parts.entries()) {
+                    const path = [base, ...parts.slice(0, i + 1)].filter(Boolean).join('/');
+                    const name = i === parts.length - 1 && declared && declared !== area ? declared : part;
+                    architecture.push({ id: `area:${path}`, name });
+                }
             } else if (declared || area) {
                 const name = declared || tailOf(area!);
                 if (name !== architecture.at(-1)?.name) architecture.push({ id: `area:${file.area}`, name });

@@ -14,6 +14,7 @@
  * band's threshold; the crossing does the rest). With no rig (no stage yet) it drills directly, as before.
  */
 
+import { entryFileOf } from '../../surface/stations';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DrillModel } from '../../surface/transit/useDrill';
 import type { StageBus } from '../anchor/stageBus';
@@ -145,9 +146,17 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         const next = stepBand(s.band, focus?.px ?? 0, parentPx);
         if (next > s.band && focus) {
             const c = s.candidates[slots.indexOf(focus.slot)]!;
-            if (s.band === CODE - 1) { s.drill.select(c.id); s.codeKey = c.key; setTrail([c.key]); return; }
+            if (s.band === CODE - 1 && !(s.drill.hasMembers?.(c.id) && s.drill.canEnter(c.id).can)) {
+                s.drill.select(c.id); s.codeKey = c.key; setTrail([c.key]); return;
+            }
             const check = s.drill.canEnter(c.id);
             if (!check.can) return;
+            const file = check.level === 'package' ? entryFileOf(s.map.stations.byId.get(c.id)) : undefined;
+            if (file && s.drill.openFile) {
+                pending.current = true;
+                s.drill.openFile(file);
+                return;
+            }
             const e = nestEntryOf(p, focus.slot, `${check.level}:${c.id}`);
             if (e) add(e);
             pending.current = true;
@@ -270,7 +279,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
             if (f) c = s.candidates[slots.indexOf(f.slot)];
         }
         if (!c) return false;
-        if (s.band === CODE - 1) return enterCode(c.key.slice('node:'.length));
+        if (s.band === CODE - 1 && !(s.drill.hasMembers?.(c.id) && s.drill.canEnter(c.id).can)) return enterCode(c.key.slice('node:'.length));
         zoomInto(c.id);
         return true;
     }, [bus, enterCode, zoomInto]);

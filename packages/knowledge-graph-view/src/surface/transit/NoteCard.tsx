@@ -26,6 +26,8 @@ export interface NoteCardProps {
     glyph: ReactNode;
     name: string;
     kind: string;
+    onKind?: (() => void) | undefined;
+    detail?: ReactNode;
     /** Under the header: a path and lines, a loading or no-symbols note. */
     meta?: ReactNode;
     /** The facts row. */
@@ -49,18 +51,21 @@ const shell = (narrow: boolean): CSSProperties => ({
 });
 const closeButton: CSSProperties = { border: 0, background: 'transparent', color: cssVar('muted'), cursor: 'pointer', minHeight: 24, minWidth: 24, padding: 0, font: 'inherit' };
 
-export function NoteCard({ ariaLabel, glyph, name, kind, meta, facts, acts, answer, narrow = false, boxRef, role, close }: NoteCardProps) {
+export function NoteCard({ ariaLabel, glyph, name, kind, onKind, detail, meta, facts, acts, answer, narrow = false, boxRef, role, close }: NoteCardProps) {
     return (
         <section ref={boxRef} aria-label={ariaLabel} data-note-card={role} style={shell(narrow)} {...(close ? { role: 'dialog', tabIndex: -1 } : null)}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px 0', color: cssVar('text') }}>
                 {glyph}
                 <b data-note-name title={name} style={{ fontFamily: FONT_MONO, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{name}</b>
-                <span style={{ marginInlineStart: 'auto', ...TYPE.meta, whiteSpace: 'nowrap' }}>{kind}</span>
+                {onKind
+                    ? <button type="button" onClick={onKind} style={{ ...closeButton, ...TYPE.meta, marginInlineStart: 'auto', textDecoration: 'underline', whiteSpace: 'nowrap' }}>{kind}</button>
+                    : <span style={{ marginInlineStart: 'auto', ...TYPE.meta, whiteSpace: 'nowrap' }}>{kind}</span>}
                 {close && <button type="button" aria-label={close.label} title={close.label} onClick={close.onClose} style={closeButton}><span aria-hidden="true">{actionGlyph('close')}</span></button>}
             </div>
             {meta && <div style={{ padding: '2px 12px 0', minWidth: 0, overflowWrap: 'anywhere' }}>{meta}</div>}
             {facts && <div data-note-facts style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', padding: '6px 12px 0' }}>{facts}</div>}
             {acts && <div data-note-acts style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '9px 12px 10px' }}>{acts}</div>}
+            {detail}
             {answer && (
                 <div data-note-answer style={{ display: 'flex', gap: 8, padding: '9px 12px 10px', borderTop: `1px solid ${cssVar('border')}` }}>
                     <span aria-hidden="true" style={{ display: 'inline-flex', marginTop: 1, color: cssVar('accent') }}>{answer.icon}</span>

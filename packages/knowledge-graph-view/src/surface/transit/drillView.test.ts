@@ -29,15 +29,14 @@ describe('the package level', () => {
 });
 
 describe('the class level', () => {
-    it('shows a file\'s class above its methods, the error symbol in its own band', () => {
+    it('shows top-level definitions at file depth and leaves methods under their owner', () => {
         const view = buildDrillView(graph, world, { level: 'class', ref: USE_CASE, name: 'useCase.ts' });
         const by = (n: string) => view.stations.stations.find((s) => s.name === n)!;
         expect(by('UseCase').layer).toBe('symbol');
-        expect(by('run').layer).toBe('methods');
-        expect(by('UseCaseError').layer).toBe('errors');
+        expect(by('run')).toBeUndefined();
+        expect(by('UseCaseError')).toBeUndefined();
         expect(view.order.slice(0, 3)).toEqual(['symbol', 'methods', 'errors']);
         expect(view.filesOnly).toBe(false);
-        expect(view.lines.lines.some((l) => l.stops.includes(by('UseCase').id) && l.stops.includes(by('run').id))).toBe(true);
     });
 });
 
@@ -75,13 +74,13 @@ it('resolves calls from both graph edges and host symbol relations', () => {
 describe('a graph with no symbols', () => {
     const plain = surfaceFixture();
     const plainWorld = buildStations(plain);
-    it('says so, and the class level shows the package\'s files', () => {
+    it('says so, and file depth keeps the selected file visible', () => {
         expect(hasSymbols(plain)).toBe(false);
         expect(hasSymbols(graph)).toBe(true);
         const view = buildDrillView(plain, plainWorld, { level: 'class', ref: 'src:sys::api/useCase.ts', name: 'useCase.ts' });
         expect(view.noSymbols).toBe(true);
         expect(view.filesOnly).toBe(true);
-        expect(names(view)).toEqual(expect.arrayContaining(['routes.ts', 'useCase.ts']));
+        expect(view.stations.stations.filter((station) => !view.leaves.has(station.id)).map((station) => station.name)).toEqual(['useCase.ts']);
     });
 });
 

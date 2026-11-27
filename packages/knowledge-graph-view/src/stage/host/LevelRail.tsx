@@ -9,7 +9,7 @@
  * a method (its code), and Line = a line or call picked in that code. The Sequence has three bands: System, Class, Method.
  */
 
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { fillTemplate } from '../../labels';
 import type { SceneLabels } from '../../labels/surface.scene';
 import { cssVar } from '../../scene/themeColors';
@@ -76,9 +76,10 @@ export interface LevelRailProps {
     zoom: SceneLabels['zoom'];
     rail: LevelRailModel;
     narrow: boolean;
+    filters?: ReactNode;
 }
 
-export function LevelRail({ zoom, rail, narrow }: LevelRailProps) {
+export function LevelRail({ zoom, rail, narrow, filters }: LevelRailProps) {
     const { levels, current, go, hint } = rail;
     return (
         <div data-level-rail style={{ position: 'absolute', zIndex: 2, insetInlineEnd: 10, insetBlockStart: 10, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, pointerEvents: 'none' }}>
@@ -94,6 +95,7 @@ export function LevelRail({ zoom, rail, narrow }: LevelRailProps) {
                 ))}
                 <i aria-hidden="true" data-level-thumb style={{ position: 'absolute', insetInlineStart: 4, top: current * ROW_PX + (ROW_PX - 7) / 2, width: 7, height: 7, borderRadius: '50%', background: cssVar('accent') }} />
             </div>
+            {filters}
             {!narrow && <div role="status" aria-live="polite" data-level-hint style={chip}>{hint}</div>}
         </div>
     );

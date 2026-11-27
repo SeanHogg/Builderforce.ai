@@ -16,8 +16,8 @@ import type { CallSite, KnowledgeGraph } from '@seanhogg/builderforce-memory/kno
 import { restructureOf } from './restructureTarget';
 import { useComputed } from '../../compute/useComputed';
 import { fillTemplate } from '../../labels';
-import { nodeIndex } from '../../graphModel';
-import { fileRefOf, stationOfRef } from '../../surface/stations';
+import { nodeIndex, pathOf } from '../../graphModel';
+import { entryFileOf, fileRefOf, stationOfRef } from '../../surface/stations';
 import type { SceneProps } from '../../surface/registry';
 import { stageBus, StageBusContext } from '../anchor/stageBus';
 import { ZOOM_BANDS } from '../labels/lod';
@@ -25,6 +25,7 @@ import { cssVar } from '../../scene/themeColors';
 import { TYPE } from '../../surface/ui/type';
 import { questionGlyph } from '../../surface/ui/glyphs';
 import { depthCrumbs } from '../../surface/DepthTrail';
+import { callersOf } from '../../surface/transit/callers';
 import { answerOf } from '../../surface/transit/noteFacts';
 import { onePaneStage } from '../../layout';
 import { MARK_TYPE_ORDER, type MarkType } from '../../shapes';
@@ -79,6 +80,8 @@ export interface StageDockOptions {
 
 export interface StageWiring {
     map: StageMap;
+    openFile(ref: string): void;
+    openDefinition(ref: string): void;
     /** The semantic zoom: the Map's band, the Sequence's `lod`, Go inside as a zoom, the code layer. */
     zoom: SemanticZoom;
     selected: string | null;
@@ -127,6 +130,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const selected = pickedKey?.startsWith('node:') && !map.stationOfKey(pickedKey) ? pickedKey : stationKey;
     const [cardPick, setCardKey] = useState<string | null>(null);
     const cardKey = cardPick === stationKey ? cardPick : null;
+    const [callersTarget, setCallersTarget] = useState<string | null>(null);
     const [dismissed, setDismissed] = useState<string | null>(null);
     const toast = useStageToast();
     const t = p.labels.surface.code;
@@ -158,9 +162,6 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     // (another placement on the bus) closes it, as does selecting a mark.
     useEffect(() => bus.onPlacement(() => setSite(null)), [bus]);
     useEffect(() => { setSite(null); }, [generation]);
-    useEffect(() => {
-        bus.setOptions({ ...bus.options, incident: incident && incident.generation === generation ? new SlotIncident(incident) : null, path: stops ? stops.map((id) => `st:${id}`) : null, onLink });
-    }, [bus, incident, generation, stops, onLink]);
 
     // A drill step leaves the level the card and the selection were on. Focus follows it once the tween settles: Go
     // inside → the level's first stop; Out → the station (or member) drilled out of, at the level now on show.
@@ -179,6 +180,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
 
     const onSelect = useCallback((key: string) => {
         dock.onCodeRef?.(null);
+        setCallersTarget(null);
         setSelected(key);
         setDismissed(null);
         setSite(null);
@@ -191,7 +193,10 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const onDrill = useCallback((key: string) => {
         // A method is a station too (the method band's marks), so a station that cannot be entered falls through to its code.
         const station = map.stationOfKey(key);
-        if (station && drill.canEnter(station.id).can) { zoom.zoomInto(station.id); return; }
+        const file = drill.view ? (station && drill.view.leaves.has(station.id) ? station.refs[0] : undefined) : entryFileOf(station);
+        if (file && drill.openFile) { drill.openFile(file); return; }
+        if (station && (!key.startsWith('node:') || fileRefOf(key.slice(5)) === key.slice(5) || drill.hasMembers?.(station.id))
+            && drill.canEnter(station.id).can) { zoom.zoomInto(station.id); return; }
         if (!key.startsWith('node:')) return;
         const ref = key.slice('node:'.length);
         if (!zoom.enterCode(ref)) toast.show(fillTemplate(t.toastNoCalls, { name: index.get(ref)?.label ?? ref }));
@@ -202,7 +207,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const surfaceSelected = p.selected ?? null;
     const clearSelection = useCallback(() => {
         dock.onCodeRef?.(null);
-        setSelected(null); setCardKey(null); setSite(null); setDismissed(surfaceSelected);
+        setSelected(null); setCardKey(null); setSite(null); setCallersTarget(null); setDismissed(surfaceSelected);
         if (drill.view) drill.select(null); else surface.selectStation(null);
     }, [drill, surface, surfaceSelected, dock.onCodeRef]);
 
@@ -231,15 +236,19 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const groups = useMemo(() => drill.view ? undefined : new Map(map.stations.stations.map((station) => [station.id, architectureGroupsOf(station, systems, p.rootTitle, layers)])), [drill.view, map.stations, systems, p.rootTitle, layers]);
     const [rootCrumb, ...drillCrumbs] = depthCrumbs(drill.stack, p.rootTitle, p.labels.surface.depth);
     const component = surface.stations.byId.get(drill.stack[0]?.ref ?? '');
+    const fileFrame = drill.stack.find((frame) => frame.level === 'class');
+    const fileGroups = fileFrame ? dock.codeFiles?.get(fileFrame.ref)?.architecture : undefined;
+    const singleFile = component?.refs.length === 1;
     const ancestors = [
         rootCrumb!,
-        ...architectureGroupsOf(component, systems, p.rootTitle, layers).map((group) => ({ ...group, depth: 0 })),
-        ...drillCrumbs,
+        ...(fileGroups ?? architectureGroupsOf(component, systems, p.rootTitle, layers)).map((group) => ({ ...group, depth: 0 })),
+        ...(fileFrame || singleFile ? drillCrumbs.filter((crumb) => crumb.depth !== 1) : drillCrumbs),
     ];
     const codeSelection = dock.codeRef ?? p.selected;
     const openFile = (ref: string) => {
         const local = stationOfRef(map.stations, ref);
-        if (drill.view) { if (local) drill.select(local); else drill.climb(0); }
+        if (drill.openFile && dock.codeFiles?.get(ref)?.isCode) drill.openFile(ref);
+        else if (drill.view) { if (local) drill.select(local); else drill.climb(0); }
         surface.selectStation(stationOfRef(surface.stations, ref) ?? null);
         dock.onCodeRef?.(ref);
         drill.loadFileSymbols?.(ref);
@@ -270,22 +279,52 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const answer = useMemo(() => ({ icon: questionGlyph(surface.question), ...answerOf(surface.question, surface, p.labels) }), [surface, p.labels]);
     const findings = useMemo(() => new Map(graph.findings.map((f) => [f.id, f] as const)), [graph]);
     const symbolRestructure = restructureOf(d.facts, [cardSubject?.ref ?? ''], restructureLoading);
+    const activeStation = map.stationOfKey(cardKey);
+    const callersKey = cardSubject?.ref ?? cardKey;
+    const callersActive = callersKey !== null && callersTarget === callersKey;
+    const toggleCallers = () => setCallersTarget(callersActive ? null : callersKey);
+    const callerRefs = useMemo(() => callersActive
+        ? callersOf(graph, records, cardSubject?.ref ? [cardSubject.ref] : activeStation?.refs ?? []) : [],
+    [callersActive, graph, records, cardSubject?.ref, activeStation?.refs]);
+    const callerKeys = useMemo(() => callersKey === null ? undefined : callerRefs.map((ref) => {
+        const file = fileRefOf(ref);
+        const station = stationOfRef(surface.stations, file);
+        return [`node:${ref}`, `node:${file}`, ...(station ? [`st:${station}`] : [])];
+    }), [callersKey, callerRefs, surface.stations]);
+    useEffect(() => {
+        bus.setOptions({ ...bus.options, incident: incident && incident.generation === generation ? new SlotIncident(incident) : null,
+            path: stops ? stops.map((id) => `st:${id}`) : null, onLink, callerKeys });
+    }, [bus, incident, generation, stops, onLink, callerKeys]);
+    const callersDetail = callersActive && (
+        <div style={{ padding: '0 12px 8px' }} data-callers-list>
+            <div role="status">{fillTemplate(t.callers, { count: callerRefs.length })}</div>
+            <ul style={{ maxHeight: 180, overflow: 'auto', margin: '4px 0', paddingInlineStart: 18 }}>
+                {callerRefs.map((ref) => <li key={ref}>
+                    <button type="button" style={{ ...TYPE.monoMeta, cursor: 'pointer', border: 0, padding: 0, background: 'transparent', color: cssVar('text'), textAlign: 'start' }}
+                        onClick={() => { openFile(fileRefOf(ref)); dock.onCodeRef?.(ref); setCallersTarget(null); }}>
+                        {pathOf(fileRefOf(ref)) ?? fileRefOf(ref)}{fileRefOf(ref) === ref ? '' : ref.slice(fileRefOf(ref).length)}
+                    </button>
+                </li>)}
+            </ul>
+        </div>
+    );
     const symbolCard = cardSubject && (
         <SymbolCard
             slotKey={cardSlot} symbolRef={cardSubject.ref} name={cardRecord?.name ?? index.get(cardSubject.ref)?.label ?? cardSubject.ref} state={cardSubject.state}
             records={records} markType={cardType} labels={p.labels} onDrill={() => onDrill(`node:${cardSubject.ref}`)} onCode={d.openCode}
             onOpenSource={p.onOpenSource} answer={answer} narrow={narrow}
-            facts={d.facts} onCallers={() => surface.setQuestion('callers')} onSimulate={actOn(dock.onSimulate, cardSubject.ref)} onRestructure={actOn(dock.onRestructure, symbolRestructure.ref)} restructureReady={symbolRestructure.ready}
+            facts={d.facts} onCallers={toggleCallers} callersActive={callersActive} callersDetail={callersDetail} onSimulate={actOn(dock.onSimulate, cardSubject.ref)} onRestructure={actOn(dock.onRestructure, symbolRestructure.ref)} restructureReady={symbolRestructure.ready}
         />
     );
-    const cardRefs = map.stationOfKey(cardKey)?.refs ?? [];
+    const cardRefs = activeStation?.refs ?? [];
     const stationRestructure = restructureOf(d.facts, cardRefs, restructureLoading);
     const card = (
         <StageBusContext.Provider value={bus}>
             <StageCard
                 cardKey={cardKey} map={map} drill={drill} graph={graph} labels={p.labels} narrow={narrow} answer={answer}
-                type={(cardKey && d.types.get(map.stationOfKey(cardKey)?.id ?? '')) || 'source'} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel} onEnter={zoom.zoomInto}
-                onCode={d.openCode} facts={d.facts} onSimulate={actOn(dock.onSimulate, cardRefs[0])}
+                type={(cardKey && d.types.get(map.stationOfKey(cardKey)?.id ?? '')) || 'source'} onQuestion={surface.setQuestion} onOpenPanel={surface.openPanel} onEnter={(id) => { const station = map.stations.byId.get(id); if (station) onDrill(map.keyOfStation(station)); }}
+                onCode={cardRefs[0] ? () => openFile(fileRefOf(cardRefs[0]!)) : undefined}
+                onCallers={toggleCallers} callersActive={callersActive} callersDetail={callersDetail} facts={d.facts} onSimulate={actOn(dock.onSimulate, cardRefs[0])}
                 onRestructure={actOn(dock.onRestructure, stationRestructure.ref)} restructureReady={stationRestructure.ready}
             />
             {/* One docked card at a time: the call site, while open, stands in for the symbol card. */}
@@ -324,11 +363,15 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
                 ? <CodeHierarchyTree key={dock.hierarchy} files={dock.codeFiles} view={dock.hierarchy} label={t[dock.hierarchy]} selected={codeSelection ? fileRefOf(codeSelection) : null} onFile={openFile} />
                 : null}
             tree={{
-                ancestors, onClimb: drill.climb, stations: map.stations.stations, keyOf: map.keyOfStation, types: d.types, groups,
+                ancestors, onClimb: drill.climb,
+                stations: drill.stack.at(-1)?.level === 'function'
+                    ? map.stations.stations.filter((station) => station.id !== drill.stack.at(-1)?.ref)
+                    : map.stations.stations,
+                related: drill.view?.leaves, onSource: openFile, keyOf: map.keyOfStation, types: d.types, groups,
                 facts: d.facts, selected, canEnter: (id) => drill.canEnter(id).can, onSelect: (key) => {
                     onSelect(key);
-                    if (drill.stack.at(-1)?.level === 'package' && key.startsWith('node:')) d.openCode();
-                }, onEnter: zoom.zoomInto, onHover: onHoverRow,
+                    if (drill.stack.at(-1)?.level === 'package' && key.startsWith('node:')) openFile(key.slice(5));
+                }, onEnter: (id) => { const station = map.stations.byId.get(id); if (station) onDrill(map.keyOfStation(station)); }, onHover: onHoverRow,
             }}
         />
     );
@@ -342,7 +385,11 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
         ) : null,
     };
     return {
-        map, zoom, selected, onSelect, onDrill, onOut: out, onEscape, clearSelection, dismissed, wheelStep, toBand, method: methodTarget?.ref ?? null, patchMap, card, code,
+        map, openFile, openDefinition: (ref) => {
+            dock.onCodeRef?.(ref);
+            drill.loadFileSymbols?.(fileRefOf(ref));
+            d.openCode();
+        }, zoom, selected, onSelect, onDrill, onOut: out, onEscape, clearSelection, dismissed, wheelStep, toBand, method: methodTarget?.ref ?? null, patchMap, card, code,
     };
 }
 

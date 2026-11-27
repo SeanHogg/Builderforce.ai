@@ -6,7 +6,7 @@
  * step). Reads only main-thread data (the stations, the graph's index and findings).
  */
 
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import type { Finding, KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { nodeIndex } from '../../graphModel';
 import type { KnowledgeGraphLabels } from '../../labels';
@@ -36,6 +36,9 @@ export interface StageCardProps {
     /** The answer to the question being asked. */
     answer?: NoteAnswer | null | undefined;
     onQuestion?: ((id: QuestionId) => void) | undefined;
+    onCallers?: (() => void) | undefined;
+    callersActive?: boolean | undefined;
+    callersDetail?: ReactNode;
     onOpenPanel?: ((id: string) => void) | undefined;
     /** Go inside as the semantic zoom's shortcut (B1a rule 9: fly to the station, the zoom enters it); absent = drill directly. */
     onEnter?: ((stationId: string) => void) | undefined;
@@ -65,18 +68,19 @@ export function stationCardOf(
     });
 }
 
-export function StageCard({ cardKey, map, drill, graph, labels, narrow, type, answer, onQuestion, onOpenPanel, onEnter, onCode, facts, onSimulate, onRestructure, restructureReady }: StageCardProps) {
+export function StageCard({ cardKey, map, drill, graph, labels, narrow, type, answer, onQuestion, onCallers, callersActive, callersDetail, onOpenPanel, onEnter, onCode, facts, onSimulate, onRestructure, restructureReady }: StageCardProps) {
     const index = useMemo(() => nodeIndex(graph), [graph]);
     const findings = useMemo(() => new Map(graph.findings.map((f) => [f.id, f] as const)), [graph]);
     const station = map.stationOfKey(cardKey);
     if (!station || !cardKey) return null;
-    const card = stationCardOf(station, { map, drill, findings, index, labels, facts, restructureReady });
+    const base = stationCardOf(station, { map, drill, findings, index, labels, facts, restructureReady });
+    const card: CardModel = base.leaf && onEnter ? { ...base, enter: { can: true, level: 'package' } } : base;
     return (
         <StationCard
             key={station.id} card={card} labels={labels} type={type} answer={answer} narrow={narrow} loading={drill.loading}
             onEnter={() => (onEnter ?? drill.enter)(station.id)}
             onUnfold={() => map.toggleUnfold(station.id)}
-            onCallers={() => onQuestion?.('callers')}
+            onCallers={onCallers ?? (() => onQuestion?.('callers'))} callersActive={callersActive} callersDetail={callersDetail}
             onApi={() => onOpenPanel?.('api')}
             onPatterns={() => onOpenPanel?.('patterns')}
             onCode={onCode}

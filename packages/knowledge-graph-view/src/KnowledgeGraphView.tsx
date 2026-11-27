@@ -201,7 +201,7 @@ function KnowledgeGraphSurface({
     }, [lensInEffect, lensAsked, setQuestion]);
     const layout = useMemo(() => layoutOf(width), [width]);
     const compact = layout.compact;
-    const surfaceEnv: SurfaceEnv = { webgl: env.webgl, reducedMotion: env.reducedMotion, hasLines: surface.lines.lines.length > 0, compact, hasRun: !!source.runs || !!source.review || keepsBaseline, hasAgentRuns: !!source.agentRuns, hasDomains: !!source.domains && !!source.organizeDomains };
+    const surfaceEnv: SurfaceEnv = { webgl: env.webgl, reducedMotion: env.reducedMotion, hasLines: surface.lines.lines.length > 0, hasSymbolScope: surface.drill.stack.some((frame) => frame.level === 'class'), compact, hasRun: !!source.runs || !!source.review || keepsBaseline, hasAgentRuns: !!source.agentRuns, hasDomains: !!source.domains && !!source.organizeDomains };
     const cameras = CAMERAS.filter((c) => c.available(graph, surfaceEnv));
     const mode: ViewMode = cameras.find((c) => c.id === chosen)?.id ?? cameras.find((c) => c.id === 'transit')?.id ?? 'graph';
     const stageCamera = !!real && !!cameras.find((c) => c.id === mode)?.placement;

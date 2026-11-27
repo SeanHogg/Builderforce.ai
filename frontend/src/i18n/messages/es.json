@@ -40197,6 +40197,8 @@
         "levelAria": "Miembros de este nivel",
         "levelEmpty": "Todavía no hay nada en este nivel.",
         "levelNoSource": "El código fuente no está disponible aquí: se muestra el esquema.",
+        "classDiagram": "Diagrama de clases",
+        "componentDiagram": "Diagrama de componentes",
         "rowNoTest": "Sin prueba",
         "rowAntiPattern": "Antipatrón: {name}",
         "paneCode": "Código",

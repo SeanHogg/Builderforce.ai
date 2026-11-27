@@ -26,6 +26,8 @@ type Fn<T extends unknown[] = []> = (...args: T) => void;
 export interface StageOptions {
     /** The ranked incident index (`stageIncident`): a selection draws its best neighbours. */
     incident?: SlotIncident | null;
+    /** Visible alternatives for each direct caller. Empty hides selection links for a card. */
+    callerKeys?: readonly (readonly string[])[] | undefined;
     /** The highlighted path's stops, by key, in order (the path strip). */
     path?: readonly string[] | null;
     /** A line was picked (a route): its batch, segment, polyline and slot. */

@@ -11,10 +11,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { SymbolRecord } from '../../types';
-import type { StationModel } from '../stations';
+import { stationOfRef, type StationModel } from '../stations';
+import { tailOf } from '../outlineGraph';
 import { buildDrillView, hasSymbols, type DrillFrame, type DrillLevel, type DrillView } from './drillView';
 import { anchorFilesOf, reanchorDrill } from './reanchorDrill';
-import { SYMBOL_FILES, symbolsOf, symbolsOfFile, withSymbolRecords } from './symbols';
+import { SYMBOL_FILES, isClassLike, membersOfClass, symbolSort, symbolsOf, symbolsOfFile, withSymbolRecords } from './symbols';
 
 /** The package moves of one re-anchor; `seq` changes with every one. */
 export interface Reanchored { seq: number; moves: ReadonlyMap<string, string> }
@@ -37,6 +38,8 @@ export interface DrillModel {
     select(id: string | null): void;
     canEnter(id: string): EnterCheck;
     enter(id: string): void;
+    openFile?(ref: string): void;
+    hasMembers?(ref: string): boolean;
     /** Climb back to a depth. 0 is the system (the world map). A depth at or past the current one stays. */
     climb(depth: number): void;
     out(): void;
@@ -117,6 +120,13 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
         return full && top ? buildDrillView(full, world, top, records) : null;
     }, [full, world, stack, records]);
 
+    const hasMembers = useCallback((ref: string) => {
+        if (!full) return false;
+        const symbols = symbolsOfFile(symbolsOf(full), ref.includes('#') ? ref.slice(0, ref.indexOf('#')) : ref);
+        const parent = symbols.find((node) => node.ref === ref);
+        return !!parent && isClassLike(symbolSort(parent)) && membersOfClass(symbols, parent).length > 0;
+    }, [full]);
+
     const canEnter = useCallback((id: string): EnterCheck => {
         // An empty stack IS the world level. Branch on length, not `top?.level ?? 'world'`: without
         // `noUncheckedIndexedAccess` (the frontend's config) the index narrows to `DrillFrame` and 'world' drops out.
@@ -142,6 +152,19 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
         if (check.level === 'package') requestSymbols((world.byId.get(id)?.refs ?? []).slice(0, SYMBOL_FILES));
     }, [canEnter, view, world, requestSymbols]);
 
+    const openFile = useCallback((ref: string) => {
+        const id = stationOfRef(world, ref);
+        const station = id ? world.byId.get(id) : undefined;
+        if (!station || !station.refs.includes(ref)) return;
+        setStack([
+            { level: 'package', ref: station.id, name: station.name, files: [ref] },
+            { level: 'class', ref, name: tailOf(ref) },
+        ]);
+        setSelected(null);
+        setNotice(null);
+        requestSymbols([ref]);
+    }, [world, requestSymbols]);
+
     const climb = useCallback((depth: number) => {
         const n = Number.isFinite(depth) ? Math.max(0, Math.floor(depth)) : 0;
         if (n >= stack.length) return;
@@ -151,7 +174,7 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
     }, [stack.length]);
     const out = useCallback(() => { setStack((s) => s.slice(0, -1)); setSelected(null); setNotice(null); }, []);
     return {
-        stack, view, canOut: stack.length > 0, parent: stack[stack.length - 2] ?? null, selected, select: setSelected, canEnter, enter, climb, out,
+        stack, view, canOut: stack.length > 0, parent: stack[stack.length - 2] ?? null, selected, select: setSelected, canEnter, enter, openFile, hasMembers, climb, out,
         loading: pending > 0, notice, symbols: records, loadFileSymbols: (ref) => requestSymbols([ref]), reanchored,
     };
 }

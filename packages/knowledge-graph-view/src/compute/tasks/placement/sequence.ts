@@ -54,7 +54,7 @@ export const SEQUENCE_WORD_KEYS = ['sequence.hop', 'sequence.noReference'] as co
 export function placeSequence(g: KnowledgeGraph, model: StageModel, req: PlacementReq): Placement {
     // Code depth (`req.method`): that method and the symbols it calls, its own calls only, as raised bars.
     const method = req.method !== undefined;
-    const band = method ? 'method' : sequenceBandOf(req.lod);
+    const band = method || req.pathId?.startsWith('node:') ? 'method' : sequenceBandOf(req.lod);
     const records = req.symbols ?? [];
     const full = withSymbolRecords(g, records);
     const flow = sequenceFlow({

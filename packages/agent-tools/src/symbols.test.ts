@@ -109,6 +109,12 @@ describe("formatSymbol", () => {
 });
 
 describe("extractSymbols — TS module and abstract shapes", () => {
+  it("indexes interface signatures under their interface and class methods under their class", () => {
+    const src = ["export interface Logger {", "  info(msg: string): void;", "}", "class AppLogger implements Logger {", "  info(msg: string): void {", "  }", "}"].join("\n");
+    const members = extractSymbols("logger.ts", src).filter((s) => s.kind === "method");
+    expect(members.map(({ name, container, line }) => [name, container, line])).toEqual([["info", "Logger", 2], ["info", "AppLogger", 5]]);
+  });
+
   it("names a namespace and a declare module (quotes dropped), and an abstract method signature", () => {
     const source = [
       "namespace Billing.Internal {",

@@ -40197,6 +40197,8 @@
         "levelAria": "Membres de ce niveau",
         "levelEmpty": "Rien à ce niveau pour l’instant.",
         "levelNoSource": "Le source n’est pas disponible ici : le plan est affiché.",
+        "classDiagram": "Diagramme de classes",
+        "componentDiagram": "Diagramme de composants",
         "rowNoTest": "Aucun test",
         "rowAntiPattern": "Anti-patron : {name}",
         "paneCode": "Code",

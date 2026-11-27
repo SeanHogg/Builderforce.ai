@@ -39,7 +39,7 @@ export const CAMERAS: readonly CameraDef[] = [
     { id: 'style', labelKey: 'viewStyle', placement: 'style', available: (graph) => hasLayeredCode(graph) },
     { id: 'features', labelKey: 'viewFeatures', placement: 'features', available: (graph) => hasSourceFiles(graph) },
     // Flow and Sequence read the lines (the entry walk), so they exist where the lines do.
-    { id: 'flow', labelKey: 'viewFlow', placement: 'flow', available: (_graph, env) => env.hasLines },
-    { id: 'sequence', labelKey: 'viewSequence', placement: 'sequence', available: (_graph, env) => env.hasLines },
+    { id: 'flow', labelKey: 'viewFlow', placement: 'flow', available: (_graph, env) => env.hasLines || env.hasSymbolScope === true },
+    { id: 'sequence', labelKey: 'viewSequence', placement: 'sequence', available: (_graph, env) => env.hasLines || env.hasSymbolScope === true },
     { id: 'list', labelKey: 'viewList', component: ListCamera, available: () => true, fallback: true },
 ];

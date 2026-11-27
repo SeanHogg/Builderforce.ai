@@ -72,14 +72,19 @@ export function StageInteraction({ bus, renderer, keys, placement, tweening, sel
     const overlayOf = (): OverlayState => {
         const slot = bus.slotOf(selected);
         const path = (options.path ?? []).map((k) => bus.slotOf(k)).filter((s) => s >= 0);
-        return { selected: slot, hover: bus.hover, reading: bus.reading, calls: bus.calls, path, incident: options.incident?.of(slot, INCIDENT_SHOWN) ?? [] };
+        const callers = options.callerKeys?.flatMap((keys) => {
+            const incoming = keys.map((key) => bus.slotOf(key)).find((at) => at >= 0 && at !== slot && (placement?.scale[at] ?? 0) > 0);
+            return incoming === undefined ? [] : [incoming];
+        });
+        const incident = callers ? [...new Set(callers)].slice(0, INCIDENT_SHOWN) : options.incident?.of(slot, INCIDENT_SHOWN) ?? [];
+        return { selected: slot, hover: bus.hover, reading: bus.reading, calls: bus.calls, path, incident };
     };
     const latest = useRef(overlayOf);
     latest.current = overlayOf;
     useEffect(() => {
         renderer.setOverlay(latest.current());
         bus.invalidate();
-    }, [renderer, bus, selected, placement, options.path, options.incident]);
+    }, [renderer, bus, selected, placement, options.path, options.incident, options.callerKeys]);
     useEffect(() => {
         const patch = (next: Partial<OverlayState>) => { renderer.setOverlay({ ...renderer.overlay, ...next }); bus.invalidate(); };
         const offHover = bus.onHover((hover) => patch({ hover }));
