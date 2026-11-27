@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, type RootState } from '@react-three/fiber';
 import { PerspectiveCamera, type OrthographicCamera } from 'three';
 import type { ThemeColors } from '../scene/themeColors';
 import { StageFrameTap } from './anchor/StageFrameTap';
@@ -39,6 +39,7 @@ import { panZoomOf, useRig } from './rig/useRig';
 import { useDepth, useLiveKeys, useStageMotion, useTweening } from './stageHooks';
 import { now, TWEEN_MS } from './tween';
 import type { Caption, MarkPaint, MarkSet, Placement } from './types';
+import { useRenderTrace } from '../renderTrace';
 
 export interface StageProps {
     renderer: StageRenderer;
@@ -82,6 +83,7 @@ export interface StageProps {
     flat?: boolean;
     /** The WebGL context was lost and did not come back: the host falls back to the List. */
     onContextLost?: () => void;
+    onRenderError?: ((error: Error) => void) | undefined;
 }
 
 type Inputs = { marks: MarkSet; paint: MarkPaint | null; placement: Placement | null; colors: ThemeColors | null; reducedMotion: boolean };
@@ -99,12 +101,13 @@ function useRendererInputs(r: StageRenderer, p: Inputs, changed: () => void): vo
     }, [r, p.marks, p.placement]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-interface SceneProps { renderer: StageRenderer; rig: RigController; inputs: Inputs; captions: RefObject<HTMLDivElement | null>; onContextLost?: (() => void) | undefined }
+interface SceneProps { renderer: StageRenderer; rig: RigController; inputs: Inputs; captions: RefObject<HTMLDivElement | null>; onContextLost?: (() => void) | undefined; onRenderError?: ((error: Error) => void) | undefined }
 
 /** A matrix no real transform equals: the first frame always writes. */
 const unwritten = (): Affine2 => ({ a: NaN, b: NaN, c: NaN, d: NaN, e: NaN, f: NaN });
 
-function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLost, width, height }: SceneProps & { canvasLabel: string; width: number; height: number }) {
+function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLost, onRenderError, width, height }: SceneProps & { canvasLabel: string; width: number; height: number }) {
+    const trace = useRenderTrace();
     const invalidate = useThree((s) => s.invalidate);
     const gl = useThree((s) => s.gl);
     const set = useThree((s) => s.set);
@@ -127,7 +130,7 @@ function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLos
     useEffect(() => renderer.onRedraw(invalidate), [renderer, invalidate]);
     const giveUp = useRef(onContextLost);
     giveUp.current = onContextLost;
-    useEffect(() => bindContextLoss(gl.domElement, renderer, invalidate, () => giveUp.current?.()), [gl, renderer, invalidate]);
+    useEffect(() => bindContextLoss(gl.domElement, renderer, invalidate, () => giveUp.current?.(), (event, error) => trace(`WebGL context ${event}`, undefined, error)), [gl, renderer, invalidate, trace]);
     // Arrow keys orbit only while the canvas itself has focus (never the proxies' roving arrows).
     // The canvas is a tab stop only while there is something for the keys to do (an orbit view).
     useEffect(() => {
@@ -145,7 +148,7 @@ function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLos
     useEffect(() => () => { if (motionTimer.current) clearTimeout(motionTimer.current); }, []);
     // Reused every frame: no allocation in the loop.
     const scratch = useMemo(() => ({ view: { pxPerWorld: 1, dpr: 1 } as StageView, affine: unwritten(), last: unwritten() }), []);
-    useFrame(() => {
+    const draw = ({ scene }: RootState) => {
         const t = now();
         const rigMoving = rig.tick(t);
         const pose = rig.pose();
@@ -159,12 +162,29 @@ function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLos
         if (depth !== renderer.depth) renderer.setDepth(depth, !rigMoving);
         const at = pose.target;
         if (captions.current) applyCaptionTransform(captions.current, groundAffine(rig.projectInto, scratch.affine, at[0], at[2]), scratch.last);
-        if (renderer.tick(t) || rigMoving) { invalidate(); return; }
+        const moving = renderer.tick(t);
+        gl.render(scene, camera);
+        if (moving || rigMoving) { invalidate(); return; }
         // The label fade (next frame) and decorative motion (the pulse, ≤ 30 fps, only while visible and allowed).
         const delay = renderer.motionDelay(t);
         if (delay === 0) { invalidate(); return; }
         if (delay !== null && !motionTimer.current) motionTimer.current = setTimeout(() => { motionTimer.current = null; invalidate(); }, delay);
-    });
+    };
+    const failed = useRef(false);
+    const painted = useRef<Placement | null>(null);
+    useFrame((state) => {
+        if (failed.current || gl.getContext().isContextLost()) return;
+        try {
+            draw(state);
+            if (inputs.placement && painted.current !== inputs.placement) {
+                painted.current = inputs.placement;
+                trace('frame drawn', `generation=${inputs.marks.generation} size=${width}x${height} dpr=${gl.getPixelRatio()} calls=${gl.info.render.calls} scale=${rig.pxPerWorld.toPrecision(4)}`);
+            }
+        } catch (error) {
+            failed.current = true;
+            onRenderError?.(error instanceof Error ? error : new Error(String(error)));
+        }
+    }, 1);
     return renderer.object ? <primitive object={renderer.object} dispose={null} /> : null;
 }
 
@@ -263,7 +283,7 @@ export function Stage(p: StageProps) {
     // An orbit placement (3D) holds the marks' extrude at full; a ground one gives the depth control back.
     useEffect(() => { if (placement) { renderer.setDepth(rig.depthUniform, true); bus.invalidate(); } }, [renderer, rig, bus, placement]);
 
-    const scene: SceneProps = { renderer, rig, inputs: { marks: p.marks, paint: p.paint, placement, colors: p.colors, reducedMotion: p.reducedMotion }, captions, onContextLost: p.onContextLost };
+    const scene: SceneProps = { renderer, rig, inputs: { marks: p.marks, paint: p.paint, placement, colors: p.colors, reducedMotion: p.reducedMotion }, captions, onContextLost: p.onContextLost, onRenderError: p.onRenderError };
     const frame = placement?.rig.frame ?? 'fill';
     return (
         <StageBusContext.Provider value={bus}>
@@ -273,7 +293,7 @@ export function Stage(p: StageProps) {
                     ? (
                         <Canvas orthographic frameloop="demand" dpr={[1, 2]} gl={{ antialias: false, alpha: true }} style={{ position: 'absolute', inset: 0, touchAction: 'none' }}>
                             <StageScene {...scene} canvasLabel={p.description ?? ''} width={width} height={height} />
-                            <StageFrameTap bus={bus} />
+                            <StageFrameTap bus={bus} onError={p.onRenderError} />
                         </Canvas>
                     )
                     : <NoCanvas {...scene} bus={bus} />}

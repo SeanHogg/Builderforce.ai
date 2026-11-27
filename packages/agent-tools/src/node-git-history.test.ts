@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { churnCapWarning, churnOf, type HistoryCommit } from "./knowledge/historyPort.js";
-import { AUTHOR_END, COMMIT_MARK, commitFilesParser, gitHistoryPort, parseCommitFiles, parseRecentCommits } from "./node-git-history.js";
+import { AUTHOR_END, COMMIT_MARK, commitFilesParser, gitHistoryPort, parseCommitFiles, parseRecentCommits, readRecentCommits } from "./node-git-history.js";
 
 /** The commit-header marker the git log format writes (`%x1e`). */
 const RS = COMMIT_MARK;
@@ -128,6 +128,15 @@ describe("gitHistoryPort", () => {
       const port = await gitHistoryPort(dir);
       const counts = churnOf(await port!.commits(30, 5000), [hexName, "a.ts"], 30);
       expect([...counts].sort()).toEqual([["a.ts", 2], [hexName, 1]]);
+      expect(await readRecentCommits(dir, 1, { path: "a.ts", author: "t@t" })).toEqual({
+        commits: [expect.objectContaining({ author: "t", title: "two", paths: ["a.ts"] })],
+      });
+      expect(await readRecentCommits(dir, 2, { path: null, authorIdentity: true })).toEqual({
+        commits: [
+          expect.objectContaining({ author: "t <t@t>", title: "two", paths: ["a.ts"] }),
+          expect.objectContaining({ author: "t <t@t>", title: "one", paths: ["a.ts", hexName] }),
+        ],
+      });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

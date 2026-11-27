@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getComputeClient } from './sharedClient';
 import type { KindInput, KindResult } from './kinds';
 import type { TaskKind } from './protocol';
+import { useRenderTrace } from '../renderTrace';
 
 export interface ComputeOptions<R> {
     enabled?: boolean;
@@ -29,10 +30,10 @@ export interface ComputeOptions<R> {
     failed?: R | null;
 }
 
-export interface Computed<R> { value: R | null; pending: boolean }
+export interface Computed<R> { value: R | null; pending: boolean; failed: boolean }
 
 /** `deps` are those of the request that answered: an answer for other deps is the previous one, still on show. */
-interface Answer<R> { value: R | null; settled: boolean; scope: readonly unknown[]; deps: readonly unknown[] }
+interface Answer<R> { value: R | null; settled: boolean; failed?: boolean; scope: readonly unknown[]; deps: readonly unknown[] }
 
 const NO_SCOPE: readonly unknown[] = [];
 const same = (a: readonly unknown[], b: readonly unknown[]): boolean => a === b || (a.length === b.length && a.every((x, i) => Object.is(x, b[i])));
@@ -43,6 +44,7 @@ export function useComputed<K extends TaskKind>(
     const { enabled = true, inline = false, keep = true, failed = initial } = opts;
     const scope = opts.scope ?? (keep ? NO_SCOPE : deps);
     const client = getComputeClient();
+    const trace = useRenderTrace();
     const sync = enabled && inline;
     // `input` is built from `deps` by the caller; both the memo and the effect list exactly them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -54,7 +56,10 @@ export function useComputed<K extends TaskKind>(
         setAnswer((a) => (same(a.scope, scope) ? (a.settled ? { ...a, settled: false } : a) : { value: initial, settled: false, scope, deps }));
         const cancel = client.run(kind, input, {
             done: (value) => setAnswer({ value, settled: true, scope, deps }),
-            fail: (error) => { console.error(`useComputed: ${kind} failed`, error); setAnswer({ value: failed, settled: true, scope, deps }); },
+            fail: (error) => {
+                trace('compute failed', kind, error instanceof Error ? error : new Error(String(error)));
+                setAnswer({ value: failed, settled: true, failed: true, scope, deps });
+            },
         });
         return () => { cancel(); client.release(); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -63,5 +68,6 @@ export function useComputed<K extends TaskKind>(
     const value = sync ? now : enabled && current ? answer.value : initial;
     // Pending from the render the deps change in, not from the effect after it: the previous answer still shows, but a caller
     // that pairs it with the NEW inputs (the transit map: old routes, new lines) must know it is not theirs.
-    return { value: value ?? initial, pending: enabled && !inline && !(answer.settled && current && same(answer.deps, deps)) };
+    const settled = answer.settled && current && same(answer.deps, deps);
+    return { value: value ?? initial, pending: enabled && !inline && !settled, failed: enabled && !inline && settled && !!answer.failed };
 }

@@ -29,7 +29,6 @@ describe('the docked pane is not the reading pane', () => {
         const { p } = scene(async () => null);
         const { result } = renderHook(() => useStageWiring(p, createNoopStage(), null, 1000));
         expect(result.current.code).toMatchObject({ visible: true, split: true, reading: false, bar: null });
-        expect(result.current.status).toBeNull();
         expect(recordsForCode).not.toHaveBeenCalled();
         const { container } = render(<div>{result.current.code.pane}</div>);
         expect(container.querySelector('[data-level-outline]')).not.toBeNull();
@@ -52,7 +51,6 @@ describe('the docked pane is not the reading pane', () => {
         const { result } = renderHook(() => useStageWiring(withEditor, stage, null, 1000));
         expect(result.current.selected).toBe(`node:${file.ref}`);
         expect(result.current.code).toMatchObject({ visible: true, reading: false });
-        expect(result.current.status).toBeNull();
     });
 
     it("below CODE_SPLIT_WIDTH the pane is not split (the header's Code | Picture switch picks one); hidden, it has no pane and offers Show", () => {

@@ -38,6 +38,7 @@ export interface GraphDiagnosticsInput {
     run?: StoredReviewRun | null | undefined;
     /** The first load's timings (the view's timeline and the host's trace); absent ⇒ no First load section. */
     load?: LoadDiagnosticsInput | undefined;
+    rendering?: Pick<DiagnosticSection, 'lines' | 'attention'> | undefined;
     /** ISO time. */
     time: string;
 }
@@ -108,7 +109,7 @@ export function graphDiagnosticSections(i: GraphDiagnosticsInput): DiagnosticSec
     if (i.run) review.push(...runDiagnosticLines(i.run));
     const failed = s.status === 'error' || (i.run?.outcome === 'failed') || (i.run ? failureCountOf(i.run) > 0 : false);
     return [
-        { id: 'graph', lines: graph, attention: false },
+        { id: 'graph', lines: [...graph, ...(i.rendering?.lines ?? [])], attention: i.rendering?.attention ?? false },
         { id: 'review', lines: review, attention: failed },
         ...(i.load ? [loadDiagnosticSection(i.load)] : []),
         ...(i.surface ? surfaceDiagnosticSections(i.surface) : []),

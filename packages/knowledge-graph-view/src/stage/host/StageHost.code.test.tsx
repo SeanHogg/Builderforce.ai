@@ -49,6 +49,16 @@ describe('the code pane in the host', () => {
         expect(container.querySelector('[data-pane-switch]')).toBeNull();
     });
 
+    it('uses the same dock for routes and code and restores the outline from the Code tab', async () => {
+        const { container } = mount(1000, { lines: <div data-testid="routes" /> });
+        const dock = await screen.findByRole('complementary', { name: sc.dockAria });
+        fireEvent.click(screen.getByRole('button', { name: L.surface.linesButton }));
+        expect(dock.contains(screen.getByTestId('routes'))).toBe(true);
+        expect(container.querySelector('[data-code-tree]')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: sc.paneCode }));
+        expect(dock.querySelector('[data-code-tree]')).not.toBeNull();
+    });
+
     it('in a 360 px box shows ONE of the two, chosen by the viewer\'s code slot (the header\'s Code | Picture switch)', async () => {
         const code = mount(360);
         expect(await screen.findByRole('complementary', { name: sc.dockAria })).toBeTruthy();

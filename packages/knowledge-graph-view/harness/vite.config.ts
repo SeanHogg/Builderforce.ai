@@ -59,9 +59,11 @@ export default {
     resolve: { alias: sourcePackageAliases(path.resolve(HERE, '../../..'), { installDir: FRONTEND }) },
     // The view's sources use syntax (destructuring in the worker bundle) the default browser targets reject.
     esbuild: { jsx: 'automatic', target: 'es2022' },
+    optimizeDeps: { esbuildOptions: { target: 'es2022' } },
     worker: { format: 'es', plugins: () => [peersFromHost] },
     build: {
         target: 'es2022',
+        modulePreload: false,
         outDir: OUT_DIR,
         emptyOutDir: true,
         rollupOptions: { output: { inlineDynamicImports: true } },

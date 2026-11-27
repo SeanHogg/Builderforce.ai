@@ -48,6 +48,8 @@ export function Spine({ items, labels, onPick, roots }: SpineProps) {
                         items={roots.scopes.map((s) => ({ id: s.rootId, label: s.title, selected: s.rootId === roots.rootId }))}
                         onSelect={(id) => { if (id === roots.rootId) onPick(item); else roots.onRoot(id); }}
                     />
+                ) : item.kind === 'folder' ? (
+                    <span style={{ ...TYPE.monoValue, padding: '4px 6px', color: cssVar('muted') }}>{item.label}</span>
                 ) : (
                     <button type="button" aria-current={current ? 'location' : undefined} onClick={() => onPick(item)} style={crumb(current)}>
                         {item.label}

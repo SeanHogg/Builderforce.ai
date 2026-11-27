@@ -36,9 +36,8 @@ import { codePaneWidth } from '../overlay/CodeDock';
 import { ColourLegend } from './ColourLegend';
 import { LevelRail, useLevelRail } from './LevelRail';
 import { depthCrumbs } from '../../surface/DepthTrail';
-import { toggleButton } from '../overlay/cardStyles';
+import { PanelChevron } from '../../surface/ui/PanelChevron';
 import { CODE_BAR_PX } from '../overlay/CodeTrail';
-import { STATUS_PX } from '../overlay/StatusStrip';
 import { useStageWiring } from '../overlay/useStageWiring';
 import type { StageRenderer } from '../renderer';
 import { legendTypesOf } from '../rig/stageLegend';
@@ -54,6 +53,9 @@ import { useHeldFrame } from './useHeldFrame';
 import { useSideMask } from './useSideMask';
 import { holdsForNestBasis, useNestBasis } from './useNestBasis';
 import { useStageStrings } from './stageStrings';
+import type { HierarchyView } from '../overlay/CodeHierarchy';
+import { SurfaceErrorBoundary } from '../../surface/SurfaceErrorBoundary';
+import { useRenderTrace } from '../../renderTrace';
 
 /** What the host threads to the code pane (PRD 43 Part C): its visibility, and the actions another slice wires. */
 export interface StageCodeProps {
@@ -65,6 +67,9 @@ export interface StageCodeProps {
     onRestructure?: ((ref: string) => void) | undefined;
     /** The restructure's file read is in flight: the card's Restructure is disabled meanwhile. */
     restructureLoading?: boolean | undefined;
+    lines?: ReactNode;
+    hierarchy?: HierarchyView | undefined;
+    onHierarchy?: ((view: HierarchyView) => void) | undefined;
 }
 
 /** The open comparison, if any (PRD 43 C5): the side on show, what it lacks, how it differs. The graph the host hands in is already the union. */
@@ -82,6 +87,9 @@ export interface StageHostProps extends SceneProps, StageCodeProps, StageCompare
     camera: PlacementCamera;
     /** The scale sentence (`ScaleLine`), drawn under the Colour-by legend at the bottom-left; the view's chrome hands it in. */
     scale?: ReactNode;
+    tools?: ReactNode;
+    journey?: ReactNode;
+    notice?: ReactNode;
     /** The DOM camera shown when the stage cannot draw (no WebGL, a lost context). */
     fallback: ComponentType<SceneProps>;
 }
@@ -94,19 +102,41 @@ const UNMEASURED = { width: 960, height: 600 } as const;
 export default function StageHost({ fallback: Fallback, ...p }: StageHostProps) {
     const factory = useContext(StageFactoryContext);
     const renderer = useStageRenderer(factory);
-    const [lost, setLost] = useState(false);
-    const onLost = useCallback(() => setLost(true), []);
-    if (renderer === false || lost) return <><Fallback {...p} /><ScaleFoot>{p.scale}</ScaleFoot></>;
-    return renderer ? <StageBody {...p} renderer={renderer} onLost={onLost} /> : <div style={BOX} data-stage-host />;
+    const trace = useRenderTrace();
+    const [failedAt, setFailedAt] = useState<string | null>(null);
+    const location = `${p.graph.scope.rootId}|${p.camera}|${p.surface.drill.stack.map((f) => f.ref).join(' > ')}`;
+    useEffect(() => { setFailedAt((failed) => failed === location ? failed : null); }, [location]);
+    const onLost = useCallback(() => {
+        trace('WebGL context recovery timed out', location, new Error('WebGL context unavailable'));
+        setFailedAt(location);
+    }, [trace, location]);
+    const onRenderError = useCallback((error: Error) => { trace('frame failed', location, error); setFailedAt(location); }, [trace, location]);
+    useEffect(() => {
+        if (renderer !== null) trace('renderer', `${location} renderer=${renderer === false ? 'list (WebGL 2 unavailable)' : renderer.kind}`);
+    }, [trace, renderer, location]);
+    const fallback = <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {p.tools}
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', position: 'relative' }}><Fallback {...p} /><ScaleFoot>{p.scale}</ScaleFoot>{p.notice}</div>
+        {p.journey}
+    </div>;
+    if (renderer === false || failedAt === location) return fallback;
+    return renderer ? (
+        <SurfaceErrorBoundary labels={p.labels} resetKey={location} fallback={fallback}
+            onError={(error, info) => trace('stage failed', `${location}${info.componentStack ?? ''}`, error)}>
+            <StageBody {...p} renderer={renderer} onLost={onLost} onRenderError={onRenderError} onComputeError={() => setFailedAt(location)} />
+        </SurfaceErrorBoundary>
+    ) : <div style={BOX} data-stage-host />;
 }
 
 /** The Map's ladder: system, class, method, code (drill depth 0..3). Going in stays with the wheel, double-click and Enter. */
 const MAP_BANDS: readonly ZoomBand[] = ZOOM_BANDS.map((b) => b.band);
 
-function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, compare, flat = false, ...p }: SceneProps & StageCodeProps & StageCompareProps & StageFlatProps & { camera: PlacementCamera; scale?: ReactNode; renderer: StageRenderer; onLost(): void }) {
+function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, scale, codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, lines, hierarchy, onHierarchy, compare, flat = false, tools, journey, notice, ...p }: Omit<StageHostProps, 'fallback'> & { renderer: StageRenderer; onLost(): void; onRenderError(error: Error): void; onComputeError(): void }) {
     const box = useRef<HTMLDivElement>(null);
+    const picture = useRef<HTMLDivElement>(null);
     // Before the box is measured (and where nothing measures it: jsdom) the stage is laid out for a standard box.
     const measured = useContainerSize(box);
+    const pictureSize = useContainerSize(picture);
     const boxWidth = measured.width || UNMEASURED.width, boxHeight = measured.height || UNMEASURED.height;
     const colors = useThemeColors(box.current);
     const { graph, surface, labels } = p;
@@ -115,11 +145,12 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
     const strings = useStageStrings(labels);
 
     // The MarkSet is built once per graph: a comparison hands the union graph for its whole run, and a commit's changed set is paint, never an input here.
-    const marks = useComputed('markSet', { graph, strings }, [graph, strings], null, { keep: false }).value;
+    const markResult = useComputed('markSet', { graph, strings }, [graph, strings], null, { keep: false });
+    const marks = markResult.value;
     const generation = marks?.generation ?? 0;
     const codeCompare = useMemo(() => codeCompareOf(compare), [compare]);
     const wiring = useStageWiring(p, renderer, marks, boxWidth, {
-        shown: codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, compare: codeCompare, sequence: camera === 'sequence', factsGraph: compare?.sideGraph,
+        shown: codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, compare: codeCompare, sequence: camera === 'sequence', factsGraph: compare?.sideGraph, lines, hierarchy, onHierarchy,
     });
     const drilled = !!surface.drill.view;
     // The map's own box: beside the docked pane, under the zoom-path bar and above the status strip (the last two while a file is read).
@@ -133,8 +164,8 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
     // Opening a file in a narrow box shows it: the switch flips to Code (once per opening, so Picture can still be picked).
     const opensCode = code.reading && !code.split && onePaneStage(boxWidth);
     useEffect(() => { if (opensCode && !slotOn) onToggleCode?.(); }, [opensCode]); // eslint-disable-line react-hooks/exhaustive-deps
-    const barPx = code.reading ? CODE_BAR_PX : 0, statusPx = code.reading ? STATUS_PX : 0;
-    const width = boxWidth - codeWidth, height = boxHeight - barPx - statusPx;
+    const barPx = code.reading && !showCodeHalf ? CODE_BAR_PX : 0;
+    const width = Math.max(1, boxWidth - codeWidth), height = Math.max(1, (pictureSize.height || boxHeight) - barPx);
 
     // Paint: the lens, the overlay, the question (+ its family) and what it lights; Show in towers' roles while a tower
     // picture is on show (the 3D scene, or the Map tilted).
@@ -176,7 +207,8 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
         // Flow reads symbols only inside a drilled level; at system level they are not an input (nor part of its key).
         ...(drill || cam === 'sequence' ? { symbols } : {}),
     });
-    const map = useComputed('placement', place('map', mapDepth, wiring.map.drill, 0, null), [graph, generation, band, channels, wiring.map.drill, symbols, mapDepth], null, { enabled: !!marks }).value;
+    const mapResult = useComputed('placement', place('map', mapDepth, wiring.map.drill, 0, null), [graph, generation, band, channels, wiring.map.drill, symbols, mapDepth], null, { enabled: !!marks, scope: [generation, wiring.map.drill] });
+    const map = mapResult.value;
     const other = camera === 'map' ? 'graph' : camera;
     // The zoom's nesting survives a rebuilt world: its entries are re-derived from the ancestor levels' placements of the new generation.
     const nestBasis = useNestBasis(marks, surface.drill.stack, camera === 'map' && wiring.zoom.nests, (d) => place('map', mapDepth, d, 0, null), [graph, generation, band, channels, symbols, mapDepth]);
@@ -184,7 +216,8 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
     useEffect(() => { setBasis(nestBasis.basis); }, [setBasis, nestBasis.basis]);
     const otherDepth = other === '3d' ? 1 : flat ? 0 : undefined;
     const otherSymbols = otherDrill || other === 'sequence' ? symbols : null;
-    const otherPlacement = useComputed('placement', place(other, otherDepth, otherDrill, lod, pathId, method), [graph, generation, band, channels, other, lod, pathId, otherSymbols, otherDepth, otherDrill, method], null, { enabled: !!marks }).value;
+    const otherResult = useComputed('placement', place(other, otherDepth, otherDrill, lod, pathId, method), [graph, generation, band, channels, other, lod, pathId, otherSymbols, otherDepth, otherDrill, method], null, { enabled: !!marks && camera !== 'map', scope: [generation, other, otherDrill] });
+    const otherPlacement = otherResult.value;
     // Before / After: the same placement with the slots the side lacks shrunk onto their anchor (the tween moves them).
     const placement = useSideMask(camera === 'map' ? wiring.patchMap(map) : otherPlacement, marks, compare);
     // A zoom-entered level whose entry went stale with the rebuilt world waits for the placements it re-nests from (not when they failed: nothing is coming).
@@ -195,6 +228,14 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
     const drillIdentity = useDrillIdentity(surface.drill.stack, surface.drill.reanchored.moves);
     const frame = useHeldFrame(`${graph.scope.rootId}|${camera}|${drillIdentity}`, ready ? { marks, paint, placement } : null);
     const shownMarks = frame?.marks ?? marks;
+    const computeFailed = markResult.failed || (camera === 'map' ? mapResult.failed : otherResult.failed);
+    useEffect(() => { if (computeFailed) onComputeError(); }, [computeFailed, onComputeError]);
+    const trace = useRenderTrace();
+    useEffect(() => {
+        if (!frame) return;
+        const { placement: placed } = frame;
+        trace('placement ready', `camera=${camera} level=${drillIdentity} generation=${placed.generation} size=${width}x${height} marks=${placed.a11y.length} bounds=${placed.bounds.min.join(',')} to ${placed.bounds.max.join(',')}`);
+    }, [trace, camera, drillIdentity, frame?.placement, width, height]);
 
     // The selection: the stage's own (a mark picked here), else the surface's (a search hit, the List).
     const selected = wiring.selected ?? (p.selected && p.selected !== wiring.dismissed ? `node:${p.selected}` : null);
@@ -238,22 +279,21 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
     }, [onEscape]);
 
     return (
-        <div ref={box} style={BOX} data-stage-host data-stage-camera={camera}>
+        <div ref={box} style={{ ...BOX, display: 'grid', gridTemplateColumns: code.split ? `${codeWidth}px minmax(0, 1fr)` : 'minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr)' }} data-stage-host data-stage-camera={camera}>
             {code.split && (
-                <div data-code-split style={{ position: 'absolute', insetBlockStart: 0, insetBlockEnd: statusPx, insetInlineStart: 0, width: codeWidth }}>
+                <div data-code-split style={{ position: 'relative', minHeight: 0, minWidth: 0 }}>
                     {code.pane}
                 </div>
             )}
             {code.show && (
-                <button
-                    type="button" data-action="dock-show" aria-label={sc.dockShow} title={sc.dockShow} onClick={code.show}
-                    style={{ ...toggleButton, position: 'absolute', zIndex: 3, insetBlockStart: '50%', insetInlineStart: 0, transform: 'translateY(-50%)', minHeight: 40, borderRadius: '0 6px 6px 0' }}
-                >
-                    <span aria-hidden="true">›</span>
-                </button>
+                <PanelChevron action="dock-show" open={false} label={sc.dockShow} onClick={code.show}
+                    style={{ position: 'absolute', zIndex: 3, insetBlockStart: '50%', insetInlineStart: 0, transform: 'translateY(-50%)', borderRadius: '0 4px 4px 0' }} />
             )}
-            {code.reading && <div style={{ position: 'absolute', top: 0, left: codeWidth, width }}>{code.bar}</div>}
-            <div data-map-pane style={{ position: 'absolute', top: barPx, left: codeWidth, width, height, ...(showCodeHalf ? { visibility: 'hidden', pointerEvents: 'none' } : null) }}>
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
+            {tools}
+            <div ref={picture} style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'auto' }}>
+            {!!barPx && <div style={{ position: 'absolute', top: 0, insetInline: 0 }}>{code.bar}</div>}
+            <div data-map-pane style={{ position: 'absolute', top: barPx, insetInlineStart: 0, width, height, ...(showCodeHalf ? { visibility: 'hidden', pointerEvents: 'none' } : null) }}>
                 {levelNote && <p data-level-note style={{ position: 'absolute', zIndex: 1, insetBlockEnd: 74, insetInlineStart: 10, maxWidth: 'calc(100% - 80px)', margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'), ...TYPE.bodyMuted }}>{levelNote}</p>}
                 <LevelRail zoom={zoom} rail={rail} narrow={narrowStage} />
                 {ready && <ColourLegend labels={labels} surface={surface} types={legendTypesOf(shownMarks?.type)} comparing={!!compare} narrow={narrowStage} scale={scale} />}
@@ -263,7 +303,7 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
                         width={width} height={height} reducedMotion={p.reducedMotion} selected={selected} onSelect={wiring.onSelect} onDrill={wiring.onDrill}
                         nav={nav} description={labels.regionLabel}
                         onOut={wiring.onEscape} onClear={wiring.clearSelection}
-                        {...(camera === 'map' ? { tilt: flat ? 0 : 1, onWheelStep } : {})} flat={flat} onContextLost={onLost}
+                        {...(camera === 'map' ? { tilt: flat ? 0 : 1, onWheelStep } : {})} flat={flat} onContextLost={onLost} onRenderError={onRenderError}
                     />
                 )}
                 {!ready && <LayingOut labels={labels} corner={!!frame} />}
@@ -275,11 +315,14 @@ function StageBody({ renderer, onLost, camera, scale, codeShown, onToggleCode, o
                 )}
                 {(drill.loading && camera === 'map') && <LayingOut labels={labels} corner />}
                 <EdgesCapped caption={caption} labels={labels} text={camera === 'map' ? labels.surface.scene.stationsCapped : undefined} />
+                {notice}
             </div>
             {showCodeHalf && (
-                <div data-code-narrow style={{ position: 'absolute', insetInline: 0, insetBlockStart: barPx, insetBlockEnd: statusPx, background: cssVar('bg') }}>{code.pane}</div>
+                <div data-code-narrow style={{ position: 'absolute', inset: 0, background: cssVar('bg') }}>{code.pane}</div>
             )}
-            {wiring.status}
+            </div>
+            {journey}
+            </div>
         </div>
     );
 }

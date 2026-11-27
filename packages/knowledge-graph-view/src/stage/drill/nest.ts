@@ -9,8 +9,7 @@
  *   - a slot the level HIDES stays exactly where the placement on show had it (scale 0), so the members grow out of the
  *     parent (where the outer placement parked them) and everything else shrinks in place; going back out is the outer
  *     placement again, which parks the members at their parent: they fold in;
- *   - the bounds and the rig are the OUTER placement's, so the rig keeps the person's zoom (no re-home) and Fit still
- *     frames the whole map.
+ *   - the fitted camera follows the transformed child content, so entering and resetting frame the current level.
  *
  * Pure.
  */
@@ -84,8 +83,12 @@ export function nestPlacement(raw: Placement, e: NestEntry): Placement {
         labels: raw.labels.map((r) => (r.scale === 'world'
             ? { ...r, size: r.size * s, offsetPx: [r.offsetPx[0] * s, r.offsetPx[1] * s] as [number, number], halo: { ...r.halo, px: r.halo.px * s } }
             : r)),
-        bounds: outer.bounds,
-        rig: outer.rig,
+        bounds: { min: at(...min), max: at(...max) },
+        rig: raw.rig.view ? {
+            ...raw.rig,
+            home: { ...raw.rig.home, position: at(...raw.rig.home.position), target: at(...raw.rig.home.target) },
+            view: { ...raw.rig.view, distance: raw.rig.view.distance * s, ...(raw.rig.view.radius === undefined ? {} : { radius: raw.rig.view.radius * s }) },
+        } : raw.rig,
     };
 }
 

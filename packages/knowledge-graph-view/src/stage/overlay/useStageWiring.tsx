@@ -17,7 +17,7 @@ import { restructureOf } from './restructureTarget';
 import { useComputed } from '../../compute/useComputed';
 import { fillTemplate } from '../../labels';
 import { nodeIndex } from '../../graphModel';
-import { fileRefOf } from '../../surface/stations';
+import { fileRefOf, stationOfRef } from '../../surface/stations';
 import type { SceneProps } from '../../surface/registry';
 import { stageBus, StageBusContext } from '../anchor/stageBus';
 import { ZOOM_BANDS } from '../labels/lod';
@@ -42,7 +42,8 @@ import type { StageRenderer } from '../renderer';
 import type { MarkSet, Placement } from '../types';
 import { SlotIncident } from './incident';
 import { StageToast, useStageToast } from './StageToast';
-import { StatusStrip } from './StatusStrip';
+import { architectureGroups, FilesystemTree, type HierarchyView } from './CodeHierarchy';
+import { Pill } from '../../surface/ui/Pill';
 import { CallSiteCard } from './CallSiteCard';
 import { StageCard, stationCardOf } from './StageCard';
 import { SymbolCard, type SymbolCardState } from './SymbolCard';
@@ -67,6 +68,9 @@ export interface StageDockOptions {
     sequence?: boolean | undefined;
     /** The graph the facts read while comparing (the shown side's own; `p.graph` is the union, which keeps both sides' findings). */
     factsGraph?: KnowledgeGraph | null | undefined;
+    lines?: ReactNode;
+    hierarchy?: HierarchyView | undefined;
+    onHierarchy?: ((view: HierarchyView) => void) | undefined;
 }
 
 export interface StageWiring {
@@ -90,8 +94,6 @@ export interface StageWiring {
     toBand(target: number): void;
     /** The method whose code is open (the code band's, or one opened across): the Sequence placement's `method`. */
     method: string | null;
-    /** The status strip along the bottom while the code is read. */
-    status: ReactNode;
     /** The Map placement with the unfold patch applied (memoized: the same placement in, the same out). */
     patchMap(p: Placement | null): Placement | null;
     card: ReactNode;
@@ -116,11 +118,21 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const map = useStageMap(surface.stations, drill, index, slotOf);
     // The semantic zoom (B1a rules 9–10): the zoom enters and leaves the drill's levels; Go inside flies the same zoom.
     const zoom = useSemanticZoom(bus, drill, map, p.reducedMotion);
-    const [selected, setSelected] = useState<string | null>(null);
-    const [cardKey, setCardKey] = useState<string | null>(null);
+    const [pickedKey, setSelected] = useState<string | null>(null);
+    const pickedStation = (drill.view ? map.stations.byId.get(drill.selected ?? '') : surface.station) ?? null;
+    const stationKey = pickedStation ? map.keyOfStation(pickedStation) : null;
+    const selected = pickedKey?.startsWith('node:') && !map.stationOfKey(pickedKey) ? pickedKey : stationKey;
+    const [cardPick, setCardKey] = useState<string | null>(null);
+    const cardKey = cardPick === stationKey ? cardPick : null;
     const [dismissed, setDismissed] = useState<string | null>(null);
     const toast = useStageToast();
     const t = p.labels.surface.code;
+    useEffect(() => {
+        if (!stationKey || drill.view) return undefined;
+        const reveal = () => { const slot = bus.slotOf(stationKey); if (slot >= 0) bus.reveal(slot); };
+        reveal();
+        return bus.onPlacement(reveal);
+    }, [stationKey, drill.view, bus]);
 
     // The ranked incident index, once per graph; the selected line is the path the overlay highlights.
     const generation = marks?.generation ?? 0;
@@ -209,6 +221,14 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
 
     // The code dock: docked or read, what it reads and what that drives on the map (`useCodeDock`).
     const d = useCodeDock({ p, bus, map, zoom, selected, setSelected, cardKey, toast: toast.show, width, slotOf, shown: dock.shown ?? true, onToggle: dock.onToggleCode, sequence: dock.sequence, factsGraph: dock.factsGraph });
+    const groups = useMemo(() => drill.view ? undefined : architectureGroups(graph, map.stations.stations, p.rootTitle), [drill.view, graph, map.stations, p.rootTitle]);
+    const openFile = (ref: string) => {
+        const local = stationOfRef(map.stations, ref);
+        if (drill.view) { if (local) drill.select(local); else drill.climb(0); }
+        setSelected(`node:${ref}`);
+        p.onSelect(ref);
+        d.openCode();
+    };
     const { reader, records, methodTarget, out } = d;
     // Escape: clear the pick first (never at the code level, which goes out), else go out.
     const onEscape = useCallback(() => {
@@ -278,10 +298,18 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const onHoverRow = (key: string | null) => bus.setHover(key ? bus.slotOf(key) : -1);
     const pane = !d.visible ? null : (
         <CodePane
-            labels={p.labels} say={say} onHide={d.hide} note={surface.readSource ? undefined : t.levelNoSource} narrow={!d.split} source={reading}
+            labels={p.labels} say={say} onHide={d.hide} note={surface.readSource ? undefined : t.levelNoSource} narrow={!d.split} source={reading} lines={dock.lines}
+            hierarchy={dock.onHierarchy && <div role="group" aria-label={t.levelAria} style={{ display: 'flex', gap: 4, padding: '0 12px 6px' }}>
+                <Pill on={dock.hierarchy !== 'filesystem'} aria-pressed={dock.hierarchy !== 'filesystem'} onClick={() => dock.onHierarchy?.('architecture')}>{t.architecture}</Pill>
+                <Pill on={dock.hierarchy === 'filesystem'} aria-pressed={dock.hierarchy === 'filesystem'} onClick={() => dock.onHierarchy?.('filesystem')}>{t.filesystem}</Pill>
+            </div>}
+            filesystem={dock.hierarchy === 'filesystem' ? <FilesystemTree graph={graph} labels={p.labels} selected={p.selected} onFile={openFile} /> : null}
             tree={{
-                ancestors: depthCrumbs(drill.stack, null, p.labels.surface.depth), onClimb: drill.climb, stations: map.stations.stations, keyOf: map.keyOfStation, types: d.types,
-                facts: d.facts, selected, canEnter: (id) => drill.canEnter(id).can, onSelect, onEnter: zoom.zoomInto, onHover: onHoverRow,
+                ancestors: depthCrumbs(drill.stack, p.rootTitle, p.labels.surface.depth), onClimb: drill.climb, stations: map.stations.stations, keyOf: map.keyOfStation, types: d.types, groups,
+                facts: d.facts, selected, canEnter: (id) => drill.canEnter(id).can, onSelect: (key) => {
+                    onSelect(key);
+                    if (drill.stack.at(-1)?.level === 'package' && key.startsWith('node:')) d.openCode();
+                }, onEnter: zoom.zoomInto, onHover: onHoverRow,
             }}
         />
     );
@@ -294,9 +322,8 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
             />
         ) : null,
     };
-    const status = d.reading ? <StatusStrip labels={p.labels} band={zoom.band} follow={reader.follow} path={d.codeTarget?.path ?? null} line={reader.line} /> : null;
     return {
-        map, zoom, selected, onSelect, onDrill, onOut: out, onEscape, clearSelection, dismissed, wheelStep, toBand, method: methodTarget?.ref ?? null, patchMap, card, code, status,
+        map, zoom, selected, onSelect, onDrill, onOut: out, onEscape, clearSelection, dismissed, wheelStep, toBand, method: methodTarget?.ref ?? null, patchMap, card, code,
     };
 }
 

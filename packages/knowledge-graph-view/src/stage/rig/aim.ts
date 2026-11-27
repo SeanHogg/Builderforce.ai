@@ -21,7 +21,7 @@ export function aimCamera(
     if (perspective) {
         persp.fov = pose.fov;
         persp.aspect = size.width / Math.max(1, size.height);
-        persp.near = Math.max(0.1, orbitDistance / 1000);
+        persp.near = Math.max(1e-6, orbitDistance / 1000);
         persp.far = orbitDistance * 20;
     } else {
         // The frustum in CSS px (R3F's own convention for an orthographic default camera), set from the CURRENT size.

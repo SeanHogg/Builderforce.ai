@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, rmdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -83,12 +84,32 @@ it("serves the SDK workspace catalog and searches only the requested file", asyn
           symbols: ["exactMarker"], snippet: expect.stringContaining("return true") }]),
       });
     }
+
+    const git = (...args: string[]) => execFileSync(
+      "git", ["-c", "user.name=MCP Test", "-c", "user.email=mcp@example.test", "-c", "commit.gpgsign=false", ...args],
+      { cwd: root, stdio: "ignore" },
+    );
+    git("init", "--quiet");
+    git("add", "match.ts");
+    git("commit", "--quiet", "-m", "Add match");
+    const history = await call("workspace__git_history", { path: "match.ts", author: "MCP Test" });
+    expect(history.result.structuredContent.commits).toEqual([
+      expect.objectContaining({ author: "MCP Test", title: "Add match", paths: ["match.ts"] }),
+    ]);
+    const legacyHistory = await call("git_history", { path: "match.ts", author: "MCP Test" });
+    const blocks = JSON.parse(legacyHistory.result.content[0].text);
+    expect(JSON.parse(blocks[0].text)).toMatchObject({
+      totalCommits: 1,
+      commits: [{ author: "MCP Test <mcp@example.test>", message: "Add match", filesChanged: 1 }],
+      topFiles: [{ file: "match.ts", commits: 1 }],
+    });
   } finally {
     vi.unstubAllEnvs();
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
     await Promise.all(data.map((file) => rm(join(root, file), { force: true })));
     await rm(join(root, ".builderForceAgents", "symbols.json"), { force: true });
     await rmdir(join(root, ".builderForceAgents")).catch(() => undefined);
+    await rm(join(root, ".git"), { recursive: true, force: true });
     await rmdir(root);
   }
 });

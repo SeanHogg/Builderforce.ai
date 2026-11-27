@@ -2,11 +2,9 @@
 
 Part of the [unified platform review](unified-platform-gap-review.md). Areas are audited one at a time, and each one ends in a single target design plus granular gaps (`MCP-G###`, …) in [GAP-REGISTER.md](../../roadmap/GAP-REGISTER.md).
 
-Synapse is being rebuilt from the ground up (user, 2026-11-26), so its Rust MCP code is judged only on whether a shared component should replace it.
-
 | # | Area | Status |
 |---|---|---|
-| 1 | MCP | **audited 2026-11-26** (below) |
+| 1 | MCP | **reverified 2026-11-27** (§1) |
 | 2 | Code index / search / context | **audited 2026-11-26** (below) |
 | 3 | Local inference + model catalog + routing | **audited 2026-11-26** (below) |
 | 4 | Memory (Evermind), skills, episodes, runs | **audited 2026-11-26** (below) |
@@ -19,179 +17,36 @@ Synapse is being rebuilt from the ground up (user, 2026-11-26), so its Rust MCP 
 
 ## 1. MCP
 
-### 1.1 Inventory: 11 implementations across 3 repos
+### 1.1 Current stack, verified 2026-11-27
 
-| # | Implementation | Repo · path | Role | Transport | Library | Protocol | Tools |
-|---|---|---|---|---|---|---|---|
-| A | Platform MCP server | Builderforce.ai `api/src/presentation/routes/mcpServerRoutes.ts` (mounted `api/src/index.ts:1043`) | server | Streamable HTTP, stateless, POST-only, batches | hand-rolled | negotiates 2025-06-18 / 2025-03-26 / 2024-11-05 | ~360+ (gateway catalog, `?surface=`) |
-| B | Gateway catalog + dispatcher | `api/src/application/llm/mcpGateway.ts`, `builtinMcpService.ts` (4609 lines, ~378 tools), `connectors/connectorTools.ts`, `mcpExtensionService.ts`, `toolSurfaces.ts` | catalog + gateway | in-process + REST `/llm/v1/mcp/{tools,surfaces,call}` | custom | — | built-in + connectors + tenant MCP |
-| C | Outbound MCP client | `api/src/application/llm/mcp/mcpWireClient.ts` (+ `mcpOAuth*.ts`, `mcpExtensionAuth.ts`, `mcpToolConsent.ts`) | client | Streamable HTTP (JSON or SSE body) + legacy REST fallback | hand-rolled | 2025-06-18 | forwards tenant servers |
-| D | Marketplace review probe | `api/src/application/developer/dynamicReview.ts:349-430` | client (probe) | HTTP, no `initialize` | hand-rolled (3rd framing) | none sent | `tools/list` only |
-| E | agent-runtime local MCP | `agent-runtime/src/gateway/mcp-server-http.ts` (via `server-http.ts:500`, port 18789) | server | HTTP `GET/POST /mcp` + legacy `/mcp/call` | hand-rolled | 2024-11-05 only | 9 |
-| F | REST relay consumers | `brain-embedded/src/mcpCatalog.ts` (web via `McpExtensionsBridge.tsx`, VS Code `platform/platformTools.ts`, Chrome `tools/platformTools.ts`); copies in `frontend/src/lib/builtinTools.ts`, `agent-runtime/.../connector-tools.ts`, `platform-ticket-tools.ts`, mobile `PlatformTools` | client (REST) | HTTPS | custom | — | platform catalog |
-| G | User-server registration UI | VS Code `src/tools/mcpServers.ts`, `bfApi/mcpExtensions.ts`; web `components/mcp/*`, `lib/mcpExtensionsApi.ts` | host UI (→ API CRUD) | — | — | — | — |
-| H | Synapse `McpClient` | builderforce-inference `crates/bf-mcp/src/client.rs` | client | stdio NDJSON | hand-rolled Rust | 2025-06-18 | forwards |
-| I | Synapse connector `Host` | `crates/bf-mcp/src/{host,catalog,spec}.rs`, Tauri `app/src-tauri/src/connectors.rs` | host (stdio user servers, 7 one-click) | stdio | hand-rolled Rust | 2025-06-18 | `mcp_<conn>_<tool>` |
-| J | Synapse context server | `crates/bf-context/src/mcp.rs` (`synapse mcp`, `bf-context mcp`) + loopback HTTP `server.rs` | server | stdio (+ loopback HTTP API) | hand-rolled Rust | 2025-06-18 (echoes the client) | 5 |
-| K | Memory MCP | builderforce-memory `packages/memory-mcp` (`@seanhogg/builderforce-memory-mcp` 2026.10.85) | server ×3 transports | stdio, Streamable HTTP (stateless), in-process Agent SDK | **official `@modelcontextprotocol/sdk ^1.12`** | SDK-negotiated | 9 memory/cost + 20 experience |
+The original audit counted 11 server, client, catalog and host integrations. The shared package now owns the TypeScript MCP protocol helpers, Streamable HTTP transport, tool conversion, naming, output policy, platform REST relay and host config codecs. Each server has a distinct catalog.
 
-These are not MCP but look like it, and should be renamed or documented:
-- `api/src/application/workflow/mcpNode.ts` and `agent-runtime/src/builderforce/orchestrator.ts:797-866` are data-provider calls.
-- The webcontainers `ENV_TOOL_KEYS`/`runtime.agents.*` are an in-process tool catalog.
-- `agent-runtime/src/acp/*` is the Agent Client Protocol; it sends `mcpServers: []`.
-
-Facts that shape the design:
-- **Only K uses the official SDK.** Builderforce.ai only *pins* it (pnpm override `^1.32.0` in `agent-runtime/package.json:246` and `clients/vscode/package.json:1414`).
-- No code anywhere **reads** a host `mcp.json`.
-- **Every server is tools-only.** None offers resources, prompts, sampling or `list_changed`.
-- No MCP path applies `tool-output-policy` or `secret-redaction`.
-
-### 1.2 Duplicate-responsibility matrix
-
-| Responsibility | Copies | Where |
-|---|---|---|
-| JSON-RPC framing / envelopes / error codes | **6** | A `mcpServerRoutes.ts:53-90`; E `mcp-server-http.ts:127-262` (own codes −32001/−32002); C `mcpWireClient.ts:150-175`; D `dynamicReview.ts:~387-405`; H `client.rs`; J `mcp.rs` |
-| SSE-body result parsing | 2 | C `readJsonRpcBody`; D (own "first `data:` line") |
-| Protocol-version constant / negotiation | 5 | A (3 versions), C, E (2024-11-05), H, J (hard-coded 2025-06-18); K is SDK |
-| Tool registry / catalog | **6** | B `CATALOG`; E `MCP_TOOLS`; J `tool_list` (JSON literals); K `buildMemoryTools` (zod); `creation-canvas-contract/canvasTools.ts`; webcontainers `ENV_TOOL_KEYS` |
-| `McpToolEntry` type | 3 "mirrors" | `mcpExtensionService.ts`, `brain-embedded/src/mcpCatalog.ts:25`, `clients/vscode/src/platform/platformTools.ts:~21` |
-| Tool → LLM function shape | 4 | `brain-embedded/src/toolSpecs.ts:18`; `builtinMcpService.ts:4458`; Synapse `brain_tools.rs`; `bf-cloud PlatformTool::as_function` |
-| Tool → MCP `inputSchema` | 3 | A `tools/list`; E `:~84` (TypeBox `$schema` strip); J literals |
-| Advertised-name scheme | **4** | `builtin_<id>` (`agent-tools/src/toolNaming.ts:~28` + `api/.../toolNaming.ts`); `mcp_<8hex>_<tool>` (`mcpExtensionService.ts:~201`, a second `advertisedName` with another signature); `mcp_<conn>_<tool>` 64-char (Synapse `flat_name`); `mcp__server__tool` (`toolNaming.ts:20`, `agent-stall/src/index.ts:96`; no producer) |
-| Write/read-only decision | **4** | `mutates` (B; absent = write); `readOnlyHint` (H/I); webcontainers `mutates` map; A maps `readOnlyHint = mutates===false` |
-| Per-tool approval/consent | **5** | `mcpToolConsent.ts` (server); `mcpCatalog.ts` `mutates !== false`; VS Code `toolMutating`/`platformCallGate`; Chrome `safety.ts`; Synapse Approve (`Tool::writes()`) |
-| REST relay client for `/llm/v1/mcp/call` | **6** | `brain-embedded/mcpCatalog.ts`; `frontend/src/lib/builtinTools.ts:22,33`; `agent-runtime/.../connector-tools.ts:70,161`; `platform-ticket-tools.ts`; `bf-cloud/src/tools.rs`; mobile `PlatformTools` |
-| Catalog TTL cache | 3 | VS Code 60s `ttlCache`; Chrome 60s; API external 60s (`mcpExtensionService.ts:~159`) |
-| Bearer extraction (server) | 3 | A `requireTenantAccess`; E `getBearerToken`; K HTTP auth (sha256, timing-safe) |
-| Outbound auth header build | 5 | `mcpWireClient headersFor`; `mcpCatalog.ts:~96,~138`; `platform-ticket-tools.ts:~38`; `connector-tools.ts`; `builtinTools.ts` |
-| User-server config store | 2, disjoint | API DB `tenant_mcp_extensions` (`identity.ts:294`, remote https only) vs Synapse `connectors.json` (local stdio) |
-| Server-URL validation | 3 | `assertSafeServerUrl` (API); VS Code `mcpServers.ts` regex; `McpServerForm.tsx` |
-| stdio spawn/supervise | 1 (Rust) | H only. TS has none (K is a server). |
-| Launch spec (npx args for memory-mcp) | 3 by hand | `bf-memory/launch.rs RUNTIME_PEERS`; `memory-mcp/src/install/server-spec.ts`; `plugins/builderforce-memory/.claude-plugin/plugin.json` |
-| Windows `.cmd` shim / command-line split | 2 | Rust `LaunchSpec`/`split_command_line`; TS `buildServerSpec` |
-| Host `mcp.json` writer | 2 | K installer (8 hosts, write-only); Synapse `connect_info` (writes the `mcpServers` JSON) |
-
-### 1.3 Tool-level overlaps
-
-| Concept | Names in use | Where |
-|---|---|---|
-| Code search | `codebase_semantic_search`, `codebase_search` (E) · `semantic_search`, `repo_map` (J) · `search_code` (`agent-tools/core-tools.ts:106`) · `builtin_knowledge_search` (B) | 4 implementations of "find code" |
-| Memory | `memory_recall/remember/forget` (`core-tools.ts:347-415`) · `memory_search/get` (`agent-runtime/agents/tools/memory-tool.ts:42,72`) · `memory_recall/get/recall_by_tag/remember/forget/compact/restore` (K) | 3 vocabularies; K is canonical |
-| Tickets / reviews / security | `tickets_from_delta`, `reviews_record`, `security_record` (E) = `builtin_tickets_from_delta`, `builtin_reviews_record`, `builtin_security_record_finding` (B) | same function, two names |
-| Runs / workflows | `workflow_status`, `agent_fleet` (E) · `executions.*`, `workflows.runs` (B) · `run_start/step/finish/list/get` (K) | 3 meanings of "run" |
-| Project knowledge | `project_knowledge` (E) · `projects.*` (B) | |
-| Files / exec | `read_file`, `write_file`, `run_command` (`core-tools.ts`) · `env.fs.*`, `env.run` (webcontainers) · `filesystem` connector (I) · VS Code local tools | 4 |
-| Compression | `compress_context` (J, LLMLingua-2) · `memory_compact` (K, lossless) | similar name, different goal; keep both, but rename J |
-| Fact checking | `check_references` (J) · `memory_compact` recall probe (K) | no shared code |
-| Third-party tools | GitHub/Slack via the tenant connector (B) and via the local connector (I) | possible double-advertising (unverified) |
-
-### 1.4 Inconsistencies
-
-- **Protocol:** E speaks only 2024-11-05.
-  - E returns tools *inside* `initialize`, which is non-standard.
-  - E has no `ping`, no notifications, no batch and no annotations.
-- **Errors:**
-  - Auth failure: A sends −32600 with 401; E sends −32001 with 401.
-  - Unknown tool on E: −32601 with HTTP 200 on `/mcp`, but 404 on `/mcp/call`.
-  - The REST relay returns `{error}` with 4xx/502; K returns `{error:"unauthorized"}`; `bf-cloud` returns `Status{502}`; webcontainers returns typed `code`.
-- **Timeouts:**
-  - outbound 20s (C);
-  - relay 30s (E);
-  - stdio call 30s, hosted 120s, start 180s (H/I);
-  - platform 120s (`bf-cloud`);
-  - browser relays have none.
-- **Sessions:** C re-runs `initialize` before every `tools/list` and every `tools/call`, which doubles the round trips.
-- **Arguments:** E accepts `arguments | args` and `tool`; A accepts `arguments` only.
-- **Wrong placeholder:** VS Code's URL placeholder is `…/sse`, but C only speaks Streamable HTTP.
-- **Stale version:** K's default `serverInfo.version` is `2026.5.31`, while the package is `2026.10.85`.
-- **Loopback:** not verified whether K's HTTP bin binds to loopback.
-
-### 1.5 Target design: one MCP stack
-
-**Principle:** use the official SDK under every TypeScript MCP surface, keep one tool vocabulary, and make one package own the protocol. Synapse's Rust MCP is not ported; the rebuilt Synapse hosts the VSIX, and the VSIX is TypeScript.
-
-**New package `@seanhogg/builderforce-mcp`.** It is source-and-published, depends on `@modelcontextprotocol/sdk`, and is runtime-neutral (Workers, Node, browser).
-
-| Module | Replaces |
+| Surface | Current implementation |
 |---|---|
-| `protocol`: version negotiation, error codes, `isError` result helpers (re-exported SDK types) | the 6 framings and 5 version constants |
-| `tool`: ONE `McpToolEntry` (`name`, `title`, `description`, `inputSchema`, `effect: 'read' \| 'write' \| 'external'`, `surface[]`) plus `toMcp()`, `toOpenAI()`, `toAnthropic()` and `fromMcp()` (maps `readOnlyHint` ⇄ `effect`) | 3 type mirrors, 4 LLM shapers, 3 inputSchema shapers, 4 write/read rules |
-| `naming`: ONE advertised-name codec, `<source>__<tool>` (MCP-client convention, ≤64 chars, reversible), with `resolve(name) → {source, tool}` | 4 naming schemes |
-| `policy`: a `ToolGate` port (consent list, approval-for-write, role filter hook) plus output policy applied centrally (`tool-output-policy`, `secret-redaction`) | 5 consent/approval copies; adds the missing redaction |
-| `server`: `createMcpServer(catalog, {auth, transport})`, using the SDK's Streamable-HTTP transport (Workers fetch adapter) and stdio | A, E |
-| `client`: a session-reusing Streamable-HTTP/SSE client (one `initialize` per session, cursor pagination, timeout, typed `AuthChallenge`) plus a stdio client with supervise and restart (Node only) | C, D, H |
-| `relay`: ONE typed client for the platform REST face (`/llm/v1/mcp/*`) with the TTL cache | 6 relay copies, 3 TTL caches |
-| `config`: read **and** write host configs (Claude Code, Claude Desktop, Cursor, VS Code `mcp.json`, Windsurf, Cline, Gemini, Codex TOML), plus ONE `LaunchSpec` (npx args, Windows `.cmd`) | K installer (moves here), Synapse `connect_info`, the 3 hand-copied npx specs |
+| Platform MCP | The API's `mcpServerRoutes.ts` exposes the tenant gateway catalog via the shared SDK server. The default profile supports stateless discovery and calls. The authenticated interactive profile adds catalog-change notifications, a guide resource and a discovery prompt. |
+| Workspace MCP | VS Code and agent-runtime use `packages/workspace-mcp` for the SDK server and catalog. The hosts supply workspace selection and HTTP authentication. Shared code provides text and indexed search, symbols, outlines, repo maps, references, git history and optional compression. |
+| Memory MCP | `builderforce-memory/packages/memory-mcp` uses the shared SDK server with stdio and loopback HTTP, and exposes the same tool catalog to the in-process Agent SDK. It reports its package version. |
+| Registered remote MCP | `mcpWireClient.ts` adapts the shared SDK-backed HTTP transport to the gateway's destination checks, session cache and legacy REST fallback. The marketplace discovery probe uses the same transport and pagination. |
+| Editor MCP | VS Code reads native host config and consumes the shared Platform connector catalog for HTTP and stdio setup. The former Synapse Rust Workspace MCP server and connector host were retired. Synapse's private Evermind stdio client uses the Rust MCP SDK and generated launch data. |
+| Platform REST relay | Web, VS Code, Chrome and agent-runtime use the shared TypeScript relay. Rust, Android and iOS use their native HTTP clients with the gateway's canonical model projection and legacy response compatibility. |
 
-**Servers after consolidation:** three servers, one per bounded context, all built with `createMcpServer`.
+### 1.2 Duplicate responsibilities and compatibility
 
-1. **Platform MCP** (A on B): remote, tenant-scoped, the canonical catalog for everything that lives in the platform.
-2. **Memory MCP** (K): canonical memory and experience. Stdio, HTTP and in-process transports stay, now on the shared package.
-3. **Workspace MCP**, one local server for a machine's code.
-   - It exposes the code index, search, repo map, git history, references and context compression.
-   - It replaces E's local tools and J.
-   - Its host is the VS Code extension (and therefore the rebuilt Synapse IDE) plus `agent-runtime` headless, sharing one implementation. Which index engine sits behind it is the next audit (area 2).
+| Finding | Current behavior |
+|---|---|
+| Protocol framing, version negotiation and SSE parsing | MCP servers use the SDK. The shared outbound client uses SDK transport and message helpers. Marketplace discovery and tenant calls share that implementation. |
+| Tool schema, names and read/write metadata | `packages/builderforce-mcp` owns the TypeScript tool and relay contracts, OpenAI and Anthropic conversion, the canonical name codec and the write-approval default. First-party model integrations use canonical names and translate back to stable dispatch IDs. The older REST spelling remains supported for existing clients and saved calls. Tenant consent controls which remote tools are available. Host confirmations govern individual writes. |
+| Platform write tools | The agent-runtime Workspace catalog advertises Workspace tools. Platform ticket creation, review recording and security finding tools come from the Platform catalog. |
+| Code search and git history | `workspace__search` provides text search using the shared `search_code` implementation. `workspace__find` provides indexed search. The callable `codebase_search` and `codebase_semantic_search` aliases retain their filters and response shape on the same Workspace index. Canonical and legacy git history now share one Git reader and parser. Platform `knowledge.search` queries tenant knowledge. Area 2 tracks index engine migration. |
+| Memory | Evermind hosted facts use `MemoryCapability`. Workspace Markdown uses `WorkspaceMemoryCapability`, including saved `memory_search` and `memory_get` calls. Memory MCP serves Evermind's memory and experience tools. |
+| Connector registration and config | Tenant HTTP registrations live in the tenant store. Native stdio installations use host config. The VS Code chooser uses the shared connector catalog, and web and VS Code now share the remote URL-shape check. The API validates public destinations. Memory's installer provides the launch data consumed by Synapse. |
+| Workflow naming | The API and runtime use data-provider handlers. The unused API `mcpNode.ts` shim was removed. Saved workflow nodes with kind `mcp` still dispatch through the data-provider handler. |
 
-**User-connected servers: one model, two transports.**
-- Remote servers (https) stay tenant records in `tenant_mcp_extensions`, called through `client`.
-- Local stdio servers become entries in the host's own `mcp.json`, read through `config`.
-  - In VS Code and the Synapse IDE they also surface through VS Code's built-in MCP support.
-  - Synapse's `connectors.json` and its 7-entry one-click catalog fold into one catalog: the API connector catalog, with a `transport: 'stdio' | 'http'` column.
-- One gate (`policy.ToolGate`) applies to both kinds.
+The remaining compatibility surfaces include agent-runtime's legacy GET manifest and POST `/mcp/call`, the gateway's REST aliases, and native fallbacks for older gateway responses. A client that combines native editor and Platform catalogs would need verified server and account identity to deduplicate across those sources. Builderforce's former combined Synapse catalog was retired.
 
-**Vocabulary:**
-- Platform tools keep their dotted catalog ids (`tasks.create`). They are advertised as `platform__tasks_create`.
-- Memory tools are `memory__recall`; workspace tools are `workspace__search`; tenant or local servers are `<server>__<tool>`.
-- E's duplicate snake names (`tickets_from_delta`, …) are deleted; E calls the platform tool by its id.
-- In-process catalogs (canvas `canvas_*`, webcontainers `env.*`) are not MCP servers. They register as `McpToolEntry` sources in the same catalog type so that names, effect and gating are shared.
+### 1.3 Gap status
 
-### 1.6 Migration order
-
-**Implementation status (2026-11-26).** Platform and Workspace run on `@seanhogg/builderforce-mcp`. Synapse’s Rust Workspace MCP and connector host are retired. Its private Evermind client uses the official Rust MCP SDK with launch data generated from Memory’s installer. VS Code uses the shared connector catalog and reads host configs, and the headless runtime routes both legacy code searches through the shared Workspace index. Native Platform relay clients request canonical tool names and accept saved legacy aliases. npm serves `0.1.1` with compiled exports. Memory MCP `2026.10.86` pins the published package in its frozen lockfile. All 76 Memory MCP tests passed, and the version is available on npm and the MCP Registry. See the [MCP gap register](../../roadmap/GAP-REGISTER.md#mcp-consolidation-platform-agents) and the [npm package](https://www.npmjs.com/package/@seanhogg/builderforce-mcp/v/0.1.1).
-
-Normal web, VS Code, and Chrome Brain runs and direct Creation Canvas runs send canonical names for first-party remote Platform tools at the model boundary. The same catalog maps calls back to stable names before scheduling, review, approval, and dispatch. Editor fact tools use the shared Memory capability and canonical provider names while retaining their existing policy IDs. The compatibility REST catalog keeps legacy names for consumers outside these paths.
-
-Each step is a separate PR, and existing tests run unchanged as the parity oracle.
-
-1. **Create `@seanhogg/builderforce-mcp`** with `protocol`, `tool`, `naming` and `policy`. Move `McpToolEntry` and `toolNaming.ts` in, and re-point the 3 mirrors and 4 shapers. (MCP-G001–G006)
-2. **Move K onto the package.** Move `install/` to `config`, fix the stale version and verify the HTTP loopback bind. (MCP-G007–G009)
-3. **Rebase A on `server`.** Rewrite E as a `createMcpServer` instance (fixing its protocol, ping, errors and annotations) and delete E's duplicate tools. (MCP-G010–G013)
-4. **Replace C and D with `client`.** This reuses sessions and gives one SSE parser. Fix the VS Code `/sse` placeholder. (MCP-G014–G016)
-5. **Replace the 6 relay copies with `relay`.** (MCP-G017)
-6. **Unify the user-server model.** Add the `transport` column to the connector catalog, read `mcp.json` through `config`, and apply one `ToolGate` everywhere. (MCP-G018–G020)
-7. **Merge the four code-search tools** into Workspace MCP behind one interface; the engine choice comes from area 2. (MCP-G021)
-8. **Retire Synapse's Rust Workspace MCP and connector host.** The user approved removing both ahead of the rebuilt Synapse release on 2026-11-26. The VS Code extension provides Workspace MCP, and the loopback context service remains available for hybrid search and compression. Synapse's desktop features still use the private Evermind client in `bf-memory`. Workflow execution uses data-provider handlers and accepts saved `mcp` nodes. (MCP-G022–G024)
-
-The benchmark in §2.5 gates retirement of the native index, which still backs optional Workspace capabilities.
-
-### 1.7 Granular gaps
-
-| ID | Gap | Fix | Where |
-|---|---|---|---|
-| MCP-G001 | 6 hand-rolled JSON-RPC framings; only memory-mcp uses the official SDK | `protocol` module on the SDK | A, C, D, E, H, J |
-| MCP-G002 | 5 protocol-version constants; E is stuck on 2024-11-05 | negotiate in one place | A, C, E, H, J |
-| MCP-G003 | `McpToolEntry` mirrored 3× | one type in `tool` | `mcpExtensionService.ts`, `mcpCatalog.ts:25`, `platformTools.ts:~21` |
-| MCP-G004 | 4 tool→LLM-function shapers; no Anthropic shaper | `toOpenAI`/`toAnthropic` | `toolSpecs.ts:18`, `builtinMcpService.ts:4458`, Synapse ×2 |
-| MCP-G005 | 4 advertised-name schemes; `mcp__server__tool` is parsed but never produced; two different `advertisedName` functions | one codec | `toolNaming.ts` ×2, `mcpExtensionService.ts:~201`, `agent-stall:96`, `flat_name` |
-| MCP-G006 | 4 encodings of read/write (`mutates`, `readOnlyHint`, webcontainers map) and 5 approval gates | `effect` + `ToolGate` | B, H/I, webcontainers, `mcpToolConsent`, `mcpCatalog`, VS Code, Chrome `safety.ts` |
-| MCP-G007 | No MCP path applies `tool-output-policy` / `secret-redaction`; the gateway and E return untruncated, unredacted results | central output policy | A, B, E |
-| MCP-G008 | memory-mcp default `serverInfo.version` is stale (2026.5.31 vs 2026.10.85) | read from package.json | `memory-mcp/src/transports/{mcp-server,sdk}.ts` |
-| MCP-G009 | memory-mcp HTTP bin loopback binding unverified | bind 127.0.0.1 by default | `memory-mcp/src/bin/http.ts` |
-| MCP-G010 | E is non-standard: tools inside `initialize`, no ping/notifications/batch/annotations, its own error codes | rebuild on `server` | `agent-runtime/src/gateway/mcp-server-http.ts` |
-| MCP-G011 | E duplicates platform tools under snake names (`tickets_from_delta`, `reviews_record`, `security_record`) | call the platform ids, delete the copies | `mcp-server-http.ts:63`, `platform-ticket-tools.ts` |
-| MCP-G012 | E accepts `args` and `arguments`; A accepts only `arguments` | the SDK schema only | E |
-| MCP-G013 | No server offers resources, prompts or `list_changed` (catalogs change per tenant/role) | advertise `listChanged`; expose docs/specs as resources where useful | A, E, J, K |
-| MCP-G014 | Outbound client re-initializes before every list and call | session reuse | `mcpWireClient.ts` |
-| MCP-G015 | Second SSE parser and framing in the marketplace probe | use `client` | `dynamicReview.ts:349-430` |
-| MCP-G016 | VS Code server-URL placeholder says `/sse`, but the client is Streamable-HTTP only | fix the placeholder, or add legacy SSE to `client` | `clients/vscode/src/tools/mcpServers.ts` |
-| MCP-G017 | 6 REST relay clients for `/llm/v1/mcp/call`, 3 TTL caches, 5 auth-header builders | `relay` | `mcpCatalog.ts`, `builtinTools.ts`, `connector-tools.ts`, `platform-ticket-tools.ts`, `bf-cloud/tools.rs`, mobile |
-| MCP-G018 | Two disjoint user-server stores: tenant DB (remote) vs Synapse `connectors.json` (local); two one-click catalogs | one connector catalog with `transport` | `identity.ts:294`, `bf-mcp/catalog.rs` |
-| MCP-G019 | Nothing reads a host `mcp.json`; the memory installer only writes it | `config` read + write | `memory-mcp/src/install/*` |
-| MCP-G020 | npx launch spec for memory-mcp copied by hand 3× | one `LaunchSpec` | `launch.rs`, `server-spec.ts`, `plugin.json` |
-| MCP-G021 | 4 code-search tools (`codebase_*`, `semantic_search`/`repo_map`, `search_code`, `knowledge.search`) | Workspace MCP + area-2 audit | E, J, `core-tools.ts:106`, B |
-| MCP-G022 | 3 memory tool vocabularies (`core-tools`, `memory-tool.ts`, memory-mcp) | memory-mcp names only | `core-tools.ts:347-415`, `agent-runtime/agents/tools/memory-tool.ts` |
-| MCP-G023 | Possible double-advertising of the same third-party server (tenant connector + local connector) | dedupe by server identity in the catalog | B + I (unverified) |
-| MCP-G024 | Non-MCP code named "mcp" (workflow `mcpNode`, orchestrator `mcp` node) | rename to `dataProvider` | `api/.../workflow/mcpNode.ts`, `orchestrator.ts:797-866` |
+The [MCP gap register](../../roadmap/GAP-REGISTER.md#mcp-consolidation-platform-agents) records the disposition of MCP-G001 through MCP-G024. The original inventory and migration plan are available in this document's Git history.
 
 ---
 
@@ -278,7 +133,7 @@ Following decision 4 (interface first; Rust only where a benchmark proves a gain
 
 **One location:** `<ws>/.builderforce/index/<rootId>.idx`. `.builderForceAgents/` is retired. The VS Code extension, the Synapse IDE (the same extension) and agent-runtime on one machine share the file through a single-writer lock, and the second process reads it.
 
-**One tool vocabulary on Workspace MCP** (§1.5):
+**One tool vocabulary on Workspace MCP** (§1.1):
 
 | Tool | Semantics |
 |---|---|
@@ -518,7 +373,7 @@ Synapse's `bf-memory` is a thin MCP client: no second store.
 | Capability | Survivor | Change |
 |---|---|---|
 | Fact model, rank and write | M `MemoryStore` + `recallRanked` + `commitFact` | Cloud `memoryService` keeps governance and scoping but calls M's ranker (one formula). `facts` (triples) is either folded into `agent_memory` or documented as the knowledge graph's own store. |
-| Tool contract | `agent-tools` `memory_*` (`MemoryCapability`) | VS Code `recall_facts`/`remember_fact` → `memory_*`; retire agent-runtime `memory_search`/`memory_get` with the pi loop. This matches `MCP-G022`. |
+| Tool contract | `MemoryCapability` for Evermind facts and `WorkspaceMemoryCapability` for local Markdown | Editor fact tools and headless Markdown tools have canonical provider names. Saved calls continue to resolve through their original tool IDs. See `MCP-G022`. |
 | Compaction | memory-mcp `compaction.ts` | `brainMemory` consolidation and `memory-flush` call it. |
 | Experience (episodes, procedural skills, runs, Train-Once) | M `memory-engine/experience` | Rust `bf-teach` types are retired with the Synapse rebuild (the TS IDE hosts the teach flow). No direct reads of `memory.json`. |
 | SKILL.md skills | `packages/agent-skills` + cloud `skills*` | Rename the procedural kind ("routine" or "recipe") so "skill" means one thing. |

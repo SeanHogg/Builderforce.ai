@@ -6,7 +6,7 @@
  */
 
 import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { labelFor } from '../graphModel';
+import { labelFor, pathOf } from '../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import type { SurfaceLayout } from '../layout';
 import type { LensDef } from '../lenses';
@@ -19,7 +19,8 @@ import type { QuestionId } from './questions';
 import type { CameraDef } from './registry';
 import type { SceneOverlayProps } from './SceneOverlay';
 import type { MapCap, ScaleLineProps } from './ScaleLine';
-import { stationOfRef } from './stations';
+import { fileRefOf, stationOfRef } from './stations';
+import type { HierarchyView } from '../stage/overlay/CodeHierarchy';
 import type { SurfaceModel } from './useSurface';
 import type { ZoomApi } from './zoom';
 
@@ -43,6 +44,7 @@ export interface SurfaceChromeInput {
     visibleNodes: number;
     showAll: boolean;
     setShowAll(on: boolean): void;
+    hierarchy?: HierarchyView | undefined;
 }
 
 export function useSurfaceChrome(i: SurfaceChromeInput) {
@@ -55,11 +57,46 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
     // The spine gains the drawn line between the folder and the station; picking it steps back up to the line.
     // A root of several systems starts the crumb at the system the line or station is in.
     const systemCrumb = isMultiSystem(surface.lines.systems) ? systemName(surface.lines.systems, spineStation?.system ?? surface.line?.system) : undefined;
-    const spineItems = withSystemCrumb(withLineCrumb(
+    const rootTitle = i.titleOf(graph.scope.rootId);
+    const root: SpineItem = { kind: 'root', label: rootTitle };
+    const legacySpine = withSystemCrumb(withLineCrumb(
         buildSpine({ rootTitle: i.titleOf(graph.scope.rootId), station: spineStation, node: selected ? index.get(selected) ?? null : null, nodeLabel: (r) => labelFor(index, r) }),
         surface.pinned ? null : lineLabel,
-    ), systemCrumb);
+    ), systemCrumb === rootTitle ? undefined : systemCrumb);
+    let spineItems = legacySpine;
+    const drill = surface.drill;
+    if (i.hierarchy === 'architecture') {
+        const component = surface.stations.byId.get(drill.stack[0]?.ref ?? '') ?? spineStation;
+        const system = systemName(surface.lines.systems, component?.system);
+        const app = component?.app?.split('/').at(-1);
+        spineItems = [root];
+        if (system && system !== rootTitle) spineItems.push({ kind: 'system', label: system });
+        if (app && app !== system && app !== rootTitle && app !== component?.name) spineItems.push({ kind: 'system', id: component?.app ?? app, label: app });
+        for (const [depth, frame] of drill.stack.entries()) spineItems.push({ kind: 'level', id: frame.ref, label: frame.name, depth: depth + 1 });
+        const member = drill.view?.stations.byId.get(drill.selected ?? '') ?? (!drill.view ? component : null);
+        if (member && !drill.stack.some((frame) => frame.ref === member.id)) spineItems.push({ kind: 'station', id: member.id, label: member.name });
+    } else if (i.hierarchy === 'filesystem') {
+        const ref = selected ?? drill.view?.stations.byId.get(drill.selected ?? '')?.refs[0] ?? spineStation?.refs[0];
+        spineItems = [root];
+        if (ref) {
+            const file = fileRefOf(ref), parts = pathOf(file)?.replaceAll('\\', '/').split('/').filter(Boolean) ?? [];
+            const name = parts.pop() ?? labelFor(index, file);
+            for (const [depth, part] of parts.entries()) spineItems.push({ kind: 'folder', id: parts.slice(0, depth + 1).join('/'), label: part });
+            spineItems.push({ kind: 'file', id: file, label: name });
+            if (ref !== file) spineItems.push({ kind: 'symbol', id: ref, label: labelFor(index, ref) });
+        }
+    }
     const onSpinePick = (item: SpineItem) => {
+        if (i.hierarchy) {
+            if (item.kind === 'root' || item.kind === 'system') {
+                drill.climb(0); kg.select(null); surface.selectStation(null);
+            } else if (item.kind === 'level') {
+                kg.select(null); drill.select(null); drill.climb(item.depth ?? 0);
+            } else if (item.kind === 'station' && item.id) {
+                if (drill.view) drill.select(item.id); else surface.selectStation(item.id);
+            } else if (item.id && item.kind !== 'folder') i.select(item.id);
+            return;
+        }
         if (item.kind === 'root') { kg.select(null); surface.selectStation(null); } else if (item.kind === 'line' || item.kind === 'system') surface.selectStation(null);
         else if (item.kind === 'station') kg.select(null); else if (item.id) i.select(item.id);
     };
@@ -78,7 +115,7 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
 
     // The header's Out button: inside a drilled level it goes up one level; otherwise it leaves the picked station for the line.
     // The drill is the transit map's: other cameras keep the station-to-line "Out".
-    const drilled = surface.drill.canOut && i.mode === 'transit';
+    const drilled = surface.drill.canOut && (i.mode === 'transit' || !!i.hierarchy);
     const out = {
         to: drilled ? surface.drill.parent?.name ?? s.map.world : surface.station ? lineLabel : null,
         onOut: drilled ? surface.drill.out : () => surface.selectStation(null),

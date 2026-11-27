@@ -74,7 +74,7 @@ So the work is mostly *unify and extract*, not *build*. The pasted roadmap's pha
   - It starts with `--enable-proposed-api builderforce.builderforce-ai`.
   - It preinstalls the platform VSIX (`--install-extension`).
 - The Tauri window loads the server UI. The CSP gains `frame-src`/`connect-src` for `http://127.0.0.1:<port>` only.
-- The extension discovers Synapse's local services, which already exist: the `synapse mcp` stdio bridge, the bf-local OpenAI/Anthropic-compatible endpoint and the context server. So the IDE uses Synapse's warm index, local models and Evermind without a second copy.
+- The extension supplies Workspace MCP through the shared TypeScript package. It can use Synapse's bf-local endpoint for inference and its loopback context service for hybrid search and compression. Synapse's desktop features use a private Evermind stdio client. [MCP implementation status](platform-duplication-audit.md#1-mcp)
 - Synapse's current tray screens (models, connectors, Evermind, teach, skills, runs) become either:
   - (a) the extension's webviews, where one already exists (Evermind), or
   - (b) remain tray-only for headless and system-level tasks.

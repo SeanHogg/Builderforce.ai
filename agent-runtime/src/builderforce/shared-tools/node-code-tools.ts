@@ -11,7 +11,7 @@
  * `builderforce-local` engine — PRD 11 §5.5(a).)
  */
 
-import { execFileSync } from "node:child_process";
+import { readRecentCommits } from "@builderforce/agent-tools/node-git-history";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { buildCodeMap, buildDependencyGraph } from "../code-map.js";
@@ -32,36 +32,21 @@ export interface GitHistoryOpts {
   author?: string;
 }
 
-export function runGitHistory(projectRoot: string, opts: GitHistoryOpts): Record<string, unknown> {
+export async function runGitHistory(projectRoot: string, opts: GitHistoryOpts): Promise<Record<string, unknown>> {
   const { path: targetPath, limit = 50, author } = opts;
   try {
-    // SECURITY (C1): build an argv array and run WITHOUT a shell (execFileSync), so
-    // `author`/`path`/`projectRoot` — which are LLM/agent-chosen and therefore
-    // prompt-injection reachable — can never break out into shell command
-    // substitution. `limit` is coerced to a bounded integer.
     const safeLimit = Math.min(Math.max(1, Math.floor(Number(limit) || 50)), 1000);
-    const args = ["-C", projectRoot, "log", "--format=%H%x00%an%x00%ae%x00%at%x00%s", "--name-only", "-n", String(safeLimit)];
-    if (author) args.push(`--author=${author}`);
-    if (targetPath) args.push("--", targetPath);
-
-    const output = execFileSync("git", args, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
-    const commits: Array<{ sha: string; author: string; date: Date; message: string; filesChanged: string[] }> = [];
-    const blocks = output.split("\n\n").filter((b) => b.trim());
-    for (const block of blocks) {
-      const lines = block.split("\n");
-      if (lines.length < 1) continue;
-      const [hash, authorName, authorEmail, timestamp, message] = lines[0].split("\x00");
-      const filesChanged = lines.slice(1).filter((f) => f.trim());
-      commits.push({
-        sha: hash,
-        author: `${authorName} <${authorEmail}>`,
-        date: new Date(Number.parseInt(timestamp) * 1000),
-        message,
-        filesChanged,
-      });
-    }
+    const history = await readRecentCommits(projectRoot, safeLimit, {
+      path: targetPath || null,
+      author,
+      authorIdentity: true,
+      repoRelative: true,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    if (!("commits" in history)) throw new Error(history.stderr?.trim() || "Git history is unavailable");
+    const { commits } = history;
     const authors = new Set(commits.map((c) => c.author));
-    const files = new Set(commits.flatMap((c) => c.filesChanged));
+    const files = new Set(commits.flatMap((c) => c.paths));
     return {
       totalCommits: commits.length,
       uniqueAuthors: authors.size,
@@ -69,16 +54,16 @@ export function runGitHistory(projectRoot: string, opts: GitHistoryOpts): Record
       commits: commits.slice(0, 20).map((c) => ({
         sha: c.sha.slice(0, 8),
         author: c.author,
-        date: c.date.toISOString(),
-        message: c.message,
-        filesChanged: c.filesChanged.length,
+        date: new Date(c.at).toISOString(),
+        message: c.title,
+        filesChanged: c.paths.length,
       })),
       topAuthors: Array.from(authors)
         .map((a) => ({ author: a, commits: commits.filter((c) => c.author === a).length }))
         .toSorted((a, b) => b.commits - a.commits)
         .slice(0, 10),
       topFiles: Array.from(files)
-        .map((file) => ({ file, commits: commits.filter((c) => c.filesChanged.includes(file)).length }))
+        .map((file) => ({ file, commits: commits.filter((c) => c.paths.includes(file)).length }))
         .toSorted((a, b) => b.commits - a.commits)
         .slice(0, 10),
     };

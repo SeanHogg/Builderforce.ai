@@ -10,20 +10,14 @@ import { useEffect, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { CameraProjector } from '../projector';
 import type { StageBus } from './stageBus';
+import type { RigController } from '../rig/rig';
 
-export function StageFrameTap({ bus }: { bus: StageBus }) {
-    const camera = useThree((s) => s.camera);
-    const size = useThree((s) => s.size);
+export function StageFrameTap({ bus, rig }: { bus: StageBus; rig: RigController }) {
     const invalidate = useThree((s) => s.invalidate);
     const projector = useMemo(() => new CameraProjector(), []);
     useEffect(() => {
         bus.invalidate = invalidate;
         return () => { bus.invalidate = () => {}; };
     }, [bus, invalidate]);
-    useFrame(() => {
-        camera.updateMatrixWorld();
-        projector.update(camera, size.width, size.height);
-        bus.frame(projector);
-    });
-    return null;
+    return projector;
 }

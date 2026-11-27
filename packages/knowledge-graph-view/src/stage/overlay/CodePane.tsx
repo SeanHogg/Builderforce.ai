@@ -5,15 +5,15 @@
  * and under it the SAY box, the plain words about what is selected. Panel background, no right border in a narrow stage.
  */
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
 import { typeShape, type MarkType } from '../../shapes';
 import { ShapeGlyph } from '../../surface/LegendGlyph';
 import type { Station } from '../../surface/stations';
-import { actionGlyph } from '../../surface/ui/glyphs';
+import { PanelChevron } from '../../surface/ui/PanelChevron';
 import { FONT_MONO, TYPE } from '../../surface/ui/type';
-import { toggleButton } from './cardStyles';
+import { Pill } from '../../surface/ui/Pill';
 import { CodeTree, type CodeTreeProps } from './CodeTree';
 
 export interface CodePaneProps {
@@ -29,6 +29,9 @@ export interface CodePaneProps {
     note?: string | undefined;
     /** One half of a narrow stage's Code | Picture switch: no right border. */
     narrow: boolean;
+    lines?: ReactNode;
+    hierarchy?: ReactNode;
+    filesystem?: ReactNode;
 }
 
 function FolderListing({ stations, keyOf, types, selected, onSelect, onHover }: Pick<CodeTreeProps, 'stations' | 'keyOf' | 'types' | 'selected' | 'onSelect' | 'onHover'>) {
@@ -52,29 +55,35 @@ function FolderListing({ stations, keyOf, types, selected, onSelect, onHover }: 
     );
 }
 
-export function CodePane({ labels, tree, source, say, onHide, note, narrow }: CodePaneProps) {
+export function CodePane({ labels, tree, source, say, onHide, note, narrow, lines, hierarchy, filesystem }: CodePaneProps) {
     const t = labels.surface.code;
+    const [showLines, setShowLines] = useState(false);
+    const lineTab = !!lines && showLines;
     return (
         <aside
             data-code-dock data-code-pane data-level-outline role="complementary" aria-label={t.dockAria}
             style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', minHeight: 0, background: cssVar('panel'), color: cssVar('text'), borderInlineEnd: narrow ? 0 : `1px solid ${cssVar('border')}` }}
         >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 12px 4px' }}>
-                <h2 style={{ ...TYPE.sectionHeading }}>{t.paneCode}</h2>
-                <span style={{ ...TYPE.meta, color: cssVar('muted'), marginInlineStart: 'auto' }}>{t.samePlace}</span>
-                {onHide && <button type="button" data-action="dock-hide" aria-label={t.dockHide} title={t.dockHide} onClick={onHide} style={{ ...toggleButton, minHeight: 24 }}><span aria-hidden="true" style={{ display: 'inline-flex' }}>{actionGlyph('close')}</span></button>}
+                {lines ? <div role="group" aria-label={t.dockAria} style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    <Pill on={!lineTab} aria-pressed={!lineTab} onClick={() => setShowLines(false)}>{t.paneCode}</Pill>
+                    <Pill on={lineTab} aria-pressed={lineTab} onClick={() => setShowLines(true)}>{labels.surface.linesButton}</Pill>
+                </div> : <h2 style={{ ...TYPE.sectionHeading }}>{t.paneCode}</h2>}
+                {onHide && <PanelChevron action="dock-hide" open label={t.dockHide} onClick={onHide} style={{ marginInlineStart: 'auto' }} />}
             </div>
-            <CodeTree {...tree} labels={labels} />
+            {lineTab ? <div style={{ padding: '0 12px 12px', minHeight: 0, flex: 1, overflow: 'auto' }}>{lines}</div> : <>
+            {hierarchy}
+            {filesystem ?? <CodeTree {...tree} labels={labels} />}
             {source ?? (
                 <div style={{ flex: '1 1 0', minHeight: 0, overflow: 'auto', padding: '6px 0', background: cssVar('bg') }}>
-                    <FolderListing {...tree} />
+                    {!filesystem && <FolderListing {...tree} />}
                     {note && <p role="note" data-outline-note style={{ margin: '8px 12px', ...TYPE.meta }}>{note}</p>}
                 </div>
             )}
             <div data-code-say style={{ padding: '10px 12px', borderTop: `1px solid ${cssVar('border')}`, ...TYPE.body, fontSize: 12.5 }}>
                 <div><b style={{ fontWeight: 600 }}>{t.sayLead}</b> {say}</div>
                 <div style={{ marginTop: 4, ...TYPE.meta, color: cssVar('muted') }}>{t.sayHint}</div>
-            </div>
+            </div></>}
         </aside>
     );
 }

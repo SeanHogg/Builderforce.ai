@@ -12,15 +12,20 @@ import { now } from './tween';
 /** How long a lost context may take to come back before the stage gives up on it. */
 export const CONTEXT_GIVE_UP_MS = 5000;
 
-export function bindContextLoss(canvas: HTMLCanvasElement, renderer: Pick<StageRenderer, 'restore'>, invalidate: () => void, onGiveUp?: () => void): () => void {
+export function bindContextLoss(canvas: HTMLCanvasElement, renderer: Pick<StageRenderer, 'restore'>, invalidate: () => void, onGiveUp?: () => void, report?: (event: 'lost' | 'restored', error?: Error) => void): () => void {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
     const lost = (e: Event) => {
         e.preventDefault();
+        report?.('lost');
         clear();
         if (onGiveUp) timer = setTimeout(() => { timer = null; onGiveUp(); }, CONTEXT_GIVE_UP_MS);
     };
-    const restored = () => { clear(); renderer.restore(now()); invalidate(); };
+    const restored = () => {
+        clear();
+        try { renderer.restore(now()); invalidate(); report?.('restored'); }
+        catch (error) { report?.('restored', error instanceof Error ? error : new Error(String(error))); onGiveUp?.(); }
+    };
     canvas.addEventListener('webglcontextlost', lost);
     canvas.addEventListener('webglcontextrestored', restored);
     return () => {

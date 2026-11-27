@@ -60,8 +60,8 @@ claude mcp add --transport http builderforce https://api.builderforce.ai/mcp \
 | 连接器 | 你的租户已**连接**的每个连接器，通过连接器运行时执行（具备 SSRF 防护并记录审计）。 |
 | 外部 MCP 服务器 | 你的租户注册的每个 MCP 服务器，使用其存储的密钥在服务端之间中继。该密钥仅在服务端解密，永不下发到客户端。 |
 
-只读工具会声明 `annotations.readOnlyHint: true`。其余一律按会写入处理——外部服务器
-无法声明该标志，因此缺少提示即意味着“假定它会写入”。
+Builderforce 会保留已注册 MCP 工具显式声明的 `annotations.readOnlyHint: true`。
+未明确声明只读的工具按可能写入处理。
 
 ## 方法
 

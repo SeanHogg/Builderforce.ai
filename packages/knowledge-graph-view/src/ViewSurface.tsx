@@ -12,12 +12,13 @@ import type { CameraDef, SceneProps } from './surface/registry';
 import { ScaleFoot } from './surface/ScaleFoot';
 import { SurfaceErrorBoundary } from './surface/SurfaceErrorBoundary';
 import type { StageCodeProps, StageCompareProps, StageFlatProps } from './stage/host/StageHost';
+import { useRenderTrace } from './renderTrace';
 
 /**
  * The scene's props, plus what the stage host threads to its code pane (visibility, Simulate, Restructure), the open comparison, the 3D / Flat switch and
  * the scale sentence (`scale`, drawn by the stage under its Colour-by legend; a DOM camera draws none).
  */
-export type ViewSurfaceProps = SceneProps & StageCodeProps & StageCompareProps & StageFlatProps & { scale?: ReactNode };
+export type ViewSurfaceProps = SceneProps & StageCodeProps & StageCompareProps & StageFlatProps & { scale?: ReactNode; tools?: ReactNode; journey?: ReactNode; notice?: ReactNode };
 
 const StageHost = lazy(() => import('./stage/host/StageHost'));
 
@@ -28,8 +29,11 @@ export function ViewSurface({ scale, ...p }: ViewSurfaceProps) {
     const camera: CameraDef = CAMERAS.find((c) => c.id === p.mode) ?? CAMERAS.find((c) => c.id === 'graph')!;
     // A camera that throws shows the boundary, never a blank host; another camera, root or drill level draws afresh.
     const { drill } = p.surface;
+    const trace = useRenderTrace();
+    const location = `${camera.id}\0${p.graph.scope.rootId}\0${drill.stack.map((f) => f.ref).join(' > ')}`;
     return (
-        <SurfaceErrorBoundary labels={p.labels} resetKey={`${camera.id}\0${p.graph.scope.rootId}\0${drill.stack.length}`} onBack={drill.canOut ? drill.out : undefined}>
+        <SurfaceErrorBoundary labels={p.labels} resetKey={location} onBack={drill.canOut ? drill.out : undefined}
+            onError={(error, info) => trace('camera failed', `${camera.id} ${p.graph.scope.rootId}${info.componentStack ?? ''}`, error)}>
             {camera.placement
                 ? (
                     <Suspense fallback={<LayingOut labels={p.labels} />}>

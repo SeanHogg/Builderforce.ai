@@ -11,6 +11,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { isRemoteMcpEndpoint } from '@seanhogg/builderforce-mcp';
 import type { CreateMcpExtensionInput, McpExtension, UpdateMcpExtensionInput } from '@/lib/mcpExtensionsApi';
 import { REPLAY_BLOCK } from '@/lib/replaySensitive';
 
@@ -54,7 +55,7 @@ export function McpServerForm(props: McpServerFormProps) {
   const [clearSecret, setClearSecret] = useState(false);
   const [allowedTools, setAllowedTools] = useState(editing?.allowedTools?.join(', ') ?? '');
 
-  const httpsOk = /^https:\/\//i.test(serverUrl.trim());
+  const httpsOk = isRemoteMcpEndpoint(serverUrl);
   const canSubmit = name.trim().length > 0 && httpsOk && !props.busy;
 
   const submit = (e: React.FormEvent) => {
@@ -86,7 +87,7 @@ export function McpServerForm(props: McpServerFormProps) {
 
       <div style={row}>
         <label style={label} htmlFor="mcp-url">{t('form.urlLabel')}</label>
-        <input id="mcp-url" style={field} value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} placeholder="https://mcp.example.com/sse" inputMode="url" />
+        <input id="mcp-url" style={field} value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} placeholder={t('form.urlPlaceholder')} inputMode="url" />
         <p style={{ fontSize: 'var(--font-size-eyebrow)', color: serverUrl && !httpsOk ? 'var(--danger)' : 'var(--text-muted)', margin: '5px 0 0' }}>
           {serverUrl && !httpsOk ? t('form.urlMustBeHttps') : t('form.urlHint')}
         </p>

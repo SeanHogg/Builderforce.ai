@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import * as vscode from "vscode";
+import { isRemoteMcpEndpoint } from "@seanhogg/builderforce-mcp";
 import { readMcpConfig, readSynapseConnectors, type LaunchSpec, type McpConfigHost } from "@seanhogg/builderforce-mcp/config";
 import * as bfApi from "../bfApi";
 import { getWebBaseUrl } from "../gateway/gateway";
@@ -168,7 +169,7 @@ async function registerFlow(secrets: vscode.SecretStorage): Promise<bfApi.BfMcpE
     ignoreFocusOut: true,
     // Mirrors the server's own guard: https only, no private or loopback hosts.
     validateInput: (v) =>
-      /^https:\/\/\S+$/i.test(v.trim()) ? undefined : vscode.l10n.t("Enter a public https:// address"),
+      isRemoteMcpEndpoint(v) ? undefined : vscode.l10n.t("Enter a public https:// address"),
   });
   if (!serverUrl?.trim()) return undefined;
 

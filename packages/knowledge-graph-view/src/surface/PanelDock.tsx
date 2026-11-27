@@ -11,6 +11,7 @@ import { cssVar } from '../scene/themeColors';
 import { PANELS } from './panels';
 import type { PanelDef, SurfaceEnv } from './registry';
 import type { PanelSlot } from './usePanelVisibility';
+import { PanelChevron } from './ui/PanelChevron';
 
 /** The panels of the registry that are available for this graph. */
 export const availablePanels = (graph: KnowledgeGraph, env: SurfaceEnv, panels: readonly PanelDef[] = PANELS): PanelDef[] =>
@@ -22,10 +23,6 @@ export { DOCK_RAIL };
 const TOGGLE_NAMES = { left: ['showLeft', 'hideLeft'] } as const;
 
 /** Points toward the edge the dock collapses to, and back into the scene when it is a rail. */
-function chevronGlyph(shown: boolean, below: boolean): string {
-    if (below) return shown ? '▾' : '▴';
-    return shown ? '‹' : '›';
-}
 
 export interface DockEdgeProps {
     slot: PanelSlot;
@@ -67,16 +64,9 @@ export function DockEdge({ slot, shown, onToggle, labels, below = false, childre
                 ...(shown ? null : { ...rail, background: cssVar('panel') }),
             }}
         >
-            <button
-                type="button" data-panel-edge={slot} aria-expanded={shown} aria-label={name} title={name} onClick={() => onToggle(slot)}
-                style={{
-                    ...place, position: 'absolute', zIndex: 1, width: 22, height: 22, padding: 0, display: 'inline-flex',
-                    alignItems: 'center', justifyContent: 'center', borderRadius: 6, cursor: 'pointer', font: 'inherit', lineHeight: 1,
-                    border: `1px solid ${cssVar('border')}`, background: cssVar('panel'), color: cssVar('text'),
-                }}
-            >
-                <span aria-hidden="true">{chevronGlyph(shown, below)}</span>
-            </button>
+            <span data-panel-edge={slot} style={{ ...place, position: 'absolute', zIndex: 1 }}>
+                <PanelChevron open={shown} side={below ? 'bottom' : 'left'} label={name} onClick={() => onToggle(slot)} style={{ width: 22, height: 22 }} />
+            </span>
             {shown ? children : null}
         </div>
     );

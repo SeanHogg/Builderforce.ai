@@ -38,7 +38,6 @@ import { ViewSurface } from './ViewSurface';
 import { LensPanel } from './LensPanel';
 import { InsightsPanel } from './insights/InsightsPanel';
 import { NodeSheet } from './NodeSheet';
-import { Sheet } from './Sheet';
 import { cssVar } from './scene/themeColors';
 import { muted } from './styles';
 import { CAMERAS } from './surface/cameras';
@@ -69,7 +68,6 @@ import { SurfaceHeader } from './surface/SurfaceHeader';
 import { TimeSlider, useHistory } from './surface/TimeSlider';
 import { FlatViewContext, useFlatView } from './surface/useFlatView';
 import { usePanelVisibility } from './surface/usePanelVisibility';
-import { Pill } from './surface/ui';
 import { questionForLens } from './surface/questions';
 import { useSurfaceActions } from './surface/useSurfaceActions';
 import { useSurfaceChrome } from './surface/useSurfaceChrome';
@@ -85,6 +83,8 @@ import { useCompare } from './surface/useCompare';
 import { useCompareActions } from './surface/useCompareActions';
 import { RestructureContext } from './surface/useRestructure';
 import type { EvidenceSide, KnowledgeConfirm, KnowledgeGraphSource, KnowledgePanelRenderer, LensId, EditorView, SourceLocation, SourceRange, ViewMode } from './types';
+import { createRenderTrace, RenderTraceContext } from './renderTrace';
+import type { HierarchyView } from './stage/overlay/CodeHierarchy';
 
 /** Nodes a desktop view draws at most (instanced geometry is sized for it). */
 const MAX_DRAWN_NODES = 2000;
@@ -114,9 +114,15 @@ export interface KnowledgeGraphViewProps {
 
 const EMPTY_VISIBLE: VisibleGraph = { nodes: [], edges: [] };
 
-export function KnowledgeGraphView({
+export function KnowledgeGraphView(props: KnowledgeGraphViewProps) {
+    const [trace] = useState(createRenderTrace);
+    return <RenderTraceContext.Provider value={trace.record}><KnowledgeGraphSurface {...props} renderTrace={trace} /></RenderTraceContext.Provider>;
+}
+
+function KnowledgeGraphSurface({
     source, labels: partial, onCompose, initialFocus, openReview, initialLens, renderPanel, confirm, lenses: lensSubset, onOpenSource, editorView, headerTools,
-}: KnowledgeGraphViewProps) {
+    renderTrace,
+}: KnowledgeGraphViewProps & { renderTrace: ReturnType<typeof createRenderTrace> }) {
     const labels = useMemo(() => resolveLabels(partial), [partial]);
     // First-load triage: the graph's calls are timed (one wrapper per source), and the host's trace is read while a load runs.
     const timing = useTimedSource(source);
@@ -129,7 +135,9 @@ export function KnowledgeGraphView({
     const width = useContainerWidth(rootRef);
     const env = useRenderEnvironment();
     const [chosen, setMode] = useState<ViewMode | null>(null);
-    const [showAll, setShowAll] = useState(false), [tracing, setTracing] = useState(false), [linesOpen, setLinesOpen] = useState(false);
+    const [hierarchy, setHierarchy] = useState<HierarchyView>('architecture');
+    const [showAll, setShowAll] = useState(false), [tracing, setTracing] = useState(false);
+    const [narrowCode, setNarrowCode] = useState(false);
     const targets = useReviewTargets(source); // read ONCE: the empty state's launcher uses it
     const sync = useSyncStatus(source, kg.rootId, kg.graph); // read ONCE: the pill, the banner and the Sync drawer share it
     const zoom = useZoomHost();
@@ -150,7 +158,19 @@ export function KnowledgeGraphView({
     const { lens, selected } = kg;
     // The commit scrubber: the commit picked marks the stations it changed (the "changed" question and metric); on the stage it is paint only.
     const changed = useMemo(() => new Set(compare.picked?.refs ?? []), [compare.picked]);
-    const symbols = useMemo(() => (source.symbolsOf && kg.rootId ? (refs: string[]) => source.symbolsOf!(kg.rootId!, refs) : undefined), [source, kg.rootId]);
+    const symbols = useMemo(() => (source.symbolsOf && kg.rootId ? async (refs: string[]) => {
+        const start = performance.now();
+        const detail = `root=${kg.rootId} files=${refs.length}`;
+        renderTrace.record('symbols requested', detail);
+        try {
+            const records = await source.symbolsOf!(kg.rootId!, refs);
+            renderTrace.record('symbols loaded', `${detail} records=${records.length} elapsed=${Math.round(performance.now() - start)}ms`);
+            return records;
+        } catch (error) {
+            renderTrace.record('symbols failed', detail, error instanceof Error ? error : new Error(String(error)));
+            throw error;
+        }
+    } : undefined), [source, kg.rootId, renderTrace]);
     const readSource = useMemo(() => (source.readSource && kg.rootId ? (path: string, range: SourceRange) => source.readSource!(kg.rootId!, path, range) : undefined), [source, kg.rootId]);
     const readSourceAt = useMemo(() => (source.readSourceAt && kg.rootId ? (path: string, rev: string, range: SourceRange) => source.readSourceAt!(kg.rootId!, path, rev, range) : undefined), [source, kg.rootId]);
     const surface = useSurface(graph, compare.showingBefore ? null : kg.baseline?.graph ?? null, { question: questionForLens(kg.requested.id), focus: kg.focus, changed, symbols, readSource, readSourceAt, editorView, repoConfigName: labels.surface.repoConfig, communityFallback: labels.communityFallback });
@@ -165,6 +185,7 @@ export function KnowledgeGraphView({
     const surfaceEnv: SurfaceEnv = { webgl: env.webgl, reducedMotion: env.reducedMotion, hasLines: surface.lines.lines.length > 0, compact, hasRun: !!source.runs || !!source.review || keepsBaseline, hasAgentRuns: !!source.agentRuns, hasDomains: !!source.domains && !!source.organizeDomains };
     const cameras = CAMERAS.filter((c) => c.available(graph, surfaceEnv));
     const mode: ViewMode = cameras.find((c) => c.id === chosen)?.id ?? cameras.find((c) => c.id === 'transit')?.id ?? 'graph';
+    const stageCamera = !!real && !!cameras.find((c) => c.id === mode)?.placement;
     // Selecting a node already inside the drawn set must not change the arrays the cameras key their layouts on.
     const focusKeep = useMemo(() => [...kg.focus, ...(selected ? [selected] : [])], [kg.focus, selected]);
     // Up to ~360 ms on a large graph: computed in the worker (in the same render for a small one), the previous drawn set staying until the new one lands.
@@ -182,6 +203,7 @@ export function KnowledgeGraphView({
         showAll, webgl: env.webgl, reducedMotion: env.reducedMotion, mode, width, compact, lens: lens.id,
         review: kg.review.state, lastPhase: kg.review.lastPhase, run: runRead.live, time: new Date().toISOString(),
         load: { timeline: timing.timeline.snapshot(), host: freshHost !== undefined ? freshHost : source.loadTrace ? hostTrace.latest() : undefined },
+        rendering: renderTrace.snapshot(),
         // Called on click, after the render below has defined these.
         ...(real ? {
             surface: {
@@ -212,10 +234,9 @@ export function KnowledgeGraphView({
         : undefined;
     const chrome = useSurfaceChrome({
         kg, surface, graph, labels, layout, index, titleOf, select, cameras, mode, setMode, zoom: zoom.api, pickQuestion, pickLens, lens,
-        visibleNodes: visible.nodes.length, showAll, setShowAll,
+        visibleNodes: visible.nodes.length, showAll, setShowAll, hierarchy: stageCamera ? hierarchy : undefined,
     });
 
-    const s = labels.surface;
     const hasLines = surface.lines.lines.length > 0;
     // The Act findings are the graph's own, never filtered through a hidden view: scoped by the stations, then (only when a question is asked) by what it lit.
     const asking = surface.question !== 'where';
@@ -239,7 +260,9 @@ export function KnowledgeGraphView({
     const linesPanel = (rail: boolean) => (
         <LinesPanel
             lines={surface.lines} stations={surface.stations} overlay={surface.overlay} labels={labels} lineId={surface.line?.id ?? null} rail={rail}
-            selectedStation={surface.station?.id ?? null} onSelectLine={surface.selectLine} onSelectStation={surface.selectStation}
+            selectedStation={surface.station?.id ?? null}
+            onSelectLine={(id) => { kg.select(null); surface.drill.climb(0); surface.selectLine(id); setNarrowCode(false); }}
+            onSelectStation={(id) => { kg.select(null); surface.drill.climb(0); surface.selectStation(id); setNarrowCode(false); }}
             coverage={surface.coverage} extras={legendExtras} kinds={mode === 'system' ? graph.findings.map((f) => f.kind) : undefined} findings={graph.findings}
         />
     );
@@ -252,8 +275,6 @@ export function KnowledgeGraphView({
         if (mode === 'transit' || mode === 'map') setTowers(!next);
     };
     useEffect(() => { if (mode === 'transit' || mode === 'map') setTowers(!flatView.flat); }, [mode, flatView.flat, setTowers]);
-    /** The stage's code pane has its own hide control (PRD 43 Part C1); its slot is remembered with the docks'. */
-    const toggleCode = () => panels.toggle('code');
     // The ONE drawer: a panel opened from anywhere (`setPanel`) opens it at that tab; the header's Panels button opens it on Act.
     const drawer = useDrawer(panel, setPanel);
     const openSimulate = useOpenSimulate(surface, setPanel);
@@ -263,19 +284,25 @@ export function KnowledgeGraphView({
     const showTime = surface.question === 'changed' || compare.picked !== null;
     const overlay = (
         <SceneOverlay
-            {...chrome.overlayProps} flat={flatView.flat} onFlat={onFlat}
+            {...chrome.overlayProps} narrow={stageCamera || layout.phone} flat={flatView.flat} onFlat={onFlat}
             time={showTime ? <TimeSlider commits={history.commits} capped={history.total} picked={compare.picked?.sha ?? null} labels={labels} changedStations={changedStations} onPick={(sha) => { compare.pickCommit(sha); if (sha) pickQuestion('changed'); }} onClose={() => { compare.pickCommit(null); pickQuestion('where'); }} /> : undefined}
         />
     );
-    const leftDock = hasLines && !layout.phone && !layout.linesStacked;
-    const stackLines = hasLines && layout.linesStacked && !layout.phone;
+    const leftDock = !stageCamera && hasLines && !layout.linesStacked;
+    const stackLines = !stageCamera && hasLines && layout.linesStacked;
+    const journey = hasLines ? <PathStrip path={surface.path} step={surface.step} labels={labels}
+        onStep={(step) => { kg.select(null); surface.drill.climb(0); surface.setStep(step); }} pathTitle={chrome.pathTitle} stations={surface.stations.byId} /> : null;
+    const notice = <SceneStatus stale={kg.stale} refreshFailed={kg.refreshFailed} labels={labels} onRetry={kg.reload} onRun={real && !kg.running ? kg.run : undefined} />;
     // The Code | Picture switch shows exactly when the stage shows ONE of the two: a stage camera whose box (what the Lines dock and the drawer column
     // leave) is too narrow to split. Its state is the code slot the stage reads, so the switch and the stage never disagree.
     // With no graph the drawer exists for ONE panel: Reviews (a review started from the empty state opens it, as `useReviewsPanel` documents); Act and the rest need a graph.
     const drawerMounted = !!real || panel === 'run';
     const stageWidth = stageWidthOf(width, { lines: leftDock ? (panels.visibility.left ? 'shown' : 'rail') : 'none', drawerColumn: drawerMounted && drawer.open && !layout.drawerSheet });
-    const panes = real && CAMERAS.find((c) => c.id === mode)?.placement && onePaneStage(stageWidth)
-        ? { code: panels.visibility.code, onPane: (code: boolean) => { if (code !== panels.visibility.code) toggleCode(); } }
+    const narrowStage = stageCamera && onePaneStage(stageWidth);
+    const codeShown = narrowStage ? narrowCode : panels.visibility.code;
+    const toggleCode = () => { if (narrowStage) setNarrowCode((on) => !on); else panels.toggle('code'); };
+    const panes = narrowStage
+        ? { code: codeShown, onPane: setNarrowCode }
         : undefined;
 
     return (
@@ -287,7 +314,6 @@ export function KnowledgeGraphView({
                 panes={panes} headerTools={headerTools} drawerAvailable={!!real} diagnostics={copyDiagnostics}
                 spine={<Spine labels={labels} items={chrome.spineItems} roots={{ scopes: kg.scopes, rootId: kg.rootId, onRoot: kg.selectRoot }} onPick={chrome.onSpinePick} />}
                 askName={chrome.askName}
-                linesToggle={layout.phone && hasLines ? <Pill on={linesOpen} aria-expanded={linesOpen} onClick={() => setLinesOpen((v) => !v)}>{s.linesButton}</Pill> : undefined}
                 onSearch={(q) => void kg.search(q)} onSelect={select} onMatches={pinpointed} onClear={unpin} onCompose={onCompose}
             />
             {noHits !== null && <p role="status" style={{ ...muted, margin: 0, padding: '4px 12px' }}>{fillTemplate(labels.searchNoHits, { query: noHits })}</p>}
@@ -299,17 +325,19 @@ export function KnowledgeGraphView({
                         </DockEdge>
                     )}
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                        {layout.phone && overlay}{actions.bar}
+                        {!stageCamera && layout.phone && overlay}{actions.bar}
                         <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
                             {/* Below the floating controls in every camera: `--kg-scene-top` is the measured height `SceneOverlay` publishes on this box (a phone stacks them in flow, so 0). */}
-                            <div data-testid="kg-scene-box" style={{ position: 'absolute', top: layout.phone ? 0 : `var(--kg-scene-top, ${SCENE_TOP_FALLBACK})`, right: 0, bottom: 0, left: 0, overflow: 'auto' }}>
+                            <div data-testid="kg-scene-box" style={{ position: 'absolute', top: stageCamera || layout.phone ? 0 : `var(--kg-scene-top, ${SCENE_TOP_FALLBACK})`, right: 0, bottom: 0, left: 0, overflow: 'auto' }}>
                                 {real ? (
                                     <ZoomProvider host={zoom}>
                                         <ViewSurface
                                             mode={mode} graph={graph} drawn={drawn} lens={lens} labels={labels} rootTitle={titleOf(graph.scope.rootId)}
                                             selected={selected} focus={kg.focus} reducedMotion={env.reducedMotion} surface={surface} onSelect={select} onShow={show} onCamera={setMode}
                                             onCompose={onCompose} evidence={evidenceOf} onOpenSource={onOpenSource}
-                                            codeShown={panels.visibility.code} onToggleCode={toggleCode} onSimulate={actions.onSimulate} onRestructure={actions.onRestructure} restructureLoading={actions.restructureStatus === 'loading'} compare={compare.view} flat={flatView.flat}
+                                            codeShown={codeShown} onToggleCode={toggleCode} onSimulate={actions.onSimulate} onRestructure={actions.onRestructure} restructureLoading={actions.restructureStatus === 'loading'} compare={compare.view} flat={flatView.flat}
+                                            lines={stageCamera && hasLines ? linesPanel(false) : undefined} hierarchy={hierarchy} onHierarchy={setHierarchy}
+                                            tools={stageCamera ? overlay : undefined} journey={stageCamera ? journey : undefined} notice={stageCamera ? notice : undefined}
                                             scale={<span data-testid="kg-scale-note"><ScaleLine {...chrome.scaleProps} /></span>}
                                         />
                                     </ZoomProvider>
@@ -318,9 +346,9 @@ export function KnowledgeGraphView({
                                         loading={{ phase: currentLoadPhase(hostTrace.trace, kg.rootId), diagnostics: () => diagnostics().text }}
                                         onSeed={kg.notHere?.canSeed && kg.rootId ? () => kg.review.start({ rootId: kg.rootId!, seed: true }) : undefined} onRun={kg.run} />
                                 )}
-                                <SceneStatus stale={kg.stale} refreshFailed={kg.refreshFailed} labels={labels} onRetry={kg.reload} onRun={real && !kg.running ? kg.run : undefined} />
+                                {!stageCamera && notice}
                             </div>
-                            {!layout.phone && overlay}
+                            {!stageCamera && !layout.phone && overlay}
                             {surface.highlight && showsTowers(mode, surface.towers) && <TowerLegend highlight={surface.highlight} labels={labels} compact={layout.compact} onClose={() => surface.setHighlight(null)} />}
                         </div>
                         {stackLines && (
@@ -328,9 +356,7 @@ export function KnowledgeGraphView({
                                 <div style={{ padding: 12, maxHeight: 260, overflow: 'auto', borderTop: `1px solid ${cssVar('border')}`, background: cssVar('panel') }}>{linesPanel(false)}</div>
                             </DockEdge>
                         )}
-                        {hasLines && (
-                            <PathStrip path={surface.path} step={surface.step} labels={labels} onStep={surface.setStep} pathTitle={chrome.pathTitle} stations={surface.stations.byId} />
-                        )}
+                        {!stageCamera && journey}
                     </div>
                 </div>
                 {drawerMounted && (
@@ -356,7 +382,6 @@ export function KnowledgeGraphView({
                     />
                 )}
             </div>
-            {layout.phone && hasLines && <Sheet open={linesOpen} compact title={s.linesTitle} closeLabel={labels.close} onClose={() => setLinesOpen(false)}>{linesPanel(false)}</Sheet>}
             <NodeSheet
                 graph={graph} index={index} selected={selected} tracing={tracing} labels={labels} source={source} confirm={confirm} renderPanel={renderPanel}
                 compact={layout.compact} onClose={() => { setTracing(false); kg.select(null); }} onTrace={() => setTracing((v) => !v)} onSelect={select} onChanged={kg.reload} onShow={show}

@@ -7,7 +7,7 @@ import type { Integration } from './stepIntegrations';
  * The id points at a row of the tenant's `integration_credentials` (the same vault
  * Settings ▸ Integrations writes). The secret itself never travels in a step's
  * config: the server resolves the id, scoped to the run's tenant, when the step
- * executes (`api/src/application/workflow/mcpNode.ts`). Omitted = the tenant's
+ * executes (`api/src/application/workflow/dataProviderNode.ts`). Omitted = the tenant's
  * single enabled credential for the provider, and an ambiguous match fails closed.
  */
 export interface StepCredentialConfig {

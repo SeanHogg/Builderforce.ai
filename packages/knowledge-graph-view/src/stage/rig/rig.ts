@@ -169,7 +169,8 @@ export class RigController {
         this.stop();
         if (this.kind === 'orbit') {
             const h = this.orbitHome.distance;
-            this.orbit = { ...this.orbit, distance: clamp(this.orbit.distance / factor, h * DOLLY_MIN, h * DOLLY_MAX) };
+            const minimum = Math.min(this.orbit.distance, h * (this.flatDepth === undefined ? DOLLY_MIN : 1 / MAX_ZOOM_FACTOR));
+            this.orbit = { ...this.orbit, distance: clamp(this.orbit.distance / factor, minimum, h * DOLLY_MAX) };
             this.moved = true; this.reframed = true;
             this.changed();
             return;
@@ -187,15 +188,21 @@ export class RigController {
 
     /**
      * Flies the ground view to centre (x, z) at `zoom` px per world unit (clamped like {@link zoomBy}), tweened like a
-     * re-home (`ms` 0 jumps) — the "Go inside" shortcut animates the SAME zoom the wheel makes. The focus returns to the
-     * centre. In orbit it only centres.
+     * re-home (`ms` 0 jumps). The focus returns to the centre. In orbit, dolly to the requested scale.
      */
-    flyTo(x: number, z: number, zoom: number, now: number, ms: number = TWEEN_MS): void {
-        if (this.kind === 'orbit') { this.centreOn(x, z); return; }
+    flyTo(x: number, z: number, zoom: number, now: number, ms: number = TWEEN_MS, y = 0): void {
         this.stop();
         const h = this.home;
         this.moved = true;
         this.focusPoint = null;
+        if (this.kind === 'orbit') {
+            const from = this.liveOrbit();
+            const home = this.orbitHome.distance;
+            const distance = clamp(orbitDistanceFor(zoom, from.fov, this.height), home / MAX_ZOOM_FACTOR, home * DOLLY_MAX);
+            this.reframed = true;
+            this.goOrbit(from, { ...from, tx: x, ty: y, tz: z, distance }, now, ms);
+            return;
+        }
         this.go({ cx: x, cz: z, zoom: clamp(zoom, h.zoom * MIN_ZOOM_FACTOR, h.zoom * MAX_ZOOM_FACTOR) }, now, ms);
     }
 

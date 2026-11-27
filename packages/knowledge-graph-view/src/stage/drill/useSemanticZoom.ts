@@ -183,7 +183,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         const slot = station ? bus.slotOf(s.map.keyOfStation(station)) : -1;
         const scale = p && slot >= 0 ? p.scale[slot] ?? 0 : 0;
         if (!rig || !p || !(scale > 0) || s.band >= CODE || cameraOf(p) !== 'map') { s.drill.enter(stationId); return; }
-        rig.flyTo(p.position[slot * 3]!, p.position[slot * 3 + 2]!, zoomForBand(s.band + 1, scale), now(), ms);
+        rig.flyTo(p.position[slot * 3]!, p.position[slot * 3 + 2]!, zoomForBand(s.band + 1, scale), now(), ms, p.position[slot * 3 + 1]);
     }, [bus, ms]);
 
     // An explicit band click SETS the band (the one state), then the camera follows it: band 0 is a fit, the others fly to the threshold.
@@ -202,7 +202,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
     const flyToCode = useCallback((key: string) => {
         const slot = bus.slotOf(key), p = bus.placement, rig = rigOf(bus);
         const scale = p && slot >= 0 ? p.scale[slot] ?? 0 : 0;
-        if (rig && p && scale > 0) rig.flyTo(p.position[slot * 3]!, p.position[slot * 3 + 2]!, zoomForBand(CODE, scale), now(), ms);
+        if (rig && p && scale > 0) rig.flyTo(p.position[slot * 3]!, p.position[slot * 3 + 2]!, zoomForBand(CODE, scale), now(), ms, p.position[slot * 3 + 1]);
     }, [bus, ms]);
 
     const codeBack = useCallback((index: number) => {
@@ -219,7 +219,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         const slot = bus.slotOf(key), scale = p && slot >= 0 ? p.scale[slot] ?? 0 : 0;
         if (!rig || !p || !(scale > 0)) { s.codeKey = null; s.trail = []; setTrail([]); return; }
         // Back under the code band's exit: the crossing closes it (the whole trail), and the method band is not re-entered from there.
-        rig.flyTo(p.position[slot * 3]!, p.position[slot * 3 + 2]!, (ZOOM_BANDS[CODE]!.exitPx * 0.85) / (2 * scale), now(), ms);
+        rig.flyTo(p.position[slot * 3]!, p.position[slot * 3 + 2]!, (ZOOM_BANDS[CODE]!.exitPx * 0.85) / (2 * scale), now(), ms, p.position[slot * 3 + 1]);
     }, [bus, ms]);
 
     const outToBand = useCallback((target: number) => {

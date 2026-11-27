@@ -563,12 +563,18 @@ The runtimes Builderforce.ai is built on are open source under MIT, and built to
 |---|---|
 | [builderforce-webcontainers](https://github.com/SeanHogg/builderforce-webcontainers) | The in-browser dev runtime behind the IDE and canvas previews: live preview, production build, type-check, Node processes, `npm install` and a shell, with no COOP/COEP and no session caps. npm: `@seanhogg/builderforce-webcontainers`. |
 | [builderforce-memory](https://github.com/SeanHogg/builderforce-memory) | Persistent, browser-trainable SSM memory for any agent: WebGPU Mamba engine, runtime, semantic cache and the Evermind write-through memory, plus an MCP server. npm: `@seanhogg/builderforce-memory`. |
-| [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) | Synapse, the desktop app and local AI runtime: runs models on your own machine with the native `bfi` engine, keeps a private Evermind memory and hosts MCP connectors. |
+| [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) | Synapse, the desktop app and local AI runtime: runs models on your own machine with the native `bfi` engine, keeps a private Evermind memory. Builderforce Workspace MCP and editor connector setup are provided by the VS Code extension. |
 | [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn) | Spawn, the desktop app that builds Roblox games by talking, with a Roblox Studio bridge. |
 
 ---
 
 ## Architecture
+
+The Platform, Workspace and Memory MCP servers share the SDK stack in
+[`packages/builderforce-mcp`](packages/builderforce-mcp). The hosted Platform MCP
+serves tenant tools, the VS Code extension and headless runtime host Workspace MCP
+for local code tools, and Evermind serves memory and experience tools.
+[Platform MCP setup](docs-site/src/content/docs/gateway/mcp.md) · [MCP audit and compatibility](docs/specs/tasks/platform-duplication-audit.md#1-mcp)
 
 ```
 ┌─────────────────────────── Browser ──────────────────────────────┐

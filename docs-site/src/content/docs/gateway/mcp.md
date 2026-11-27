@@ -61,9 +61,8 @@ union of three sources:
 | Connectors | Every connector your tenant has **connected**, executed through the connector runtime (SSRF-guarded and audited). |
 | External MCP servers | Every MCP server your tenant has registered, relayed server-to-server with its stored secret. That secret is decrypted only on the server and never reaches a client. |
 
-Tools that only read declare `annotations.readOnlyHint: true`. Anything else must
-be treated as mutating — external servers cannot declare the flag, so an absent
-hint means "assume it writes".
+Builderforce passes through an explicit `annotations.readOnlyHint: true` from
+registered MCP tools. Treat tools without an explicit read-only hint as mutating.
 
 ## Methods
 

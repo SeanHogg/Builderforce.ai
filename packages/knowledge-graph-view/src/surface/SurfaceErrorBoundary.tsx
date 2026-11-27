@@ -21,6 +21,8 @@ export interface SurfaceErrorBoundaryProps {
     resetKey: string;
     /** Present inside a drilled level: the action is "Back" and leaves the level before drawing again. */
     onBack?: (() => void) | undefined;
+    fallback?: ReactNode;
+    onError?: ((error: Error, info: ErrorInfo) => void) | undefined;
 }
 
 interface State { error: Error | null; key: string }
@@ -37,7 +39,8 @@ export class SurfaceErrorBoundary extends Component<SurfaceErrorBoundaryProps, S
     }
 
     componentDidCatch(error: Error, info: ErrorInfo): void {
-        console.error('knowledge-graph-view: a camera failed to draw', error, info.componentStack);
+        if (this.props.onError) this.props.onError(error, info);
+        else console.error('knowledge-graph-view: a camera failed to draw', error, info.componentStack);
     }
 
     private readonly recover = (): void => {
@@ -48,6 +51,7 @@ export class SurfaceErrorBoundary extends Component<SurfaceErrorBoundaryProps, S
     render(): ReactNode {
         const { error } = this.state;
         if (!error) return this.props.children;
+        if (this.props.fallback) return this.props.fallback;
         const words = this.props.labels.surface.scene;
         return (
             <div

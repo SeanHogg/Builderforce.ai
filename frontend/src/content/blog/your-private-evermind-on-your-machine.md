@@ -1,12 +1,14 @@
 ---
 title: Your private Evermind, on your machine — with local models, connectors and approvals from your phone
 date: 2026-10-10
-description: Synapse now runs local models sized to your computer and serves them to Claude Code and your scripts, hosts MCP connectors the Brain can use, lets you approve an agent's step from your phone, and gives you a private model to start from. Everything it learns stays on your machine unless you publish it.
+description: The October Synapse release introduced local models, connector setup and phone approvals. Local MCP connector setup now lives in the Builderforce VS Code extension.
 tags: [evermind, privacy, agents, local-models, mcp, product]
 author: Sean Hogg
 ---
 
 # Your private Evermind, on your machine
+
+**November 2026 update.** This post describes the October release. The Builderforce VS Code extension now provides Workspace MCP and handles local connector setup. Synapse's desktop features continue to use a private Evermind client.
 
 Every assistant you use is learning something about you. Which projects you care about, how you name things, which steps of a monthly task you always do by hand. And almost every one of them keeps that knowledge on someone else's server, in a model you will never own, that forgets you the moment you switch tools.
 

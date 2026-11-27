@@ -40,7 +40,7 @@ export interface SceneLabels {
         | 'stateSelected' | 'stateReading' | 'statePinned' | 'methodsCount' | 'fieldsCount' | 'callsCount' | 'imported' | 'drillInAction' | 'showCode' | 'openFile'
         | 'status' | 'following' | 'pinnedStatus' | 'statusLine'
         | 'dockAria' | 'dockHide' | 'dockShow' | 'levelAria' | 'levelEmpty' | 'levelNoSource' | 'rowNoTest' | 'rowAntiPattern'
-        | 'paneCode' | 'panePicture' | 'lensOut' | 'lensSimulate' | 'lensRestructure' | 'gutterWarn'
+        | 'paneCode' | 'panePicture' | 'architecture' | 'filesystem' | 'lensOut' | 'lensSimulate' | 'lensRestructure' | 'gutterWarn'
         | 'samePlace' | 'sayLead' | 'sayHint' | 'fileLines' | 'fileLine',
         string
     >;
@@ -174,6 +174,8 @@ export const SCENE_DEFAULTS: SceneLabels = {
         rowAntiPattern: 'Anti-pattern: {name}',
         /** The pane's heading, and (a box too narrow to split) the picture it trades places with. */
         paneCode: 'Code',
+        architecture: 'System & components',
+        filesystem: 'Filesystem',
         panePicture: 'Picture',
         /** The lens line's added actions (PRD 43 Part C2): out of the level, simulate an untested symbol, restructure by its anti-pattern (`{name}`); the gutter's warning. */
         lensOut: 'Out',

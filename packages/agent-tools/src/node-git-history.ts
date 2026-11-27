@@ -38,6 +38,8 @@ export const PARENT_SEP = "\u001d";
 /** THE `--format` of `recentCommits`, read back by `parseRecentCommits`: `<RS>%H<GS>%P|%cI|%an<US>%s`. */
 export const RECENT_COMMITS_FORMAT = `${formatEscape(COMMIT_MARK)}%H${formatEscape(PARENT_SEP)}%P|%cI|%an${formatEscape(AUTHOR_END)}%s`;
 
+const AUTHOR_IDENTITY_FORMAT = `${formatEscape(COMMIT_MARK)}%H|%aI|%an <%ae>${formatEscape(AUTHOR_END)}%s`;
+
 /** THE `--format` of the history port's `-z` log, read back by `commitFilesParser`: `<RS><US>%cI` (committer time, what `--since` filters on). */
 export const HISTORY_FORMAT = `${formatEscape(COMMIT_MARK)}${formatEscape(AUTHOR_END)}%cI`;
 
@@ -60,10 +62,10 @@ export interface GitRun {
  * THE git exec wrapper (history, churn and the knowledge fixes all use it): `git` in `cwd`
  * with `core.quotepath=false`. `stdout` is set only on success; a failure says why.
  */
-export function runGit(cwd: string, args: string[], opts: { timeoutMs?: number } = {}): Promise<GitRun> {
+export function runGit(cwd: string, args: string[], opts: { timeoutMs?: number; maxBuffer?: number } = {}): Promise<GitRun> {
   return new Promise((resolve) => {
     try {
-      execFile("git", ["-c", "core.quotepath=false", ...args], { cwd, maxBuffer: MAX_BUFFER, timeout: opts.timeoutMs ?? TIMEOUT_MS, windowsHide: true }, (error, stdout, stderr) => {
+      execFile("git", ["-c", "core.quotepath=false", ...args], { cwd, maxBuffer: opts.maxBuffer ?? MAX_BUFFER, timeout: opts.timeoutMs ?? TIMEOUT_MS, windowsHide: true }, (error, stdout, stderr) => {
         if (!error) return resolve({ stdout, stderr });
         const e = error as NodeJS.ErrnoException & { killed?: boolean };
         resolve({ stderr, failure: e.killed ? "timeout" : e.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ? "buffer" : "error" });
@@ -119,12 +121,32 @@ export function parseRecentCommits(log: string): RecentCommit[] {
  * the reason through `onWarn` for a run that did not finish.
  */
 export async function recentCommits(rootDir: string, count: number, options: GitHistoryOptions = {}): Promise<RecentCommit[]> {
-  const run = await git(rootDir, ["log", `-${Math.max(1, Math.floor(count))}`, "--name-only", "--relative", `--format=${RECENT_COMMITS_FORMAT}`, "--", "."]);
-  if (run.stdout === undefined) {
-    if (run.failure === "timeout") options.onWarn?.(`git log did not finish within ${TIMEOUT_MS / 1000}s: history is missing.`);
-    return [];
+  const history = await readRecentCommits(rootDir, count);
+  if ("commits" in history) return history.commits;
+  if (history.failure === "timeout") options.onWarn?.(`git log did not finish within ${TIMEOUT_MS / 1000}s: history is missing.`);
+  return [];
+}
+
+export async function readRecentCommits(rootDir: string, count: number, options: {
+  /** A null path selects the entire repository, with repository-relative paths. */
+  path?: string | null;
+  author?: string;
+  /** Include the author email and use author time for the legacy history summary. */
+  authorIdentity?: boolean;
+  /** Use repository-relative paths even when a subdirectory is selected. */
+  repoRelative?: boolean;
+  timeoutMs?: number;
+  maxBuffer?: number;
+} = {}): Promise<{ commits: RecentCommit[] } | GitRun> {
+  const args = ["log", `--max-count=${Math.max(1, Math.floor(count))}`, "--name-only",
+    `--format=${options.authorIdentity ? AUTHOR_IDENTITY_FORMAT : RECENT_COMMITS_FORMAT}`];
+  if (options.author) args.push(`--author=${options.author}`);
+  if (options.path !== null) {
+    if (!options.repoRelative) args.push("--relative");
+    args.push("--", options.path ?? ".");
   }
-  return parseRecentCommits(run.stdout);
+  const run = await git(rootDir, args, options);
+  return run.stdout === undefined ? run : { commits: parseRecentCommits(run.stdout) };
 }
 
 /** A header token of the `-z` history log: the marker, then the `%cI` time (a leading newline when it follows a commit). */

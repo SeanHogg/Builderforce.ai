@@ -23,3 +23,4 @@ export {
 } from "./relay.js";
 export type { RelayCallResult, RelayCatalog, RelayToolCall } from "./relay.js";
 export type { ConnectorOffer, ConnectorTransport, StdioConnectorInput } from "./connectorCatalog.js";
+export { isRemoteMcpEndpoint } from "./endpoint.js";

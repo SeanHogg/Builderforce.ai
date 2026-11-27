@@ -19,7 +19,8 @@ import type { PanelDef, PanelProps, SurfaceEnv } from './registry';
 import { ACT_TAB, type DrawerState } from './useDrawer';
 import type { SurfaceModel } from './useSurface';
 import { DRAWER_WIDTH } from '../layout';
-import { actionGlyph, chromeGlyph } from './ui/glyphs';
+import { chromeGlyph } from './ui/glyphs';
+import { PanelChevron } from './ui/PanelChevron';
 import { TYPE } from './ui/type';
 
 export interface DrawerProps {
@@ -91,12 +92,7 @@ export function Drawer(p: DrawerProps) {
             <div role="tablist" aria-label={labels.surface.panelsLabel} style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px', borderBottom: `1px solid ${cssVar('border')}`, overflowX: 'auto', scrollbarWidth: 'none', flex: 'none' }}>
                 {tab(ACT_TAB, labels.surface.header.drawerTabAct, tabId === ACT_TAB)}
                 {tabs.map((t) => tab(t.id, nameOf(t), t.id === tabId))}
-                <button
-                    type="button" aria-label={labels.close} title={labels.close} data-testid="kg-drawer-close" onClick={drawer.close}
-                    style={{ marginInlineStart: 'auto', width: 28, height: 28, padding: 0, border: 0, background: 'transparent', color: cssVar('muted'), cursor: 'pointer', display: 'grid', placeItems: 'center', flex: 'none' }}
-                >
-                    <span aria-hidden="true" style={{ display: 'inline-flex' }}>{actionGlyph('close')}</span>
-                </button>
+                <PanelChevron testId="kg-drawer-close" open side={p.sheet ? 'bottom' : 'right'} label={labels.close} onClick={drawer.close} style={{ marginInlineStart: 'auto' }} />
             </div>
             <div
                 id="kg-drawer-body" role="tabpanel" aria-labelledby={`kg-drawer-tab-${tabId}`}

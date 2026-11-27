@@ -246,6 +246,14 @@ describe('the orbit rig (3D, a placement carrying rig.view)', () => {
         };
         const HOME = { cx: 0, cz: 0, zoom: 1 };
 
+        it('flies to a map mark at the requested screen scale and elevation', () => {
+            const rig = new RigController();
+            rig.setHome(HOME, FITTED, 900, 600, 0, 0);
+            rig.flyTo(20, 30, 60, 10, 0, 4);
+            expect(rig.pose().target).toEqual([20, 4, 30]);
+            expect(rig.pxPerWorld).toBeCloseTo(60);
+        });
+
         it('derives the distance from the narrower half-angle: a tall, narrow box backs off further than a wide one', () => {
             const wide = new RigController(), tall = new RigController();
             wide.setHome(HOME, FITTED, 1200, 600, 0, 0);

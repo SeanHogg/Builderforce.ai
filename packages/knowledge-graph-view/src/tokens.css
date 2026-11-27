@@ -25,6 +25,44 @@
  *          #FFFFFF is higher)      graphics need 3:1; muted (--bf-text-secondary #475569) 6.8:1, stale 5.3:1, error 7.6:1 — text needs 4.5:1
  */
 
+:where(.kg) .kg-file-tree {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 6px 8px;
+  font-family: var(--kg-font-mono);
+}
+
+:where(.kg) .kg-file-tree__row {
+  box-sizing: border-box;
+  min-height: 24px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+:where(.kg) button.kg-file-tree__row {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.kg) .kg-file-tree__row:hover,
+:where(.kg) [data-code-tree] button:hover {
+  background: var(--kg-panel2);
+}
+
+:where(.kg) .kg-file-tree__row[aria-current="true"] {
+  background: var(--kg-accent-soft);
+}
+
 :where(:root) {
   /* The design's neutrals (B-Surface.dc.html `.kg`), literal: the view looks the same on every host. Light is the `.kg.light` set below. */
   --kg-bg: #14161b;

@@ -104,10 +104,11 @@ export function pathOfStations(
 }
 
 export interface SpineItem {
-    kind: 'root' | 'system' | 'line' | 'station' | 'file' | 'symbol';
+    kind: 'root' | 'system' | 'line' | 'station' | 'file' | 'symbol' | 'folder' | 'level';
     /** The station id or node ref this crumb selects (the root and the line have none). */
     id?: string;
     label: string;
+    depth?: number;
 }
 
 export interface SpineInput {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { executeMcpNode, providerIdFromConfig, resolveParams } from './mcpNode';
+import { executeDataProviderNode, providerIdFromConfig, resolveParams } from './dataProviderNode';
 import { encryptCredentials } from '../integrations/credentialCrypto';
 import { fakeDb, fakeFetch } from '../../../test/fakeDb';
 import type { Db } from '../../infrastructure/database/connection';
@@ -43,22 +43,22 @@ describe('resolveParams', () => {
   });
 });
 
-describe('executeMcpNode', () => {
+describe('executeDataProviderNode', () => {
   it('refuses a node with no provider selected', async () => {
-    const result = await executeMcpNode(ctx(fakeDb()), {}, '');
+    const result = await executeDataProviderNode(ctx(fakeDb()), {}, '');
     expect(result).toMatchObject({ ok: false });
     expect((result as { error: string }).error).toContain('no provider');
   });
 
   it('names the discovery endpoint when the provider is unknown', async () => {
-    const result = await executeMcpNode(ctx(fakeDb()), { provider: 'notreal' }, '');
+    const result = await executeDataProviderNode(ctx(fakeDb()), { provider: 'notreal' }, '');
     expect(result).toMatchObject({ ok: false });
     expect((result as { error: string }).error).toContain('/api/integrations/catalog');
   });
 
   it('gives the transport reason for a TCP-only provider — not a generic refusal', async () => {
     const db = fakeDb();
-    const result = await executeMcpNode(ctx(db), { provider: 'mysql' }, '');
+    const result = await executeDataProviderNode(ctx(db), { provider: 'mysql' }, '');
     expect(result).toMatchObject({ ok: false });
     expect((result as { error: string }).error).toContain('MySQL');
     expect((result as { error: string }).error).toContain('self-hosted');
@@ -68,7 +68,7 @@ describe('executeMcpNode', () => {
 
   it('tells the user where to add a connection when none exists', async () => {
     const db = fakeDb([[]]);
-    const result = await executeMcpNode(ctx(db), { provider: 'hubspot' }, '');
+    const result = await executeDataProviderNode(ctx(db), { provider: 'hubspot' }, '');
     expect((result as { error: string }).error).toContain('Integrations');
   });
 
@@ -79,7 +79,7 @@ describe('executeMcpNode', () => {
       await credentialRow('Staging', { connectionString: 'postgres://u:p@a.neon.tech/db' }),
       await credentialRow('Production', { connectionString: 'postgres://u:p@b.neon.tech/db' }),
     ]]);
-    const result = await executeMcpNode(ctx(db), { provider: 'postgres' }, '');
+    const result = await executeDataProviderNode(ctx(db), { provider: 'postgres' }, '');
     expect(result).toMatchObject({ ok: false });
     const error = (result as { error: string }).error;
     expect(error).toContain('"Staging"');
@@ -89,7 +89,7 @@ describe('executeMcpNode', () => {
   it('runs a marketing operation with the decrypted credential', async () => {
     const db = fakeDb([[await credentialRow('Main', { apiKey: 'hs-key' })]]);
     const fetchImpl = fakeFetch([{ match: 'api.hubapi.com', json: { id: '99' } }]);
-    const result = await executeMcpNode(
+    const result = await executeDataProviderNode(
       ctx(db),
       { provider: 'hubspot', operation: 'upsert-contact', params: { email: 'sam@example.com', name: 'Sam' } },
       '',
@@ -104,7 +104,7 @@ describe('executeMcpNode', () => {
   it('runs SQL against a Neon database through the HTTP endpoint', async () => {
     const db = fakeDb([[await credentialRow('App DB', { connectionString: 'postgres://u:p@ep-1.neon.tech/app' })]]);
     const fetchImpl = fakeFetch([{ match: 'ep-1.neon.tech/sql', json: { rows: [{ n: 1 }] } }]);
-    const result = await executeMcpNode(
+    const result = await executeDataProviderNode(
       ctx(db),
       { provider: 'postgres', operation: 'query', params: { sql: 'SELECT count(*) FROM leads' } },
       '',
@@ -117,7 +117,7 @@ describe('executeMcpNode', () => {
   it('feeds the upstream payload into the operation', async () => {
     const db = fakeDb([[await credentialRow('Main', { apiKey: 'k' })]]);
     const fetchImpl = fakeFetch([{ match: 'api.hubapi.com', json: {} }]);
-    await executeMcpNode(
+    await executeDataProviderNode(
       ctx(db),
       { provider: 'hubspot', operation: 'upsert-contact' },
       '{"email":"from-upstream@example.com"}',
@@ -129,14 +129,14 @@ describe('executeMcpNode', () => {
   it('resolves a kebab-case palette id against the snake_case stored provider', async () => {
     const db = fakeDb([[await credentialRow('Zoho', { apiKey: 'z' })]]);
     const fetchImpl = fakeFetch([{ match: 'zohoapis.com', json: { users: [] } }]);
-    const result = await executeMcpNode(ctx(db), { provider: 'zoho-crm' }, '', fetchImpl);
+    const result = await executeDataProviderNode(ctx(db), { provider: 'zoho-crm' }, '', fetchImpl);
     expect(result).toMatchObject({ ok: true });
   });
 
   it('surfaces an upstream rejection as a readable node failure', async () => {
     const db = fakeDb([[await credentialRow('Main', { apiKey: 'bad' })]]);
     const fetchImpl = fakeFetch([{ match: 'api.hubapi.com', status: 403, json: {} }]);
-    const result = await executeMcpNode(ctx(db), { provider: 'hubspot' }, '', fetchImpl);
+    const result = await executeDataProviderNode(ctx(db), { provider: 'hubspot' }, '', fetchImpl);
     expect(result).toMatchObject({ ok: false });
     expect((result as { error: string }).error).toContain('403');
   });
@@ -155,7 +155,7 @@ describe('executeMcpNode', () => {
     it('scopes the lookup to the run\'s tenant AND the pinned id', async () => {
       const db = fakeDb([[await credentialRow('Main', { apiKey: 'hs-key' })]]);
       const fetchImpl = fakeFetch([{ match: 'api.hubapi.com', json: { id: '1' } }]);
-      const result = await executeMcpNode(
+      const result = await executeDataProviderNode(
         ctx(db),
         { provider: 'hubspot', operation: 'upsert-contact', credentialId: 'cred-Main', params: { email: 'a@b.co' } },
         '',
@@ -171,7 +171,7 @@ describe('executeMcpNode', () => {
       // The tenant predicate is in the query, so a foreign or unknown id matches nothing.
       const db = fakeDb([[]]);
       const fetchImpl = fakeFetch([]);
-      const result = await executeMcpNode(ctx(db), { provider: 'hubspot', credentialId: 'cred-elsewhere' }, '', fetchImpl);
+      const result = await executeDataProviderNode(ctx(db), { provider: 'hubspot', credentialId: 'cred-elsewhere' }, '', fetchImpl);
       expect(result).toMatchObject({ ok: false });
       expect((result as { error: string }).error).toContain('No enabled');
       expect(fetchImpl.calls).toHaveLength(0);
@@ -181,7 +181,7 @@ describe('executeMcpNode', () => {
       const foreign = await encryptCredentials({ apiKey: 'other-tenant-key' }, SECRET, TENANT + 1);
       const db = fakeDb([[{ id: 'cred-x', name: 'Theirs', credentialsEnc: foreign.enc, iv: foreign.iv }]]);
       const fetchImpl = fakeFetch([]);
-      const result = await executeMcpNode(ctx(db), { provider: 'hubspot', credentialId: 'cred-x' }, '', fetchImpl);
+      const result = await executeDataProviderNode(ctx(db), { provider: 'hubspot', credentialId: 'cred-x' }, '', fetchImpl);
       expect(result).toMatchObject({ ok: false });
       expect((result as { error: string }).error).toContain('decrypted');
       expect(fetchImpl.calls).toHaveLength(0);
@@ -191,7 +191,7 @@ describe('executeMcpNode', () => {
   it('reports an undecryptable credential instead of sending garbage upstream', async () => {
     const db = fakeDb([[{ id: 'c1', name: 'Broken', credentialsEnc: 'v2:not-base64', iv: 'zz' }]]);
     const fetchImpl = fakeFetch([]);
-    const result = await executeMcpNode(ctx(db), { provider: 'hubspot' }, '', fetchImpl);
+    const result = await executeDataProviderNode(ctx(db), { provider: 'hubspot' }, '', fetchImpl);
     expect(result).toMatchObject({ ok: false });
     expect((result as { error: string }).error).toContain('decrypted');
     expect(fetchImpl.calls).toHaveLength(0);

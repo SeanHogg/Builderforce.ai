@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { advertiseName, platformWireToolName, relayModelText, toRelayModelTool } from "../dist/index.js";
+import { advertiseName, isRemoteMcpEndpoint, platformWireToolName, relayModelText, toRelayModelTool } from "../dist/index.js";
 import { readMcpConfig, readSynapseConnectors, writeMcpConfig } from "../dist/config.js";
+
+test("remote MCP registration requires a complete HTTPS URL without embedded credentials", () => {
+  assert.equal(isRemoteMcpEndpoint(" https://mcp.example.com/mcp "), true);
+  for (const invalid of ["https://", "https://a b/mcp", "http://mcp.example.com", "https://user:pass@mcp.example.com"]) {
+    assert.equal(isRemoteMcpEndpoint(invalid), false, invalid);
+  }
+});
 
 test("the native relay projection uses canonical tool shaping and approval", () => {
   const entry = { extensionId: "remote", tool: "search", name: "remote_search", description: "Search", parameters: { type: "object" } };

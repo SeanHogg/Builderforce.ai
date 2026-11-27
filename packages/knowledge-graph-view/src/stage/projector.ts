@@ -65,7 +65,7 @@ export class CameraProjector implements Projector {
     private version = 0;
 
     /** Re-reads `cam` in a `width` × `height` box; true when the projection changed (the key moved). */
-    update(cam: CameraLike, width: number, height: number): boolean {
+    update(cam: CameraLike, width: number, height: number, scaleAtTarget?: number): boolean {
         const p = cam.projectionMatrix.elements, v = cam.matrixWorldInverse.elements, m = this.m;
         let changed = width !== this.width || height !== this.height;
         for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
@@ -73,7 +73,7 @@ export class CameraProjector implements Projector {
             for (let k = 0; k < 4; k++) s += p[k * 4 + r]! * v[c * 4 + k]!;
             if (m[c * 4 + r] !== s) { m[c * 4 + r] = s; changed = true; }
         }
-        if (!changed) return false;
+        if (!changed && (scaleAtTarget === undefined || scaleAtTarget === this.pxPerWorld)) return false;
         this.width = width; this.height = height;
         // Clip → screen pixels folded in: sx = (x/w + 1)·W/2 ⇒ row0' = (row0 + row3)·W/2; sy = (1 − y/w)·H/2 ⇒ row1' = (row3 − row1)·H/2.
         for (let c = 0; c < 4; c++) {
@@ -82,8 +82,8 @@ export class CameraProjector implements Projector {
             this.screen[c * 4 + 2] = 0;
             this.screen[c * 4 + 3] = m[c * 4 + 3]!;
         }
-        // Pixels per world unit: an orthographic camera's x scale is 2 / (right − left) in NDC per world unit.
-        this.pxPerWorld = Math.abs(m[0]!) * width / 2 + Math.abs(m[8]!) * width / 2 || 1;
+        // Perspective needs the scale at the rig's target. The clip matrix alone has no target distance.
+        this.pxPerWorld = scaleAtTarget ?? (Math.abs(m[0]!) * width / 2 + Math.abs(m[8]!) * width / 2 || 1);
         this.key = `c${++this.version}`;
         return true;
     }
@@ -91,10 +91,10 @@ export class CameraProjector implements Projector {
     project(x: number, y: number, z: number, out: Float64Array): boolean {
         const s = this.screen;
         const w = s[3]! * x + s[7]! * y + s[11]! * z + s[15]!;
-        if (w <= 1e-9) return false;
+        if (!(w > 1e-9)) return false;
         out[0] = (s[0]! * x + s[4]! * y + s[8]! * z + s[12]!) / w;
         out[1] = (s[1]! * x + s[5]! * y + s[9]! * z + s[13]!) / w;
-        return true;
+        return Number.isFinite(out[0]) && Number.isFinite(out[1]);
     }
 }
 

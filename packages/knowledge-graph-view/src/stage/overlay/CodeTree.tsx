@@ -7,7 +7,7 @@
  * member through the stage's own `onSelect`, so the picture moves to it; a click on the one already picked goes inside.
  */
 
-import { useEffect, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { fillTemplate, type KnowledgeGraphLabels } from '../../labels';
 import { kindLabel } from '../../names';
 import { cssVar } from '../../scene/themeColors';
@@ -26,9 +26,11 @@ const ICON_PX = 12;
 
 /** A level above the one on show (`depthCrumbs`): its depth is what `DrillModel.climb` takes. */
 export interface TreeAncestor { depth: number; name: string }
+export interface CodeTreeGroup { id: string; name: string }
 
 type Row =
     | { kind: 'ancestor'; id: string; depth: number; name: string; up: number }
+    | { kind: 'group'; id: string; depth: number; name: string; expanded: boolean }
     | { kind: 'member'; id: string; depth: number; station: Station; key: string };
 
 const button = (on: boolean, muted: boolean, depth: number): CSSProperties => ({
@@ -56,14 +58,29 @@ export interface CodeTreeProps {
     /** A row is hovered (its slot key) or left (null): the stage lights its shape. */
     onHover(key: string | null): void;
     labels: KnowledgeGraphLabels;
+    groups?: ReadonlyMap<string, readonly CodeTreeGroup[]> | undefined;
 }
 
-export function CodeTree({ ancestors, onClimb, stations, keyOf, types, facts, selected, canEnter, onSelect, onEnter, onHover, labels }: CodeTreeProps) {
+export function CodeTree({ ancestors, onClimb, stations, keyOf, types, facts, selected, canEnter, onSelect, onEnter, onHover, labels, groups }: CodeTreeProps) {
     const t = labels.surface.code;
-    const rows: Row[] = [
-        ...ancestors.map((a, i): Row => ({ kind: 'ancestor', id: `up:${a.depth}`, depth: i, name: a.name, up: a.depth })),
-        ...stations.map((s): Row => ({ kind: 'member', id: s.id, depth: ancestors.length, station: s, key: keyOf(s) })),
-    ];
+    const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+    const rows: Row[] = ancestors.map((a, i) => ({ kind: 'ancestor', id: `up:${a.depth}`, depth: i, name: a.name, up: a.depth }));
+    function addMembers(members: readonly Station[], depth: number, parent: string, groupIndex: number) {
+        const branches = new Map<string, { group: CodeTreeGroup; members: Station[] }>();
+        for (const station of members) {
+            const group = groups?.get(station.id)?.[groupIndex];
+            if (!group) { rows.push({ kind: 'member', id: station.id, depth, station, key: keyOf(station) }); continue; }
+            const branch = branches.get(group.id) ?? { group, members: [] };
+            branch.members.push(station);
+            branches.set(group.id, branch);
+        }
+        for (const { group, members } of branches.values()) {
+            const id = `${parent}/${group.id}`, expanded = !collapsed.has(id);
+            rows.push({ kind: 'group', depth, id, name: group.name, expanded });
+            if (expanded) addMembers(members, depth + 1, id, groupIndex + 1);
+        }
+    }
+    addMembers(stations, ancestors.length, '', 0);
     const v = useVirtualRows<HTMLUListElement>(rows.length, ROW_PX);
     const selectedIndex = selected === null ? -1 : rows.findIndex((r) => r.kind === 'member' && r.key === selected);
     const { reveal } = v;
@@ -76,10 +93,18 @@ export function CodeTree({ ancestors, onClimb, stations, keyOf, types, facts, se
                 style={{ listStyle: 'none', margin: 0, padding: 0, paddingTop: v.padTop, paddingBottom: v.padBottom, maxHeight: 'min(40vh, 260px)', overflow: 'auto', minHeight: 0 }}
             >
                 {rows.slice(v.from, v.to).map((row, i) => {
+                    if (row.kind === 'group') {
+                        return <li key={row.id} role="none"><button type="button" role="treeitem" aria-level={row.depth + 1} aria-expanded={row.expanded}
+                            style={button(false, true, row.depth)} onClick={() => setCollapsed((current) => {
+                                const next = new Set(current);
+                                if (next.has(row.id)) next.delete(row.id); else next.add(row.id);
+                                return next;
+                            })}><span aria-hidden="true">{row.expanded ? '⌄' : '›'}</span>{row.name}</button></li>;
+                    }
                     if (row.kind === 'ancestor') {
                         return (
                             <li key={row.id} role="none" aria-setsize={rows.length} aria-posinset={v.from + i + 1}>
-                                <button type="button" role="treeitem" aria-selected={false} data-tree-ancestor={row.up} onClick={() => onClimb(row.up)} style={button(false, true, row.depth)}>
+                                <button type="button" role="treeitem" aria-level={row.depth + 1} aria-selected={false} data-tree-ancestor={row.up} onClick={() => onClimb(row.up)} style={button(false, true, row.depth)}>
                                     <ShapeGlyph shape={typeShape('system')} size={ICON_PX} />
                                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{row.name}</span>
                                 </button>
@@ -94,7 +119,7 @@ export function CodeTree({ ancestors, onClimb, stations, keyOf, types, facts, se
                     return (
                         <li key={row.id} role="none" data-outline-member={ref} aria-setsize={rows.length} aria-posinset={v.from + i + 1}>
                             <button
-                                type="button" role="treeitem" aria-selected={on} aria-current={on ? 'true' : undefined} title={s.path ?? s.name}
+                                type="button" role="treeitem" aria-level={row.depth + 1} aria-selected={on} aria-current={on ? 'true' : undefined} title={s.path ?? s.name}
                                 onClick={() => { if (on && canEnter(s.id)) onEnter(s.id); else onSelect(row.key); }}
                                 onMouseEnter={() => onHover(row.key)} onMouseLeave={() => onHover(null)} onFocus={() => onHover(row.key)} onBlur={() => onHover(null)}
                                 style={button(on, false, row.depth)}

@@ -1,7 +1,7 @@
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative } from "node:path";
 import type { RepoReadCapability } from "@builderforce/agent-tools";
-import { parseRecentCommits, RECENT_COMMITS_FORMAT, runGit } from "@builderforce/agent-tools/node-git-history";
+import { readRecentCommits } from "@builderforce/agent-tools/node-git-history";
 import { resolveInsideRoot } from "@builderforce/agent-tools/node-path";
 
 /** Resolve symlinks before using a caller-supplied path to access the disk. */
@@ -46,11 +46,12 @@ export async function workspaceGitHistory({ root }: { root: string }, args: Reco
   const limit = typeof args.limit === "number" && Number.isFinite(args.limit)
     ? Math.min(50, Math.max(1, Math.floor(args.limit)))
     : 20;
-  const author = typeof args.author === "string" && args.author.trim() ? [`--author=${args.author}`] : [];
-  const run = await runGit(root, [
-    "log", `--max-count=${limit}`, "--name-only", "--relative", `--format=${RECENT_COMMITS_FORMAT}`,
-    ...author, "--", relative(await realpath(root), path) || ".",
-  ], { timeoutMs: 10_000 });
-  if (run.stdout === undefined) throw new Error("Git history is unavailable");
-  return { commits: parseRecentCommits(run.stdout) };
+  const author = typeof args.author === "string" && args.author.trim() ? args.author : undefined;
+  const history = await readRecentCommits(root, limit, {
+    path: relative(await realpath(root), path) || ".",
+    author,
+    timeoutMs: 10_000,
+  });
+  if (!("commits" in history)) throw new Error("Git history is unavailable");
+  return history;
 }

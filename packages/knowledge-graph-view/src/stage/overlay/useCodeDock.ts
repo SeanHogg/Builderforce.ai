@@ -144,7 +144,8 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     const stopStation = stop ? surface.stations.byId.get(stop.id) ?? map.stations.byId.get(stop.id) ?? null : null;
     const stopRef = codeRefForStop(stop?.id ?? null, stopStation);
     // At the code level the pane reads the open method; else the selected mark, else the journey stop.
-    const dockRef = methodRef ?? markRef ?? stopRef;
+    const explicitRef = p.selected && fileRefOf(p.selected) === p.selected ? p.selected : null;
+    const dockRef = methodRef ?? explicitRef ?? markRef ?? stopRef;
     const codeName = subject.name || (dockRef === stopRef && stopStation ? stopStation.name : '') || (dockRef ? index.get(dockRef)?.label ?? dockRef : '');
     // The pane reads the whole file; the mark's own line is `scrollLine`, so another method in the same file only scrolls it.
     const markTarget = reading ? (methodTarget ?? targetForMark(dockRef, codeName, records)) : null;
