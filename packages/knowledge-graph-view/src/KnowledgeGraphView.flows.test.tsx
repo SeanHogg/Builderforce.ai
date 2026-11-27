@@ -9,6 +9,7 @@ import { packLabel } from './names';
 import { PHONE_FOCUS_NODES } from './graphModel';
 import { codeFixture, docsFixture, fixtureSource, openList } from './testing';
 import { startReviewing } from './testReviews';
+import { openDetails, openSearch } from './testPicks';
 import type { KnowledgeGraphSource, KnowledgeSearchHit } from './types';
 
 

@@ -96,6 +96,12 @@ export function toOpenAI<Schema>(
   };
 }
 
+export function toAnthropic<Schema>(
+  tool: { name: string; description: string; inputSchema: Schema },
+): { name: string; description: string; input_schema: Schema };
+export function toAnthropic<Schema>(
+  tool: { name: string; description?: string; inputSchema: Schema },
+): { name: string; description?: string; input_schema: Schema };
 export function toAnthropic<Schema>(tool: { name: string; description?: string; inputSchema: Schema }) {
   return {
     name: tool.name,
