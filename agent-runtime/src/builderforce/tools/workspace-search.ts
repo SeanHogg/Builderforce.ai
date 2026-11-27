@@ -31,7 +31,7 @@ export async function searchWorkspace(options: SearchOptions, lexicalOnly: boole
       const existing = filesByPath.get(path);
       if (!existing) {
         if (filesByPath.size >= limit) continue;
-        filesByPath.set(path, { filePath: path, score, symbols: symbol ? [symbol] : [], snippet });
+        filesByPath.set(path, { filePath: path, score: score ?? 0, symbols: symbol ? [symbol] : [], snippet });
       } else if (symbol && existing.symbols.length < 8 && !existing.symbols.includes(symbol)) {
         existing.symbols.push(symbol);
       }
