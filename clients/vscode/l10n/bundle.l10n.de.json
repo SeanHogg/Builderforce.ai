@@ -1660,5 +1660,6 @@
   "routine": "Routine",
   "succeeded": "erfolgreich",
   "{0} steps": "{0} Schritte",
-  "{0}: step {1} needs your approval ({2})": "{0}: Schritt {1} braucht deine Freigabe ({2})"
+  "{0}: step {1} needs your approval ({2})": "{0}: Schritt {1} braucht deine Freigabe ({2})",
+  "BuilderForce: .builderforce/project.json was linked to another project in the meantime, so it was left unchanged.": "BuilderForce: .builderforce/project.json wurde inzwischen mit einem anderen Projekt verknüpft und blieb daher unverändert."
 }

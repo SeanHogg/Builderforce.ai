@@ -1,9 +1,8 @@
 import * as vscode from "vscode";
 import { projectTypePath, type ProjectTypeAction } from "@builderforce/ide-templates/project-types";
+import { PICK_MODEL_COMMAND } from "../models/noLocalModelPrompt";
 import { projectTypeText } from "./projectTypeText";
 
-/** The command that lets the person pick the model a project uses. */
-export const PICK_MODEL_COMMAND = "builderforce.pickModel";
 
 export interface ProjectTypeRunContext {
   projectId: number;

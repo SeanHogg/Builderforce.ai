@@ -19,18 +19,26 @@ async function pickProjectType(): Promise<ProjectTypeEntry | undefined> {
 
 /**
  * Re-binding a folder that already belongs to another project is destructive, so it asks
- * (modal). True when there is nothing to replace or the person agreed.
+ * (modal). `proceed` is false when the link file is unreadable (reported; nothing is created)
+ * or the person cancelled; `expectedProjectId` is the id they agreed to replace.
  */
-async function confirmRebind(port: ReturnType<typeof vscodeWorkspacePort>, folder: WorkspaceFolderRef): Promise<boolean> {
+async function confirmRebind(
+  port: ReturnType<typeof vscodeWorkspacePort>,
+  folder: WorkspaceFolderRef,
+): Promise<{ proceed: boolean; expectedProjectId?: unknown }> {
   const current = await readProjectLink(port, folder);
-  if (!current.ok || !current.link) return true; // an unreadable file is reported when linking, never overwritten
+  if (!current.ok) {
+    void vscode.window.showWarningMessage(refusalText(current.reason));
+    return { proceed: false };
+  }
+  if (!current.link) return { proceed: true };
   const replace = vscode.l10n.t("Replace");
   const answer = await vscode.window.showWarningMessage(
-    vscode.l10n.t("This folder is already linked to project {0} ({1}). Link it to the new project instead?", current.link.projectId, current.link.projectType),
+    vscode.l10n.t("This folder is already linked to project {0} ({1}). Link it to the new project instead?", String(current.link.projectId), String(current.link.projectType ?? "?")),
     { modal: true },
     replace,
   );
-  return answer === replace;
+  return answer === replace ? { proceed: true, expectedProjectId: current.link.projectId } : { proceed: false };
 }
 
 function refusalText(reason: "invalid-json" | "not-an-object"): string {
@@ -57,9 +65,13 @@ export async function newAiProject(
   // Settle the folder and any re-bind BEFORE creating anything on the server.
   const port = vscodeWorkspacePort();
   let folder: WorkspaceFolderRef | undefined;
+  let expectedProjectId: unknown;
   if (port.folders().length > 0) {
     folder = await chooseFolder(port, vscode.l10n.t("Which folder is this project for?"));
-    if (!folder || !(await confirmRebind(port, folder))) return;
+    if (!folder) return;
+    const rebind = await confirmRebind(port, folder);
+    if (!rebind.proceed) return;
+    expectedProjectId = rebind.expectedProjectId;
   }
 
   const project = await createProjectInteractive(context, { modality: type.modality, title: projectTypeText(type.labelKey) });
@@ -67,8 +79,11 @@ export async function newAiProject(
 
   if (folder) {
     try {
-      const result = await linkProject(port, folder, { projectId: project.id, projectType: type.id }, { replace: true });
+      const result = await linkProject(port, folder, { projectId: project.id, projectType: type.id }, expectedProjectId === undefined ? {} : { replace: { expectedProjectId } });
       if (result.status === "refused") void vscode.window.showWarningMessage(refusalText(result.reason));
+      else if (result.status === "conflict") {
+        void vscode.window.showWarningMessage(vscode.l10n.t("BuilderForce: .builderforce/project.json was linked to another project in the meantime, so it was left unchanged."));
+      }
     } catch (error) {
       void vscode.window.showErrorMessage(vscode.l10n.t("BuilderForce: could not write .builderforce/project.json ({0}).", (error as Error).message));
     }
