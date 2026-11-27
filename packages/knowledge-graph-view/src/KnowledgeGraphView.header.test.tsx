@@ -55,10 +55,7 @@ async function mount(source: KnowledgeGraphSource) {
 }
 const strip = () => within(screen.getByTestId('kg-status-strip'));
 /** The ask input: the search icon button expands it (where the header does not wrap). */
-const askBox = () => {
-    if (!screen.queryByRole('searchbox', { name: L.searchLabel })) fireEvent.click(screen.getByTestId('kg-search-button'));
-    return screen.getByRole('searchbox', { name: L.searchLabel }) as HTMLInputElement;
-};
+const askBox = () => openSearch({ fireEvent }, L);
 const toolbar = (over: Partial<Parameters<typeof Toolbar>[0]> = {}) => (
     <Toolbar labels={L} wrapped={false} onSearch={vi.fn()} question="where" askName="Web" drawerOpen={false} onToggleDrawer={vi.fn()} {...over} />
 );

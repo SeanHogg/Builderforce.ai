@@ -97,6 +97,7 @@ async function browseConnectorCatalog(secrets: vscode.SecretStorage, canInstallL
   if (!pick) return;
   if (pick.transport.transport === "http") {
     const url = new URL("/settings/integrations", getWebBaseUrl());
+    if (url.protocol !== "http:" && url.protocol !== "https:") return;
     url.searchParams.set("connector", pick.transport.connectorKey);
     await vscode.env.openExternal(vscode.Uri.parse(url.href));
     return;
