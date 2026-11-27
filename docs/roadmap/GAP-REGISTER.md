@@ -754,13 +754,9 @@ Details, paths and migration order: `docs/specs/tasks/platform-duplication-audit
 
 Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §6. The tool definitions are shared in `packages/agent-tools`; the code beneath them is not.
 
-- `SHELL-G001` **The sandbox provider's containment check wrongly rejects names like `..foo`** (`sandbox-capability-provider.ts:101`, which uses `startsWith("..")`). Fix in progress.
-- `SHELL-G002` **The shared path resolver needs a symlink-aware variant**, used by every read/write/edit provider. Details are in the local security findings file. Fix in progress.
 - `SHELL-G003` **There are four process-tree kill implementations.** Make one shared `node-process` helper. The Node hosts are done: `packages/agent-tools/src/node-process.ts`, awaiting review. Still open: `clients/vscode/src/process/killTree.ts` stays as a re-export until `knowledge/knowledgeShell.ts` imports `node-process` directly; the container JS (`api/container/sandboxJobs.mjs`, `sandboxCore.mjs`, `previewProcess.mjs`) has its own kill logic and needs the container generator (`scripts/gen-container-shared.mjs`).
-- `SHELL-G004` **Some Windows tree-kills resolve `taskkill` unsafely.** Details are in the local security findings file. Fix in progress.
 - `SHELL-G005` **Output caps are hard-coded per host** (VS Code 60,000 characters and 4 MB, browser 16,000, native 50 KB, 2 MB reads). Take them from `tool-output-policy`.
 - `SHELL-G006` **Command timeout defaults and units differ** (seconds vs ms; 5 vs 10 min). Add one `DEFAULT_COMMAND_TIMEOUT_MS`.
-- `SHELL-G007` **The `apply_patch` alias maps onto `edit_file`, which has a different contract** (`toolAliases.ts`). Fix in progress.
 - `SHELL-G008` **agent-runtime's native `read`, `exec` and `process` are not converged** onto the shared tools.
 - `SHELL-G009` **No command policy exists outside agent-runtime.** Port `exec-approvals` into `agent-tools` as a deny-list plus a confirm port. Details are in the local security findings file.
 - `SHELL-G010` **`LIST_MAX_FILES` and the file walker are copied three times** (on-prem, sandbox, VS Code).
@@ -786,7 +782,6 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §7. 
 - `AUTH-G007` **Configuration names and aliases are inconsistent** across hosts. Keep one documented table and deprecate the aliases.
 - `AUTH-G008` **Error flattening is copied four times,** and Rust `CloudError` misses the nested `{error:{message,code}}` form.
 - `AUTH-G009` **The fallback when the server omits `expiresIn` differs:** 3600 s in TypeScript, 900 s in Rust.
-- `AUTH-G010` **The `packages/device-auth` header comment cites stale paths.**
 - `AUTH-G011` **The web has no token refresh,** so an expired token is a hard logout.
 - `AUTH-G012` **Auth-client test gaps:** Chrome `apiClient.test.ts` is 11 lines, Rust has 6 tests, agent-runtime has none.
 - `AUTH-G013` **Rust and VS Code derive the web origin from the API URL by hand.**
@@ -800,19 +795,16 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §7. 
 
 Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §8. The shared cores are `code-shield`, `secret-redaction`, `sarif` and the single incident writer `findingIncidentKinds.ts`.
 
-- `SEC-G001` **Secret regexes exist outside `secret-redaction`:** code-shield `secretRules.ts`, governance-audit `matchers.ts`, W `securityEvent.ts`, VS Code `modelFallbackDetail.ts`. Derive them all from `SECRET_SHAPES`. Fix in progress.
-- `SEC-G002` **There are about 8 severity scales and no shared mapper.** Put one in `sarif`.
-- `SEC-G003` **The API mirrors W's Shield reason codes by hand** (`runtimeShieldEvent.ts`). Generate them, or add a drift test.
-- `SEC-G004` **Memory has no secret redaction before facts are stored.** Details are in the local security findings file.
-- `SEC-G005` **There is no single dangerous-command ruleset** (exec approvals, run-delta `rmRf`, `policyGateCallKey`, `dangerous-tools`, `node-command-policy`). Joins `SHELL-G009`.
-- `SEC-G006` **The run-delta security rules re-implement code-shield SAST** (`tlsVerifyDisabled`, `weakCrypto`, `corsPermissive`, `cspPermissive`, `cookieInsecure`).
-- `SEC-G007` **There are three prompt-injection pattern sets** (`external-content.ts`, `instruction-firewall.ts`, M `cognition/sanitize.ts`).
-- `SEC-G008` **The W credential scrubber has no parity test with `secret-redaction`.** Fix in progress.
-- `SEC-G009` **Egress has six mechanisms and no single registry.**
-- `SEC-G010` **The inference host (builderforce-inference) has no scanner or egress policy.** Under the Synapse IDE rebuild it inherits the VS Code extension's.
-- `SEC-G011` **Shield evidence values are not redacted server-side.** Details are in the local security findings file. Fix in progress.
-- `SEC-G012` **code-shield rule ids are inconsistent,** and `obfuscated-code` is duplicated.
-- `SEC-G013`–`SEC-G015` **Security-sensitive defaults and coverage gaps.** Details are in the local security findings file.
+- `SECP-G002` **There are about 8 severity scales and no shared mapper.** Put one in `sarif`.
+- `SECP-G003` **The API mirrors W's Shield reason codes by hand** (`runtimeShieldEvent.ts`). Generate them, or add a drift test.
+- `SECP-G004` **Memory has no secret redaction before facts are stored.** Details are in the local security findings file.
+- `SECP-G005` **There is no single dangerous-command ruleset** (exec approvals, run-delta `rmRf`, `policyGateCallKey`, `dangerous-tools`, `node-command-policy`). Joins `SHELL-G009`.
+- `SECP-G006` **The run-delta security rules re-implement code-shield SAST** (`tlsVerifyDisabled`, `weakCrypto`, `corsPermissive`, `cspPermissive`, `cookieInsecure`).
+- `SECP-G007` **There are three prompt-injection pattern sets** (`external-content.ts`, `instruction-firewall.ts`, M `cognition/sanitize.ts`).
+- `SECP-G008` **The W credential scrubber has no parity test with `secret-redaction`.** Fix in progress.
+- `SECP-G009` **Egress has six mechanisms and no single registry.**
+- `SECP-G010` **The inference host (builderforce-inference) has no scanner or egress policy.** Under the Synapse IDE rebuild it inherits the VS Code extension's.
+- `SECP-G013`–`SECP-G015` **Security-sensitive defaults and coverage gaps.** Details are in the local security findings file.
 
 ### Data model — PRD 20 `[platform]`
 

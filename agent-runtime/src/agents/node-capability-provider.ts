@@ -33,7 +33,7 @@ import { applyStringEdit, editFacts, matchGlobInScope, dirMayContainGlobMatch, n
 // The ONE workspace-containment resolver, shared with the VS Code local provider.
 // Node-only, so it comes from the `/node-path` export condition (the package root stays
 // node-builtin-free for the Worker).
-import { resolveInsideRootReal as resolveInside } from "@builderforce/agent-tools/node-path.js";
+import { tryResolveInsideRootReal as resolveInside, type RealResolveOutcome } from "@builderforce/agent-tools/node-path.js";
 // The ONE definition index (shared with the VS Code workspace) behind `find_symbol` /
 // `file_outline`, in its one on-prem configuration (tree-sitter, persisted snapshot).
 import { onPremSymbolIndex } from "./on-prem-symbol-index.js";
@@ -206,9 +206,9 @@ export async function searchNodeWorkspaceCode(
 ): Promise<RepoSearchResult> {
   const root = resolvePath(workspaceRoot);
   const scopeDir = normalizeScopeDir(scope);
-  const start = scopeDir ? await resolveInside(root, scopeDir) : root;
-  if (!start) return { ok: false, error: `'${scopeDir ?? ""}' is outside the workspace` };
-  return searchWorkspace({ root, start, query, ripgrep: await findOnPathRipgrep() });
+  const start = scopeDir ? await resolveInside(root, scopeDir) : { ok: true as const, abs: root };
+  if (!start.ok) return { ok: false, error: start.error };
+  return searchWorkspace({ root, start: start.abs, query, ripgrep: await findOnPathRipgrep() });
 }
 
 /**
@@ -219,14 +219,13 @@ export async function searchNodeWorkspaceCode(
  */
 export function buildNodeCapabilityProvider(options: NodeProviderOptions): CapabilityProvider {
   const root = resolvePath(options.workspaceRoot);
-  const escaped = (path: string) => `'${path}' is outside the workspace`;
   const askHuman = options.requestHuman ?? requestHumanInput;
   // Per-file read/write/edit/delete resolve through this (one scope, so the write guard's
   // probe sees the same file the write lands on); list/search always use `resolveInside`.
   const resolveFile =
     (options.scope ?? "workspace") === "workspace"
-      ? (p: string) => resolveInside(root, p)
-      : async (p: string) => resolvePath(root, p);
+      ? (p: string): Promise<RealResolveOutcome> => resolveInside(root, p)
+      : async (p: string): Promise<RealResolveOutcome> => ({ ok: true, abs: resolvePath(root, p) });
   // Process-wide per root: a provider is built per session, and an index per provider
   // would re-walk the tree every time. Persisted beside the on-prem search index.
   const symbols = onPremSymbolIndex(root);
@@ -282,21 +281,22 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
     },
     repoRead: {
       async listFiles(sub, glob, opts): Promise<RepoListResult> {
-        const scope = sub ? await resolveInside(root, sub) : root;
-        if (!scope) {
-          return { ok: false, error: escaped(sub ?? "") };
+        const scope = sub ? await resolveInside(root, sub) : { ok: true as const, abs: root };
+        if (!scope.ok) {
+          return { ok: false, error: scope.error };
         }
         // The glob is applied DURING the walk (so the file budget counts matches) and
         // resolved against the scope, because a glob is naturally written relative to
         // the folder you asked about ("path": "src", "glob": "**\/*.ts").
-        const { paths, truncated } = await walkFiles(root, scope, glob, sub, opts?.unbounded === true);
+        const { paths, truncated } = await walkFiles(root, scope.abs, glob, sub, opts?.unbounded === true);
         return { ok: true, paths, truncated };
       },
       async readFile(path): Promise<RepoReadResult> {
-        const abs = await resolveFile(path);
-        if (!abs) {
-          return { ok: false, error: escaped(path) };
+        const resolved = await resolveFile(path);
+        if (!resolved.ok) {
+          return { ok: false, error: resolved.error };
         }
+        const abs = resolved.abs;
         try {
           const content = await fsReadFile(abs, "utf-8");
           return { ok: true, path, content };
@@ -327,10 +327,11 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
     },
     repoWrite: {
       async writeFile(path, content): Promise<RepoWriteResult> {
-        const abs = await resolveFile(path);
-        if (!abs) {
-          return { ok: false, error: escaped(path) };
+        const resolved = await resolveFile(path);
+        if (!resolved.ok) {
+          return { ok: false, error: resolved.error };
         }
+        const abs = resolved.abs;
         let existed = true;
         try {
           await fsAccess(abs, constants.F_OK);
@@ -347,10 +348,11 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         }
       },
       async editFile(path, oldString, newString, replaceAll): Promise<RepoEditResult> {
-        const abs = await resolveFile(path);
-        if (!abs) {
-          return { ok: false, error: escaped(path) };
+        const resolved = await resolveFile(path);
+        if (!resolved.ok) {
+          return { ok: false, error: resolved.error };
         }
+        const abs = resolved.abs;
         let raw: string;
         try {
           raw = await fsReadFile(abs, "utf-8");
@@ -375,10 +377,11 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         }
       },
       async deleteFile(path): Promise<RepoDeleteResult> {
-        const abs = await resolveFile(path);
-        if (!abs) {
-          return { ok: false, error: escaped(path) };
+        const resolved = await resolveFile(path);
+        if (!resolved.ok) {
+          return { ok: false, error: resolved.error };
         }
+        const abs = resolved.abs;
         try {
           await fsAccess(abs, constants.F_OK);
         } catch {

@@ -1,3 +1,26 @@
+## ✅ RESOLVED 2026-11-26 — One path check, one process-tree kill, one secret detector (SHELL-G001/G002/G004/G007, SECP-G001/G011/G012, AUTH-G010; AUTH-G018 in the local findings file)
+
+- **Path containment.**
+  - `packages/agent-tools/src/node-path.ts` gains `resolveInsideRootReal` (follows symlinks; new files resolve through their nearest existing folder) and `isPathInside`.
+  - Every file tool in VS Code, on-prem and the sandbox uses them. Names like `..foo` are accepted again.
+  - Six local containment helpers in agent-runtime and VS Code were deleted.
+- **Process-tree kill.**
+  - `packages/agent-tools/src/node-process.ts` (`./node-process`) replaces four copies: hard kill by default, graceful with `graceMs`. `taskkill` always comes from `%SystemRoot%\System32`, and errors are reported.
+  - `agent-runtime/src/process/kill-tree.ts` and `clients/vscode/src/process/killTree.ts` were deleted.
+  - The container JS copies are still open under `SHELL-G003`.
+- **Alias.** The `apply_patch` → `edit_file` alias was removed.
+- **Secrets.**
+  - code-shield's secret rules are derived from `secret-redaction` `SECRET_SHAPES`, so the PR gate flags every shape the redactor knows. Persisted rule ids stay stable through `LEGACY_SHAPE_RULE_IDS`/`legacyRuleId`.
+  - PGP private keys are detected again. New shapes report at MEDIUM in test and fixture paths.
+  - The governance-audit matcher uses the shared detector and redacts its evidence.
+  - Shield incident evidence is redacted server-side before it is stored.
+  - code-shield rule ids are namespaced, and the duplicate `obfuscated-code` is split.
+- **Docs.** The `device-auth` header paths are corrected.
+- **Checks.** Two Opus reviews ran.
+  - 44 agent-tools, 158 agent-runtime, 187 VS Code and 246 api targeted tests pass.
+  - The agent-runtime, VS Code and harness typechecks are clean.
+  - The source-package-graph guard passes.
+
 ## ✅ RESOLVED 2026-11-26 — The Visualizer no longer crashes VS Code on large repos and opens on the last review (AE-G063, AE-G062; VSIX 2026.11.225)
 
 - **Crash (AE-G063).** On hired.video (6315 files) a finished load sent 123,843 edges and 24,674 per-edge `partition-violation` findings from the worker to the host, into `lastSeen` and on to the webview. The host stalled for up to 10 s, then crashed.

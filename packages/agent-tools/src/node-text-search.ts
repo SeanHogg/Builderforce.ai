@@ -125,11 +125,13 @@ export function parseRipgrepLine(line: string): SearchMatch | null {
   // (chat #111: directory `search_code` returned total:0 truncated:false).
   const m = /^(.+):(\d+):(.*)$/.exec(line);
   if (!m) return null;
-  const rel = m[1].split("\\").join("/").replace(/^(?:\.\/)+/, "");
+  // All three groups participate in every match of the pattern; the defaults only satisfy the index types.
+  const [, rawPath = "", lineNo = "", rawText = ""] = m;
+  const rel = rawPath.split("\\").join("/").replace(/^(?:\.\/)+/, "");
   if (!rel) return null;
-  const text = m[3].trim();
+  const text = rawText.trim();
   if (text === "[Omitted long matching line]") return null;
-  return { path: rel, line: Number(m[2]), text: text.slice(0, MATCH_TEXT_MAX) };
+  return { path: rel, line: Number(lineNo), text: text.slice(0, MATCH_TEXT_MAX) };
 }
 
 /**
@@ -310,8 +312,9 @@ async function searchOneFile(root: string, abs: string, re: RegExp, size: number
   const out: SearchMatch[] = [];
   const lines = content.split("\n");
   for (let i = 0; i < lines.length; i++) {
-    if (re.test(lines[i])) {
-      out.push({ path: rel, line: i + 1, text: lines[i].trim().slice(0, MATCH_TEXT_MAX) });
+    const lineText = lines[i] ?? "";
+    if (re.test(lineText)) {
+      out.push({ path: rel, line: i + 1, text: lineText.trim().slice(0, MATCH_TEXT_MAX) });
       if (out.length >= SEARCH_MAX_MATCHES) break;
     }
   }

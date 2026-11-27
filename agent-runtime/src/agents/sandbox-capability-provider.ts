@@ -36,7 +36,7 @@
 import { readdir } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import { resolveInsideRootReal } from "@builderforce/agent-tools/node-path.js";
+import { tryResolveInsideRootReal, type RealResolveOutcome } from "@builderforce/agent-tools/node-path.js";
 import {
   applyStringEdit,
   dirMayContainGlobMatch,
@@ -156,29 +156,29 @@ export function buildSandboxCapabilityProvider(
   options: SandboxProviderOptions,
 ): CapabilityProvider {
   const root = resolve(options.workspaceRoot);
-  const escaped = (path: string) => `'${path}' is outside the workspace`;
   const resolveFile =
     (options.scope ?? "workspace") === "workspace"
-      ? (p: string) => resolveInsideRootReal(root, p)
-      : async (p: string) => (isAbsolute(p) ? resolve(p) : resolve(root, p));
+      ? (p: string): Promise<RealResolveOutcome> => tryResolveInsideRootReal(root, p)
+      : async (p: string): Promise<RealResolveOutcome> => ({ ok: true, abs: isAbsolute(p) ? resolve(p) : resolve(root, p) });
   const bridge = options.bridge;
 
   return {
     capabilities: SANDBOX_SURFACE_CAPS,
     repoRead: {
       async listFiles(sub, glob): Promise<RepoListResult> {
-        const scope = sub ? await resolveInsideRootReal(root, sub) : root;
-        if (!scope) {
-          return { ok: false, error: escaped(sub ?? "") };
+        const scope = sub ? await tryResolveInsideRootReal(root, sub) : { ok: true as const, abs: root };
+        if (!scope.ok) {
+          return { ok: false, error: scope.error };
         }
-        const { paths, truncated } = await walkFiles(root, scope, glob, sub);
+        const { paths, truncated } = await walkFiles(root, scope.abs, glob, sub);
         return { ok: true, paths, truncated };
       },
       async readFile(path): Promise<RepoReadResult> {
-        const abs = await resolveFile(path);
-        if (!abs) {
-          return { ok: false, error: escaped(path) };
+        const resolved = await resolveFile(path);
+        if (!resolved.ok) {
+          return { ok: false, error: resolved.error };
         }
+        const abs = resolved.abs;
         try {
           const buf = await bridge.readFile({ filePath: abs, cwd: root });
           return { ok: true, path, content: buf.toString("utf-8") };
@@ -209,10 +209,11 @@ export function buildSandboxCapabilityProvider(
     },
     repoWrite: {
       async writeFile(path, content): Promise<RepoWriteResult> {
-        const abs = await resolveFile(path);
-        if (!abs) {
-          return { ok: false, error: escaped(path) };
+        const resolved = await resolveFile(path);
+        if (!resolved.ok) {
+          return { ok: false, error: resolved.error };
         }
+        const abs = resolved.abs;
         const stat = await bridge.stat({ filePath: abs, cwd: root }).catch(() => null);
         const existed = !!stat;
         try {
@@ -223,10 +224,11 @@ export function buildSandboxCapabilityProvider(
         }
       },
       async editFile(path, oldString, newString, replaceAll): Promise<RepoEditResult> {
-        const abs = await resolveFile(path);
-        if (!abs) {
-          return { ok: false, error: escaped(path) };
+        const resolved = await resolveFile(path);
+        if (!resolved.ok) {
+          return { ok: false, error: resolved.error };
         }
+        const abs = resolved.abs;
         let raw: string;
         try {
           const buf = await bridge.readFile({ filePath: abs, cwd: root });
@@ -247,10 +249,11 @@ export function buildSandboxCapabilityProvider(
         }
       },
       async deleteFile(path): Promise<RepoDeleteResult> {
-        const abs = await resolveFile(path);
-        if (!abs) {
-          return { ok: false, error: escaped(path) };
+        const resolved = await resolveFile(path);
+        if (!resolved.ok) {
+          return { ok: false, error: resolved.error };
         }
+        const abs = resolved.abs;
         const stat = await bridge.stat({ filePath: abs, cwd: root }).catch(() => null);
         if (!stat) {
           // Not in the container — benign no-op so the model doesn't treat it as a failure.

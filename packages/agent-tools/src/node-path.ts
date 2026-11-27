@@ -153,11 +153,9 @@ export async function resolveInsideRootRealOrThrow(root: string, relPath: unknow
   if (typeof relPath !== "string") {
     throw new Error("a 'path' string is required");
   }
-  const abs = await resolveInsideRootReal(root, relPath, opts);
-  if (abs === null) {
-    throw new PathEscapesRootError(relPath);
-  }
-  return abs;
+  const outcome = await tryResolveInsideRootReal(root, relPath, opts);
+  if (outcome.ok) return outcome.abs;
+  throw outcome.reason === "escapes" ? new PathEscapesRootError(relPath) : new PathUnverifiableError(relPath, outcome.cause);
 }
 
 /**
@@ -193,4 +191,41 @@ export function resolveShellCwd(root: string, relative?: string): { ok: true; di
     return { ok: false, error: `the directory '${relative}' does not exist in the workspace` };
   }
   return { ok: true, dir };
+}
+
+/** Outcome of {@link tryResolveInsideRootReal}: a typed result instead of a throw. */
+export type RealResolveOutcome =
+  | { ok: true; abs: string }
+  | { ok: false; reason: "escapes"; error: string }
+  | { ok: false; reason: "unverifiable"; error: string; cause: unknown };
+
+/** A root-relative, host-path-free sentence for a path whose containment could not be checked. */
+function unverifiableMessage(relPath: string, cause: unknown): string {
+  const code = (cause as NodeJS.ErrnoException | undefined)?.code;
+  return `'${relPath}' could not be verified inside the workspace${code ? ` (${code})` : ""}`;
+}
+
+/**
+ * {@link resolveInsideRootReal} for the providers that return `{ ok: false, error }` instead of throwing: an
+ * escape is `reason: "escapes"`, and a filesystem error (permissions, I/O) is `reason: "unverifiable"` whose
+ * `error` names only the root-relative path and the errno code — never the host's absolute path — with the
+ * original error in `cause` for the caller's report sink. "Could not tell" is still never answered "inside".
+ */
+export async function tryResolveInsideRootReal(root: string, relPath: string, opts: RealResolveOptions = {}): Promise<RealResolveOutcome> {
+  try {
+    const abs = await resolveInsideRootReal(root, relPath, opts);
+    return abs === null
+      ? { ok: false, reason: "escapes", error: `'${relPath}' is outside the workspace` }
+      : { ok: true, abs };
+  } catch (cause) {
+    return { ok: false, reason: "unverifiable", error: unverifiableMessage(relPath, cause), cause };
+  }
+}
+
+/** Thrown by {@link resolveInsideRootRealOrThrow} when containment could not be verified; the message carries no host path. */
+export class PathUnverifiableError extends Error {
+  constructor(readonly requestedPath: string, readonly cause: unknown) {
+    super(unverifiableMessage(requestedPath, cause));
+    this.name = "PathUnverifiableError";
+  }
 }

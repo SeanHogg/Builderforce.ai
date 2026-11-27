@@ -863,7 +863,7 @@ Paths: BF = `Builderforce.ai`, I = `builderforce-inference`, M = `builderforce-m
 
 ## 8. Security policy engines
 
-Paths: BF = `Builderforce.ai`, W = `builderforce-webcontainers`, I = `builderforce-inference`, M = `builderforce-memory`. The audit is read-only; items not opened are marked UNVERIFIED. Exploitable observations are in the gitignored local security findings file (`SEC-G011`, `SEC-G013` to `SEC-G015`, and the memory part of `SEC-G004`) and are only referenced here.
+Paths: BF = `Builderforce.ai`, W = `builderforce-webcontainers`, I = `builderforce-inference`, M = `builderforce-memory`. The audit is read-only; items not opened are marked UNVERIFIED. Exploitable observations are in the gitignored local security findings file (`SECP-G011`, `SECP-G013` to `SECP-G015`, and the memory part of `SECP-G004`) and are only referenced here.
 
 ### 8.1 Headline
 
@@ -935,16 +935,16 @@ The duplication sits around these cores:
 
 | ID | Gap | Where |
 |---|---|---|
-| SEC-G001 | Secret regexes outside `secret-redaction` | `code-shield/src/rules/secretRules.ts`, `agent-runtime/src/agents/tools/governance-audit/matchers.ts`, W `securityEvent.ts`, VS Code `modelFallbackDetail.ts` |
-| SEC-G002 | About 8 severity scales; no shared mapper | `sarif`, `SecurityAuditService.ts`, `auditDeepPass.ts`, `skill-scanner.ts`, `agent-runtime/src/security/audit.ts`, `packageReview.ts`, run-delta, Shield |
-| SEC-G003 | Shield reason codes mirrored by hand | `api/src/application/security/runtimeShieldEvent.ts`, W `shieldRules.ts` |
-| SEC-G004 | Memory has no secret redaction before storage (details in the local security findings file) | M `packages/memory/src/storage/*` (UNVERIFIED) |
-| SEC-G005 | No single dangerous-command ruleset | `exec-approvals-analysis.ts`, run-delta `rmRf.ts`, `agent-tools/src/policyGateCallKey.ts`, `dangerous-tools.ts`, `node-command-policy.ts` |
-| SEC-G006 | run-delta security rules re-implement code-shield SAST | `run-delta/src/rules/{tlsVerifyDisabled, weakCrypto, corsPermissive, cspPermissive, cookieInsecure}.ts` |
-| SEC-G007 | Three prompt-injection pattern sets | `agent-runtime/src/security/{external-content, instruction-firewall}.ts`, M `cognition/sanitize.ts` |
-| SEC-G008 | W scrubber parity test; VS Code fallback redactor | W `securityEvent.ts`, VS Code `models/modelFallbackDetail.ts` |
-| SEC-G009 | Egress has no single registry; six mechanisms | §8.2 egress row |
-| SEC-G010 | The inference host (I) has no scanner or egress policy | `I/crates/*` |
-| SEC-G011 | Shield evidence values are not redacted server-side (details in the local security findings file) | `runtimeShieldEvent.ts` |
-| SEC-G012 | code-shield rule ids are inconsistent; `obfuscated-code` is duplicated | `packages/code-shield/src/rules/*` |
-| SEC-G013–G015 | Security-sensitive defaults and coverage gaps; details in the local security findings file | — |
+| SECP-G001 | Secret regexes outside `secret-redaction` | `code-shield/src/rules/secretRules.ts`, `agent-runtime/src/agents/tools/governance-audit/matchers.ts`, W `securityEvent.ts`, VS Code `modelFallbackDetail.ts` |
+| SECP-G002 | About 8 severity scales; no shared mapper | `sarif`, `SecurityAuditService.ts`, `auditDeepPass.ts`, `skill-scanner.ts`, `agent-runtime/src/security/audit.ts`, `packageReview.ts`, run-delta, Shield |
+| SECP-G003 | Shield reason codes mirrored by hand | `api/src/application/security/runtimeShieldEvent.ts`, W `shieldRules.ts` |
+| SECP-G004 | Memory has no secret redaction before storage (details in the local security findings file) | M `packages/memory/src/storage/*` (UNVERIFIED) |
+| SECP-G005 | No single dangerous-command ruleset | `exec-approvals-analysis.ts`, run-delta `rmRf.ts`, `agent-tools/src/policyGateCallKey.ts`, `dangerous-tools.ts`, `node-command-policy.ts` |
+| SECP-G006 | run-delta security rules re-implement code-shield SAST | `run-delta/src/rules/{tlsVerifyDisabled, weakCrypto, corsPermissive, cspPermissive, cookieInsecure}.ts` |
+| SECP-G007 | Three prompt-injection pattern sets | `agent-runtime/src/security/{external-content, instruction-firewall}.ts`, M `cognition/sanitize.ts` |
+| SECP-G008 | W scrubber parity test; VS Code fallback redactor | W `securityEvent.ts`, VS Code `models/modelFallbackDetail.ts` |
+| SECP-G009 | Egress has no single registry; six mechanisms | §8.2 egress row |
+| SECP-G010 | The inference host (I) has no scanner or egress policy | `I/crates/*` |
+| SECP-G011 | Shield evidence values are not redacted server-side (details in the local security findings file) | `runtimeShieldEvent.ts` |
+| SECP-G012 | code-shield rule ids are inconsistent; `obfuscated-code` is duplicated | `packages/code-shield/src/rules/*` |
+| SECP-G013–G015 | Security-sensitive defaults and coverage gaps; details in the local security findings file | — |

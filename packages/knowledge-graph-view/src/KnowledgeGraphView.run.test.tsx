@@ -35,8 +35,8 @@ function runSource(withRuns = true, graphs = [docsFixture()]) {
     return { source, answers, push: (run: StoredReviewRun) => act(() => listeners.forEach((l) => l(run))) };
 }
 
-// The panel is titled by the folder's name.
-const drawer = () => screen.queryByRole('dialog', { name: 'docs' });
+// The panel is the drawer (an aside, not a dialog); its Run tab is titled by the folder's name.
+const drawer = () => screen.queryByTestId('kg-drawer');
 const chip = () => screen.getByTestId('kg-status-chip');
 
 async function mount(source: ReturnType<typeof runSource>['source']) {
@@ -46,7 +46,7 @@ async function mount(source: ReturnType<typeof runSource>['source']) {
 
 /** The chip opens the panel on its Runs tab when synced: open the Review tab, where a review is started. */
 const openReviewTab = async () => {
-    const dialog = await screen.findByRole('dialog', { name: 'docs' });
+    const dialog = await screen.findByTestId('kg-drawer');
     fireEvent.click(within(dialog).getByRole('tab', { name: new RegExp(`^${L.surface.run.review.tabReview}`) }));
 };
 
@@ -67,8 +67,8 @@ describe('the Reviews panel from the strip', () => {
         expect(drawer()).toBeNull();
 
         await openReviews({ screen, fireEvent });
-        const open = await screen.findByRole('dialog', { name: 'docs' });
-        expect(open.getAttribute('aria-modal')).toBe('false');
+        const open = await screen.findByTestId('kg-drawer');
+        expect(open.getAttribute('aria-modal')).not.toBe('true'); // a slide-out beside the stage, never a modal
         // Opening does not plan (RunPanel.tsx): planning walks and hashes every file, which opening the panel did not ask for.
         fireEvent.click(within(open).getByRole('tab', { name: new RegExp(`^${L.surface.run.review.tabReview}`) }));
         expect(await within(open).findByTestId('kg-review-idle')).toBeTruthy();
@@ -81,7 +81,6 @@ describe('the Reviews panel from the strip', () => {
         const { source, answers } = runSource(true, []);
         render(<div style={{ height: 600 }}><KnowledgeGraphView source={source} /></div>);
         fireEvent.click(await screen.findByRole('button', { name: L.reviewFolder }));
-        await openReviewTab();
         await screen.findByTestId('kg-review-start');
         const open = screen.getByRole('dialog');
         fireEvent.click(within(open).getByRole('button', { name: L.close }));
@@ -95,19 +94,19 @@ describe('the Reviews panel from the strip', () => {
         push(liveRun());
         push(liveRun({ id: 'run-elsewhere', root: 'elsewhere' }));
         push(liveRun());
-        const open = await screen.findByRole('dialog', { name: 'docs' });
+        const open = await screen.findByTestId('kg-drawer');
         expect(within(open).getByTestId('kg-review-steps')).toBeTruthy();
     });
 
     it('does not stop a running review when it is closed, and the chip reopens it', async () => {
         const { source } = runSource();
         await reviewRunning(source);
-        fireEvent.click(within(await screen.findByRole('dialog', { name: 'docs' })).getByRole('button', { name: L.close }));
+        fireEvent.click(within(await screen.findByTestId('kg-drawer')).getByRole('button', { name: L.close }));
         await waitFor(() => expect(drawer()).toBeNull());
         expect(chip().getAttribute('data-kind')).toBe('running');
 
         fireEvent.click(chip());
-        expect(await screen.findByRole('dialog', { name: 'docs' })).toBeTruthy();
+        expect(await screen.findByTestId('kg-drawer')).toBeTruthy();
     });
 
     it('works for a host that reviews but records no runs: the panel opens and the review runs', async () => {
