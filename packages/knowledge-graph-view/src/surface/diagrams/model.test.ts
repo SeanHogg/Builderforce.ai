@@ -95,14 +95,13 @@ describe('diagram models', () => {
     });
 
     it('selects the owning class when the scope is one of its methods', () => {
-        const diagram = sourceDiagram('classDiagram', surfaceFixture(), records, run, []);
-        expect(diagram.nodes.map((node) => node.id)).toContain(cls);
-        expect(diagram.nodes.some((node) => node.kind === 'package')).toBe(false);
+        const withUnrelatedType: SymbolRecord[] = [...records,
+            { ref: `${file}#Other@15`, parent: file, name: 'Other', kind: 'class', line: 15, exported: false }];
+        const diagram = sourceDiagram('classDiagram', surfaceFixture(), withUnrelatedType, run, []);
+        expect(diagram.nodes.map((node) => node.id)).toEqual([cls, iface]);
         expect(diagram.nodes.find((node) => node.id === cls)?.members).toEqual([{ text: 'log()', ref: run }]);
-        // Only a selected class keeps its own kind in the composite view; the old file-level fallback made every type a part.
-        const composite = sourceDiagram('compositeDiagram', surfaceFixture(), records, run, []);
-        expect(composite.nodes.find((node) => node.id === cls)?.kind).toBe('class');
-        expect(composite.nodes.find((node) => node.id === iface)?.kind).toBe('part');
+        const composite = sourceDiagram('compositeDiagram', surfaceFixture(), withUnrelatedType, run, []);
+        expect(composite.nodes.map(({ id, kind }) => ({ id, kind }))).toEqual([{ id: cls, kind: 'class' }]);
     });
 
     it('narrows C4 containers to the system of the scope file and components to its app', () => {

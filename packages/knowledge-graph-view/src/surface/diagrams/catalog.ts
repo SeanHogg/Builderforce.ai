@@ -20,8 +20,8 @@ export const DIAGRAM_IDS: readonly DiagramId[] = [
 
 /**
  * Diagrams the 3D stage already draws better than a DOM board: picking one switches the camera instead of opening a board.
- * Sequence is the stage's `sequence` camera (call-site order, depth, activation bars); the code city is the Tower, the 3D camera.
+ * Sequence is the stage's `sequence` camera (call-site order, depth, activation bars); the code city is the Tower, which `towerCameraOf` resolves among the available cameras.
  */
-export const STAGE_CAMERA_VIEWS: Partial<Record<DiagramId, ViewMode>> = {
-    sequenceDiagram: 'sequence', msc: 'sequence', codeCity: '3d',
+export const STAGE_CAMERA_VIEWS: Partial<Record<DiagramId, ViewMode | 'tower'>> = {
+    sequenceDiagram: 'sequence', msc: 'sequence', codeCity: 'tower',
 };

@@ -49,7 +49,7 @@ function DiagramBox({ node, point, flat, onOpen }: { node: DiagramNode; point: P
         transform: diamondKinds.has(node.kind) ? 'scale(.92)' : undefined,
         clipPath: diamondKinds.has(node.kind) ? 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)' : undefined,
         background: cssVar(diamondKinds.has(node.kind) ? 'accentSoft' : 'panel'), color: cssVar('text'), overflow: 'hidden', display: 'flex', flexDirection: 'column',
-        boxShadow: flat ? undefined : `0 5px 0 ${cssVar('plane')}, 4px 10px 16px color-mix(in srgb, ${cssVar('text')} 25%, transparent)`,
+        boxShadow: flat ? undefined : `0 5px 0 ${cssVar('plane')}, 4px 10px 16px ${cssVar('scrim')}`,
     }}>
         <header style={{ ...TYPE.meta, fontWeight: 700, padding: '6px 9px', margin: node.members?.length ? 0 : 'auto', textAlign: 'center', overflowWrap: 'anywhere' }}>
             {node.kind === 'interface' || node.kind === 'component' || node.kind === 'stereotype' ? <small style={{ display: 'block', color: cssVar('muted') }}>«{node.kind}»</small> : null}

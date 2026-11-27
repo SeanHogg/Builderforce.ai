@@ -1,8 +1,11 @@
-import { useMemo, useRef, useState } from 'react';
+import { useContext, useMemo, useRef, useState } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
 import { STAGE_CAMERA_VIEWS, STANDARD_VIEWS, UML_BEHAVIOR, UML_INTERACTION, UML_STRUCTURE, type DiagramId, type UmlDiagramId } from '../../surface/diagrams/catalog';
+import { FlatViewContext } from '../../surface/useFlatView';
+import { goToTowers } from '../../surface/useShowInTower';
+import { towerCameraOf } from '../../surface/towerHighlight';
 import { diagramFromFile, sourceDiagram, type Diagram } from '../../surface/diagrams/model';
 import type { Station } from '../../surface/stations';
 import { TYPE } from '../../surface/ui/type';
@@ -25,21 +28,28 @@ export function DiagramPicker(props: Props) {
     return <ProjectDiagramPicker key={props.graph.scope.rootId} {...props} />;
 }
 
-function ProjectDiagramPicker({ active, onPick, graph, records, scope, stations, flat, labels, onOpen, onCamera, cameras, onLoadSymbols }: Props) {
+function ProjectDiagramPicker({ active: requested, onPick, graph, records, scope, stations, flat, labels, onOpen, onCamera, cameras, onLoadSymbols }: Props) {
     const t = labels.surface.code;
+    // A camera-routed id is never a board: should one arrive as `active`, nothing is drawn for it.
+    const active = requested && !STAGE_CAMERA_VIEWS[requested] ? requested : null;
+    const setFlat = useContext(FlatViewContext);
     const input = useRef<HTMLInputElement>(null);
     const [imported, setImported] = useState<ReadonlyMap<string, Diagram>>(() => new Map());
     const [failed, setFailed] = useState<string | null>(null);
-    const [c4Anchor, setC4Anchor] = useState<{ level: DiagramId; ref: string } | null>(null);
-    const anchored = c4Anchor?.level === active ? c4Anchor.ref : active === 'c4Containers' || active === 'c4Components' ? null : scope;
+    const [c4Anchor, setC4Anchor] = useState<{ level: DiagramId; ref: string; scope: string | null } | null>(null);
+    // An anchor holds only under the scope it was taken in: another selection on the stage ends it.
+    const anchored = c4Anchor?.level === active && c4Anchor.scope === scope ? c4Anchor.ref : active === 'c4Containers' || active === 'c4Components' ? null : scope;
     const indexed = useMemo(() => active ? sourceDiagram(active, graph, records, anchored, stations) : null, [active, graph, records, anchored, stations]);
     const key = active ? JSON.stringify([graph.scope.rootId, active]) : null;
     const provided = key ? imported.get(key) : undefined;
     const diagram = provided ?? indexed;
-    const offered = <T extends DiagramId>(options: readonly T[]) => options.filter((option) => {
-        const mode = STAGE_CAMERA_VIEWS[option];
-        return !mode || !!onCamera && !!cameras?.includes(mode);
-    });
+    /** The camera a camera-routed id switches to, or null when the stage cannot (no switch, or no such camera). */
+    const cameraOf = (id: DiagramId): ViewMode | null => {
+        const target = STAGE_CAMERA_VIEWS[id];
+        if (!target || !onCamera) return null;
+        return target === 'tower' ? towerCameraOf(cameras) : cameras?.includes(target) ? target : null;
+    };
+    const offered = <T extends DiagramId>(options: readonly T[]) => options.filter((option) => !STAGE_CAMERA_VIEWS[option] || cameraOf(option) !== null);
     const group = (name: string, options: readonly UmlDiagramId[]) => <optgroup label={name}>
         {offered(options).map((option) => <option key={option} value={option}>{t[option]}</option>)}
     </optgroup>;
@@ -59,11 +69,16 @@ function ProjectDiagramPicker({ active, onPick, graph, records, scope, stations,
             background: cssVar('panel'), borderBottom: `1px solid ${cssVar('border')}`, ...TYPE.meta,
         }}>
             <select aria-label={t.diagramUml} value={active ?? ''} onChange={(event) => {
-                setC4Anchor(null);
                 const pick = event.currentTarget.value as DiagramId || null;
-                const mode = pick ? STAGE_CAMERA_VIEWS[pick] : undefined;
-                onPick(mode ? null : pick);
-                if (mode) onCamera?.(mode);
+                const target = pick ? STAGE_CAMERA_VIEWS[pick] : undefined;
+                setC4Anchor(null);
+                if (target) {
+                    onPick(null);
+                    if (target === 'tower') goToTowers(towerCameraOf(cameras), () => undefined, onCamera, setFlat);
+                    else if (cameras?.includes(target)) onCamera?.(target);
+                    return;
+                }
+                onPick(pick);
             }}>
                 <option value="">{t.diagramUml}</option>
                 {group(t.diagramStructure, UML_STRUCTURE)}
@@ -94,7 +109,7 @@ function ProjectDiagramPicker({ active, onPick, graph, records, scope, stations,
                 ? <DiagramView id={active} model={diagram} flat={flat} labels={labels} onOpen={(ref) => {
                     const next = C4_NEXT[active];
                     if (!next) { onOpen(ref); return; }
-                    setC4Anchor({ level: next, ref });
+                    setC4Anchor({ level: next, ref, scope });
                     if (next === 'c4Code') onLoadSymbols?.(ref);
                     onPick(next);
                 }} />

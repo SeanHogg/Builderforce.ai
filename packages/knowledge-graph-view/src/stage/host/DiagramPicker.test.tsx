@@ -22,12 +22,12 @@ const graph = { ...base, nodes: base.nodes.map((node) => ({ ...node, ...tag(path
 const stations = buildStations(graph).stations;
 const t = L.surface.code;
 
-function Harness({ start = null, project = graph, onCamera, cameras, onLoadSymbols }: {
-    start?: DiagramId | null; project?: typeof graph; onCamera?: (mode: ViewMode) => void;
+function Harness({ start = null, project = graph, scope = null, onCamera, cameras, onLoadSymbols }: {
+    start?: DiagramId | null; scope?: string | null; project?: typeof graph; onCamera?: (mode: ViewMode) => void;
     cameras?: readonly ViewMode[]; onLoadSymbols?: (ref: string) => void;
 }) {
     const [active, setActive] = useState<DiagramId | null>(start);
-    return <DiagramPicker active={active} onPick={setActive} graph={project} records={[]} scope={null} stations={stations}
+    return <DiagramPicker active={active} onPick={setActive} graph={project} records={[]} scope={scope} stations={stations}
         flat labels={L} onOpen={vi.fn()} onCamera={onCamera} cameras={cameras} onLoadSymbols={onLoadSymbols} />;
 }
 
@@ -63,6 +63,27 @@ describe('DiagramPicker C4 drill-down', () => {
         rerender(<Harness project={anotherProject} />);
         expect(screen.getByRole('button', { name: 'web' })).toBeTruthy();
         rerender(<Harness />);
+        expect(screen.getByRole('button', { name: 'web' })).toBeTruthy();
+    });
+});
+
+describe('DiagramPicker drill position', () => {
+    it('keeps the drill position through a camera pick, which closes the board', () => {
+        const onCamera = vi.fn();
+        const { container } = render(<Harness start="c4Context" onCamera={onCamera} cameras={['sequence']} />);
+        fireEvent.click(screen.getByRole('button', { name: 'srv' }));
+        expect(select().value).toBe('c4Containers');
+        fireEvent.change(select(), { target: { value: 'sequenceDiagram' } });
+        expect(onCamera).toHaveBeenCalledWith('sequence');
+        expect(select().value).toBe('');
+        expect(container.querySelector('[data-diagram-pane]')).toBeNull();
+    });
+
+    it('ends the drill position when the scope on the stage changes', () => {
+        const { rerender } = render(<Harness start="c4Context" />);
+        fireEvent.click(screen.getByRole('button', { name: 'srv' }));
+        expect(screen.queryByRole('button', { name: 'web' })).toBeNull();
+        rerender(<Harness scope="elsewhere" />);
         expect(screen.getByRole('button', { name: 'web' })).toBeTruthy();
     });
 });
