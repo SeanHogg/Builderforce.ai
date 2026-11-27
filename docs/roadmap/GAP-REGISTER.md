@@ -570,19 +570,20 @@ Source: [platform-duplication-audit.md §1](../specs/tasks/platform-duplication-
 
 | Gaps | Status |
 |---|---|
-| MCP-G001–G002 | **Partial.** Platform, Workspace, outbound HTTP, and the marketplace probe use the SDK. The private Evermind stdio client in Synapse still owns its framing and protocol revision. |
+| MCP-G001–G002 | **Resolved.** Platform, Workspace, outbound HTTP, and the marketplace probe use the official TypeScript SDK. Synapse’s private Evermind stdio client uses the official Rust SDK for framing and protocol negotiation. |
 | MCP-G003 | **Resolved.** The TypeScript relay consumers share the package's tool contract. |
-| MCP-G004–G006 | **Partial.** Shared OpenAI and Anthropic adapters, canonical Platform and Workspace names, effect classification, and a shared gate are in code. Native adapters and host-specific approvals remain. |
-| MCP-G007 | **Partial.** Platform and Workspace apply shared output limits and redaction. Memory uses the same policy when the shared package is installed. Automatic acquisition still needs the npm release. |
+| MCP-G004–G006 | **Partial.** Production converters share the OpenAI and Anthropic tool adapters, and Chrome and VS Code use the shared effect policy. Native clients request canonical names and accept saved legacy names. Older REST catalogs and host-specific approval flows remain. |
+| MCP-G007 | **Memory rollout pending.** Platform and Workspace apply shared output limits and redaction. The Memory cutover passed against the packed SDK. Staged npm version `0.1.1` needs maintainer approval, then Memory needs its frozen lockfile updated. |
 | MCP-G008–G012 | **Resolved for the implemented transports.** Memory reports its package version and binds to loopback. Agent-runtime uses the SDK and no longer advertises duplicate Platform write tools. Standard MCP calls use `arguments`. The legacy REST compatibility route still accepts its original payload. |
 | MCP-G013 | **Resolved for Platform.** The authenticated interactive profile exposes catalog-change notifications, a catalog guide resource, and a discovery prompt. Registry clients use the stateless default profile. |
 | MCP-G014–G016 | **Resolved.** The outbound client reuses sessions, marketplace review uses the shared client, and the VS Code example points to `/mcp`. |
-| MCP-G017 | **Shared model projection implemented.** TypeScript consumers share relay plumbing and catalog caching. Rust and mobile use the gateway's model tool schema, approval decision, and protected result text. Each native client uses its platform HTTP transport and supports the legacy response during rollout. |
-| MCP-G018–G019 | **Partial.** The API has a shared connector catalog with HTTP and stdio offers. VS Code reads workspace configs and imports Synapse connector launch settings through native review. Imports carry environment references for credentials. Memory uses the shared config codec when the package is installed. |
-| MCP-G020 | **Partial.** The Memory installer and Claude plugin share a launch spec. Synapse's private Evermind client still has a Rust launcher. |
-| MCP-G021 | **Workspace MCP cutover implemented.** VS Code and the headless runtime share a persisted TypeScript code-body index for `workspace__find`. Lexical search works without a model. Dense ranking can use a resident loopback Ollama embedder. Broader index migration and the native retirement benchmark remain tracked in Area 2. |
-| MCP-G022 | **Partial.** The Memory adapter supports canonical names and legacy aliases. The shared package has a release pipeline entry. Its publication and automatic acquisition by Memory still remain. Other agent memory vocabularies still exist. |
-| MCP-G023 | **Partial.** The old combined Rust catalog was removed. Platform and VS Code each deduplicate within their own scope. Coalescing live tools across hosts still requires verified server and credential identity. |
+| MCP-G017 | **Shared model projection implemented.** TypeScript consumers share relay plumbing and catalog caching. Rust and mobile use the gateway’s canonical tool schema, approval decision, and protected result text. Native HTTP transports and old-server response compatibility remain. |
+| MCP-G018 | **Resolved.** One VS Code chooser consumes the shared Platform connector catalog for HTTP setup and native stdio installation. |
+| MCP-G019 | **Memory rollout pending.** VS Code discovers VS Code, Claude Code, and Cursor configs, including the active Claude project, and imports legacy Synapse settings through native review. Local credentials stay in their host config. The Memory installer uses the shared codec in the pending release. |
+| MCP-G020 | **Resolved.** Memory’s installer and Claude plugin define the launch spec. Synapse consumes generated Windows and POSIX launch data and retains the explicit executable override. |
+| MCP-G021 | **Workspace MCP cutover implemented.** VS Code and headless runtime share the persisted TypeScript index. Both legacy `codebase_*` calls use it, and the old runtime keyword ranker and `search-index.json` writer were removed. Broader index migration and the native retirement benchmark remain tracked in Area 2. |
+| MCP-G022 | **Partial.** Memory supports canonical names and legacy call aliases. Its new default runtime awaits the public SDK release and Memory lockfile update. Markdown workspace recall and durable agent facts still have their own contracts. |
+| MCP-G023 | **Closed for Builderforce catalogs.** The combined Synapse catalog was retired. Platform and the native editor advertise independently. Combining tools from both in another client would require verified server and account identity. |
 | MCP-G024 | **Resolved.** Workflow execution uses data-provider handlers, with compatibility for saved `mcp` nodes. |
 
 Findings from the original audit:

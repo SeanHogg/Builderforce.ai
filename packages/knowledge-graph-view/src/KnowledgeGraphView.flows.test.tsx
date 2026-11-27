@@ -17,7 +17,7 @@ import type { KnowledgeGraphSource, KnowledgeSearchHit } from './types';
 afterEach(() => vi.restoreAllMocks());
 
 const search = (q: string) => {
-  const box = screen.getByRole('searchbox', { name: L.searchLabel });
+  const box = openSearch({ fireEvent }, L);
   fireEvent.change(box, { target: { value: q } });
   fireEvent.submit(box.closest('form')!);
 };

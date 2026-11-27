@@ -69,6 +69,12 @@ describe('the native MCP relay projection', () => {
     }] });
   });
 
+  it('exposes canonical names to raw REST relay clients without changing the dispatch address', async () => {
+    const response = await app().request('/v1/mcp/tools?names=canonical', {}, env);
+    const body = await response.json() as { tools: unknown[] };
+    expect(body.tools).toEqual([canonicalReadTool]);
+  });
+
   it('formats the protected reply before returning it to a native host', async () => {
     const response = await app().request('/v1/mcp/call?format=openai', {
       method: 'POST',

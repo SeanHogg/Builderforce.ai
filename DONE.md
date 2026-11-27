@@ -1,3 +1,11 @@
+## ✅ RESOLVED 2026-11-26 — Evermind MCP protocol, connector catalog, and legacy Workspace search cutovers
+
+- Synapse’s private Evermind client uses the official Rust MCP SDK. Its default launch data comes from Memory’s installer. All six Rust tests, the Synapse build check, and a live connection to the Node Memory server passed.
+- VS Code presents Platform HTTP and native stdio offers in one chooser and discovers supported host configs. The existing native review flow handles local installation.
+- Both legacy headless code-search calls use the shared Workspace index, and the runtime’s earlier keyword ranker and persistent semantic index were removed.
+- Native Platform relay clients request canonical names and accept saved aliases. Chrome and VS Code share the remote tool effect policy.
+- The [MCP gap register](docs/roadmap/GAP-REGISTER.md#mcp-consolidation-platform-agents) records pending rollout and compatibility work.
+
 ## ✅ RESOLVED 2026-11-26 — Web sessions use short-lived tokens that renew in the background (AUTH-G011, AUTH-G015)
 
 - **Decision (user):** keep bearer tokens, make them short-lived and renew them silently. Total session length is unchanged: 24 h, or 30 days with a trusted device.
