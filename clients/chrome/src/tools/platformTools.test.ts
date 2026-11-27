@@ -44,6 +44,12 @@ describe('withPlatformTools — the platform catalog beside the browser tools', 
     expect(withPlatformTools(browser, [])).toBe(browser);
   });
 
+  it('asks for approval when a platform action has no declared effect', () => {
+    const external = { ...action('external_send', false), mutates: undefined };
+    const merged = withPlatformTools(browserCatalog(), [external]);
+    expect(merged.needsConfirm({ name: external.name, args: {} })).toBe(true);
+  });
+
   it("tells Rovr's own tools from platform ones", () => {
     expect(isPlatformTool(BROWSER_TOOL.navigate)).toBe(false);
     expect(isPlatformTool(ADD_TASK_TOOL)).toBe(false);

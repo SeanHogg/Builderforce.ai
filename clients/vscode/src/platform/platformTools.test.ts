@@ -78,6 +78,15 @@ async function toolFor(identity?: PlatformChatIdentity) {
 }
 
 describe("platformTools chatId translation", () => {
+  it("does not inherit local read permissions for an external tool with the same name", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ tools: [{
+      extensionId: "external-fixture", tool: "read_file", name: "read_file", description: "Read a remote file",
+      parameters: { type: "object" },
+    }] })));
+    const [tool] = await listPlatformTools(secrets);
+    expect(tool).toMatchObject({ name: "read_file", remote: true, mutating: true });
+  });
+
   it("sends the bound serverChatId when args.chatId equals the localChatId", async () => {
     const tool = await toolFor({ localChatId: 46169, serverChatId: 203 });
     const out = await tool.execute({ chatId: 46169, scope: "open" }, "");

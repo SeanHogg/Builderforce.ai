@@ -1,3 +1,24 @@
+## ✅ RESOLVED 2026-11-26 — Web sessions use short-lived tokens that renew in the background (AUTH-G011, AUTH-G015)
+
+- **Decision (user):** keep bearer tokens, make them short-lived and renew them silently. Total session length is unchanged: 24 h, or 30 days with a trusted device.
+- **Server.**
+  - Web and workspace tokens last 15 min and carry `sat`/`sma` (session start and maximum age).
+  - `POST /api/auth/web/renew` (`renewWebSession.ts`, `tokenRotation.ts`) accepts any validly signed web token within `sat + sma` and rotates it to a new `jti`. The successor is written first, then a compare-and-set supersedes the old token and drops the cached verdicts.
+  - Presenting a superseded token within 60 s returns the same successor. Presenting it later revokes the whole session (`session_revoked`). Non-web tokens are refused.
+  - Migration 1369 adds `auth_tokens.superseded_by`. Migration 1370 extends rows already issued, so the expired-credential sweep can't remove a sleeping device's current token.
+- **Clients.**
+  - The website (`frontend/src/lib/auth/tokenRenewal.ts`) renews at 75 % of a token's life and again on focus. One tab renews at a time and the others adopt the new token.
+  - A 401 triggers one renewal and one retry; a brain-stream 401 renews in the background.
+  - The agent-runtime CLI renews its stored web token, and qa-e2e signs in once per worker.
+- **Checks.** Three Opus reviews ran. Fixed findings:
+  - the 1 h grace window that signed out sleeping laptops;
+  - workspace tokens could be renewed into web tokens;
+  - pre-deploy rows could be swept;
+  - the tab-lock race;
+  - an embed loop;
+  - swallowed errors.
+  - The api, frontend, agent-runtime and qa-e2e typechecks are clean, and the targeted tests pass (renewal 15/15). The migration guards pass. Row growth is tracked as `AUTH-G021`.
+
 ## ✅ RESOLVED 2026-11-26 — One path check, one process-tree kill, one secret detector (SHELL-G001/G002/G004/G007, SECP-G001/G011/G012, AUTH-G010; AUTH-G018 in the local findings file)
 
 - **Path containment.**

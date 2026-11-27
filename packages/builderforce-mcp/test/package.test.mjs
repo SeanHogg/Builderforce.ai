@@ -30,3 +30,20 @@ test("legacy Synapse launch settings round-trip through the VS Code config codec
   assert.match(output, /keep the comment/);
   assert.deepEqual(readMcpConfig(output, "vscode").get(connector.id), { transport: "stdio", ...connector.launch });
 });
+
+test("Claude Code local sources resolve only the selected project on Windows", () => {
+  const remote = { type: "http", url: "https://tools.example/mcp", headers: { Authorization: "Bearer ${TOKEN}" } };
+  const document = JSON.stringify({
+    mcpServers: { user: remote },
+    projects: {
+      "C:/Code/project": { mcpServers: { current: remote } },
+      "C:/Code/other": { mcpServers: { other: remote } },
+    },
+  });
+
+  assert.deepEqual([...readMcpConfig(document, "claude-code").keys()], ["user"]);
+  const local = readMcpConfig(document, "claude-code", { claudeProjectPath: "c:\\Code\\project" });
+  assert.deepEqual([...local.keys()], ["current"]);
+  assert.deepEqual(local.get("current")?.headers, remote.headers);
+  assert.equal(readMcpConfig(document, "claude-code", { claudeProjectPath: "c:\\Code\\missing" }).size, 0);
+});

@@ -36,15 +36,15 @@ type McpServerPick = vscode.QuickPickItem & (
   | { action: "local"; config: vscode.Uri }
 );
 
-type ConfigLocation = { host: McpConfigHost; segments: readonly string[] };
+type ConfigLocation = { host: McpConfigHost; segments: readonly string[]; project?: { path: string; name: string } };
 
 async function configuredMcpPicks(root: vscode.Uri, locations: readonly ConfigLocation[], sharedWorkspaceRoot = false): Promise<McpServerPick[]> {
   const decoder = new TextDecoder("utf-8");
-  const configs = await Promise.all(locations.map(async ({ host, segments }) => {
+  const configs = await Promise.all(locations.map(async ({ host, segments, project }) => {
     const config = vscode.Uri.joinPath(root, ...segments);
     try {
       const document = decoder.decode(await vscode.workspace.fs.readFile(config));
-      return { config, servers: readMcpConfig(document, host) };
+      return { config, project, servers: readMcpConfig(document, host, { claudeProjectPath: project?.path }) };
     } catch {
       return null;
     }
@@ -66,7 +66,7 @@ async function configuredMcpPicks(root: vscode.Uri, locations: readonly ConfigLo
       picks.push({
         action: "local",
         label: `${server.transport === "stdio" ? "$(terminal)" : "$(plug)"} ${name}`,
-        description: vscode.workspace.asRelativePath(file.config),
+        description: [vscode.workspace.asRelativePath(file.config), file.project?.name].filter(Boolean).join(" · "),
         config: file.config,
       });
     }
@@ -75,24 +75,28 @@ async function configuredMcpPicks(root: vscode.Uri, locations: readonly ConfigLo
 }
 
 async function localMcpPicks(): Promise<McpServerPick[]> {
+  const folders = vscode.workspace.workspaceFolders ?? [];
+  const claudeProjectConfigs = folders.map(({ uri, name }): ConfigLocation => ({
+    host: "claude-code", segments: [".claude.json"], project: { path: uri.fsPath, name },
+  }));
   const groups = await Promise.all([
-    ...(vscode.workspace.workspaceFolders ?? []).map(({ uri }) => configuredMcpPicks(uri, WORKSPACE_MCP_CONFIGS, true)),
-    configuredMcpPicks(vscode.Uri.file(homedir()), USER_MCP_CONFIGS),
+    ...folders.map(({ uri }) => configuredMcpPicks(uri, WORKSPACE_MCP_CONFIGS, true)),
+    configuredMcpPicks(vscode.Uri.file(homedir()), [...USER_MCP_CONFIGS, ...claudeProjectConfigs]),
   ]);
   return groups.flat();
 }
 
 async function browseConnectorCatalog(secrets: vscode.SecretStorage, canInstallLocally: boolean): Promise<void> {
   const catalog = await bfApi.listMcpConnectorCatalog(secrets);
-  const options = catalog.flatMap((offer) => {
-    // Offer local launch and Platform setup separately so each keeps its own credential scope.
-    const local = offer.transports.find((transport) => transport.transport === "stdio");
-    const platform = offer.transports.find((transport) => transport.transport === "http");
-    return [
-      ...(canInstallLocally && local ? [{ label: `$(terminal) ${offer.name}`, id: offer.id, transport: local }] : []),
-      ...(platform ? [{ label: `$(globe) ${offer.name}`, id: offer.id, transport: platform }] : []),
-    ];
-  });
+  // Offer local launch and Platform setup separately so each keeps its own credential scope.
+  const options = catalog.flatMap((offer) => offer.transports
+    .filter((transport) => canInstallLocally || transport.transport === "http")
+    .sort((a, b) => Number(a.transport === "http") - Number(b.transport === "http"))
+    .map((transport) => ({
+      label: `${transport.transport === "stdio" ? "$(terminal)" : "$(globe)"} ${offer.name}`,
+      id: offer.id,
+      transport,
+    })));
   const pick = await vscode.window.showQuickPick(options, { title: vscode.l10n.t("Browse MCP connectors") });
   if (!pick) return;
   if (pick.transport.transport === "http") {

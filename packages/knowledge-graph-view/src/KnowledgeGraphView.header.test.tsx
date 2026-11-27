@@ -10,6 +10,7 @@ import { counted } from './surface/plural';
 import { QUESTIONS } from './surface/questions';
 import { Toolbar } from './Toolbar';
 import { fixtureSource, surfaceFixture } from './testing';
+import { openSearch } from './testPicks';
 
 import type { KnowledgeGraphSource, SyncStatus } from './types';
 import { StageFactoryContext } from './stage/host/StageFactoryContext';

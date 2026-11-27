@@ -23,17 +23,25 @@ export async function searchWorkspace(options: SearchOptions, lexicalOnly: boole
     const files = buildNodeCapabilityProvider({ workspaceRoot: root }).repoRead!;
     const embedder = extension ? undefined : await workspaceCodeEmbedder().catch(() => undefined);
     const result = await searchWorkspaceCodeIndex({
-      root, files, query, limit, lexicalOnly, ...(rebuild ? { rebuild } : {}), waitForIndexMs: 5_000,
+      root, files, query, limit: 3 * limit, lexicalOnly, ...(rebuild ? { rebuild } : {}), waitForIndexMs: 5_000,
       ...(extension ? { extension } : {}), ...(embedder ? { embedder } : {}), ...(wasmDir ? { wasmDir } : {}),
     });
+    const filesByPath = new Map<string, { filePath: string; score: number; symbols: string[]; snippet: string }>();
+    for (const { path, score, symbol, snippet } of result.results ?? []) {
+      const existing = filesByPath.get(path);
+      if (!existing) {
+        if (filesByPath.size >= limit) continue;
+        filesByPath.set(path, { filePath: path, score, symbols: symbol ? [symbol] : [], snippet });
+      } else if (symbol && existing.symbols.length < 8 && !existing.symbols.includes(symbol)) {
+        existing.symbols.push(symbol);
+      }
+    }
     return {
       query,
       ...(result.indexing ? { indexing: true } : {}),
       ...(result.partial ? { partial: true } : {}),
       ...(result.indexedFiles !== undefined ? { indexedFiles: result.indexedFiles } : {}),
-      results: (result.results ?? []).map(({ path, score, symbol, snippet }) => ({
-        filePath: path, score, symbols: symbol ? [symbol] : [], snippet,
-      })),
+      results: [...filesByPath.values()],
     };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Workspace search failed" };

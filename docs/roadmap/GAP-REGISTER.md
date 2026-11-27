@@ -785,11 +785,10 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §7. 
 - `AUTH-G007` **Configuration names and aliases are inconsistent** across hosts. Keep one documented table and deprecate the aliases.
 - `AUTH-G008` **Error flattening is copied four times,** and Rust `CloudError` misses the nested `{error:{message,code}}` form.
 - `AUTH-G009` **The fallback when the server omits `expiresIn` differs:** 3600 s in TypeScript, 900 s in Rust.
-- `AUTH-G011` **The web has no token refresh,** so an expired token is a hard logout.
 - `AUTH-G012` **Auth-client test gaps:** Chrome `apiClient.test.ts` is 11 lines, Rust has 6 tests, agent-runtime has none.
 - `AUTH-G013` **Rust and VS Code derive the web origin from the API URL by hand.**
 - `AUTH-G014` **Not yet audited:** Chrome SettingsView sign-in, webcontainers `aiGateway`/`hostRelay`, `knowledge-client`, `provider-connect`.
-- `AUTH-G015`–`AUTH-G019` **Security-sensitive client and credential findings.** Details are in the local security findings file. `AUTH-G015` decided (user, 2026-11-26): shorter-lived web tokens with silent background renewal; queued behind the running fixes.
+- `AUTH-G016`–`AUTH-G019` **Security-sensitive client and credential findings.** Details are in the local security findings file. (`AUTH-G015` and `AUTH-G018` are resolved; see DONE.md.)
 - `AUTH-G021` **15-minute web and workspace tokens write about 2 `auth_tokens` rows every 11 minutes per active session,** each kept 7 days by the expired-credential sweep. Neon core storage was last noted at 504/512 MB.
   - Fix: a shorter sweep grace for superseded rows (`superseded_by IS NOT NULL`), keeping just enough for reuse detection, plus a row-count check on the storage dashboard.
 - `AUTH-G020` **The workspace-switch route `/api/vscode/tenants/:id/token` is VS Code-named but used by every editor host.** Alias it host-neutrally (expand/contract).

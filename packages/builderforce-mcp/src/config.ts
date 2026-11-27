@@ -40,6 +40,18 @@ function stringMap(value: unknown): Record<string, string> | undefined {
   ));
 }
 
+function claudeProjectConfig(config: Record<string, unknown>, path: string): Record<string, unknown> | undefined {
+  const projects = record(config.projects);
+  if (!projects) return;
+  if (Object.hasOwn(projects, path)) return record(projects[path]);
+  if (!/^[a-z]:[\\/]|^\\\\/i.test(path)) return;
+  // Normalize only the Windows drive and separator. Directory case may be significant.
+  const spelling = (value: string) => value.replace(/\\/g, "/").replace(/^[A-Z]:/, (drive) => drive.toLowerCase());
+  const normalized = spelling(path);
+  const matches = Object.keys(projects).filter((candidate) => spelling(candidate) === normalized);
+  if (matches.length === 1) return record(projects[matches[0]!]);
+}
+
 function launchSpec(entry: Record<string, unknown>): LaunchSpec | undefined {
   const { command, args, cwd } = entry;
   if (typeof command !== "string" || !command.trim()) return;
@@ -74,7 +86,7 @@ export function readSynapseConnectors(document: string): Array<{ id: string; nam
   });
 }
 
-function readServerMap(document: string, host: McpConfigHost): Record<string, unknown> {
+function readServerMap(document: string, host: McpConfigHost, claudeProjectPath?: string): Record<string, unknown> {
   if (!document.trim()) return {};
   const errors: ParseError[] = [];
   const value: unknown = host === "codex"
@@ -84,7 +96,14 @@ function readServerMap(document: string, host: McpConfigHost): Record<string, un
   const config = record(value);
   if (errors.length || !config) throw new Error("Invalid MCP host configuration");
   const key = HOSTS[host];
-  const map = Object.hasOwn(config, key) ? config[key] : undefined;
+  let scope = config;
+  if (host === "claude-code" && claudeProjectPath !== undefined) {
+    // Claude stores local-scope servers under the path of their owning project, beside user-scope servers.
+    const projectConfig = claudeProjectConfig(config, claudeProjectPath);
+    if (!projectConfig) return {};
+    scope = projectConfig;
+  }
+  const map = Object.hasOwn(scope, key) ? scope[key] : undefined;
   if (map === undefined) return {};
   const servers = record(map);
   if (!servers) throw new Error("Invalid MCP server map");
@@ -92,9 +111,13 @@ function readServerMap(document: string, host: McpConfigHost): Record<string, un
 }
 
 /** Read host configuration as data. Commands and environment references stay literal. */
-export function readMcpConfig(document: string, host: McpConfigHost): Map<string, ConfiguredMcpServer> {
+export function readMcpConfig(
+  document: string,
+  host: McpConfigHost,
+  options: { claudeProjectPath?: string } = {},
+): Map<string, ConfiguredMcpServer> {
   const servers = new Map<string, ConfiguredMcpServer>();
-  for (const [name, value] of Object.entries(readServerMap(document, host))) {
+  for (const [name, value] of Object.entries(readServerMap(document, host, options.claudeProjectPath))) {
     const entry = record(value);
     if (!entry || entry.disabled === true || entry.enabled === false) continue;
     if (typeof entry.command === "string" && entry.command.trim()) {

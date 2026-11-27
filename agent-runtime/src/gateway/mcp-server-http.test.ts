@@ -73,6 +73,16 @@ it("serves the SDK workspace catalog and searches only the requested file", asyn
     expect(found.result.structuredContent).toMatchObject({
       ok: true, results: [{ at: "match.ts:1-1", snippet: expect.stringContaining("return true") }],
     });
+
+    for (const name of ["codebase_search", "codebase_semantic_search"]) {
+      const alias = await call(name, { query: "exactMarker", language: ".ts" });
+      const blocks = JSON.parse(alias.result.content[0].text);
+      expect(JSON.parse(blocks[0].text)).toMatchObject({
+        indexedFiles: 2,
+        results: expect.arrayContaining([{ filePath: "match.ts", score: expect.any(Number),
+          symbols: ["exactMarker"], snippet: expect.stringContaining("return true") }]),
+      });
+    }
   } finally {
     vi.unstubAllEnvs();
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));

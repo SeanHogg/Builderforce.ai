@@ -15,7 +15,7 @@ const stubs = vi.hoisted(() => ({
 vi.mock("vscode", () => ({
   Uri: { joinPath: (...parts: string[]) => parts.join("/"), parse: (uri: string) => uri, file: (path: string) => path },
   workspace: {
-    workspaceFolders: [{ uri: "/workspace" }],
+    workspaceFolders: [{ name: "workspace", uri: { fsPath: "/workspace", toString: () => "/workspace" } }],
     asRelativePath: (uri: string) => uri.slice("/workspace/".length),
     fs: { readFile: stubs.readFile },
   },
@@ -77,10 +77,13 @@ it("opens the native MCP manager when the tenant catalog is unavailable", async 
 it("lists HTTP configurations without merging credential contexts or including their credentials in the picker", async () => {
   stubs.readFile.mockImplementation(async (uri) => {
     if (!uri.endsWith("/.mcp.json") && !uri.endsWith("/.claude.json")) throw new Error("file not found");
+    const crm = { type: "http", url: "https://crm.example/mcp", headers: { Authorization: "Bearer ${input:token}" } };
     return Buffer.from(JSON.stringify({
-      mcpServers: {
-        crm: { type: "http", url: "https://crm.example/mcp", headers: { Authorization: "Bearer ${input:token}" } },
-      },
+      mcpServers: { crm },
+      ...(uri.endsWith("/.claude.json") ? { projects: {
+        "/workspace": { mcpServers: { "private-crm": crm } },
+        "/other-project": { mcpServers: { "unrelated-crm": crm } },
+      } } : {}),
     }));
   });
   stubs.pick.mockImplementationOnce(async (picks: Array<{ action: string }>) => picks.find((pick) => pick.action === "local"));
@@ -89,7 +92,9 @@ it("lists HTTP configurations without merging credential contexts or including t
   await manageMcpServers({} as never, ensureSignedIn);
 
   const picks = stubs.pick.mock.calls[0]?.[0] as Array<{ action: string; label: string }>;
-  expect(picks.filter((pick) => pick.action === "local").map((pick) => pick.label)).toEqual(["$(plug) crm", "$(plug) crm"]);
+  expect(picks.filter((pick) => pick.action === "local").map((pick) => pick.label)).toEqual([
+    "$(plug) crm", "$(plug) crm", "$(plug) private-crm",
+  ]);
   expect(JSON.stringify(picks)).not.toContain("${input:token}");
   expect(stubs.open).toHaveBeenCalledWith("/workspace/.mcp.json");
   expect(stubs.openExternal).not.toHaveBeenCalled();

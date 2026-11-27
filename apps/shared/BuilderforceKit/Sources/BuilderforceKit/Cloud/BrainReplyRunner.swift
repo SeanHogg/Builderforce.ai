@@ -170,8 +170,8 @@ public struct BrainReplyRunner: Sendable {
         onEvent: @escaping @Sendable (BrainReplyEvent) async -> Void) async throws -> String
     {
         let aliases = loop.catalog.filter { $0.legacyName == call.name }
-        guard let tool = loop.catalog.first(where: { $0.name == call.name })
-            ?? (aliases.count == 1 ? aliases.first : nil) else {
+        let alias = aliases.count == 1 ? aliases.first : nil
+        guard let tool = loop.catalog.first(where: { $0.name == call.name }) ?? alias else {
             loop.failures += 1
             return Self.errorJSON("there is no tool named \(call.name)")
         }
