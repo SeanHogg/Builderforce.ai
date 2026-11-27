@@ -78,7 +78,16 @@ describe('completion port: observe', () => {
     });
     const out = await tasks.json<{ v: number }>({ system: 's', user: 'u', schema: { type: 'object', required: ['v'] } });
     expect(out).toEqual({ v: 1 });
-    expect(events).toEqual([expect.objectContaining({ kind: 'json', engine: 'synapse', model: 'qwen2.5-3b', outcome: 'served' })]);
+    expect(events).toEqual([expect.objectContaining({ kind: 'json', engine: 'bfi-serve', model: 'qwen2.5-3b', outcome: 'served' })]);
+  });
+
+  it('reads a saved `local/bfi-serve/…` ref as the same engine as the retired `local/synapse/…` spelling', async () => {
+    const events: OnDeviceTaskEvent[] = [];
+    const tasks = completionOnDeviceTasks({
+      complete: servedBy('local/bfi-serve/qwen2.5-3b', '{"v":1}'), available: async () => true, observe: (e) => events.push(e),
+    });
+    await tasks.json<{ v: number }>({ system: 's', user: 'u', schema: { type: 'object', required: ['v'] } });
+    expect(events).toEqual([expect.objectContaining({ engine: 'bfi-serve', model: 'qwen2.5-3b', outcome: 'served' })]);
   });
 
   it('reports a declined call when the output fails validation', async () => {

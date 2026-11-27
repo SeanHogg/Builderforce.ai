@@ -41,6 +41,7 @@
       "@builderforce/workload": ["../packages/workload/src/index.ts"],
       "@builderforce/pipeline-route": ["../packages/pipeline-route/src/index.ts"],
       "@builderforce/run-context": ["../packages/run-context/src/index.ts"],
+      "@builderforce/local-inference": ["../packages/local-inference/src/index.ts"],
       "@builderforce/spend-contract": ["../packages/spend-contract/src/index.ts"],
       "@builderforce/voice-provenance": ["../packages/voice-provenance/src/index.ts"],
       "@builderforce/cost-levers": ["../packages/cost-levers/src/index.ts"],

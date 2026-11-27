@@ -2917,6 +2917,7 @@ function matchEdit(content, oldString, newString, replaceAll, eol) {
 }
 
 // ../packages/agent-tools/src/edit.ts
+var BOM_CHAR_CODE = 65279;
 var MIN_CONTAINS_NEEDLE = 8;
 var EXCERPT_RADIUS = 3;
 var EDIT_EXCERPT_CONTEXT = 2;
@@ -2952,6 +2953,11 @@ function findNearest(content, oldString) {
 function applyStringEdit(content, oldString, newString, replaceAll = false) {
   if (typeof oldString !== "string" || oldString.length === 0) {
     return { ok: false, error: "oldString is required" };
+  }
+  const bom = content.charCodeAt(0) === BOM_CHAR_CODE ? String.fromCharCode(BOM_CHAR_CODE) : "";
+  if (bom) {
+    const inner = applyStringEdit(content.slice(1), oldString, newString, replaceAll);
+    return inner.ok && inner.content !== void 0 ? { ...inner, content: bom + inner.content } : inner;
   }
   const match = matchEdit(content, oldString, newString, replaceAll, dominantEol(content));
   if (match && "ambiguous" in match) {
@@ -3483,8 +3489,11 @@ function matchGlob(pathPosix, pattern) {
   }
   return re.test(pathPosix);
 }
+function toPosixPath(p) {
+  return p.split("\\").join("/");
+}
 function normalizeScopeDir(raw) {
-  return (raw ?? "").split("\\").join("/").trim().replace(/^\.\/+/, "").replace(/^\/+|\/+$/g, "");
+  return toPosixPath(raw ?? "").trim().replace(/^\.\/+/, "").replace(/^\/+|\/+$/g, "");
 }
 function emptyGlobListingNote(glob, scopeDir, truncated) {
   const scope = normalizeScopeDir(scopeDir);
@@ -6465,10 +6474,10 @@ var ANALYZER_VERSIONS = {
 import { hashText } from "@seanhogg/builderforce-memory/ingest";
 
 // ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
-import { CONTENT_HASH_RULE, contentHash, mediaTypeOfPath as mediaTypeOfPath2 } from "@seanhogg/builderforce-memory/knowledge";
+import { CONTENT_HASH_RULE, contentHash, mediaTypeOfPath as mediaTypeOfPath2, memoryHashCache, msToNs as msToNs2 } from "@seanhogg/builderforce-memory/knowledge";
 
-// ../packages/agent-tools/src/knowledge/statManifest.ts
-var RACY_WINDOW_NS = BigInt(2e9);
+// ../packages/agent-tools/src/knowledge/statWalk.ts
+import { EMPTY_STAT_SET, isRacy, msToNs, reusedHash, sameRow } from "@seanhogg/builderforce-memory/knowledge";
 
 // ../packages/agent-tools/src/knowledge/documents/withDocumentText.ts
 import { isDocumentPath, mediaTypeOfPath } from "@seanhogg/builderforce-memory/knowledge";
@@ -12468,6 +12477,7 @@ function windowedCap(tool, tableCap, contextWindowTokens) {
   if (isPagedReadTool(tool)) return Math.min(READ_FILE_MAX_CHARS, Math.max(tableCap, share));
   return Math.min(tableCap, share);
 }
+var READ_MAX_BYTES = 2 * 1024 * 1024;
 function isShellTool(tool) {
   return SHELL_TOOLS.has(tool);
 }
@@ -21577,6 +21587,7 @@ export {
   bracketDelta,
   changesBalance,
   describeBracketDelta,
+  toPosixPath,
   advertisedToolName,
   resolveAdvertisedToolName,
   resolveCallName,
@@ -21829,4 +21840,4 @@ export {
   computeBrainDiagnostics,
   buildBrainTriageReport
 };
-//# sourceMappingURL=chunk-A3IEKXJV.mjs.map
+//# sourceMappingURL=chunk-WVRARSU4.mjs.map

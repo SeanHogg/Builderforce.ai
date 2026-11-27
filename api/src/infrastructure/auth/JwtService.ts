@@ -44,6 +44,12 @@ export interface JwtPayload {
    * sessions and every other minter.
    */
   kid?: string;
+  /**
+   * Audience binding (`SCOPED_TOKEN_AUDIENCES`). Present only on a scoped token minted for a
+   * sibling extension; `authMiddleware` then allows it on that audience's paths only and every
+   * other verifier refuses it. Absent on every ordinary token.
+   */
+  aud?: string;
   iat:  number;
   exp:  number;
 }
@@ -106,11 +112,23 @@ function signClaims(claims: Record<string, unknown>, secret: string): Promise<st
 async function verifyClaims<T extends { exp: number }>(
   token: string,
   secret: string,
-  options?: { nowSeconds?: number },
+  options?: { nowSeconds?: number; allowAudience?: boolean },
 ): Promise<T> {
-  const verdict = await verifyHs256<T>(token, requireSecret(secret), options);
+  const verdict = await verifyHs256<T>(token, requireSecret(secret), { nowSeconds: options?.nowSeconds });
   if (!verdict.ok) throw new Error(FAILURE_MESSAGE[verdict.reason]);
+  // DENY BY DEFAULT (SEC-SYN-001): an audience-bound (scoped) token is refused by every
+  // verifier unless the caller opts in. Only authMiddleware opts in, and then enforces the
+  // audience's method + path list.
+  if (!options?.allowAudience && hasAudience(verdict.claims)) throw new Error(AUDIENCE_REFUSED_MESSAGE);
   return verdict.claims;
+}
+
+/** Thrown message when a scoped (`aud`) token reaches a verifier that did not opt in. */
+export const AUDIENCE_REFUSED_MESSAGE = 'Token audience is not valid here';
+
+function hasAudience(claims: object): boolean {
+  const aud = (claims as { aud?: unknown }).aud;
+  return aud !== undefined && aud !== null;
 }
 
 /** Sign a claim set that is not one of this file's own token types. */
@@ -148,8 +166,12 @@ export async function signJwt(
  * Verifies and decodes a JWT.
  * Throws if the signature is invalid or the token is expired.
  */
-export async function verifyJwt(token: string, secret: string): Promise<JwtPayload> {
-  return verifyClaims<JwtPayload>(token, secret);
+export async function verifyJwt(
+  token: string,
+  secret: string,
+  options?: { allowAudience?: boolean },
+): Promise<JwtPayload> {
+  return verifyClaims<JwtPayload>(token, secret, options);
 }
 
 // ---------------------------------------------------------------------------

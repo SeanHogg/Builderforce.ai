@@ -22,7 +22,7 @@ import type { FetchLike } from './probe.js';
 import type { LocalEndpoint, LocalRuntimeId } from './runtimes.js';
 
 /** Tier 3's engine preference — our engines first, a third-party server last. */
-export const LOGPROB_ENGINE_ORDER: readonly LocalRuntimeId[] = ['synapse', 'webllm', 'ollama'];
+export const LOGPROB_ENGINE_ORDER: readonly LocalRuntimeId[] = ['bfi-serve', 'webllm', 'ollama'];
 
 const CODES = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 

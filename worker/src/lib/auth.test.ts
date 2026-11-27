@@ -119,6 +119,13 @@ describe('requireAuth', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('401s an audience-bound (scoped) token without asking the api (SEC-SYN-001)', async () => {
+    const res = await request(env, await bearer({ sub: 'u1', exp: FUTURE, jti: 'j1', aud: 'spawn' }));
+    expect(res.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect((await request(env, await bearer({ sub: 'u1', exp: FUTURE, aud: 'spawn' }))).status).toBe(401);
+  });
+
   it('admits a token without a jti on its signature alone, as the api does for machine tokens', async () => {
     const res = await request(env, await bearer({ sub: 'agentHost:5', exp: FUTURE }));
     expect(res.status).toBe(200);

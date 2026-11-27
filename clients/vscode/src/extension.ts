@@ -26,7 +26,8 @@ import { watchWorkspaceSymbols } from "./workspace/workspaceSymbolWatch";
 import { workspaceSymbolIndex } from "./workspace/workspaceSymbols";
 import { activateLocalLevers } from "./models/localLevers";
 import { registerWorkspaceMcp } from "./workspace/registerWorkspaceMcp";
-import { getModels, getWebBaseUrl, getKimiCodeUnavailableReason, getLocalModelsConfig, SECRET_KEY, invalidateKimiInstallMemo } from "./gateway/gateway";
+import { createBuilderforceApi, type BuilderforceApi } from "./api/builderforceApi";
+import { getBaseUrl, getModels, getWebBaseUrl, getKimiCodeUnavailableReason, getLocalModelsConfig, SECRET_KEY, invalidateKimiInstallMemo } from "./gateway/gateway";
 import { clearPersonalityBlockCache } from "./memory/personalityLimbic";
 import { listLocalModels, localModelOptions, type LocalModel } from "./models/localModels";
 import { resolveModelRoute, routeNeedsLocalModel, routeNeedsSpecificModel, routeRequiresSignIn } from "./models/modelRouting";
@@ -149,7 +150,7 @@ let diagnostics: DiagnosticsController | undefined;
 /** The Inbox view's Meetings group (upcoming/live video calls); refreshed on auth change. */
 let meetings: MeetingsTreeProvider | undefined;
 
-export function activate(context: vscode.ExtensionContext): void {
+export function activate(context: vscode.ExtensionContext): BuilderforceApi {
   // The ship-gate reviewer's OD-1 auto-switch reads the model catalog from SecretStorage;
   // hand it the storage now (logic lives in verify/editorShipPorts.ts).
   setShipCatalogSecrets(context.secrets);
@@ -822,6 +823,14 @@ export function activate(context: vscode.ExtensionContext): void {
     lastAssignedPoll = Date.now();
     void pollAssignedTasks(context, projects);
   }));
+  const api = createBuilderforceApi({
+    getBaseUrl,
+    getWebUrl: getWebBaseUrl,
+    isSignedIn: async () => Boolean(await context.secrets.get(SECRET_KEY)),
+    onDidChangeSessions: vscode.authentication.onDidChangeSessions,
+  });
+  context.subscriptions.push(api);
+  return api;
 }
 
 async function heartbeat(context: vscode.ExtensionContext): Promise<void> {

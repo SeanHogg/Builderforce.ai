@@ -17,10 +17,10 @@ import {
  */
 
 const SYNAPSE: LocalRuntimeProbe = {
-  provider: 'synapse',
+  provider: 'bfi-serve',
   endpoint: { baseUrl: 'http://127.0.0.1:11435', token: 'k' },
   reachable: true,
-  models: [{ ref: 'local/synapse/qwen3-8b', provider: 'synapse', model: 'qwen3-8b', tools: true }],
+  models: [{ ref: 'local/bfi-serve/qwen3-8b', provider: 'bfi-serve', model: 'qwen3-8b', tools: true }],
 };
 const OLLAMA: LocalRuntimeProbe = {
   provider: 'ollama',
@@ -59,13 +59,13 @@ describe('localFirstPlan', () => {
     ]);
     expect(
       refs(localFirstPlan({ probes: [SYNAPSE, BFI], workload: CHAT, cloud: { model: 'x' }, maxLocalAttempts: 3 })),
-    ).toEqual(['local/bfi/bonsai', 'local/synapse/qwen3-8b', 'cloud:x']);
+    ).toEqual(['local/bfi/bonsai', 'local/bfi-serve/qwen3-8b', 'cloud:x']);
   });
 
   it('tries a third-party server (Ollama) last — after our engines, but still locally', () => {
     expect(refs(localFirstPlan({ probes: [OLLAMA], workload: CHAT, cloud: {} }))).toEqual(['local/ollama/gemma:2b', 'cloud:auto']);
     expect(refs(localFirstPlan({ probes: [OLLAMA, SYNAPSE], workload: TOOL_TURN, cloud: {}, maxLocalAttempts: 5 }))).toEqual([
-      'local/synapse/qwen3-8b',
+      'local/bfi-serve/qwen3-8b',
       'local/ollama/qwen3:8b',
       'cloud:auto',
     ]);
@@ -86,8 +86,8 @@ describe('localFirstPlan', () => {
     expect(refs(localFirstPlan({ probes: [SYNAPSE, webllm, BFI], workload: TOOL_TURN, cloud: null }))).toEqual([
       'local/webllm/hermes',
     ]);
-    expect(refs(localFirstPlan({ probes: [SYNAPSE, webllm, BFI], workload: TOOL_TURN, cloud: null, preferred: 'local/synapse/qwen3-8b' }))).toEqual([
-      'local/synapse/qwen3-8b',
+    expect(refs(localFirstPlan({ probes: [SYNAPSE, webllm, BFI], workload: TOOL_TURN, cloud: null, preferred: 'local/bfi-serve/qwen3-8b' }))).toEqual([
+      'local/bfi-serve/qwen3-8b',
     ]);
   });
 
@@ -110,8 +110,8 @@ describe('localFirstPlan', () => {
 
   it('honours a preferred local ref when it is capable', () => {
     expect(
-      refs(localFirstPlan({ probes: [SYNAPSE, BFI], workload: CHAT, cloud: {}, preferred: 'local/synapse/qwen3-8b' })),
-    ).toEqual(['local/synapse/qwen3-8b', 'cloud:auto']);
+      refs(localFirstPlan({ probes: [SYNAPSE, BFI], workload: CHAT, cloud: {}, preferred: 'local/bfi-serve/qwen3-8b' })),
+    ).toEqual(['local/bfi-serve/qwen3-8b', 'cloud:auto']);
   });
 
   it("takes the browser's built-in model for a chat turn, after the installed runtimes", () => {
@@ -120,7 +120,7 @@ describe('localFirstPlan', () => {
       'cloud:auto',
     ]);
     expect(refs(localFirstPlan({ probes: [BROWSER, SYNAPSE], workload: CHAT, cloud: {} }))).toEqual([
-      'local/synapse/qwen3-8b',
+      'local/bfi-serve/qwen3-8b',
       'cloud:auto',
     ]);
   });
@@ -162,7 +162,7 @@ describe('localFirstPlan', () => {
   it('tries a connected account after the device and before the cloud', () => {
     const kimi = { ref: 'local/kimi-code/k3', provider: 'kimi-code' as const, model: 'k3', endpoint: { baseUrl: 'https://api.kimi.ai/coding/v1' } };
     expect(refs(localFirstPlan({ probes: [SYNAPSE], accounts: [kimi], workload: TOOL_TURN, cloud: {} }))).toEqual([
-      'local/synapse/qwen3-8b',
+      'local/bfi-serve/qwen3-8b',
       'local/kimi-code/k3',
       'cloud:auto',
     ]);
@@ -176,7 +176,7 @@ describe('localFirstPlan', () => {
     const lead = { ref: 'local/kimi-code/k3', provider: 'kimi-code' as const, model: 'k3', endpoint: { baseUrl: 'https://a' }, placement: 'lead' as const };
     const trail = { ref: 'local/kimi-code/kimi-for-coding', provider: 'kimi-code' as const, model: 'kimi-for-coding', endpoint: { baseUrl: 'https://b' }, placement: 'trail' as const };
     const plan = localFirstPlan({ probes: [SYNAPSE], accounts: [trail, lead], workload: TOOL_TURN, cloud: {} });
-    expect(refs(plan)).toEqual(['local/synapse/qwen3-8b', 'local/kimi-code/k3', 'cloud:auto', 'local/kimi-code/kimi-for-coding']);
+    expect(refs(plan)).toEqual(['local/bfi-serve/qwen3-8b', 'local/kimi-code/k3', 'cloud:auto', 'local/kimi-code/kimi-for-coding']);
     expect(plan.some((a) => 'placement' in a)).toBe(false);
   });
 
@@ -190,7 +190,7 @@ describe('localFirstPlan', () => {
 
     it('device → lead → cloud over the other accounts (byo_pool) → trail → cloud as given', () => {
       const plan = localFirstPlan({ probes: [SYNAPSE], accounts: [trail, lead], workload: TOOL_TURN, cloud: {}, accountFirst: true });
-      expect(legs(plan)).toEqual(['local/synapse/qwen3-8b', 'local/kimi-code/k3', 'cloud:byo_pool', 'local/kimi-code/kimi-for-coding', 'cloud:call']);
+      expect(legs(plan)).toEqual(['local/bfi-serve/qwen3-8b', 'local/kimi-code/k3', 'cloud:byo_pool', 'local/kimi-code/kimi-for-coding', 'cloud:call']);
       // The accounts-only leg names no model: it is the tenant's accounts, not a pick.
       expect(plan[2]).toEqual({ kind: 'cloud', routingMode: 'byo_pool' });
     });
@@ -215,7 +215,7 @@ describe('localCatalogView', () => {
   const view = localCatalogView(base);
 
   it('makes an on-device ref local, free and its own vendor', () => {
-    expect(residencyOf(view, 'local/synapse/qwen3-8b')).toBe('local');
+    expect(residencyOf(view, 'local/bfi-serve/qwen3-8b')).toBe('local');
     expect(view.tierOf('local/ollama/qwen3:8b')).toBe('FREE');
     expect(view.vendorOf('local/ollama/qwen3:8b')).toBe('local/ollama');
     expect(view.priceOf?.('local/ollama/qwen3:8b')).toBeUndefined();

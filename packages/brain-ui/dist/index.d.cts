@@ -3709,7 +3709,7 @@ declare function chatDiagnosticsReads(adapter: ChatDiagnosticsReadAdapter, chatI
 type EvermindMode = 'connected' | 'offline-frozen';
 /** Which surface renders the console — stamped into the diagnostics export, because each
  *  fails differently and "which one was this?" is the first question of a pasted report. */
-type EvermindHost = 'web' | 'vscode' | 'synapse';
+type EvermindHost = 'web' | 'vscode';
 /** One inspectable contribution the coordinator merged into a version. */
 interface EvermindRecentEntry {
     /** Stable unique id — targets a specific learned memory (Validate highlight / detail). */
@@ -4340,7 +4340,7 @@ declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projec
 /**
  * The Evermind console's REST adapter — ONE implementation of the gateway calls behind
  * {@link EvermindConsoleAdapter}, for every host that talks to `/api/projects/:id/evermind/*`
- * with an authenticated `request` (the VS Code sidebar's bearer fetch, Synapse's signed-in
+ * with an authenticated `request` (the VS Code sidebar's bearer fetch, a signed-in web
  * session). Before this, the VS Code webview held the only copy inline, and a second host
  * would have had to restate every path, method and response unwrap beside it.
  *
@@ -4367,7 +4367,7 @@ type EvermindRequest = <T>(path: string, init?: {
  * What a host read from its local memory source for an import: the learnable entries,
  * each tagged with the source it came from. A JSON snapshot yields one shared `path`; a
  * Claude Code memory FOLDER yields one path per fact; a store with no files of its own
- * (Synapse's memory server) leaves `path` off every entry and the import falls back to
+ * (a memory server) leaves `path` off every entry and the import falls back to
  * the picked `path`. `null` = the person cancelled.
  */
 interface PickedMemory {

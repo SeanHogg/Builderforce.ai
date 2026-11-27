@@ -8,7 +8,7 @@
  * A declined or replaced call books nothing here: no model ran on this device for it.
  */
 
-import { formatLocalModelRef } from '@builderforce/local-inference';
+import { formatLocalModelRef, normalizeLocalRuntimeId } from '@builderforce/local-inference';
 import type { OnDeviceObserver } from '../onDevice/onDeviceTasks';
 import type { RunUsageLedger } from './usageLedger';
 
@@ -20,10 +20,12 @@ export function utilityUsageObserver(
 ): OnDeviceObserver {
   return (event) => {
     if (event.outcome !== 'served' || !event.engine || !event.model) return;
+    const runtime = normalizeLocalRuntimeId(event.engine);
+    if (!runtime) return;
     void ledger.record({
       chatId: run.chatId,
       runKey: run.runKey,
-      model: formatLocalModelRef(event.engine, event.model),
+      model: formatLocalModelRef(runtime, event.model),
       route: 'local',
       role: 'utility',
       usage: { prompt: event.promptTokens ?? 0, completion: event.completionTokens ?? 0 },

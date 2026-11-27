@@ -1557,5 +1557,6 @@
   "\"{0}\" is not a domain of the proposed layout, so nothing was moved.": "« {0} » n'est pas un domaine de la disposition proposée, rien n'a donc été déplacé.",
   "None of the chosen domains has a file to move.": "Aucun des domaines choisis n'a de fichier à déplacer.",
   "That is {0} files to move; the limit is {1}, so nothing was moved.": "Cela fait {0} fichiers à déplacer ; la limite est {1}, rien n'a donc été déplacé.",
-  "Review this folder first: there is no graph to organize from.": "Révisez d'abord ce dossier : il n'y a pas de graphe pour l'organiser."
+  "Review this folder first: there is no graph to organize from.": "Révisez d'abord ce dossier : il n'y a pas de graphe pour l'organiser.",
+  "Could not get a BuilderForce session for the requested scope.": "Impossible d'obtenir une session BuilderForce pour la portée demandée."
 }

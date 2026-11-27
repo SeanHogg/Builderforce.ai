@@ -84,8 +84,9 @@ export function invalidateKimiInstallMemo(): void {
  * Unlike Ollama and FreeToken it has no fixed port — it starts at 11434 and walks upward
  * when Ollama holds it — so it is DISCOVERED, the way Kimi Code is:
  *
- *  1. the `builderforce.localModels.synapseUrl` setting, when set (a bfi on another
- *     machine, or a non-default bind);
+ *  1. the `builderforce.localModels.bfiServeUrl` setting, when set (a bfi on another
+ *     machine, or a non-default bind) — else the deprecated `localModels.synapseUrl`,
+ *     which older installs still carry (INF-G019 drops the fallback);
  *  2. bfi's own announcement, `~/.builderforce/bfi.json`, written by `bfi serve`.
  *
  * The api key comes from discovery even when the URL comes from the setting, as long as
@@ -131,7 +132,9 @@ export function getLocalModelsConfig(): LocalModelsConfig {
   //     (endpoint + the tenant's chosen model order; the token is resolved per request).
   // A machine with neither contributes no endpoint and no rows.
   const kimi = kimiSource();
-  const synapse = resolveBfiServeEndpoint(cfg.get<string>("localModels.synapseUrl") ?? "");
+  const bfiServe = resolveBfiServeEndpoint(
+    cfg.get<string>("localModels.bfiServeUrl") || cfg.get<string>("localModels.synapseUrl") || "",
+  );
   return {
     enabled: cfg.get<boolean>("localModels.enabled") === true,
     // Default ON once local inference is enabled: "local first, failover to cloud" is
@@ -146,7 +149,7 @@ export function getLocalModelsConfig(): LocalModelsConfig {
       // {@link authorizeLocalEndpoint}. The happy side effect is that the credential never
       // sits inside a config object that gets passed around and logged.
       ...(kimi ? { "kimi-code": { baseUrl: kimi.baseUrl } } : {}),
-      ...(synapse ? { synapse } : {}),
+      ...(bfiServe ? { "bfi-serve": bfiServe } : {}),
     },
     ...(kimi ? { kimiCodeModels: kimi.models } : {}),
   };

@@ -9,9 +9,15 @@ describe('utilityUsageObserver', () => {
     utilityUsageObserver({ record }, run)({ kind: 'summarize', engine: 'synapse', model: 'qwen', outcome: 'served', ms: 5, promptTokens: 120, completionTokens: 30 });
     expect(record).toHaveBeenCalledTimes(1);
     expect(record).toHaveBeenCalledWith({
-      chatId: 7, runKey: 7, model: 'local/synapse/qwen', route: 'local', role: 'utility',
+      chatId: 7, runKey: 7, model: 'local/bfi-serve/qwen', route: 'local', role: 'utility',
       usage: { prompt: 120, completion: 30 }, mode: 'chat',
     });
+  });
+
+  it('books the current engine id as itself (the retired `synapse` above maps onto it)', () => {
+    const record = vi.fn(async () => undefined);
+    utilityUsageObserver({ record }, run)({ kind: 'summarize', engine: 'bfi-serve', model: 'qwen', outcome: 'served', ms: 5, promptTokens: 1, completionTokens: 1 });
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ model: 'local/bfi-serve/qwen' }));
   });
 
   it('books nothing for a declined or replaced call', () => {

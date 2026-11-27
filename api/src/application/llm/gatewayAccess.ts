@@ -248,7 +248,9 @@ export async function resolveBearerTenantId(c: Context<HonoEnv>): Promise<number
       // the key's tenant here (the route's own auth then returns the 403).
       return resolveKeyActingTenant(c, key).then((acting) => acting.tenantId, () => Number(key.tenantId));
     }
-    const payload = await verifyJwt(token, c.env.JWT_SECRET);
+    // `allowAudience`: a scoped (`aud`) token must still be throttled under its tenant. This
+    // only SELECTS the tenant to rate-limit; it grants no access (authMiddleware enforces that).
+    const payload = await verifyJwt(token, c.env.JWT_SECRET, { allowAudience: true });
     return typeof payload.tid === 'number' ? payload.tid : null;
   } catch {
     return null;

@@ -15,6 +15,8 @@ import {
   localModelsUrl,
   matchLocalChatEndpoint,
   normalizeLocalBaseUrl,
+  normalizeLocalRuntimeId,
+  canonicalLocalModelRef,
   parseBfiDiscovery,
   parseLocalModelRef,
   probeLocalRuntimes,
@@ -34,9 +36,9 @@ const json = (body: unknown, status = 200): Response => new Response(JSON.string
 
 describe('registry', () => {
   it('lists every runtime once, on-device engines first', () => {
-    expect(LOCAL_RUNTIME_IDS).toEqual(['synapse', 'ollama', 'freetoken', 'bfi', 'webllm', 'browser', 'kimi-code']);
+    expect(LOCAL_RUNTIME_IDS).toEqual(['bfi-serve', 'ollama', 'freetoken', 'bfi', 'webllm', 'browser', 'kimi-code']);
     expect(LOCAL_RUNTIMES.filter((r) => r.onDevice).map((r) => r.id)).toEqual([
-      'synapse',
+      'bfi-serve',
       'ollama',
       'freetoken',
       'bfi',
@@ -47,7 +49,7 @@ describe('registry', () => {
 
   it('ranks our engines first and a third-party server last for automatic local-first', () => {
     const ranked = LOCAL_RUNTIMES.filter((r) => r.onDevice).sort((a, b) => a.automaticRank - b.automaticRank);
-    expect(ranked.map((r) => r.id)).toEqual(['webllm', 'bfi', 'synapse', 'browser', 'ollama', 'freetoken']);
+    expect(ranked.map((r) => r.id)).toEqual(['webllm', 'bfi', 'bfi-serve', 'browser', 'ollama', 'freetoken']);
   });
 
   it('lets only bfi fall back to the host (its wasm has a CPU backend), and only as a fallback', () => {
@@ -57,7 +59,7 @@ describe('registry', () => {
 
   it('marks the in-page engines as reached by the page, never over HTTP', () => {
     expect(LOCAL_RUNTIMES.filter((r) => r.reach === 'page').map((r) => r.id)).toEqual(['bfi', 'webllm', 'browser']);
-    expect(HTTP_LOCAL_RUNTIMES.map((r) => r.id)).toEqual(['synapse', 'ollama', 'freetoken', 'kimi-code']);
+    expect(HTTP_LOCAL_RUNTIMES.map((r) => r.id)).toEqual(['bfi-serve', 'ollama', 'freetoken', 'kimi-code']);
     expect(LOCAL_RUNTIMES.find((r) => r.id === 'browser')).toMatchObject({
       defaultBaseUrl: BROWSER_ENGINE_BASE_URL,
       tools: 'unknown',
@@ -76,7 +78,7 @@ describe('registry', () => {
 
   it('names runtimes with brand tokens', () => {
     expect(Object.fromEntries(LOCAL_RUNTIMES.map((r) => [r.id, r.label]))).toEqual({
-      synapse: 'Synapse',
+      'bfi-serve': 'Synapse',
       ollama: 'Ollama',
       freetoken: 'FreeToken',
       bfi: 'Builderforce engine',
@@ -87,13 +89,23 @@ describe('registry', () => {
   });
 });
 
+describe('normalizeLocalRuntimeId', () => {
+  it('passes a current id through, maps the retired `synapse` onto `bfi-serve`, and refuses the rest', () => {
+    for (const id of LOCAL_RUNTIME_IDS) expect(normalizeLocalRuntimeId(id)).toBe(id);
+    expect(normalizeLocalRuntimeId('synapse')).toBe('bfi-serve');
+    expect(normalizeLocalRuntimeId('lmstudio')).toBeUndefined();
+    expect(normalizeLocalRuntimeId('')).toBeUndefined();
+    expect(normalizeLocalRuntimeId('toString')).toBeUndefined();
+  });
+});
+
 describe('local model refs', () => {
   it('round-trips plain, Synapse and Ollama ids', () => {
     expect(parseLocalModelRef(formatLocalModelRef('freetoken', 'gpt-oss-20b'))).toEqual({
       provider: 'freetoken',
       model: 'gpt-oss-20b',
     });
-    expect(formatLocalModelRef('synapse', 'qwen3-8b')).toBe('local/synapse/qwen3-8b');
+    expect(formatLocalModelRef('bfi-serve', 'qwen3-8b')).toBe('local/bfi-serve/qwen3-8b');
     expect(parseLocalModelRef(formatLocalModelRef('ollama', 'hf.co/user/repo:q4_K_M'))).toEqual({
       provider: 'ollama',
       model: 'hf.co/user/repo:q4_K_M',
@@ -113,6 +125,16 @@ describe('local model refs', () => {
     expect(parseLocalModelRef(`local/ollama/${hfId}`)).toEqual({ provider: 'ollama', model: hfId });
     // A local ref, so the router must price it at zero rather than check a plan for it.
     expect(isLocalModelRef(`local/ollama/${hfId}`)).toBe(true);
+  });
+
+  it('reads the retired `local/synapse/…` spelling as `bfi-serve`, and canonicalizes it', () => {
+    expect(parseLocalModelRef('local/synapse/qwen3-8b')).toEqual({ provider: 'bfi-serve', model: 'qwen3-8b' });
+    expect(parseLocalModelRef('local/bfi-serve/qwen3-8b')).toEqual({ provider: 'bfi-serve', model: 'qwen3-8b' });
+    expect(isLocalModelRef('local/synapse/qwen3-8b')).toBe(true);
+    expect(canonicalLocalModelRef('local/synapse/qwen3-8b')).toBe('local/bfi-serve/qwen3-8b');
+    expect(canonicalLocalModelRef('local/ollama/x')).toBe('local/ollama/x');
+    expect(canonicalLocalModelRef('anthropic/claude-sonnet-4')).toBe('anthropic/claude-sonnet-4');
+    expect(canonicalLocalModelRef(undefined)).toBeUndefined();
   });
 
   it('rejects anything that is not a local ref', () => {
@@ -151,11 +173,11 @@ describe('endpoint URLs', () => {
   it('fences a proxy to exactly the configured chat routes, with their credential', () => {
     const endpoints = {
       ollama: { baseUrl: 'http://127.0.0.1:11434' },
-      synapse: { baseUrl: 'http://127.0.0.1:11435/v1', token: 'bfi-key' },
+      'bfi-serve': { baseUrl: 'http://127.0.0.1:11435/v1', token: 'bfi-key' },
       freetoken: { baseUrl: '' },
     };
     expect(matchLocalChatEndpoint(endpoints, 'http://127.0.0.1:11435/v1/chat/completions')).toEqual({
-      provider: 'synapse',
+      provider: 'bfi-serve',
       endpoint: { baseUrl: 'http://127.0.0.1:11435/v1', token: 'bfi-key' },
     });
     for (const url of [
@@ -201,18 +223,18 @@ describe('probeLocalRuntimes', () => {
       return json({ data: [{ id: 'qwen3-8b', owned_by: 'bfi' }, { id: 42 }] });
     });
     const probes = await probeLocalRuntimes(fetchImpl, {
-      synapse: { baseUrl: 'http://127.0.0.1:11435/v1', token: 'desk' },
+      'bfi-serve': { baseUrl: 'http://127.0.0.1:11435/v1', token: 'desk' },
       ollama: { baseUrl: '' },
       'kimi-code': { baseUrl: 'https://api.kimi.com/coding/v1' },
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(probes).toEqual([
       {
-        provider: 'synapse',
+        provider: 'bfi-serve',
         endpoint: { baseUrl: 'http://127.0.0.1:11435/v1', token: 'desk' },
         reachable: true,
         // bfi grammar-constrains tools for every model it serves.
-        models: [{ ref: 'local/synapse/qwen3-8b', provider: 'synapse', model: 'qwen3-8b', tools: true }],
+        models: [{ ref: 'local/bfi-serve/qwen3-8b', provider: 'bfi-serve', model: 'qwen3-8b', tools: true }],
       },
     ]);
   });
@@ -233,10 +255,10 @@ describe('probeLocalRuntimes', () => {
     const probes = await probeLocalRuntimes(fetchImpl, {
       ollama: { baseUrl: 'http://127.0.0.1:11434' },
       freetoken: { baseUrl: 'http://127.0.0.1:1919' },
-      synapse: { baseUrl: 'http://127.0.0.1:2000' },
+      'bfi-serve': { baseUrl: 'http://127.0.0.1:2000' },
     });
     expect(probes.map((p) => [p.provider, p.reachable, p.models.length])).toEqual([
-      ['synapse', false, 0],
+      ['bfi-serve', false, 0],
       ['ollama', false, 0],
       ['freetoken', false, 0],
     ]);
@@ -278,9 +300,9 @@ describe('probeLocalRuntimes', () => {
     const fetchImpl = vi.fn<FetchLike>(async () => json({ data: [{ id: 'qwen3-8b', owned_by: 'bfi' }] }));
     const both = await probeLocalRuntimes(fetchImpl, {
       ollama: { baseUrl: 'http://127.0.0.1:11434' },
-      synapse: { baseUrl: 'http://127.0.0.1:11434' },
+      'bfi-serve': { baseUrl: 'http://127.0.0.1:11434' },
     });
-    expect(both.flatMap((p) => p.models.map((m) => m.ref))).toEqual(['local/synapse/qwen3-8b']);
+    expect(both.flatMap((p) => p.models.map((m) => m.ref))).toEqual(['local/bfi-serve/qwen3-8b']);
     // Synapse not configured (e.g. a browser that cannot read bfi.json): still servable.
     const ollamaOnly = await probeLocalRuntimes(fetchImpl, { ollama: { baseUrl: 'http://127.0.0.1:11434' } });
     expect(ollamaOnly.flatMap((p) => p.models.map((m) => m.ref))).toEqual(['local/ollama/qwen3-8b']);

@@ -8550,7 +8550,7 @@ var MAX_OUTPUT_CHARS = 1200;
 var MAX_EXCERPT_CHARS = 400;
 var MAX_RECENT = 10;
 var MAX_FINDINGS = 20;
-var SURFACE = { web: "web console", vscode: "VS Code sidebar", synapse: "Synapse desktop" };
+var SURFACE = { web: "web console", vscode: "VS Code sidebar" };
 function clamp(text, max) {
   const s = text.trim();
   if (s.length <= max) return s;

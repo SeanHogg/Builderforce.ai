@@ -13,6 +13,8 @@ import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import type { TransitionActorInput } from '../../application/task/taskLifecycle';
 import { updateRequestScope } from '../../application/shared/requestScope';
 import { isDeviceClient } from '@builderforce/creation-canvas-contract';
+import { audienceAllowsPath } from '../../application/auth/scopedTokenAudiences';
+import { resolveEditorKeySession } from '../../application/llm/gatewayAccess';
 
 /**
  * JWT authentication middleware.
@@ -71,15 +73,31 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
 
   let payload;
   try {
-    payload = await verifyJwt(token, c.env.JWT_SECRET);
+    // The ONLY verifier call that opts in to scoped (`aud`) tokens; every other verifier
+    // refuses them (SEC-SYN-001).
+    payload = await verifyJwt(token, c.env.JWT_SECRET, { allowAudience: true });
   } catch {
     throw new UnauthorizedError('Invalid or expired token');
+  }
+
+  // An audience-bound (scoped) token reaches only the (method, path) pairs its audience lists.
+  // Checked before any read: a token that may not be here should cost nothing. A token
+  // without `aud` skips this entirely.
+  if (payload.aud != null && !audienceAllowsPath(String(payload.aud), c.req.method, c.req.path)) {
+    return c.json({ error: 'This token is not valid for this endpoint', code: 'token_audience_forbidden' }, 403);
   }
 
   // ONE connection for the whole request — later middleware (requirePermission)
   // and route handlers read it off the context instead of opening their own.
   const db = buildDatabase(c.env);
   c.set('db', db);
+
+  // A scoped token minted from an editor session carries that session's key id: revoking the
+  // key (including VS Code sign-out) must kill every scoped copy of it, not just future mints.
+  if (payload.aud != null && payload.kid) {
+    const key = await resolveEditorKeySession(db, payload.kid, payload.sub);
+    if (!key.valid) return c.json({ error: 'Invalid or revoked API key' }, 401);
+  }
 
   // Machine tokens (sub `agentHost:<id>` / `embed:<keyId>`) are minted server-to-server
   // and intentionally have no `authTokens`/session row — their userId FK would not
@@ -156,6 +174,7 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   if (payload.agt) c.set('agentActorRef', payload.agt);
   if (isDeviceClient(payload.src)) c.set('clientSurface', payload.src);
   if (payload.kid) c.set('apiKeyId', payload.kid);
+  if (payload.aud != null) c.set('tokenAudience', String(payload.aud));
   updateRequestScope({ tenantId: payload.tid, userId: payload.sub });
   if (payload.sid) c.set('sessionId', payload.sid);
 

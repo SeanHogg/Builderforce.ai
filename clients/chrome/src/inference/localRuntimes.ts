@@ -32,14 +32,14 @@ export function loopbackEndpoints(synapseUrl?: string | null): LocalEndpoints {
     if (!runtime.onDevice) continue;
     if (runtime.defaultBaseUrl) endpoints[runtime.id] = { baseUrl: runtime.defaultBaseUrl };
   }
-  endpoints.synapse = { baseUrl: synapseUrl?.trim() || SYNAPSE_DEFAULT_URL };
+  endpoints['bfi-serve'] = { baseUrl: synapseUrl?.trim() || SYNAPSE_DEFAULT_URL };
   return endpoints as LocalEndpoints;
 }
 
 /** Drop from `bfi serve` the rows Ollama also lists at the same address (see the header). */
 export function resolveLoopbackProbes(probes: readonly LocalRuntimeProbe[]): LocalRuntimeProbe[] {
   const ollama = probes.find((p) => p.provider === 'ollama');
-  const synapse = probes.find((p) => p.provider === 'synapse');
+  const synapse = probes.find((p) => p.provider === 'bfi-serve');
   if (!ollama || !synapse) return [...probes];
   if (normalizeLocalBaseUrl(ollama.endpoint.baseUrl) !== normalizeLocalBaseUrl(synapse.endpoint.baseUrl)) return [...probes];
   const ollamaIds = new Set(ollama.models.map((m) => m.model));

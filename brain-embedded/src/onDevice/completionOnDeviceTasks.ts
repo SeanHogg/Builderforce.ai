@@ -55,7 +55,7 @@ export interface CompletionOnDeviceTasks extends OnDeviceTasks {
 const DEFAULT_CONTEXT_TOKENS = 4_096;
 const COMPLETION_KINDS: readonly OnDeviceTaskKind[] = ['summarize', 'rewrite', 'write', 'proofread', 'json'];
 
-const ENGINES: ReadonlySet<string> = new Set<OnDeviceEngine>(['browser', 'bfi', 'webllm', 'synapse', 'ollama', 'freetoken']);
+const ENGINES: ReadonlySet<string> = new Set<OnDeviceEngine>(['browser', 'bfi', 'webllm', 'bfi-serve', 'synapse', 'ollama', 'freetoken']);
 
 /** Who a served model ref (`local/<runtime>/<model>`) is, or null for a ref that is not an on-device engine. */
 export function servedByRef(kind: OnDeviceTaskKind, ref: string): ServedBy | null {

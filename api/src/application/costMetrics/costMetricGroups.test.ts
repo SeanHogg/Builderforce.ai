@@ -20,4 +20,12 @@ describe('cost metric grouping — on-device utility (PRD 42 · F)', () => {
     expect(key).toContain("'cloud'");
     expect(key).toContain("'other'");
   });
+
+  it('folds rows booked under the retired `synapse` engine into `bfi-serve`', () => {
+    expect(COST_METRIC_GROUPS.utilityEngine.key).toContain("split_part(u.model, '/', 2) = 'synapse' THEN 'bfi-serve'");
+  });
+
+  it('folds a `local/synapse/<model>` ref into `local/bfi-serve/<model>` in the model grouping too', () => {
+    expect(COST_METRIC_GROUPS.model.key).toContain("WHEN u.model LIKE 'local/synapse/%' THEN 'local/bfi-serve/' || substr(u.model, 15)");
+  });
 });

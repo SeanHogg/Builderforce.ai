@@ -6637,7 +6637,7 @@ var KIMI_CODE_CATALOG_ALIASES = {
   "kimi-latest": "~moonshotai/kimi-latest"
 };
 var LOCAL_RUNTIMES = [
-  { id: "synapse", automaticRank: 30, label: "Synapse", onDevice: true, catalog: "probe", tools: "all", reach: "http", ownedBy: "bfi" },
+  { id: "bfi-serve", automaticRank: 30, label: "Synapse", onDevice: true, catalog: "probe", tools: "all", reach: "http", ownedBy: "bfi" },
   {
     id: "ollama",
     automaticRank: 50,
@@ -6699,6 +6699,12 @@ var LOCAL_RUNTIME_IDS = LOCAL_RUNTIMES.map((r) => r.id);
 function isLocalRuntimeId(value) {
   return typeof value === "string" && LOCAL_RUNTIME_IDS.includes(value);
 }
+var LEGACY_RUNTIME_IDS = { synapse: "bfi-serve" };
+function normalizeLocalRuntimeId(id) {
+  const legacy = Object.prototype.hasOwnProperty.call(LEGACY_RUNTIME_IDS, id) ? LEGACY_RUNTIME_IDS[id] : void 0;
+  if (legacy) return legacy;
+  return isLocalRuntimeId(id) ? id : void 0;
+}
 function localRuntime(id) {
   return LOCAL_RUNTIMES.find((r) => r.id === id);
 }
@@ -6715,10 +6721,14 @@ function parseLocalModelRef(ref) {
   const rest = ref.slice(LOCAL_MODEL_PREFIX.length);
   const slash2 = rest.indexOf("/");
   if (slash2 <= 0) return null;
-  const provider = rest.slice(0, slash2);
+  const provider = normalizeLocalRuntimeId(rest.slice(0, slash2));
   const model = rest.slice(slash2 + 1);
-  if (!model || !isLocalRuntimeId(provider)) return null;
+  if (!model || !provider) return null;
   return { provider, model };
+}
+function canonicalLocalModelRef(ref) {
+  const parsed = parseLocalModelRef(ref);
+  return parsed ? formatLocalModelRef(parsed.provider, parsed.model) : ref;
 }
 function clientPinOf(ref) {
   const local = parseLocalModelRef(ref);
@@ -7097,7 +7107,8 @@ function localFirstPlan(input) {
       endpoint: p.endpoint
     }))
   );
-  const preferredIndex = input.preferred ? candidates.findIndex((c) => c.kind === "local" && c.ref === input.preferred) : -1;
+  const preferredRef = canonicalLocalModelRef(input.preferred);
+  const preferredIndex = preferredRef ? candidates.findIndex((c) => c.kind === "local" && c.ref === preferredRef) : -1;
   if (preferredIndex > 0) candidates.unshift(...candidates.splice(preferredIndex, 1));
   const local = candidates.slice(0, Math.max(0, input.maxLocalAttempts ?? 1));
   const attemptOf = ({ placement: _placement, ...account }) => ({ kind: "local", ...account });
@@ -10039,6 +10050,7 @@ function matchEdit(content, oldString, newString, replaceAll, eol) {
 }
 
 // ../packages/agent-tools/src/edit.ts
+var BOM_CHAR_CODE = 65279;
 var MIN_CONTAINS_NEEDLE = 8;
 var EXCERPT_RADIUS = 3;
 var EDIT_EXCERPT_CONTEXT = 2;
@@ -10074,6 +10086,11 @@ function findNearest(content, oldString) {
 function applyStringEdit(content, oldString, newString, replaceAll = false) {
   if (typeof oldString !== "string" || oldString.length === 0) {
     return { ok: false, error: "oldString is required" };
+  }
+  const bom = content.charCodeAt(0) === BOM_CHAR_CODE ? String.fromCharCode(BOM_CHAR_CODE) : "";
+  if (bom) {
+    const inner = applyStringEdit(content.slice(1), oldString, newString, replaceAll);
+    return inner.ok && inner.content !== void 0 ? { ...inner, content: bom + inner.content } : inner;
   }
   const match = matchEdit(content, oldString, newString, replaceAll, dominantEol(content));
   if (match && "ambiguous" in match) {
@@ -10605,8 +10622,11 @@ function matchGlob(pathPosix, pattern) {
   }
   return re.test(pathPosix);
 }
+function toPosixPath(p) {
+  return p.split("\\").join("/");
+}
 function normalizeScopeDir(raw) {
-  return (raw ?? "").split("\\").join("/").trim().replace(/^\.\/+/, "").replace(/^\/+|\/+$/g, "");
+  return toPosixPath(raw ?? "").trim().replace(/^\.\/+/, "").replace(/^\/+|\/+$/g, "");
 }
 function emptyGlobListingNote(glob, scopeDir, truncated) {
   const scope = normalizeScopeDir(scopeDir);
@@ -13597,16 +13617,16 @@ var ANALYZER_VERSIONS = {
 var import_ingest = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
-var import_knowledge5 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/statManifest.ts
-var RACY_WINDOW_NS = BigInt(2e9);
+// ../packages/agent-tools/src/knowledge/statWalk.ts
+var import_knowledge3 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/withDocumentText.ts
-var import_knowledge4 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge5 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/documentText.ts
-var import_knowledge3 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge4 = require("@seanhogg/builderforce-memory/knowledge");
 var PDF_MEDIA_TYPE = "application/pdf";
 var DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 var XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -15126,7 +15146,7 @@ var NON_DELEGABLE_CAPABILITIES = ["human", "skill.author"];
 var CHILD_WITHHELD_CAPABILITIES = /* @__PURE__ */ new Set([...NON_DELEGABLE_CAPABILITIES, ...DELEGATION_CAPABILITIES]);
 
 // ../packages/agent-tools/src/symbolRelations.ts
-var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge7 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/symbolImports.ts
 var IMPORT_NAMED = new RegExp(`^\\s*(?:type\\s+)?(${ID})(?:\\s+as\\s+(${ID}))?\\s*$`);
@@ -15134,7 +15154,7 @@ var IMPORT_NAMESPACE = new RegExp(`\\*\\s*as\\s+(${ID})`);
 var IMPORT_DEFAULT = new RegExp(`^\\s*(${ID})\\s*(?:,|$)`);
 
 // ../packages/agent-tools/src/symbolRelations.ts
-var import_knowledge7 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge8 = require("@seanhogg/builderforce-memory/knowledge");
 var LEADING_TYPE = new RegExp(`^\\s*(${ID}(?:\\s*\\.\\s*${ID})?)`);
 var FIELD = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|declare|override|abstract|accessor)\\s+)*#?(${ID})\\s*[?!]?\\s*:\\s*([^=;]+)`);
 var FIELD_INIT = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|override)\\s+)*#?(${ID})\\s*=`);
@@ -15146,7 +15166,7 @@ var CALLBACK_PARAMS = new RegExp(`(?:\\(([^()]*)\\)(?:\\s*:\\s*[^=()]+)?\\s*=>|(
 var PARAM_NAME = new RegExp(`^\\s*(?:\\.\\.\\.)?(?:(?:public|private|protected|readonly)\\s+)*(${ID})`);
 
 // ../packages/agent-tools/src/knowledge/codePack.ts
-var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest4 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/secret-redaction/src/index.ts
@@ -15315,10 +15335,10 @@ var JS_DECISIONS = new RegExp(String.raw`\b(?:if|for|while|case|catch)\b|&&|\|\|
 var OO_DECISIONS = new RegExp(String.raw`\b(?:if|for|foreach|while|case|catch)\b|&&|\|\||\?\?|${TERNARY}`, "g");
 
 // ../packages/agent-tools/src/knowledge/codeConcurrency.ts
-var import_knowledge8 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeNodes.ts
-var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
 var import_working5 = require("@seanhogg/builderforce-memory/working");
 var import_ingest2 = require("@seanhogg/builderforce-memory/ingest");
 var CODE_PACK_ID = "code";
@@ -15350,7 +15370,7 @@ var CODE_BADGES = {
   /** Commits touching the file in the last 90 days, from the host's `HistoryPort` (deterministic). */
   churn: "churn",
   /** The file's co-change partners over the last year of history (memory's `encodeCoChange`, PRD 38 P4); absent with none. */
-  coChange: import_knowledge9.COCHANGE_BADGE,
+  coChange: import_knowledge10.COCHANGE_BADGE,
   /** First CODEOWNERS owner of the file (deterministic). */
   owner: "owner",
   /** Comma-separated design-pattern ids (heuristic). */
@@ -15372,7 +15392,7 @@ var CODE_BADGES = {
 };
 
 // ../packages/agent-tools/src/knowledge/codePatterns.ts
-var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeRoutes.ts
 var METHODS = "get|post|put|patch|delete|options|head|all";
@@ -15384,31 +15404,31 @@ var NEXT_WITH_PATH = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(\s*(['"` + "
 var NEXT_ANY = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(`, "y");
 
 // ../packages/agent-tools/src/knowledge/codeFindings.ts
-var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/rules/unusedDependency.ts
-var import_knowledge12 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge13 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/rules/unusedItems.ts
-var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
-var codeFiles = (g) => g.nodes.filter((n2) => n2.pack === CODE_PACK_ID && n2.kind === "file").sort((a, b) => (0, import_knowledge11.compareStr)(a.ref, b.ref));
-var namesOf = (n2, badge) => [...new Set(String(n2.badges?.[badge] ?? "").split(",").filter(Boolean))].sort(import_knowledge11.compareStr);
+var import_knowledge12 = require("@seanhogg/builderforce-memory/knowledge");
+var codeFiles = (g) => g.nodes.filter((n2) => n2.pack === CODE_PACK_ID && n2.kind === "file").sort((a, b) => (0, import_knowledge12.compareStr)(a.ref, b.ref));
+var namesOf = (n2, badge) => [...new Set(String(n2.badges?.[badge] ?? "").split(",").filter(Boolean))].sort(import_knowledge12.compareStr);
 function itemFindings(n2, item) {
   const ref = n2.ref;
   const names = namesOf(n2, item.names);
   if (names.length === 0) {
     const count2 = Number(n2.badges?.[item.count] ?? 0) || 0;
-    return count2 > 0 ? [(0, import_knowledge11.finding)(item.kind, CODE_PACK_ID, [ref], "info", { count: count2, files: 1 }, void 0, (0, import_knowledge11.refAnchor)(ref))] : [];
+    return count2 > 0 ? [(0, import_knowledge12.finding)(item.kind, CODE_PACK_ID, [ref], "info", { count: count2, files: 1 }, void 0, (0, import_knowledge12.refAnchor)(ref))] : [];
   }
   return names.map((name) => {
     const anchor = `${ref}#${name}`;
-    return (0, import_knowledge11.finding)(item.kind, CODE_PACK_ID, [ref], "info", { count: 1, files: 1, name }, [anchor], { anchor, anchorKind: item.anchorKind });
+    return (0, import_knowledge12.finding)(item.kind, CODE_PACK_ID, [ref], "info", { count: 1, files: 1, name }, [anchor], { anchor, anchorKind: item.anchorKind });
   });
 }
 
 // ../packages/agent-tools/src/knowledge/rules/unusedDependency.ts
 var ITEM = { kind: "unused-dependency", names: CODE_BADGES.unusedDependencyNames, count: CODE_BADGES.unusedDependencies, anchorKind: "package" };
-var unusedDependencyRule = (0, import_knowledge12.defineRule)({
+var unusedDependencyRule = (0, import_knowledge13.defineRule)({
   id: "code.unused-dependency",
   version: 1,
   reads: [],
@@ -15419,9 +15439,9 @@ var unusedDependencyRule = (0, import_knowledge12.defineRule)({
 });
 
 // ../packages/agent-tools/src/knowledge/rules/unusedExport.ts
-var import_knowledge13 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge14 = require("@seanhogg/builderforce-memory/knowledge");
 var ITEM2 = { kind: "unused-export", names: CODE_BADGES.unusedExportNames, count: CODE_BADGES.unusedExports, anchorKind: "symbol" };
-var unusedExportRule = (0, import_knowledge13.defineRule)({
+var unusedExportRule = (0, import_knowledge14.defineRule)({
   id: "code.unused-export",
   version: 1,
   reads: [],
@@ -15432,10 +15452,10 @@ var unusedExportRule = (0, import_knowledge13.defineRule)({
 });
 
 // ../packages/agent-tools/src/knowledge/rules/securityRisk.ts
-var import_knowledge14 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
 var MIN_RISK = 40;
 var BLOCK_RISK = 80;
-var securityRiskRule = (0, import_knowledge14.defineRule)({
+var securityRiskRule = (0, import_knowledge15.defineRule)({
   id: "code.security-risk",
   version: 1,
   reads: [],
@@ -15446,40 +15466,40 @@ var securityRiskRule = (0, import_knowledge14.defineRule)({
     const risk = Number(n2.badges?.[CODE_BADGES.securityRisk] ?? 0) || 0;
     if (risk < MIN_RISK) return [];
     const rules = String(n2.badges?.[CODE_BADGES.securityRules] ?? "");
-    return [(0, import_knowledge14.finding)("security-risk", CODE_PACK_ID, [n2.ref], risk >= BLOCK_RISK ? "error" : "warn", { count: 1, files: 1, risk, rules }, void 0, (0, import_knowledge14.refAnchor)(n2.ref))];
+    return [(0, import_knowledge15.finding)("security-risk", CODE_PACK_ID, [n2.ref], risk >= BLOCK_RISK ? "error" : "warn", { count: 1, files: 1, risk, rules }, void 0, (0, import_knowledge15.refAnchor)(n2.ref))];
   })
 });
 
 // ../packages/agent-tools/src/knowledge/rules/unusedFile.ts
-var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
-var unusedFileRule = (0, import_knowledge15.defineRule)({
+var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
+var unusedFileRule = (0, import_knowledge16.defineRule)({
   id: "code.unused-file",
   version: 1,
   reads: [],
   // the knowledge graph only
   scope: "global",
   extraInputs: ["knowledge"],
-  derive: ({ extra: { knowledge: k } }) => codeFiles(k.graph).filter((n2) => n2.badges?.[CODE_BADGES.unused] === "file").map((n2) => (0, import_knowledge15.finding)("unused-file", CODE_PACK_ID, [n2.ref], "info", { count: 1, files: 1 }, void 0, (0, import_knowledge15.refAnchor)(n2.ref)))
+  derive: ({ extra: { knowledge: k } }) => codeFiles(k.graph).filter((n2) => n2.badges?.[CODE_BADGES.unused] === "file").map((n2) => (0, import_knowledge16.finding)("unused-file", CODE_PACK_ID, [n2.ref], "info", { count: 1, files: 1 }, void 0, (0, import_knowledge16.refAnchor)(n2.ref)))
 });
 
 // ../packages/agent-tools/src/knowledge/codeFindings.ts
 var CODE_FACT_RULES = Object.freeze([unusedFileRule, unusedExportRule, unusedDependencyRule, securityRiskRule]);
 
 // ../packages/agent-tools/src/knowledge/codeRollup.ts
-var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/moduleAliases.ts
-var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/rootId.ts
 var import_knowledge18 = require("@seanhogg/builderforce-memory/knowledge");
 
+// ../packages/agent-tools/src/knowledge/rootId.ts
+var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
+
 // ../packages/agent-tools/src/knowledge/deploy/deployParser.ts
-var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest3 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/deploy/deployNodes.ts
-var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
 var DEPLOY_BADGES = {
   type: "type",
   unitKind: "unitKind",
@@ -15513,7 +15533,7 @@ var BINDING_PREFIX = `ent:${CODE_PACK_ID}:binding:`;
 var MAX_DESCRIPTOR_CHARS = 256 * 1024;
 
 // ../packages/agent-tools/src/knowledge/codeLayers.ts
-var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
 var FOLDER_LAYERS = {
   presentation: ["routes", "components", "app", "pages", "webview", "views", "hooks", "handlers", "controllers", "ui"],
   application: ["application", "use-cases", "usecases", "services", "lib", "clients", "commands", "queries"],
@@ -15553,10 +15573,10 @@ function defaultLayerRegistry() {
 var CODE_LAYERS = defaultLayerRegistry();
 
 // ../packages/agent-tools/src/knowledge/knowledgePacks.ts
-var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/documentsPack.ts
-var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest5 = require("@seanhogg/builderforce-memory/ingest");
 var DOCUMENTS_PACK_ID = "documents";
 var documentsParser = {
@@ -15567,20 +15587,20 @@ var documentsParser = {
 var DOCUMENTS_PACK = {
   id: DOCUMENTS_PACK_ID,
   parsers: [documentsParser],
-  ...import_knowledge24.DOCS_PACK.judgement ? { judgement: import_knowledge24.DOCS_PACK.judgement } : {}
+  ...import_knowledge25.DOCS_PACK.judgement ? { judgement: import_knowledge25.DOCS_PACK.judgement } : {}
 };
 
 // ../packages/agent-tools/src/knowledge/codeExtracted.ts
-var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/facts/fileFactsOf.ts
-var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/facts/factsAst.ts
 var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
 
+// ../packages/agent-tools/src/knowledge/facts/fileFactsOf.ts
+var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/facts/factsAst.ts
+var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
+
 // ../packages/agent-tools/src/knowledge/reviewRunner.ts
-var import_knowledge39 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge40 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeEntryPoints.ts
 var LITERAL = String.raw`(?:"[^"\n]*"|'[^'\n]*'|\x60[^\x60\n$]*\x60)`;
@@ -15592,32 +15612,32 @@ var INPUT_FORMS = [
 ];
 
 // ../packages/agent-tools/src/knowledge/codeGraph.ts
-var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/deploy/deployGraph.ts
-var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeRootSignals.ts
-var import_knowledge33 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge34 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest6 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/codeCoverage.ts
 var MAX_FILE_BYTES = 40 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/codeOwners.ts
-var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/historyPort.ts
 var import_knowledge32 = require("@seanhogg/builderforce-memory/knowledge");
 
+// ../packages/agent-tools/src/knowledge/historyPort.ts
+var import_knowledge33 = require("@seanhogg/builderforce-memory/knowledge");
+
 // ../packages/agent-tools/src/knowledge/fileEdits.ts
-var import_knowledge34 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge35 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
 var import_ingest7 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/graphIgnore.ts
-var import_knowledge35 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge36 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
 var MAX_GRAPH_FILE_BYTES = 256 * 1024;
@@ -15627,10 +15647,10 @@ var cache = createShaCache({
 });
 
 // ../packages/agent-tools/src/knowledge/reviewJudgePass.ts
-var import_knowledge36 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge37 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/judgement.ts
-var import_knowledge37 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge38 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_JUDGE_TEXT = 8e3;
 var KNOWLEDGE_EXTRACT_SYSTEM = [
   "You read one section of a document and list what it asserts.",
@@ -15651,7 +15671,7 @@ async function judgeWith(ask2, req) {
       a: { ref: a.ref, claim: a.text.slice(0, MAX_JUDGE_TEXT) },
       b: { ref: b.ref, claim: b.text.slice(0, MAX_JUDGE_TEXT) }
     });
-    const v = (0, import_knowledge37.validateCompare)(out, a.ref, b.ref);
+    const v = (0, import_knowledge38.validateCompare)(out, a.ref, b.ref);
     return {
       compare: v.relation ? [{ a: a.ref, b: b.ref, relation: v.relation, confidence: v.confidence }] : [],
       invalid: v.invalid
@@ -15660,7 +15680,7 @@ async function judgeWith(ask2, req) {
   const result = { extract: [], invalid: 0 };
   for (const item of req.items) {
     const out = await ask2(KNOWLEDGE_EXTRACT_SYSTEM, { ref: item.ref, text: item.text.slice(0, MAX_JUDGE_TEXT) });
-    const v = (0, import_knowledge37.validateExtract)(out, item.ref);
+    const v = (0, import_knowledge38.validateExtract)(out, item.ref);
     result.invalid += v.invalid;
     result.extract.push({ ref: item.ref, claims: v.claims, entities: v.entities });
   }
@@ -15668,20 +15688,20 @@ async function judgeWith(ask2, req) {
 }
 
 // ../packages/agent-tools/src/knowledge/measuredWith.ts
-var import_knowledge38 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge39 = require("@seanhogg/builderforce-memory/knowledge");
 var TYPESCRIPT_VERSION = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") + 1);
 
 // ../packages/agent-tools/src/knowledge/humanFact.ts
-var import_knowledge40 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/documents/documentDoc.ts
 var import_knowledge41 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/index/persistence.ts
+// ../packages/agent-tools/src/knowledge/documents/documentDoc.ts
 var import_knowledge42 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/replicaQueue.ts
+// ../packages/agent-tools/src/knowledge/index/persistence.ts
 var import_knowledge43 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/replicaQueue.ts
+var import_knowledge44 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicatedStore.ts
@@ -15691,7 +15711,7 @@ var import_pack2 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var import_pack5 = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicaPack.ts
-var import_knowledge44 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge45 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack3 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
 var EMPTY_PACK = { rootId: "", baseGeneration: 0, targetDigest: import_pack3.ZERO_DIGEST };
@@ -15709,23 +15729,23 @@ var MAX_ANALYSIS_BYTES = 2 * 1024 * 1024;
 var MAX_SYNC_PACK_BYTES = 24 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
-var import_knowledge45 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 var import_knowledge46 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/portablePack.ts
+// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 var import_knowledge47 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/packGraph.ts
+// ../packages/agent-tools/src/knowledge/portablePack.ts
 var import_knowledge48 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/packGraph.ts
+var import_knowledge49 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest8 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/codeGraphFindings.ts
-var import_knowledge49 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge50 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
-var import_knowledge50 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge51 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
 var PINPOINT_VISION_SYSTEM = [
@@ -15846,22 +15866,22 @@ var TOOL_SEARCH_SCHEMA = {
 
 // ../packages/agent-tools/src/delta/adapters/dependencyCruiser.ts
 var import_ingest9 = require("@seanhogg/builderforce-memory/ingest");
-var import_knowledge51 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/delta/adapters/gitleaks.ts
 var import_knowledge52 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/jscpd.ts
+// ../packages/agent-tools/src/delta/adapters/gitleaks.ts
 var import_knowledge53 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/knip.ts
+// ../packages/agent-tools/src/delta/adapters/jscpd.ts
 var import_knowledge54 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/osv.ts
+// ../packages/agent-tools/src/delta/adapters/knip.ts
 var import_knowledge55 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/sarifTools.ts
+// ../packages/agent-tools/src/delta/adapters/osv.ts
 var import_knowledge56 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/delta/adapters/sarifTools.ts
+var import_knowledge57 = require("@seanhogg/builderforce-memory/knowledge");
 var SEMGREP_TOOL = "semgrep";
 var CODEQL_TOOL = "codeql";
 var SARIF_KINDS = { [SEMGREP_TOOL]: "semgrep-finding", [CODEQL_TOOL]: "codeql-finding" };
@@ -15870,7 +15890,7 @@ var SARIF_KINDS = { [SEMGREP_TOOL]: "semgrep-finding", [CODEQL_TOOL]: "codeql-fi
 var import_retrieval = require("@seanhogg/builderforce-memory/retrieval");
 
 // ../packages/agent-tools/src/delta/adapters/typescript.ts
-var import_knowledge57 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge58 = require("@seanhogg/builderforce-memory/knowledge");
 var TYPESCRIPT_VERSION2 = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") + 1);
 
 // ../packages/agent-tools/src/delta/dynamic/host.ts
@@ -16512,6 +16532,7 @@ var positive = (n2) => typeof n2 === "number" && Number.isFinite(n2) && n2 > 0 ?
 function contextWindowOf(modelRef, sources = {}) {
   if (!modelRef) return void 0;
   if (isLocalModelRef(modelRef)) {
+    modelRef = canonicalLocalModelRef(modelRef);
     const live2 = [...sources.models ?? [], ...(sources.probes ?? []).flatMap((p) => p.models)].find((m) => m.ref === modelRef && isServableLocalModel(m))?.contextTokens;
     return positive(live2) ?? positive(localCatalogModel(modelRef)?.contextTokens);
   }
@@ -16538,7 +16559,8 @@ async function resolveContextWindow(modelRef, sources = {}) {
 }
 
 // src/localTargetStream.ts
-function probedTarget(ref, probes) {
+function probedTarget(stored, probes) {
+  const ref = canonicalLocalModelRef(stored);
   for (const p of probes) {
     if (!p.reachable) continue;
     const m = p.models.find((x) => x.ref === ref && isServableLocalModel(x));
@@ -18173,10 +18195,12 @@ async function downloadBuiltInModel(options = {}) {
 function utilityUsageObserver(ledger, run, onError = () => void 0) {
   return (event) => {
     if (event.outcome !== "served" || !event.engine || !event.model) return;
+    const runtime = normalizeLocalRuntimeId(event.engine);
+    if (!runtime) return;
     void ledger.record({
       chatId: run.chatId,
       runKey: run.runKey,
-      model: formatLocalModelRef(event.engine, event.model),
+      model: formatLocalModelRef(runtime, event.model),
       route: "local",
       role: "utility",
       usage: { prompt: event.promptTokens ?? 0, completion: event.completionTokens ?? 0 },
@@ -18499,7 +18523,7 @@ function heuristicLanguage(text2) {
 // src/onDevice/completionOnDeviceTasks.ts
 var DEFAULT_CONTEXT_TOKENS = 4096;
 var COMPLETION_KINDS = ["summarize", "rewrite", "write", "proofread", "json"];
-var ENGINES = /* @__PURE__ */ new Set(["browser", "bfi", "webllm", "synapse", "ollama", "freetoken"]);
+var ENGINES = /* @__PURE__ */ new Set(["browser", "bfi", "webllm", "bfi-serve", "synapse", "ollama", "freetoken"]);
 function servedByRef(kind, ref) {
   const parsed = parseLocalModelRef(ref);
   return parsed && ENGINES.has(parsed.provider) ? { kind, engine: parsed.provider, model: parsed.model } : null;
@@ -18764,9 +18788,10 @@ ${o.user}`,
 
 // src/onDevice/clientFirst.ts
 var TRACE = /* @__PURE__ */ Symbol("clientResultTrace");
-var STAMPABLE = /* @__PURE__ */ new Set(["browser", "bfi", "webllm", "synapse"]);
+var STAMPABLE = /* @__PURE__ */ new Set(["browser", "bfi", "webllm", "bfi-serve"]);
 function stamped(host, served, payload) {
-  const provenance = served && STAMPABLE.has(served.engine) ? { engine: served.engine, model: served.model } : host.provenance();
+  const engine = served ? normalizeLocalRuntimeId(served.engine) ?? served.engine : void 0;
+  const provenance = served && engine && STAMPABLE.has(engine) ? { engine, model: served.model } : host.provenance();
   const result = { ...payload, provenance };
   if (served) Object.defineProperty(result, TRACE, { value: { by: served, observe: host.observe }, enumerable: false });
   return result;
@@ -27857,6 +27882,7 @@ function windowedCap(tool, tableCap, contextWindowTokens) {
   if (isPagedReadTool(tool)) return Math.min(READ_FILE_MAX_CHARS, Math.max(tableCap, share));
   return Math.min(tableCap, share);
 }
+var READ_MAX_BYTES = 2 * 1024 * 1024;
 function isShellTool(tool) {
   return SHELL_TOOLS.has(tool);
 }
@@ -36154,13 +36180,18 @@ function seedConfigLog(c, snap) {
 var import_evermind2 = require("@seanhogg/builderforce-memory/evermind");
 var import_working16 = require("@seanhogg/builderforce-memory/working");
 
+// src/run/normalizeRelPath.ts
+function normalizeRelPath(value) {
+  return toPosixPath(value.trim()).replace(/^\.\/+/, "");
+}
+function normalizeRelPathKey(value) {
+  return normalizeRelPath(value).replace(/\/+$/, "");
+}
+
 // src/runStore/answerAnchors.ts
 var FILE_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "view_file", "open_file", "read_files"]);
 var PATH_KEYS = ["path", "file", "filePath"];
 var MAX_ANSWER_ANCHORS = 16;
-function normalizePath2(p) {
-  return p.trim().split("\\").join("/").replace(/^\.\/+/, "");
-}
 function readFileAnchors(trace2) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
@@ -36170,7 +36201,7 @@ function readFileAnchors(trace2) {
     const paths = Array.isArray(args.paths) ? args.paths : PATH_KEYS.map((k) => args[k]);
     for (const raw of paths) {
       if (typeof raw !== "string") continue;
-      const path = normalizePath2(raw);
+      const path = normalizeRelPath(raw);
       if (!path || seen.has(path)) continue;
       seen.add(path);
       out.push({ path });
@@ -38884,9 +38915,6 @@ var STATE_TEXT = {
   changed: "changed since (by this run)",
   unknown: "may have changed (a shell command ran since)"
 };
-function normalizePath3(value) {
-  return value.trim().split("\\").join("/").replace(/^\.\/+/, "").replace(/\/+$/, "");
-}
 function objectOf(value) {
   if (value && typeof value === "object" && !Array.isArray(value)) return value;
   if (typeof value === "string") {
@@ -38907,13 +38935,13 @@ function changedPaths2(args) {
   if (!a) return [];
   const out = [];
   for (const key of ["path", "file", "filePath"]) {
-    if (typeof a[key] === "string" && a[key].trim()) out.push(normalizePath3(a[key]));
+    if (typeof a[key] === "string" && a[key].trim()) out.push(normalizeRelPathKey(a[key]));
   }
   for (const list2 of [a.edits, a.paths]) {
     if (!Array.isArray(list2)) continue;
     for (const item of list2) {
       const p = typeof item === "string" ? item : item?.path;
-      if (typeof p === "string" && p.trim()) out.push(normalizePath3(p));
+      if (typeof p === "string" && p.trim()) out.push(normalizeRelPathKey(p));
     }
   }
   return out;
@@ -38977,14 +39005,14 @@ function ledgerOf(trace2) {
       const singles = singleReadsOf("read_file", args);
       if (singles) {
         if (ev.isError || data?.ok === false) {
-          for (const s of singles) if (typeof s.path === "string") noteFailure(normalizePath3(s.path), at2);
+          for (const s of singles) if (typeof s.path === "string") noteFailure(normalizeRelPathKey(s.path), at2);
           return;
         }
         if (!isRanRead(data)) return;
         const entries = perFileResults(data) ?? [];
         singles.forEach((single, i) => {
           if (typeof single.path !== "string") return;
-          const path2 = normalizePath3(single.path);
+          const path2 = normalizeRelPathKey(single.path);
           const entry = objectOf(entries[i]);
           if (!entry || entry.ok === false) noteFailure(path2, at2);
           else noteRead(path2, at2, servedSpan2(entry, single, trimmed));
@@ -38993,7 +39021,7 @@ function ledgerOf(trace2) {
       }
       const raw = typeof args.path === "string" ? args.path : "";
       if (!raw.trim()) return;
-      const path = normalizePath3(raw);
+      const path = normalizeRelPathKey(raw);
       if (ev.isError || data?.ok === false) {
         noteFailure(path, at2);
         return;
@@ -39765,9 +39793,8 @@ var MAX_LISTED_ITEMS = 25;
 var NOT_A_SPEC = /(^|\/)(readme|changelog|license|contributing|claude|agents|memory|code_of_conduct|security)\.md$/i;
 var MD_PATH = /[\w.@-]+(?:[\\/][\w.@-]+)*\.md\b/gi;
 var SPEC_LIKE = /(?:^|\/)docs\/specs?\/|(?:^|[^a-z])(?:specs?|prds?|roadmap|requirements)(?=[^a-z]|$)/i;
-var normalizePath4 = (p) => p.trim().replace(/\\/g, "/").replace(/^\.\/+/, "");
 function namedSpecPaths(request) {
-  return [...new Set((request.match(MD_PATH) ?? []).map(normalizePath4))].filter((p) => !NOT_A_SPEC.test(p));
+  return [...new Set((request.match(MD_PATH) ?? []).map((p) => normalizeRelPath(p)))].filter((p) => !NOT_A_SPEC.test(p));
 }
 var speaksOfSpec = (request) => SPEC_LANGUAGE.some((p) => p.test(request));
 function isSpecTicketingRequest(request) {
@@ -39777,7 +39804,7 @@ function specPathsFor(request, trace2) {
   const named = namedSpecPaths(request);
   if (named.length) return named.slice(0, MAX_SPECS);
   if (!speaksOfSpec(request)) return [];
-  return readFileAnchors(trace2).map((a) => normalizePath4(a.path)).filter((p) => /\.md$/i.test(p) && !NOT_A_SPEC.test(p) && SPEC_LIKE.test(p)).reverse().slice(0, MAX_SPECS);
+  return readFileAnchors(trace2).map((a) => normalizeRelPath(a.path)).filter((p) => /\.md$/i.test(p) && !NOT_A_SPEC.test(p) && SPEC_LIKE.test(p)).reverse().slice(0, MAX_SPECS);
 }
 function itemLine(i) {
   const blocker = i.status === "blocked" ? `, blocker: ${i.blocker ?? "not stated"}` : "";
@@ -39862,7 +39889,7 @@ async function coverageTickets(run, trace2, noteEv) {
 }
 var samePath = (a, b) => a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
 function writesPath(events, path) {
-  return events.some((ev) => stepSucceeded(ev) && isCodeChangeTool(ev.label) && editedPathsOf(ev.label, ev.args).some((p) => samePath(normalizePath4(p), path)));
+  return events.some((ev) => stepSucceeded(ev) && isCodeChangeTool(ev.label) && editedPathsOf(ev.label, ev.args).some((p) => samePath(normalizeRelPath(p), path)));
 }
 function specTicketCoverageGate(run) {
   const seen = /* @__PURE__ */ new Map();

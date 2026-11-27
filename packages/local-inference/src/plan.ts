@@ -16,6 +16,7 @@
  */
 
 import { isServableLocalModel, type LocalModel, type LocalRuntimeProbe } from './probe.js';
+import { canonicalLocalModelRef } from './ref.js';
 import { LOCAL_RUNTIMES, type LocalEndpoint, type LocalRuntimeId } from './runtimes.js';
 
 /**
@@ -153,8 +154,10 @@ export function localFirstPlan(input: LocalFirstInput): LocalFirstAttempt[] {
           endpoint: p.endpoint,
         })),
     );
-  const preferredIndex = input.preferred
-    ? candidates.findIndex((c) => c.kind === 'local' && c.ref === input.preferred)
+  // A saved pin may carry a retired runtime spelling (`local/synapse/…`); compare in the current one.
+  const preferredRef = canonicalLocalModelRef(input.preferred);
+  const preferredIndex = preferredRef
+    ? candidates.findIndex((c) => c.kind === 'local' && c.ref === preferredRef)
     : -1;
   if (preferredIndex > 0) candidates.unshift(...candidates.splice(preferredIndex, 1));
   const local = candidates.slice(0, Math.max(0, input.maxLocalAttempts ?? 1));

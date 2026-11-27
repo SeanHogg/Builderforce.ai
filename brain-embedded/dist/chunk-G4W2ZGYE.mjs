@@ -26,7 +26,7 @@ var KIMI_CODE_CATALOG_ALIASES = {
   "kimi-latest": "~moonshotai/kimi-latest"
 };
 var LOCAL_RUNTIMES = [
-  { id: "synapse", automaticRank: 30, label: "Synapse", onDevice: true, catalog: "probe", tools: "all", reach: "http", ownedBy: "bfi" },
+  { id: "bfi-serve", automaticRank: 30, label: "Synapse", onDevice: true, catalog: "probe", tools: "all", reach: "http", ownedBy: "bfi" },
   {
     id: "ollama",
     automaticRank: 50,
@@ -88,6 +88,12 @@ var LOCAL_RUNTIME_IDS = LOCAL_RUNTIMES.map((r) => r.id);
 function isLocalRuntimeId(value) {
   return typeof value === "string" && LOCAL_RUNTIME_IDS.includes(value);
 }
+var LEGACY_RUNTIME_IDS = { synapse: "bfi-serve" };
+function normalizeLocalRuntimeId(id) {
+  const legacy = Object.prototype.hasOwnProperty.call(LEGACY_RUNTIME_IDS, id) ? LEGACY_RUNTIME_IDS[id] : void 0;
+  if (legacy) return legacy;
+  return isLocalRuntimeId(id) ? id : void 0;
+}
 function localRuntime(id) {
   return LOCAL_RUNTIMES.find((r) => r.id === id);
 }
@@ -104,10 +110,14 @@ function parseLocalModelRef(ref) {
   const rest = ref.slice(LOCAL_MODEL_PREFIX.length);
   const slash = rest.indexOf("/");
   if (slash <= 0) return null;
-  const provider = rest.slice(0, slash);
+  const provider = normalizeLocalRuntimeId(rest.slice(0, slash));
   const model = rest.slice(slash + 1);
-  if (!model || !isLocalRuntimeId(provider)) return null;
+  if (!model || !provider) return null;
   return { provider, model };
+}
+function canonicalLocalModelRef(ref) {
+  const parsed = parseLocalModelRef(ref);
+  return parsed ? formatLocalModelRef(parsed.provider, parsed.model) : ref;
 }
 function clientPinOf(ref) {
   const local = parseLocalModelRef(ref);
@@ -486,7 +496,8 @@ function localFirstPlan(input) {
       endpoint: p.endpoint
     }))
   );
-  const preferredIndex = input.preferred ? candidates.findIndex((c) => c.kind === "local" && c.ref === input.preferred) : -1;
+  const preferredRef = canonicalLocalModelRef(input.preferred);
+  const preferredIndex = preferredRef ? candidates.findIndex((c) => c.kind === "local" && c.ref === preferredRef) : -1;
   if (preferredIndex > 0) candidates.unshift(...candidates.splice(preferredIndex, 1));
   const local = candidates.slice(0, Math.max(0, input.maxLocalAttempts ?? 1));
   const attemptOf = ({ placement: _placement, ...account }) => ({ kind: "local", ...account });
@@ -1364,9 +1375,11 @@ export {
   BROWSER_ENGINE_BASE_URL,
   BFI_ENGINE_BASE_URL,
   WEBLLM_ENGINE_BASE_URL,
+  normalizeLocalRuntimeId,
   localRuntime,
   formatLocalModelRef,
   parseLocalModelRef,
+  canonicalLocalModelRef,
   clientPinOf,
   isLocalModelRef,
   runsOnDevice,
@@ -1416,4 +1429,4 @@ export {
   createHfModelStore,
   catalogProbe
 };
-//# sourceMappingURL=chunk-PRXY4IDM.mjs.map
+//# sourceMappingURL=chunk-G4W2ZGYE.mjs.map

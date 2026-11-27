@@ -50,6 +50,7 @@ interface WorkerJwtPayload {
   tid?: number;
   exp: number;
   jti?: string;
+  aud?: unknown;
 }
 
 /** The API's session token, verified by the SAME implementation the API uses
@@ -57,7 +58,10 @@ interface WorkerJwtPayload {
 async function verifySessionToken(token: string, secret: string): Promise<WorkerJwtPayload | null> {
   try {
     const verdict = await verifyHs256<WorkerJwtPayload & { exp: number }>(token, secret);
-    return verdict.ok ? verdict.claims : null;
+    if (!verdict.ok) return null;
+    // Deny by default (SEC-SYN-001): an audience-bound (scoped) token is never a session here.
+    if (verdict.claims.aud !== undefined && verdict.claims.aud !== null) return null;
+    return verdict.claims;
   } catch {
     return null;
   }

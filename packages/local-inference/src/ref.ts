@@ -8,7 +8,7 @@
  * (it spends nothing).
  */
 
-import { isLocalRuntimeId, localRuntime, LOCAL_RUNTIMES, type LocalRuntimeId } from './runtimes.js';
+import { normalizeLocalRuntimeId, localRuntime, LOCAL_RUNTIMES, type LocalRuntimeId } from './runtimes.js';
 
 export const LOCAL_MODEL_PREFIX = 'local/';
 const GATEWAY_DIRECT_PREFIX = 'direct/';
@@ -31,10 +31,21 @@ export function parseLocalModelRef(ref: string | undefined): { provider: LocalRu
   const rest = ref.slice(LOCAL_MODEL_PREFIX.length);
   const slash = rest.indexOf('/');
   if (slash <= 0) return null;
-  const provider = rest.slice(0, slash);
+  const provider = normalizeLocalRuntimeId(rest.slice(0, slash));
   const model = rest.slice(slash + 1);
-  if (!model || !isLocalRuntimeId(provider)) return null;
+  if (!model || !provider) return null;
   return { provider, model };
+}
+
+/**
+ * `ref` with its runtime segment in the current spelling (`local/synapse/x` → `local/bfi-serve/x`), or `ref`
+ * unchanged when it is not a local ref. Every comparison of a STORED ref against a probed one goes through this.
+ */
+export function canonicalLocalModelRef(ref: string): string;
+export function canonicalLocalModelRef(ref: string | undefined): string | undefined;
+export function canonicalLocalModelRef(ref: string | undefined): string | undefined {
+  const parsed = parseLocalModelRef(ref);
+  return parsed ? formatLocalModelRef(parsed.provider, parsed.model) : ref;
 }
 
 /**

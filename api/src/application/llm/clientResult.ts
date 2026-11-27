@@ -12,10 +12,15 @@
  * Only ever used for summaries, rewrites and judgements of the user's OWN content.
  * Grading and authorization routes must not call this (PRD 42 principle 6, done-check 8).
  */
+import { normalizeLocalRuntimeId } from '@builderforce/local-inference';
 
-/** The engines a client result may name — what can actually run on a device. */
-export const CLIENT_RESULT_ENGINES = ['browser', 'bfi', 'webllm', 'synapse'] as const;
+/**
+ * The engines a client result may name — what can actually run on a device. `synapse` is the retired id of
+ * `bfi-serve` that older clients still send: accepted, and stored as `bfi-serve` (INF-G019 drops it).
+ */
+export const CLIENT_RESULT_ENGINES = ['browser', 'bfi', 'webllm', 'bfi-serve', 'synapse'] as const;
 export type ClientResultEngine = (typeof CLIENT_RESULT_ENGINES)[number];
+
 
 /** `llm_usage_log.model` is varchar(200); the contract is tighter. */
 export const CLIENT_RESULT_MODEL_MAX = 128;
@@ -64,7 +69,9 @@ function parseProvenance(raw: unknown): ClientResultProvenance | string {
   const { engine, model } = raw;
   if (typeof engine !== 'string' || !(CLIENT_RESULT_ENGINES as readonly string[]).includes(engine)) return 'provenance_engine_invalid';
   if (typeof model !== 'string' || model.trim() === '' || model.length > CLIENT_RESULT_MODEL_MAX) return 'provenance_model_invalid';
-  return { engine: engine as ClientResultEngine, model };
+  const accepted = engine as ClientResultEngine;
+  // The retired `synapse` is stored as `bfi-serve`: the shared registry owns the alias table.
+  return { engine: (normalizeLocalRuntimeId(accepted) ?? accepted) as ClientResultEngine, model };
 }
 
 export function parseClientResult(raw: unknown, spec: { kind: 'text'; maxChars: number }): ParsedClientResult<string>;

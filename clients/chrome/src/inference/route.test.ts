@@ -21,10 +21,10 @@ const ollama: LocalRuntimeProbe = {
 };
 /** An automatic on-device runtime (Ollama serves only an explicit pick). */
 const device: LocalRuntimeProbe = {
-  provider: 'synapse',
+  provider: 'bfi-serve',
   endpoint: { baseUrl: 'http://127.0.0.1:11435' },
   reachable: true,
-  models: [{ ref: 'local/synapse/gemma:2b', provider: 'synapse', model: 'gemma:2b' }],
+  models: [{ ref: 'local/bfi-serve/gemma:2b', provider: 'bfi-serve', model: 'gemma:2b' }],
 };
 const nothing: LocalRuntimeProbe[] = [{ provider: 'ollama', endpoint: { baseUrl: 'http://127.0.0.1:11434' }, reachable: false, models: [] }];
 const hello = { messages: [{ role: 'user' as const, content: 'hello' }] };
@@ -44,7 +44,7 @@ describe('Rovr model route — local first, failover to the gateway', () => {
     const { stream, seen } = route([device], null);
     const result = await stream(hello);
     expect(result.text).toBe('from-device');
-    expect(result.resolvedModel).toBe('local/synapse/gemma:2b');
+    expect(result.resolvedModel).toBe('local/bfi-serve/gemma:2b');
     expect(seen).toEqual([{ url: 'http://127.0.0.1:11435/v1/chat/completions', auth: undefined }]);
   });
 
@@ -136,6 +136,23 @@ describe('Rovr model route — local first, failover to the gateway', () => {
     })();
     await stream(hello);
     expect(seen).toEqual(['http://127.0.0.1:11435/v1/chat/completions']);
+  });
+
+  it('still honours a pin saved under the retired `local/synapse/…` spelling', async () => {
+    // With page engines present, `page.fetch` carries every local attempt (it forwards non-page URLs).
+    const fetchImpl = vi.fn(async () => sse('from-device'));
+    const stream = createRovrStream({
+      baseUrl: BASE,
+      fetch: fetchImpl,
+      prober: prober([ollama, device]),
+      endpoints: async () => loopbackEndpoints(null),
+      key: async () => null,
+      page: { probe: async () => [], fetch: fetchImpl },
+      pinned: async () => 'local/synapse/gemma:2b',
+    });
+    const result = await stream(hello);
+    expect(result.text).toBe('from-device');
+    expect(result.resolvedModel).toBe('local/bfi-serve/gemma:2b');
   });
 
   it('sends a PINNED gateway model to the gateway first, tagged rovr — hard-pinned only under Specific', async () => {
@@ -282,30 +299,30 @@ describe('Rovr model route — local first, failover to the gateway', () => {
 describe('loopback runtimes', () => {
   it('probes every on-device runtime at its default port, Synapse at the bfi port or the person\'s address', () => {
     expect(loopbackEndpoints(null)).toEqual({
-      synapse: { baseUrl: SYNAPSE_DEFAULT_URL },
+      'bfi-serve': { baseUrl: SYNAPSE_DEFAULT_URL },
       ollama: { baseUrl: 'http://127.0.0.1:11434' },
       freetoken: { baseUrl: 'http://127.0.0.1:1919' },
     });
-    expect(loopbackEndpoints(' http://127.0.0.1:11500 ').synapse).toEqual({ baseUrl: 'http://127.0.0.1:11500' });
+    expect(loopbackEndpoints(' http://127.0.0.1:11500 ')['bfi-serve']).toEqual({ baseUrl: 'http://127.0.0.1:11500' });
   });
 
   it('does not let Synapse claim an Ollama model found at the same address', () => {
     const synapse: LocalRuntimeProbe = {
-      provider: 'synapse',
+      provider: 'bfi-serve',
       endpoint: { baseUrl: 'http://127.0.0.1:11434' },
       reachable: true,
       models: [
-        { ref: 'local/synapse/gemma:2b', provider: 'synapse', model: 'gemma:2b', tools: true },
-        { ref: 'local/synapse/qwen3-8b', provider: 'synapse', model: 'qwen3-8b', tools: true },
+        { ref: 'local/bfi-serve/gemma:2b', provider: 'bfi-serve', model: 'gemma:2b', tools: true },
+        { ref: 'local/bfi-serve/qwen3-8b', provider: 'bfi-serve', model: 'qwen3-8b', tools: true },
       ],
     };
     const resolved = resolveLoopbackProbes([synapse, ollama]);
-    expect(resolved.find((p) => p.provider === 'synapse')!.models.map((m) => m.model)).toEqual(['qwen3-8b']);
+    expect(resolved.find((p) => p.provider === 'bfi-serve')!.models.map((m) => m.model)).toEqual(['qwen3-8b']);
     expect(resolved.find((p) => p.provider === 'ollama')!.models.map((m) => m.model)).toEqual(['gemma:2b']);
   });
 
   it('leaves Synapse alone when it runs on its own port', () => {
-    const synapse: LocalRuntimeProbe = { ...ollama, provider: 'synapse', endpoint: { baseUrl: 'http://127.0.0.1:11435' } };
+    const synapse: LocalRuntimeProbe = { ...ollama, provider: 'bfi-serve', endpoint: { baseUrl: 'http://127.0.0.1:11435' } };
     expect(resolveLoopbackProbes([synapse, ollama])).toEqual([synapse, ollama]);
   });
 });

@@ -133,10 +133,15 @@ describe("catalog discovery", () => {
       endpoints: {
         ollama: { baseUrl: "" },
         freetoken: { baseUrl: "" },
-        synapse: { baseUrl: "http://127.0.0.1:11435", token: "desk-token" },
+        "bfi-serve": { baseUrl: "http://127.0.0.1:11435", token: "desk-token" },
       },
     });
-    expect(models.map((m) => m.ref)).toEqual(["local/synapse/qwen3:8b"]);
+    expect(models.map((m) => m.ref)).toEqual(["local/bfi-serve/qwen3:8b"]);
+  });
+
+  it("still reads a saved `local/synapse/…` ref as the same model (retired spelling)", () => {
+    expect(parseLocalModelRef("local/synapse/qwen3:8b")).toEqual({ provider: "bfi-serve", model: "qwen3:8b" });
+    expect(parseLocalModelRef("local/bfi-serve/qwen3:8b")).toEqual({ provider: "bfi-serve", model: "qwen3:8b" });
   });
 });
 
@@ -148,12 +153,12 @@ describe("rows for the shared model-list builder", () => {
       localModelOptions([
         { ref: "local/freetoken/gpt-oss-20b", provider: "freetoken", model: "gpt-oss-20b" },
         { ref: "local/ollama/qwen3:8b", provider: "ollama", model: "qwen3:8b" },
-        { ref: "local/synapse/llama-3.1-8b", provider: "synapse", model: "llama-3.1-8b" },
+        { ref: "local/bfi-serve/llama-3.1-8b", provider: "bfi-serve", model: "llama-3.1-8b" },
       ]),
     ).toEqual([
       { id: "local/freetoken/gpt-oss-20b", label: "gpt-oss-20b", runtime: "FreeToken" },
       { id: "local/ollama/qwen3:8b", label: "qwen3:8b", runtime: "Ollama" },
-      { id: "local/synapse/llama-3.1-8b", label: "llama-3.1-8b", runtime: "Synapse" },
+      { id: "local/bfi-serve/llama-3.1-8b", label: "llama-3.1-8b", runtime: "Synapse" },
     ]);
   });
 

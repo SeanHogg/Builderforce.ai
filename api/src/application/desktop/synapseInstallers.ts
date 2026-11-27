@@ -19,7 +19,8 @@ const SYNAPSE_TAG_PREFIX = 'v';
 const WINDOWS_SUFFIXES = ['_x64-setup.exe', '_x64_en-US.msi'];
 const MAC_ARM_SUFFIXES = ['_aarch64.dmg'];
 const MAC_INTEL_SUFFIXES = ['_x64.dmg'];
-const INSTALLER_SUFFIXES = [...WINDOWS_SUFFIXES, ...MAC_ARM_SUFFIXES, ...MAC_INTEL_SUFFIXES];
+const LINUX_SUFFIXES = ['_amd64.deb'];
+const INSTALLER_SUFFIXES = [...WINDOWS_SUFFIXES, ...MAC_ARM_SUFFIXES, ...MAC_INTEL_SUFFIXES, ...LINUX_SUFFIXES];
 
 export interface DesktopInstallers {
   /** `2026.10.1`, or null before the first release. */
@@ -29,6 +30,8 @@ export interface DesktopInstallers {
   windows: string | null;
   macArm: string | null;
   macIntel: string | null;
+  /** The Debian/Ubuntu `_amd64.deb`, or null when the release has none. */
+  linux: string | null;
 }
 
 /** The first asset whose name ends with one of `suffixes`, in the order given. */
@@ -53,13 +56,14 @@ export function pickDesktopInstallers(releases: PublicRelease[]): DesktopInstall
       !r.prerelease &&
       assetEndingWith(r, INSTALLER_SUFFIXES) !== null,
   );
-  if (!release) return { version: null, releaseUrl: null, windows: null, macArm: null, macIntel: null };
+  if (!release) return { version: null, releaseUrl: null, windows: null, macArm: null, macIntel: null, linux: null };
   return {
     version: release.tag.slice(SYNAPSE_TAG_PREFIX.length),
     releaseUrl: release.url,
     windows: assetEndingWith(release, WINDOWS_SUFFIXES),
     macArm: assetEndingWith(release, MAC_ARM_SUFFIXES),
     macIntel: assetEndingWith(release, MAC_INTEL_SUFFIXES),
+    linux: assetEndingWith(release, LINUX_SUFFIXES),
   };
 }
 

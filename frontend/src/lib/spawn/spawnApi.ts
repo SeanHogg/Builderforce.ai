@@ -77,6 +77,8 @@ export interface SpawnInstallers {
   windows: string | null;
   macArm: string | null;
   macIntel: string | null;
+  /** Optional: older API responses omit it. */
+  linux?: string | null;
 }
 
 /** A public read made once per page load (every button shares it) and retried after a failure. */

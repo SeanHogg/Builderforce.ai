@@ -5,7 +5,9 @@
 import type { KeyValueStore } from './keyValue';
 import { REPORT_ERRORS_SETTING } from '../telemetry/errorEvents';
 
-const SYNAPSE_URL = 'settings.synapseUrl';
+const BFI_SERVE_URL = 'settings.bfiServeUrl';
+/** The key before the `bfi-serve` rename: read once, copied to {@link BFI_SERVE_URL} and removed (INF-G019 drops this). */
+const LEGACY_SYNAPSE_URL = 'settings.synapseUrl';
 const TASK_PROJECT = 'settings.taskProjectId';
 const PINNED_MODEL = 'settings.pinnedModel';
 
@@ -27,8 +29,20 @@ export interface RovrSettings {
 export function createSettings(storage: KeyValueStore): RovrSettings {
   const setOrRemove = (key: string, value: unknown) => (value === null || value === '' ? storage.remove(key) : storage.set(key, value));
   return {
-    synapseUrl: async () => (await storage.get<string>(SYNAPSE_URL)) ?? null,
-    setSynapseUrl: (url) => setOrRemove(SYNAPSE_URL, url?.trim() ?? null),
+    synapseUrl: async () => {
+      const current = await storage.get<string>(BFI_SERVE_URL);
+      if (current !== undefined && current !== null) return current;
+      const legacy = await storage.get<string>(LEGACY_SYNAPSE_URL);
+      if (legacy === undefined || legacy === null) return null;
+      await storage.set(BFI_SERVE_URL, legacy);
+      await storage.remove(LEGACY_SYNAPSE_URL);
+      return legacy;
+    },
+    setSynapseUrl: async (url) => {
+      await setOrRemove(BFI_SERVE_URL, url?.trim() ?? null);
+      // A cleared (or replaced) address must not resurrect from the retired key on the next read.
+      await storage.remove(LEGACY_SYNAPSE_URL);
+    },
     taskProjectId: async () => (await storage.get<number>(TASK_PROJECT)) ?? null,
     setTaskProjectId: (id) => setOrRemove(TASK_PROJECT, id),
     pinnedModel: async () => (await storage.get<string>(PINNED_MODEL)) ?? null,

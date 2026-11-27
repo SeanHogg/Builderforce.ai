@@ -13,8 +13,12 @@ const isNumberArray = (v: unknown): v is number[] => Array.isArray(v) && v.every
 const JSON_SPEC = { kind: 'json', validate: isNumberArray } as const;
 
 describe('parseClientResult: provenance', () => {
-  it.each(['browser', 'bfi', 'webllm', 'synapse'])('accepts the %s engine', (engine) => {
+  it.each(['browser', 'bfi', 'webllm', 'bfi-serve'])('accepts the %s engine', (engine) => {
     expect(parseClientResult({ text: 'hi', provenance: { engine, model: 'm' } }, TEXT)).toEqual({ ok: true, value: 'hi', provenance: { engine, model: 'm' } });
+  });
+
+  it('accepts the retired `synapse` engine from an older client and stores it as `bfi-serve`', () => {
+    expect(parseClientResult({ text: 'hi', provenance: { engine: 'synapse', model: 'm' } }, TEXT)).toEqual({ ok: true, value: 'hi', provenance: { engine: 'bfi-serve', model: 'm' } });
   });
 
   it('refuses a missing, unknown or non-string engine and a bad model', () => {

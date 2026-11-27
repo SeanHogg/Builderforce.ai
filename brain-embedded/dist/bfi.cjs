@@ -161,7 +161,7 @@ var KIMI_CODE_CATALOG_ALIASES = {
   "kimi-latest": "~moonshotai/kimi-latest"
 };
 var LOCAL_RUNTIMES = [
-  { id: "synapse", automaticRank: 30, label: "Synapse", onDevice: true, catalog: "probe", tools: "all", reach: "http", ownedBy: "bfi" },
+  { id: "bfi-serve", automaticRank: 30, label: "Synapse", onDevice: true, catalog: "probe", tools: "all", reach: "http", ownedBy: "bfi" },
   {
     id: "ollama",
     automaticRank: 50,

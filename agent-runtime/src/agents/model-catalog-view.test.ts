@@ -26,7 +26,8 @@ describe("isLocalModel", () => {
     expect(isLocalModel("custom", { baseUrl: "http://127.0.0.1:8000/v1" })).toBe(true);
     expect(isLocalModel("custom", { baseUrl: "http://localhost:1234/v1" })).toBe(true);
     expect(isLocalModel("custom", { baseUrl: "http://[::1]:8080/v1" })).toBe(true);
-    for (const provider of ["ollama", "lmstudio", "freetoken", "synapse", "vllm", "llama", "ollama-local"]) {
+    // `synapse` is the retired id of `bfi-serve`: both stay local.
+    for (const provider of ["ollama", "lmstudio", "freetoken", "bfi-serve", "synapse", "vllm", "llama", "ollama-local"]) {
       expect(isLocalModel(provider)).toBe(true);
     }
   });
@@ -69,6 +70,7 @@ describe("catalogViewFromEntries", () => {
 
   it("answers a shared `local/<runtime>/<model>` ref as local and FREE", () => {
     expect(view.residencyOf?.("local/ollama/qwen3:8b")).toBe("local");
+    expect(view.tierOf("local/bfi-serve/qwen3-8b")).toBe("FREE");
     expect(view.tierOf("local/synapse/qwen3-8b")).toBe("FREE");
     expect(view.vendorOf("local/ollama/qwen3:8b")).toBe("local/ollama");
   });

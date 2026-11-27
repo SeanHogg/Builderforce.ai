@@ -10,7 +10,7 @@
  * today's budget" — the gateway fits a cloud request to a model that can hold it.
  */
 
-import { isLocalModelRef, isServableLocalModel, localCatalogModel, type LocalModel, type LocalRuntimeProbe } from '@builderforce/local-inference';
+import { canonicalLocalModelRef, isLocalModelRef, isServableLocalModel, localCatalogModel, type LocalModel, type LocalRuntimeProbe } from '@builderforce/local-inference';
 
 /** Where a window may come from. Every source is optional. */
 export interface ModelWindowSources {
@@ -29,6 +29,7 @@ const positive = (n: number | undefined): number | undefined =>
 export function contextWindowOf(modelRef: string | undefined, sources: ModelWindowSources = {}): number | undefined {
   if (!modelRef) return undefined;
   if (isLocalModelRef(modelRef)) {
+    modelRef = canonicalLocalModelRef(modelRef);
     const live = [...(sources.models ?? []), ...(sources.probes ?? []).flatMap((p) => p.models)]
       .find((m) => m.ref === modelRef && isServableLocalModel(m))?.contextTokens;
     return positive(live) ?? positive(localCatalogModel(modelRef)?.contextTokens);

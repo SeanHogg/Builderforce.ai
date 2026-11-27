@@ -1039,11 +1039,13 @@
       "title": "BuilderForce",
       "properties": {
         "builderforce.baseUrl": {
+          "scope": "application",
           "type": "string",
           "default": "https://builderforce.ai/gateway",
           "markdownDescription": "%config.baseUrl.desc%"
         },
         "builderforce.webUrl": {
+          "scope": "application",
           "type": "string",
           "default": "",
           "markdownDescription": "%config.webUrl.desc%"
@@ -1191,19 +1193,29 @@
           "markdownDescription": "%config.localModels.enabled.desc%"
         },
         "builderforce.localModels.ollamaUrl": {
+          "scope": "application",
           "type": "string",
           "default": "http://127.0.0.1:11434",
           "markdownDescription": "%config.localModels.ollamaUrl.desc%"
         },
         "builderforce.localModels.freetokenUrl": {
+          "scope": "application",
           "type": "string",
           "default": "http://127.0.0.1:1919",
           "markdownDescription": "%config.localModels.freetokenUrl.desc%"
         },
-        "builderforce.localModels.synapseUrl": {
+        "builderforce.localModels.bfiServeUrl": {
+          "scope": "application",
           "type": "string",
           "default": "",
-          "markdownDescription": "%config.localModels.synapseUrl.desc%"
+          "markdownDescription": "%config.localModels.bfiServeUrl.desc%"
+        },
+        "builderforce.localModels.synapseUrl": {
+          "scope": "application",
+          "type": "string",
+          "default": "",
+          "markdownDescription": "%config.localModels.synapseUrl.desc%",
+          "deprecationMessage": "%config.localModels.synapseUrl.deprecated%"
         },
         "builderforce.localModels.localFirst": {
           "type": "boolean",
@@ -1383,7 +1395,7 @@
     "@seanhogg/bfi-web": "link:../../packages/bfi-web",
     "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",
     "@seanhogg/builderforce-brain-ui": "link:../../packages/brain-ui",
-    "@seanhogg/builderforce-memory": "^2026.10.85",
+    "@seanhogg/builderforce-memory": "^2026.10.87",
     "@seanhogg/builderforce-memory-engine": "^2026.10.65",
     "@seanhogg/builderforce-memory-mcp": "^2026.10.85",
     "@seanhogg/builderforce-studio": "link:../../studio",

@@ -9,6 +9,7 @@ import {
   PAGE_ENGINE_REPLY_TYPES,
   PAGE_ENGINE_REQUEST_TYPES,
   WEBLLM_ENGINE_BASE_URL,
+  canonicalLocalModelRef,
   catalogProbe,
   clientPinOf,
   createBfiWorkerEngine,
@@ -33,6 +34,7 @@ import {
   localPickerView,
   localRuntime,
   normalizeLocalBaseUrl,
+  normalizeLocalRuntimeId,
   parseLocalModelRef,
   pricedId,
   rewriteToLocalUrl,
@@ -43,7 +45,7 @@ import {
   servedIdentity,
   servedOnDevice,
   webGpuSupport
-} from "./chunk-PRXY4IDM.mjs";
+} from "./chunk-G4W2ZGYE.mjs";
 import {
   PREFLIGHT_PROBE_MS,
   bounded,
@@ -391,6 +393,7 @@ import {
   syncIdText,
   ticketStatusMove,
   ticketToolVocabulary,
+  toPosixPath,
   toolActivity,
   toolCallArgBytes,
   toolCallPaths,
@@ -411,7 +414,7 @@ import {
   workFiledNotStaffedVerdict,
   workFinishPorts,
   workSupportsRoutingSample
-} from "./chunk-A3IEKXJV.mjs";
+} from "./chunk-WVRARSU4.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -5103,6 +5106,7 @@ var positive = (n2) => typeof n2 === "number" && Number.isFinite(n2) && n2 > 0 ?
 function contextWindowOf(modelRef, sources = {}) {
   if (!modelRef) return void 0;
   if (isLocalModelRef(modelRef)) {
+    modelRef = canonicalLocalModelRef(modelRef);
     const live = [...sources.models ?? [], ...(sources.probes ?? []).flatMap((p) => p.models)].find((m) => m.ref === modelRef && isServableLocalModel(m))?.contextTokens;
     return positive(live) ?? positive(localCatalogModel(modelRef)?.contextTokens);
   }
@@ -5129,7 +5133,8 @@ async function resolveContextWindow(modelRef, sources = {}) {
 }
 
 // src/localTargetStream.ts
-function probedTarget(ref, probes) {
+function probedTarget(stored, probes) {
+  const ref = canonicalLocalModelRef(stored);
   for (const p of probes) {
     if (!p.reachable) continue;
     const m = p.models.find((x) => x.ref === ref && isServableLocalModel(x));
@@ -6707,10 +6712,12 @@ async function downloadBuiltInModel(options = {}) {
 function utilityUsageObserver(ledger, run, onError = () => void 0) {
   return (event) => {
     if (event.outcome !== "served" || !event.engine || !event.model) return;
+    const runtime = normalizeLocalRuntimeId(event.engine);
+    if (!runtime) return;
     void ledger.record({
       chatId: run.chatId,
       runKey: run.runKey,
-      model: formatLocalModelRef(event.engine, event.model),
+      model: formatLocalModelRef(runtime, event.model),
       route: "local",
       role: "utility",
       usage: { prompt: event.promptTokens ?? 0, completion: event.completionTokens ?? 0 },
@@ -7033,7 +7040,7 @@ function heuristicLanguage(text2) {
 // src/onDevice/completionOnDeviceTasks.ts
 var DEFAULT_CONTEXT_TOKENS = 4096;
 var COMPLETION_KINDS = ["summarize", "rewrite", "write", "proofread", "json"];
-var ENGINES = /* @__PURE__ */ new Set(["browser", "bfi", "webllm", "synapse", "ollama", "freetoken"]);
+var ENGINES = /* @__PURE__ */ new Set(["browser", "bfi", "webllm", "bfi-serve", "synapse", "ollama", "freetoken"]);
 function servedByRef(kind, ref) {
   const parsed = parseLocalModelRef(ref);
   return parsed && ENGINES.has(parsed.provider) ? { kind, engine: parsed.provider, model: parsed.model } : null;
@@ -7298,9 +7305,10 @@ ${o.user}`,
 
 // src/onDevice/clientFirst.ts
 var TRACE = /* @__PURE__ */ Symbol("clientResultTrace");
-var STAMPABLE = /* @__PURE__ */ new Set(["browser", "bfi", "webllm", "synapse"]);
+var STAMPABLE = /* @__PURE__ */ new Set(["browser", "bfi", "webllm", "bfi-serve"]);
 function stamped(host, served, payload) {
-  const provenance = served && STAMPABLE.has(served.engine) ? { engine: served.engine, model: served.model } : host.provenance();
+  const engine = served ? normalizeLocalRuntimeId(served.engine) ?? served.engine : void 0;
+  const provenance = served && engine && STAMPABLE.has(engine) ? { engine, model: served.model } : host.provenance();
   const result = { ...payload, provenance };
   if (served) Object.defineProperty(result, TRACE, { value: { by: served, observe: host.observe }, enumerable: false });
   return result;
@@ -11900,13 +11908,18 @@ function seedConfigLog(c, snap) {
 import { formatEvermindMemoryBlock as formatEvermindMemoryBlock2, countReconciledMemories } from "@seanhogg/builderforce-memory/evermind";
 import { transcriptTokens } from "@seanhogg/builderforce-memory/working";
 
+// src/run/normalizeRelPath.ts
+function normalizeRelPath(value) {
+  return toPosixPath(value.trim()).replace(/^\.\/+/, "");
+}
+function normalizeRelPathKey(value) {
+  return normalizeRelPath(value).replace(/\/+$/, "");
+}
+
 // src/runStore/answerAnchors.ts
 var FILE_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "view_file", "open_file", "read_files"]);
 var PATH_KEYS = ["path", "file", "filePath"];
 var MAX_ANSWER_ANCHORS = 16;
-function normalizePath(p) {
-  return p.trim().split("\\").join("/").replace(/^\.\/+/, "");
-}
 function readFileAnchors(trace2) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
@@ -11916,7 +11929,7 @@ function readFileAnchors(trace2) {
     const paths = Array.isArray(args.paths) ? args.paths : PATH_KEYS.map((k) => args[k]);
     for (const raw of paths) {
       if (typeof raw !== "string") continue;
-      const path = normalizePath(raw);
+      const path = normalizeRelPath(raw);
       if (!path || seen.has(path)) continue;
       seen.add(path);
       out.push({ path });
@@ -14630,9 +14643,6 @@ var STATE_TEXT = {
   changed: "changed since (by this run)",
   unknown: "may have changed (a shell command ran since)"
 };
-function normalizePath2(value) {
-  return value.trim().split("\\").join("/").replace(/^\.\/+/, "").replace(/\/+$/, "");
-}
 function objectOf(value) {
   if (value && typeof value === "object" && !Array.isArray(value)) return value;
   if (typeof value === "string") {
@@ -14653,13 +14663,13 @@ function changedPaths(args) {
   if (!a) return [];
   const out = [];
   for (const key of ["path", "file", "filePath"]) {
-    if (typeof a[key] === "string" && a[key].trim()) out.push(normalizePath2(a[key]));
+    if (typeof a[key] === "string" && a[key].trim()) out.push(normalizeRelPathKey(a[key]));
   }
   for (const list of [a.edits, a.paths]) {
     if (!Array.isArray(list)) continue;
     for (const item of list) {
       const p = typeof item === "string" ? item : item?.path;
-      if (typeof p === "string" && p.trim()) out.push(normalizePath2(p));
+      if (typeof p === "string" && p.trim()) out.push(normalizeRelPathKey(p));
     }
   }
   return out;
@@ -14723,14 +14733,14 @@ function ledgerOf(trace2) {
       const singles = singleReadsOf("read_file", args);
       if (singles) {
         if (ev.isError || data?.ok === false) {
-          for (const s of singles) if (typeof s.path === "string") noteFailure(normalizePath2(s.path), at);
+          for (const s of singles) if (typeof s.path === "string") noteFailure(normalizeRelPathKey(s.path), at);
           return;
         }
         if (!isRanRead(data)) return;
         const entries = perFileResults(data) ?? [];
         singles.forEach((single, i) => {
           if (typeof single.path !== "string") return;
-          const path2 = normalizePath2(single.path);
+          const path2 = normalizeRelPathKey(single.path);
           const entry = objectOf(entries[i]);
           if (!entry || entry.ok === false) noteFailure(path2, at);
           else noteRead(path2, at, servedSpan(entry, single, trimmed));
@@ -14739,7 +14749,7 @@ function ledgerOf(trace2) {
       }
       const raw = typeof args.path === "string" ? args.path : "";
       if (!raw.trim()) return;
-      const path = normalizePath2(raw);
+      const path = normalizeRelPathKey(raw);
       if (ev.isError || data?.ok === false) {
         noteFailure(path, at);
         return;
@@ -15511,9 +15521,8 @@ var MAX_LISTED_ITEMS = 25;
 var NOT_A_SPEC = /(^|\/)(readme|changelog|license|contributing|claude|agents|memory|code_of_conduct|security)\.md$/i;
 var MD_PATH = /[\w.@-]+(?:[\\/][\w.@-]+)*\.md\b/gi;
 var SPEC_LIKE = /(?:^|\/)docs\/specs?\/|(?:^|[^a-z])(?:specs?|prds?|roadmap|requirements)(?=[^a-z]|$)/i;
-var normalizePath3 = (p) => p.trim().replace(/\\/g, "/").replace(/^\.\/+/, "");
 function namedSpecPaths(request) {
-  return [...new Set((request.match(MD_PATH) ?? []).map(normalizePath3))].filter((p) => !NOT_A_SPEC.test(p));
+  return [...new Set((request.match(MD_PATH) ?? []).map((p) => normalizeRelPath(p)))].filter((p) => !NOT_A_SPEC.test(p));
 }
 var speaksOfSpec = (request) => SPEC_LANGUAGE.some((p) => p.test(request));
 function isSpecTicketingRequest(request) {
@@ -15523,7 +15532,7 @@ function specPathsFor(request, trace2) {
   const named = namedSpecPaths(request);
   if (named.length) return named.slice(0, MAX_SPECS);
   if (!speaksOfSpec(request)) return [];
-  return readFileAnchors(trace2).map((a) => normalizePath3(a.path)).filter((p) => /\.md$/i.test(p) && !NOT_A_SPEC.test(p) && SPEC_LIKE.test(p)).reverse().slice(0, MAX_SPECS);
+  return readFileAnchors(trace2).map((a) => normalizeRelPath(a.path)).filter((p) => /\.md$/i.test(p) && !NOT_A_SPEC.test(p) && SPEC_LIKE.test(p)).reverse().slice(0, MAX_SPECS);
 }
 function itemLine(i) {
   const blocker = i.status === "blocked" ? `, blocker: ${i.blocker ?? "not stated"}` : "";
@@ -15608,7 +15617,7 @@ async function coverageTickets(run, trace2, noteEv) {
 }
 var samePath = (a, b) => a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
 function writesPath(events, path) {
-  return events.some((ev) => stepSucceeded(ev) && isCodeChangeTool(ev.label) && editedPathsOf(ev.label, ev.args).some((p) => samePath(normalizePath3(p), path)));
+  return events.some((ev) => stepSucceeded(ev) && isCodeChangeTool(ev.label) && editedPathsOf(ev.label, ev.args).some((p) => samePath(normalizeRelPath(p), path)));
 }
 function specTicketCoverageGate(run) {
   const seen = /* @__PURE__ */ new Map();

@@ -3,7 +3,7 @@
  * directly, as data.
  *
  * Membership means "the CLIENT performs this call itself", not "the weights are on this
- * disk". Six entries are on-device engines (Synapse's native `bfi`, Ollama, FreeToken,
+ * disk". Six entries are on-device engines (the native `bfi` engine over `bfi serve`, Ollama, FreeToken,
  * and three engines inside the page: our `bfi` compiled to WebAssembly over WebGPU,
  * WebLLM, and the browser's own built-in model): no account, no metering, available
  * offline, and the only ones local-first routing will try. `kimi-code` is Kimi's hosted API and belongs here anyway: its edge
@@ -14,7 +14,7 @@
  * Kept as DATA so a host never branches on a runtime id: the picker, the probe, the
  * plan and the catalog binding all read the fields below.
  */
-type LocalRuntimeId = 'synapse' | 'ollama' | 'freetoken' | 'bfi' | 'webllm' | 'browser' | 'kimi-code';
+type LocalRuntimeId = 'bfi-serve' | 'ollama' | 'freetoken' | 'bfi' | 'webllm' | 'browser' | 'kimi-code';
 /**
  * Where a runtime's calls go, and what (if anything) authenticates them. An on-device
  * engine normally leaves `token` unset; `bfi serve --api-key` and a signed-in Kimi

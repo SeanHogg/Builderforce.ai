@@ -28,7 +28,7 @@
  * router treats that as "unknown", never as cheap.
  */
 
-import { LOCAL_RUNTIMES, localCatalogView } from "@builderforce/local-inference";
+import { LEGACY_RUNTIME_IDS, LOCAL_RUNTIMES, localCatalogView } from "@builderforce/local-inference";
 import {
   LLM_PROVIDER_INFO,
   perMillionToPerToken,
@@ -65,7 +65,12 @@ const LOCAL_APIS: ReadonlySet<string> = new Set(["ollama", "llama", "transformer
 
 /** Engines only THIS host drives — the shared registry lists the runtimes a client calls
  *  itself, and none of these is one. */
-const ON_PREM_ONLY_LOCAL_PROVIDERS = ["lmstudio", "vllm", "llama", "builderforcellm-local"] as const;
+const ON_PREM_ONLY_LOCAL_PROVIDERS = [
+  "lmstudio",
+  "vllm",
+  "llama",
+  "builderforcellm-local",
+] as const;
 
 /** Providers that only ever execute on the user's own machine, for a candidate the
  *  catalog has no row for (an operator pin on a provider whose discovery found nothing).
@@ -74,6 +79,8 @@ const LOCAL_PROVIDERS: ReadonlySet<string> = new Set([
   ...LOCAL_RUNTIMES.filter((r) => r.onDevice && r.reach === "http").map((r) => r.id),
   ...LLM_PROVIDER_INFO.filter((p) => p.credential === "local_runtime").map((p) => p.id),
   ...ON_PREM_ONLY_LOCAL_PROVIDERS,
+  // Retired runtime spellings (`synapse`), still read from stored provider keys: the shared alias table owns them.
+  ...Object.keys(LEGACY_RUNTIME_IDS),
 ]);
 
 const finiteNonNegative = (n: unknown): number | undefined =>

@@ -11,11 +11,13 @@
  * its provenance, the caller supplies how to send.
  */
 
+import { normalizeLocalRuntimeId } from '@builderforce/local-inference';
 import { builtInModelIdentity } from '../builtInAi/identity';
 import { reportOnDeviceFailure } from './onDeviceFailure';
 import type { OnDeviceObserver, OnDeviceTasks, ServedBy } from './onDeviceTasks';
 
-export type ClientResultEngine = 'browser' | 'bfi' | 'webllm' | 'synapse';
+/** `synapse` is the retired id of `bfi-serve`: still accepted, never stamped (INF-G019 drops it). */
+export type ClientResultEngine = 'browser' | 'bfi' | 'webllm' | 'bfi-serve' | 'synapse';
 
 /** Who produced a client result — the server whitelists the engine and stores both. */
 export interface ClientResultProvenance {
@@ -55,11 +57,13 @@ interface Trace { by: ServedBy; observe: OnDeviceObserver | undefined }
 type Traced = ClientResultPayload & { [TRACE]?: Trace };
 
 /** The ClientResultEngine a serving engine is stamped as; `ollama` / `freetoken` are not on the server's whitelist, so the host's own stamp stands. */
-const STAMPABLE: ReadonlySet<string> = new Set<ClientResultEngine>(['browser', 'bfi', 'webllm', 'synapse']);
+const STAMPABLE: ReadonlySet<string> = new Set<ClientResultEngine>(['browser', 'bfi', 'webllm', 'bfi-serve']);
 
 function stamped(host: Pick<ClientFirstHost, 'provenance' | 'observe'>, served: ServedBy | undefined, payload: Omit<ClientResultPayload, 'provenance'>): ClientResultPayload {
-  const provenance: ClientResultProvenance = served && STAMPABLE.has(served.engine)
-    ? { engine: served.engine as ClientResultEngine, model: served.model }
+  // The retired `synapse` spelling is written as `bfi-serve`.
+  const engine = served ? (normalizeLocalRuntimeId(served.engine) ?? served.engine) : undefined;
+  const provenance: ClientResultProvenance = served && engine && STAMPABLE.has(engine)
+    ? { engine: engine as ClientResultEngine, model: served.model }
     : host.provenance();
   const result: Traced = { ...payload, provenance };
   if (served) Object.defineProperty(result, TRACE, { value: { by: served, observe: host.observe } satisfies Trace, enumerable: false });

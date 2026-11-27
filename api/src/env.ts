@@ -871,6 +871,8 @@ export interface Vars {
   clientSurface?: import('@builderforce/creation-canvas-contract').DeviceClient;
   /** The `tenant_api_keys.id` an editor session was exchanged from (`JwtPayload.kid`). */
   apiKeyId?: string;
+  /** The audience (`JwtPayload.aud`) of a scoped token; absent on every ordinary token. */
+  tokenAudience?: string;
   /** True when the request is running under an emulation token (read-only). */
   isEmulation?: boolean;
   /**

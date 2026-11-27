@@ -1,5 +1,5 @@
 import { a as BrainTraceEvent, U as UsageSurface, B as BrainMessage, P as PackageDirProbe } from './brainTriage-CpMG35_T.js';
-import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-DkPrGnWT.js';
+import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-SQisndMV.js';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 
@@ -811,7 +811,7 @@ declare function ticketToolVocabulary(toolNames?: Iterable<string>): TicketToolV
  *
  * The served model already reaches the provenance chip as the turn's `resolvedModel`
  * (`local/<runtime>/<model>` for a local answer). What would otherwise be invisible is
- * the fallback itself: "why did this turn go to the cloud when I have Synapse running?"
+ * the fallback itself: "why did this turn go to the cloud when I have `bfi serve` running?"
  * must have an answer in a copied diagnostics report and a reopened chat. Same shape and
  * category as the other `llm.*` self-reports (see `runPolicyTraces.ts`). Pure: the
  * caller stamps `ts`.
@@ -1760,8 +1760,8 @@ type JsonSchema = {
     readonly [key: string]: unknown;
 };
 type OnDeviceTaskKind = 'summarize' | 'rewrite' | 'proofread' | 'write' | 'detectLanguage' | 'translate' | 'json';
-/** The runtime that served a call — a built-in model (`browser`) or a local engine. */
-type OnDeviceEngine = 'browser' | 'bfi' | 'webllm' | 'synapse' | 'ollama' | 'freetoken';
+/** The runtime that served a call — a built-in model (`browser`) or a local engine. `synapse` is the retired id of `bfi-serve` (INF-G019 drops it). */
+type OnDeviceEngine = 'browser' | 'bfi' | 'webllm' | 'bfi-serve' | 'synapse' | 'ollama' | 'freetoken';
 /** Who served ONE call (PRD 42 · Part F): its task kind, the engine and the bare model id. */
 interface ServedBy {
     kind: OnDeviceTaskKind;
@@ -1898,7 +1898,7 @@ interface GateOutcome {
     accepted: boolean;
     features: number[];
 }
-/** Local-SLM logprob classifier (tier 3) — Synapse/bfi-node → WebLLM → Ollama last. */
+/** Local-SLM logprob classifier (tier 3) — `bfi serve` / bfi-node → WebLLM → Ollama last. */
 interface LogprobPort {
     /** True only when a local engine is warm; tier 3 is skipped otherwise. */
     warm(): boolean;

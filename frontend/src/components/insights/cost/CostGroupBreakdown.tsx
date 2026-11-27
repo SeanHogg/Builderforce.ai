@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
+import { normalizeLocalRuntimeId } from '@builderforce/local-inference';
 import { Select } from '@/components/Select';
 import { BarChart } from '@/components/charts/BarChart';
 import { PmEmpty, PmError } from '@/components/pm/pmShared';
@@ -24,7 +25,7 @@ export const GROUPING_LABEL_KEY: Record<CostGrouping, string> = {
 export const ROUTE_LABEL_KEY: Readonly<Record<string, string>> = { full: 'route.full', quick: 'route.quick' };
 
 /** Engines that are product names, spelled the same in every language. */
-const ENGINE_BRAND: Readonly<Record<string, string>> = { synapse: 'Synapse', bfi: 'BFI', webllm: 'WebLLM' };
+const ENGINE_BRAND: Readonly<Record<string, string>> = { 'bfi-serve': 'Synapse', bfi: 'BFI', webllm: 'WebLLM' };
 
 /** The wire's "no attribution" bucket — the one group key the UI names itself. */
 const UNATTRIBUTED = 'unattributed';
@@ -51,7 +52,7 @@ export function CostGroupBreakdown({
     if (grouping === 'utilityEngine') {
       if (g === 'cloud') return t('engine.cloud');
       if (g === 'browser') return t('engine.browser');
-      return ENGINE_BRAND[g] ?? g;
+      return ENGINE_BRAND[normalizeLocalRuntimeId(g) ?? g] ?? g;
     }
     const routeKey = grouping === 'route' ? ROUTE_LABEL_KEY[g] : undefined;
     return routeKey ? t(routeKey as never) : g;

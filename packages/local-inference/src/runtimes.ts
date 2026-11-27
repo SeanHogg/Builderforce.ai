@@ -15,7 +15,7 @@
  * plan and the catalog binding all read the fields below.
  */
 
-export type LocalRuntimeId = 'synapse' | 'ollama' | 'freetoken' | 'bfi' | 'webllm' | 'browser' | 'kimi-code';
+export type LocalRuntimeId = 'bfi-serve' | 'ollama' | 'freetoken' | 'bfi' | 'webllm' | 'browser' | 'kimi-code';
 
 /**
  * Where a runtime's calls go, and what (if anything) authenticates them. An on-device
@@ -154,7 +154,7 @@ const KIMI_CODE_CATALOG_ALIASES: Readonly<Record<string, string>> = {
 
 /** Runtime metadata. `automaticRank`, not array position, owns automatic preference. */
 export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
-  { id: 'synapse', automaticRank: 30, label: 'Synapse', onDevice: true, catalog: 'probe', tools: 'all', reach: 'http', ownedBy: 'bfi' },
+  { id: 'bfi-serve', automaticRank: 30, label: 'Synapse', onDevice: true, catalog: 'probe', tools: 'all', reach: 'http', ownedBy: 'bfi' },
   {
     id: 'ollama',
     automaticRank: 50,
@@ -220,6 +220,23 @@ export const LOCAL_RUNTIME_IDS: readonly LocalRuntimeId[] = LOCAL_RUNTIMES.map((
 
 export function isLocalRuntimeId(value: unknown): value is LocalRuntimeId {
   return typeof value === 'string' && (LOCAL_RUNTIME_IDS as readonly string[]).includes(value);
+}
+
+/**
+ * Retired spellings of a runtime id, still read from data written before the rename (saved model refs,
+ * settings, telemetry from older clients). `synapse` was the `bfi serve` engine's id; the label stays "Synapse".
+ * INF-G019 drops this table one release after the rename.
+ */
+export const LEGACY_RUNTIME_IDS: Readonly<Record<string, LocalRuntimeId>> = { synapse: 'bfi-serve' };
+
+/**
+ * THE one reader of a runtime id arriving from outside (a ref segment, a setting, a telemetry field): a
+ * current id passes through, a retired spelling maps to its current id, anything else is undefined.
+ */
+export function normalizeLocalRuntimeId(id: string): LocalRuntimeId | undefined {
+  const legacy = Object.prototype.hasOwnProperty.call(LEGACY_RUNTIME_IDS, id) ? LEGACY_RUNTIME_IDS[id] : undefined;
+  if (legacy) return legacy;
+  return isLocalRuntimeId(id) ? id : undefined;
 }
 
 /** The registry entry for an id. Total over {@link LocalRuntimeId}. */

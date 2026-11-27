@@ -46,7 +46,8 @@ async function resolveMemberRole(db: Db, userId: string, tenantId: number): Prom
  * editor exactly as on the web. Pass `opts.role` only to force a specific role.
  *
  * Tenant session tokens carry no `sid` (no prior login session), so there is no session
- * row to ensure — just the auth-token record keyed by the JWT's jti.
+ * row to ensure — just the auth-token record keyed by the JWT's jti (linked to a parent
+ * session only when `opts.sessionId` is given).
  */
 export async function mintTenantSessionToken(
   db: Db,
@@ -62,6 +63,14 @@ export async function mintTenantSessionToken(
     clientSurface?: DeviceClient;
     /** The `tenant_api_keys.id` this session derives from (editor sessions); stamped as `kid`. */
     keyId?: string;
+    /** Binds the token to one audience (`SCOPED_TOKEN_AUDIENCES`); stamped as `aud`. */
+    audience?: string;
+    /**
+     * The parent login session this token derives from. Stored on the `auth_tokens` row so
+     * revoking the session (sign-out, `revoke-others`) revokes this token too. Not stamped
+     * into the JWT.
+     */
+    sessionId?: string;
   },
 ): Promise<{ token: string; expiresIn: number }> {
   const expiresIn = opts.expiresIn ?? 3600;
@@ -71,6 +80,7 @@ export async function mintTenantSessionToken(
       sub: opts.userId, tid: opts.tenantId, role,
       ...(opts.clientSurface ? { src: opts.clientSurface } : {}),
       ...(opts.keyId ? { kid: opts.keyId } : {}),
+      ...(opts.audience ? { aud: opts.audience } : {}),
     },
     jwtSecret,
     expiresIn,
@@ -80,7 +90,7 @@ export async function mintTenantSessionToken(
     await db.insert(authTokens).values({
       jti: payload.jti,
       userId: opts.userId,
-      sessionId: null,
+      sessionId: opts.sessionId ?? null,
       tenantId: opts.tenantId,
       tokenType: 'tenant',
       issuedAt: new Date(),

@@ -1,4 +1,4 @@
-import { L as LocalRuntimeId, a as LocalRuntimeProbe } from './probe-DkPrGnWT.js';
+import { L as LocalRuntimeId, a as LocalRuntimeProbe } from './probe-SQisndMV.js';
 
 /**
  * Can THIS device run a catalog model — and on which backend? Answered from what the
@@ -345,7 +345,7 @@ declare function serveEngineWorker(endpoint: EngineWorkerEndpoint, engines: () =
 declare function isWasmTrap(e: unknown): boolean;
 
 /**
- * Our transformer — Synapse's `bfi` compiled to WebAssembly over WebGPU, or over the CPU
+ * Our transformer — the native `bfi` engine compiled to WebAssembly over WebGPU, or over the CPU
  * where there is no GPU (`bfi-web`, PRD 34 §3.1) — as a page engine answering the `bfi`
  * runtime's chat route. The backend is the fit's: `localModelFit` offers a Bonsai row on
  * WebGPU when the adapter fits it, else on the engine's CPU backend when the device has
@@ -498,7 +498,7 @@ declare function runBfiWorker(scope?: MessageEndpointLike, options?: RunBfiWorke
  * THE `bfi-web` loader — the one way a `bfi` worker (`runBfiWorker`, the editor host's
  * `hostBfi/worker.ts`) loads the wasm.
  *
- * `@seanhogg/bfi-web` is the vendored wasm-pack build of Synapse's engine (PRD 34 §3.1,
+ * `@seanhogg/bfi-web` is the vendored wasm-pack build of the native `bfi` engine (PRD 34 §3.1,
  * `packages/bfi-web`). This module dynamic-imports it, runs its wasm-bindgen initializer
  * with the wasm URL the HOST's bundler emitted — once, however many engines or calls ask
  * — and hands back the `BfiEngine` class in the shape `bfiEngine.ts` takes. Only the URL

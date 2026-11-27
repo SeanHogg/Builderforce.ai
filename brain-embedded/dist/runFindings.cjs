@@ -380,6 +380,7 @@ function matchEdit(content, oldString, newString, replaceAll, eol) {
 }
 
 // ../packages/agent-tools/src/edit.ts
+var BOM_CHAR_CODE = 65279;
 var MIN_CONTAINS_NEEDLE = 8;
 var EXCERPT_RADIUS = 3;
 var EDIT_EXCERPT_CONTEXT = 2;
@@ -415,6 +416,11 @@ function findNearest(content, oldString) {
 function applyStringEdit(content, oldString, newString, replaceAll = false) {
   if (typeof oldString !== "string" || oldString.length === 0) {
     return { ok: false, error: "oldString is required" };
+  }
+  const bom = content.charCodeAt(0) === BOM_CHAR_CODE ? String.fromCharCode(BOM_CHAR_CODE) : "";
+  if (bom) {
+    const inner = applyStringEdit(content.slice(1), oldString, newString, replaceAll);
+    return inner.ok && inner.content !== void 0 ? { ...inner, content: bom + inner.content } : inner;
   }
   const match = matchEdit(content, oldString, newString, replaceAll, dominantEol(content));
   if (match && "ambiguous" in match) {
@@ -880,8 +886,11 @@ function readJsonKey(text, key) {
 }
 
 // ../packages/agent-tools/src/glob.ts
+function toPosixPath(p) {
+  return p.split("\\").join("/");
+}
 function normalizeScopeDir(raw) {
-  return (raw ?? "").split("\\").join("/").trim().replace(/^\.\/+/, "").replace(/^\/+|\/+$/g, "");
+  return toPosixPath(raw ?? "").trim().replace(/^\.\/+/, "").replace(/^\/+|\/+$/g, "");
 }
 function emptyGlobListingNote(glob, scopeDir, truncated) {
   const scope = normalizeScopeDir(scopeDir);
@@ -3646,16 +3655,16 @@ var ANALYZER_VERSIONS = {
 var import_ingest = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
-var import_knowledge5 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/statManifest.ts
-var RACY_WINDOW_NS = BigInt(2e9);
+// ../packages/agent-tools/src/knowledge/statWalk.ts
+var import_knowledge3 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/withDocumentText.ts
-var import_knowledge4 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge5 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/documentText.ts
-var import_knowledge3 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge4 = require("@seanhogg/builderforce-memory/knowledge");
 var PDF_MEDIA_TYPE = "application/pdf";
 var DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 var XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -4946,7 +4955,7 @@ var NON_DELEGABLE_CAPABILITIES = ["human", "skill.author"];
 var CHILD_WITHHELD_CAPABILITIES = /* @__PURE__ */ new Set([...NON_DELEGABLE_CAPABILITIES, ...DELEGATION_CAPABILITIES]);
 
 // ../packages/agent-tools/src/symbolRelations.ts
-var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge7 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/symbolImports.ts
 var IMPORT_NAMED = new RegExp(`^\\s*(?:type\\s+)?(${ID})(?:\\s+as\\s+(${ID}))?\\s*$`);
@@ -4954,7 +4963,7 @@ var IMPORT_NAMESPACE = new RegExp(`\\*\\s*as\\s+(${ID})`);
 var IMPORT_DEFAULT = new RegExp(`^\\s*(${ID})\\s*(?:,|$)`);
 
 // ../packages/agent-tools/src/symbolRelations.ts
-var import_knowledge7 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge8 = require("@seanhogg/builderforce-memory/knowledge");
 var LEADING_TYPE = new RegExp(`^\\s*(${ID}(?:\\s*\\.\\s*${ID})?)`);
 var FIELD = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|declare|override|abstract|accessor)\\s+)*#?(${ID})\\s*[?!]?\\s*:\\s*([^=;]+)`);
 var FIELD_INIT = new RegExp(`^\\s*(?:(?:public|private|protected|readonly|static|override)\\s+)*#?(${ID})\\s*=`);
@@ -4966,7 +4975,7 @@ var CALLBACK_PARAMS = new RegExp(`(?:\\(([^()]*)\\)(?:\\s*:\\s*[^=()]+)?\\s*=>|(
 var PARAM_NAME = new RegExp(`^\\s*(?:\\.\\.\\.)?(?:(?:public|private|protected|readonly)\\s+)*(${ID})`);
 
 // ../packages/agent-tools/src/knowledge/codePack.ts
-var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest4 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/secret-redaction/src/index.ts
@@ -5135,10 +5144,10 @@ var JS_DECISIONS = new RegExp(String.raw`\b(?:if|for|while|case|catch)\b|&&|\|\|
 var OO_DECISIONS = new RegExp(String.raw`\b(?:if|for|foreach|while|case|catch)\b|&&|\|\||\?\?|${TERNARY}`, "g");
 
 // ../packages/agent-tools/src/knowledge/codeConcurrency.ts
-var import_knowledge8 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeNodes.ts
-var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
 var import_working4 = require("@seanhogg/builderforce-memory/working");
 var import_ingest2 = require("@seanhogg/builderforce-memory/ingest");
 var CODE_PACK_ID = "code";
@@ -5170,7 +5179,7 @@ var CODE_BADGES = {
   /** Commits touching the file in the last 90 days, from the host's `HistoryPort` (deterministic). */
   churn: "churn",
   /** The file's co-change partners over the last year of history (memory's `encodeCoChange`, PRD 38 P4); absent with none. */
-  coChange: import_knowledge9.COCHANGE_BADGE,
+  coChange: import_knowledge10.COCHANGE_BADGE,
   /** First CODEOWNERS owner of the file (deterministic). */
   owner: "owner",
   /** Comma-separated design-pattern ids (heuristic). */
@@ -5192,7 +5201,7 @@ var CODE_BADGES = {
 };
 
 // ../packages/agent-tools/src/knowledge/codePatterns.ts
-var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeRoutes.ts
 var METHODS = "get|post|put|patch|delete|options|head|all";
@@ -5204,31 +5213,31 @@ var NEXT_WITH_PATH = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(\s*(['"` + "
 var NEXT_ANY = new RegExp(String.raw`\s*\.\s*(${METHODS})\s*\(`, "y");
 
 // ../packages/agent-tools/src/knowledge/codeFindings.ts
-var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/rules/unusedDependency.ts
-var import_knowledge12 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge13 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/rules/unusedItems.ts
-var import_knowledge11 = require("@seanhogg/builderforce-memory/knowledge");
-var codeFiles = (g) => g.nodes.filter((n) => n.pack === CODE_PACK_ID && n.kind === "file").sort((a, b) => (0, import_knowledge11.compareStr)(a.ref, b.ref));
-var namesOf = (n, badge) => [...new Set(String(n.badges?.[badge] ?? "").split(",").filter(Boolean))].sort(import_knowledge11.compareStr);
+var import_knowledge12 = require("@seanhogg/builderforce-memory/knowledge");
+var codeFiles = (g) => g.nodes.filter((n) => n.pack === CODE_PACK_ID && n.kind === "file").sort((a, b) => (0, import_knowledge12.compareStr)(a.ref, b.ref));
+var namesOf = (n, badge) => [...new Set(String(n.badges?.[badge] ?? "").split(",").filter(Boolean))].sort(import_knowledge12.compareStr);
 function itemFindings(n, item) {
   const ref = n.ref;
   const names = namesOf(n, item.names);
   if (names.length === 0) {
     const count = Number(n.badges?.[item.count] ?? 0) || 0;
-    return count > 0 ? [(0, import_knowledge11.finding)(item.kind, CODE_PACK_ID, [ref], "info", { count, files: 1 }, void 0, (0, import_knowledge11.refAnchor)(ref))] : [];
+    return count > 0 ? [(0, import_knowledge12.finding)(item.kind, CODE_PACK_ID, [ref], "info", { count, files: 1 }, void 0, (0, import_knowledge12.refAnchor)(ref))] : [];
   }
   return names.map((name) => {
     const anchor = `${ref}#${name}`;
-    return (0, import_knowledge11.finding)(item.kind, CODE_PACK_ID, [ref], "info", { count: 1, files: 1, name }, [anchor], { anchor, anchorKind: item.anchorKind });
+    return (0, import_knowledge12.finding)(item.kind, CODE_PACK_ID, [ref], "info", { count: 1, files: 1, name }, [anchor], { anchor, anchorKind: item.anchorKind });
   });
 }
 
 // ../packages/agent-tools/src/knowledge/rules/unusedDependency.ts
 var ITEM = { kind: "unused-dependency", names: CODE_BADGES.unusedDependencyNames, count: CODE_BADGES.unusedDependencies, anchorKind: "package" };
-var unusedDependencyRule = (0, import_knowledge12.defineRule)({
+var unusedDependencyRule = (0, import_knowledge13.defineRule)({
   id: "code.unused-dependency",
   version: 1,
   reads: [],
@@ -5239,9 +5248,9 @@ var unusedDependencyRule = (0, import_knowledge12.defineRule)({
 });
 
 // ../packages/agent-tools/src/knowledge/rules/unusedExport.ts
-var import_knowledge13 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge14 = require("@seanhogg/builderforce-memory/knowledge");
 var ITEM2 = { kind: "unused-export", names: CODE_BADGES.unusedExportNames, count: CODE_BADGES.unusedExports, anchorKind: "symbol" };
-var unusedExportRule = (0, import_knowledge13.defineRule)({
+var unusedExportRule = (0, import_knowledge14.defineRule)({
   id: "code.unused-export",
   version: 1,
   reads: [],
@@ -5252,10 +5261,10 @@ var unusedExportRule = (0, import_knowledge13.defineRule)({
 });
 
 // ../packages/agent-tools/src/knowledge/rules/securityRisk.ts
-var import_knowledge14 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
 var MIN_RISK = 40;
 var BLOCK_RISK = 80;
-var securityRiskRule = (0, import_knowledge14.defineRule)({
+var securityRiskRule = (0, import_knowledge15.defineRule)({
   id: "code.security-risk",
   version: 1,
   reads: [],
@@ -5266,40 +5275,40 @@ var securityRiskRule = (0, import_knowledge14.defineRule)({
     const risk = Number(n.badges?.[CODE_BADGES.securityRisk] ?? 0) || 0;
     if (risk < MIN_RISK) return [];
     const rules = String(n.badges?.[CODE_BADGES.securityRules] ?? "");
-    return [(0, import_knowledge14.finding)("security-risk", CODE_PACK_ID, [n.ref], risk >= BLOCK_RISK ? "error" : "warn", { count: 1, files: 1, risk, rules }, void 0, (0, import_knowledge14.refAnchor)(n.ref))];
+    return [(0, import_knowledge15.finding)("security-risk", CODE_PACK_ID, [n.ref], risk >= BLOCK_RISK ? "error" : "warn", { count: 1, files: 1, risk, rules }, void 0, (0, import_knowledge15.refAnchor)(n.ref))];
   })
 });
 
 // ../packages/agent-tools/src/knowledge/rules/unusedFile.ts
-var import_knowledge15 = require("@seanhogg/builderforce-memory/knowledge");
-var unusedFileRule = (0, import_knowledge15.defineRule)({
+var import_knowledge16 = require("@seanhogg/builderforce-memory/knowledge");
+var unusedFileRule = (0, import_knowledge16.defineRule)({
   id: "code.unused-file",
   version: 1,
   reads: [],
   // the knowledge graph only
   scope: "global",
   extraInputs: ["knowledge"],
-  derive: ({ extra: { knowledge: k } }) => codeFiles(k.graph).filter((n) => n.badges?.[CODE_BADGES.unused] === "file").map((n) => (0, import_knowledge15.finding)("unused-file", CODE_PACK_ID, [n.ref], "info", { count: 1, files: 1 }, void 0, (0, import_knowledge15.refAnchor)(n.ref)))
+  derive: ({ extra: { knowledge: k } }) => codeFiles(k.graph).filter((n) => n.badges?.[CODE_BADGES.unused] === "file").map((n) => (0, import_knowledge16.finding)("unused-file", CODE_PACK_ID, [n.ref], "info", { count: 1, files: 1 }, void 0, (0, import_knowledge16.refAnchor)(n.ref)))
 });
 
 // ../packages/agent-tools/src/knowledge/codeFindings.ts
 var CODE_FACT_RULES = Object.freeze([unusedFileRule, unusedExportRule, unusedDependencyRule, securityRiskRule]);
 
 // ../packages/agent-tools/src/knowledge/codeRollup.ts
-var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/moduleAliases.ts
-var import_knowledge17 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/rootId.ts
 var import_knowledge18 = require("@seanhogg/builderforce-memory/knowledge");
 
+// ../packages/agent-tools/src/knowledge/rootId.ts
+var import_knowledge19 = require("@seanhogg/builderforce-memory/knowledge");
+
 // ../packages/agent-tools/src/knowledge/deploy/deployParser.ts
-var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest3 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/deploy/deployNodes.ts
-var import_knowledge20 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge21 = require("@seanhogg/builderforce-memory/knowledge");
 var DEPLOY_BADGES = {
   type: "type",
   unitKind: "unitKind",
@@ -5333,7 +5342,7 @@ var BINDING_PREFIX = `ent:${CODE_PACK_ID}:binding:`;
 var MAX_DESCRIPTOR_CHARS = 256 * 1024;
 
 // ../packages/agent-tools/src/knowledge/codeLayers.ts
-var import_knowledge22 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
 var FOLDER_LAYERS = {
   presentation: ["routes", "components", "app", "pages", "webview", "views", "hooks", "handlers", "controllers", "ui"],
   application: ["application", "use-cases", "usecases", "services", "lib", "clients", "commands", "queries"],
@@ -5373,10 +5382,10 @@ function defaultLayerRegistry() {
 var CODE_LAYERS = defaultLayerRegistry();
 
 // ../packages/agent-tools/src/knowledge/knowledgePacks.ts
-var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/documents/documentsPack.ts
-var import_knowledge24 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge25 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest5 = require("@seanhogg/builderforce-memory/ingest");
 var DOCUMENTS_PACK_ID = "documents";
 var documentsParser = {
@@ -5387,20 +5396,20 @@ var documentsParser = {
 var DOCUMENTS_PACK = {
   id: DOCUMENTS_PACK_ID,
   parsers: [documentsParser],
-  ...import_knowledge24.DOCS_PACK.judgement ? { judgement: import_knowledge24.DOCS_PACK.judgement } : {}
+  ...import_knowledge25.DOCS_PACK.judgement ? { judgement: import_knowledge25.DOCS_PACK.judgement } : {}
 };
 
 // ../packages/agent-tools/src/knowledge/codeExtracted.ts
-var import_knowledge26 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/facts/fileFactsOf.ts
-var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/facts/factsAst.ts
 var import_knowledge27 = require("@seanhogg/builderforce-memory/knowledge");
 
+// ../packages/agent-tools/src/knowledge/facts/fileFactsOf.ts
+var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/facts/factsAst.ts
+var import_knowledge28 = require("@seanhogg/builderforce-memory/knowledge");
+
 // ../packages/agent-tools/src/knowledge/reviewRunner.ts
-var import_knowledge39 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge40 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeEntryPoints.ts
 var LITERAL = String.raw`(?:"[^"\n]*"|'[^'\n]*'|\x60[^\x60\n$]*\x60)`;
@@ -5412,32 +5421,32 @@ var INPUT_FORMS = [
 ];
 
 // ../packages/agent-tools/src/knowledge/codeGraph.ts
-var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/deploy/deployGraph.ts
-var import_knowledge29 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge30 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeRootSignals.ts
-var import_knowledge33 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge34 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest6 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/codeCoverage.ts
 var MAX_FILE_BYTES = 40 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/codeOwners.ts
-var import_knowledge31 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/historyPort.ts
 var import_knowledge32 = require("@seanhogg/builderforce-memory/knowledge");
 
+// ../packages/agent-tools/src/knowledge/historyPort.ts
+var import_knowledge33 = require("@seanhogg/builderforce-memory/knowledge");
+
 // ../packages/agent-tools/src/knowledge/fileEdits.ts
-var import_knowledge34 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge35 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
 var import_ingest7 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/graphIgnore.ts
-var import_knowledge35 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge36 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/workspaceAnalysis.ts
 var MAX_GRAPH_FILE_BYTES = 256 * 1024;
@@ -5447,10 +5456,10 @@ var cache = createShaCache({
 });
 
 // ../packages/agent-tools/src/knowledge/reviewJudgePass.ts
-var import_knowledge36 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge37 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/judgement.ts
-var import_knowledge37 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge38 = require("@seanhogg/builderforce-memory/knowledge");
 var KNOWLEDGE_EXTRACT_SYSTEM = [
   "You read one section of a document and list what it asserts.",
   'Reply with JSON only: {"extract":[{"ref":<the ref given>,"claims":[{"subject","predicate","object","quote"}],"entities":[{"name","type"}]}]}.',
@@ -5464,20 +5473,20 @@ var KNOWLEDGE_COMPARE_SYSTEM = [
 ].join("\n");
 
 // ../packages/agent-tools/src/knowledge/measuredWith.ts
-var import_knowledge38 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge39 = require("@seanhogg/builderforce-memory/knowledge");
 var TYPESCRIPT_VERSION = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") + 1);
 
 // ../packages/agent-tools/src/knowledge/humanFact.ts
-var import_knowledge40 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/documents/documentDoc.ts
 var import_knowledge41 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/index/persistence.ts
+// ../packages/agent-tools/src/knowledge/documents/documentDoc.ts
 var import_knowledge42 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/replicaQueue.ts
+// ../packages/agent-tools/src/knowledge/index/persistence.ts
 var import_knowledge43 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/replicaQueue.ts
+var import_knowledge44 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicatedStore.ts
@@ -5487,7 +5496,7 @@ var import_pack2 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var import_pack5 = require("@seanhogg/builderforce-memory/knowledge/pack");
 
 // ../packages/agent-tools/src/knowledge/replicaPack.ts
-var import_knowledge44 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge45 = require("@seanhogg/builderforce-memory/knowledge");
 var import_pack3 = require("@seanhogg/builderforce-memory/knowledge/pack");
 var DEFAULT_MAX_DECODED = 16 * 1024 * 1024;
 var EMPTY_PACK = { rootId: "", baseGeneration: 0, targetDigest: import_pack3.ZERO_DIGEST };
@@ -5505,23 +5514,23 @@ var MAX_ANALYSIS_BYTES = 2 * 1024 * 1024;
 var MAX_SYNC_PACK_BYTES = 24 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/replicaFirstSync.ts
-var import_knowledge45 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 var import_knowledge46 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/portablePack.ts
+// ../packages/agent-tools/src/knowledge/claimSimilarity.ts
 var import_knowledge47 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/knowledge/packGraph.ts
+// ../packages/agent-tools/src/knowledge/portablePack.ts
 var import_knowledge48 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/knowledge/packGraph.ts
+var import_knowledge49 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest8 = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/codeGraphFindings.ts
-var import_knowledge49 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge50 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
-var import_knowledge50 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge51 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
 var MAX_DATA_URL_CHARS = Math.ceil(MAX_PINPOINT_IMAGE_BYTES * 4 / 3) + 64;
 var PINPOINT_VISION_SYSTEM = [
@@ -5540,22 +5549,22 @@ var LEXICAL_WEIGHTS = { name: 10, description: 1, body: 0.25 };
 
 // ../packages/agent-tools/src/delta/adapters/dependencyCruiser.ts
 var import_ingest9 = require("@seanhogg/builderforce-memory/ingest");
-var import_knowledge51 = require("@seanhogg/builderforce-memory/knowledge");
-
-// ../packages/agent-tools/src/delta/adapters/gitleaks.ts
 var import_knowledge52 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/jscpd.ts
+// ../packages/agent-tools/src/delta/adapters/gitleaks.ts
 var import_knowledge53 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/knip.ts
+// ../packages/agent-tools/src/delta/adapters/jscpd.ts
 var import_knowledge54 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/osv.ts
+// ../packages/agent-tools/src/delta/adapters/knip.ts
 var import_knowledge55 = require("@seanhogg/builderforce-memory/knowledge");
 
-// ../packages/agent-tools/src/delta/adapters/sarifTools.ts
+// ../packages/agent-tools/src/delta/adapters/osv.ts
 var import_knowledge56 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/delta/adapters/sarifTools.ts
+var import_knowledge57 = require("@seanhogg/builderforce-memory/knowledge");
 var SEMGREP_TOOL = "semgrep";
 var CODEQL_TOOL = "codeql";
 var SARIF_KINDS = { [SEMGREP_TOOL]: "semgrep-finding", [CODEQL_TOOL]: "codeql-finding" };
@@ -5564,7 +5573,7 @@ var SARIF_KINDS = { [SEMGREP_TOOL]: "semgrep-finding", [CODEQL_TOOL]: "codeql-fi
 var import_retrieval = require("@seanhogg/builderforce-memory/retrieval");
 
 // ../packages/agent-tools/src/delta/adapters/typescript.ts
-var import_knowledge57 = require("@seanhogg/builderforce-memory/knowledge");
+var import_knowledge58 = require("@seanhogg/builderforce-memory/knowledge");
 var TYPESCRIPT_VERSION2 = TYPESCRIPT_PIN.slice(TYPESCRIPT_PIN.lastIndexOf("@") + 1);
 
 // ../packages/agent-tools/src/delta/dynamic/host.ts
@@ -10626,6 +10635,7 @@ var PAGED_READ_TOOLS = {
   // The canvas's `offset` is honoured for a SINGLE path only.
   canvas_read_build_file: { search: "canvas_search_build_files", perPathOffset: false }
 };
+var READ_MAX_BYTES = 2 * 1024 * 1024;
 
 // ../packages/tool-output-policy/src/readFileWindow.ts
 var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;

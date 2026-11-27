@@ -4,6 +4,7 @@
  */
 
 import {
+  canonicalLocalModelRef,
   clientPinOf,
   formatLocalModelRef,
   isServableLocalModel,
@@ -53,7 +54,8 @@ export interface LocalTarget {
 }
 
 /** The reachable runtime serving `ref`, from a probe. */
-export function probedTarget(ref: string, probes: readonly LocalRuntimeProbe[]): LocalTarget | null {
+export function probedTarget(stored: string, probes: readonly LocalRuntimeProbe[]): LocalTarget | null {
+  const ref = canonicalLocalModelRef(stored); // a saved pin may carry the retired `local/synapse/…` spelling
   for (const p of probes) {
     if (!p.reachable) continue;
     const m = p.models.find((x) => x.ref === ref && isServableLocalModel(x));

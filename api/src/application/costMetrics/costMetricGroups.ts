@@ -7,6 +7,8 @@
  * Aliases the fragments may use: `u` = llm_usage_log, `o` = run_model_outcomes (LEFT
  * JOINed on execution id), `la` = the lever-arm lateral (lever grouping only).
  */
+import { LEGACY_RUNTIME_IDS } from '@builderforce/local-inference';
+
 export const COST_METRIC_GROUP_BYS = ['none', 'actionType', 'role', 'model', 'route', 'utilityEngine', 'lever', 'day'] as const;
 export type CostMetricGroupBy = (typeof COST_METRIC_GROUP_BYS)[number];
 
@@ -29,19 +31,28 @@ const armArray = (arm: 'on' | 'off'): string =>
   `jsonb_array_elements_text(CASE WHEN jsonb_typeof(u.metadata->'costLevers'->'${arm}') = 'array' `
   + `THEN u.metadata->'costLevers'->'${arm}' ELSE '[]'::jsonb END)`;
 
+const LEGACY_RUNTIMES = Object.entries(LEGACY_RUNTIME_IDS);
+
+/** The engine segment of a `local/<engine>/<model>` row, with each retired spelling folded to its current id (INF-G019 drops this). */
+const ENGINE_SEGMENT = `CASE ${LEGACY_RUNTIMES.map(([legacy, current]) => `WHEN split_part(u.model, '/', 2) = '${legacy}' THEN '${current}'`).join(' ')} ELSE split_part(u.model, '/', 2) END`;
+
+/** `u.model` with a `local/<retired>/` prefix rewritten to the current runtime id, so one engine is one row. */
+const FOLDED_MODEL = `CASE ${LEGACY_RUNTIMES.map(([legacy, current]) => `WHEN u.model LIKE 'local/${legacy}/%' THEN 'local/${current}/' || substr(u.model, ${`local/${legacy}/`.length + 1})`).join(' ')} ELSE u.model END`;
+
 export const COST_METRIC_GROUPS: Readonly<Record<CostMetricGroupBy, CostMetricGroupSpec>> = {
   none:       { key: `'all'`, arm: `''`, join: '' },
   actionType: { key: `COALESCE(o.action_type, 'unattributed')`, arm: `''`, join: '' },
   role:       { key: `COALESCE(u.role, 'unattributed')`, arm: `''`, join: '' },
-  // The model that served the call, as the ledger recorded it.
-  model:      { key: `COALESCE(NULLIF(u.model, ''), 'unattributed')`, arm: `''`, join: '' },
+  // The model that served the call, as the ledger recorded it (a retired `local/synapse/…` ref folds into `local/bfi-serve/…`).
+  model:      { key: `COALESCE(NULLIF(${FOLDED_MODEL}, ''), 'unattributed')`, arm: `''`, join: '' },
   // The run's pipeline route (`full` / `quick`, 1277); rows from unrouted runs are unattributed.
   route:      { key: `COALESCE(u.pipeline_route, 'unattributed')`, arm: `''`, join: '' },
   // PRD 42 · Part F — "On-device utility": utility calls by who served them. A device's own
   // call is a `local/<engine>/<model>` row (synced as `local` usage); anything else a utility
   // call went to is `cloud`. Rows of any other role are `other` (the UI leaves that bucket out).
   utilityEngine: {
-    key: `CASE WHEN u.role = 'utility' THEN CASE WHEN u.model LIKE 'local/%' THEN split_part(u.model, '/', 2) ELSE 'cloud' END ELSE 'other' END`,
+    // Rows booked before the rename carry `local/synapse/…`; they join the `bfi-serve` group (INF-G019 drops this).
+    key: `CASE WHEN u.role = 'utility' THEN CASE WHEN u.model LIKE 'local/%' THEN ${ENGINE_SEGMENT} ELSE 'cloud' END ELSE 'other' END`,
     arm: `''`,
     join: '',
   },

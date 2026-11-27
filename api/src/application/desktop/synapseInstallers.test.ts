@@ -33,7 +33,13 @@ describe('the Spawn installers', () => {
       release('v3', ['Spawn_3_x64-setup.exe'], { draft: true }),
       release('v2', ['Spawn_2_x64-setup.exe'], { prerelease: true }),
     ]);
-    expect(picked).toEqual({ version: null, releaseUrl: null, windows: null, macArm: null, macIntel: null });
+    expect(picked).toEqual({ version: null, releaseUrl: null, windows: null, macArm: null, macIntel: null, linux: null });
+  });
+
+  it('picks the Linux _amd64.deb and reports null when absent', () => {
+    const withDeb = pickDesktopInstallers([release('v1', ['Spawn_1_x64-setup.exe', 'Spawn_1_amd64.deb'])]);
+    expect(withDeb.linux).toBe('https://dl/v1/Spawn_1_amd64.deb');
+    expect(pickDesktopInstallers([release('v1', ['Spawn_1_x64-setup.exe'])]).linux).toBeNull();
   });
 
   it('reports a missing platform as null, not a wrong file', () => {

@@ -63,10 +63,10 @@ describe('localTransport', () => {
 describe('createLocalFirstStream', () => {
   const probes: LocalRuntimeProbe[] = [
     {
-      provider: 'synapse',
+      provider: 'bfi-serve',
       endpoint: { baseUrl: 'http://127.0.0.1:11435', token: 'bfi-key' },
       reachable: true,
-      models: [{ ref: 'local/synapse/qwen3-8b', provider: 'synapse', model: 'qwen3-8b', tools: true }],
+      models: [{ ref: 'local/bfi-serve/qwen3-8b', provider: 'bfi-serve', model: 'qwen3-8b', tools: true }],
     },
     {
       provider: 'ollama',
@@ -99,12 +99,12 @@ describe('createLocalFirstStream', () => {
     const result = await createLocalFirstStream({ probes, cloud, fetch: fetchImpl })(hello, { onModel });
 
     expect(result.text).toBe('hi');
-    expect(result.resolvedModel).toBe('local/synapse/qwen3-8b');
-    expect(result.localFirst).toEqual([{ target: 'local/synapse/qwen3-8b', outcome: 'served' }]);
+    expect(result.resolvedModel).toBe('local/bfi-serve/qwen3-8b');
+    expect(result.localFirst).toEqual([{ target: 'local/bfi-serve/qwen3-8b', outcome: 'served' }]);
     expect(localFallbackTrace('t', 1, result.localFirst)).toBeNull();
     expect(cloud).not.toHaveBeenCalled();
     expect(seen).toEqual([{ url: 'http://127.0.0.1:11435/v1/chat/completions', model: 'qwen3-8b', auth: 'Bearer bfi-key' }]);
-    expect(onModel).toHaveBeenCalledWith('local/synapse/qwen3-8b', undefined);
+    expect(onModel).toHaveBeenCalledWith('local/bfi-serve/qwen3-8b', undefined);
   });
 
   it('fails over at once when the runtime is not running, and says so in the trace', async () => {
@@ -123,7 +123,7 @@ describe('createLocalFirstStream', () => {
     expect(trace).toMatchObject({
       category: 'message',
       label: 'llm.local_fallback',
-      args: { step: 3, from: 'local/synapse/qwen3-8b', to: 'gateway' },
+      args: { step: 3, from: 'local/bfi-serve/qwen3-8b', to: 'gateway' },
     });
     // Summaries only — the runtime's bearer never reaches a persisted step.
     expect(JSON.stringify(trace)).not.toContain('bfi-key');
@@ -160,7 +160,7 @@ describe('createLocalFirstStream', () => {
     });
     const cloud = cloudStream();
     const ranked = await createLocalFirstStream({ probes: [ollama, probes[0]!], cloud, fetch: fetchImpl })(toolTurn);
-    expect(ranked.resolvedModel).toBe('local/synapse/qwen3-8b');
+    expect(ranked.resolvedModel).toBe('local/bfi-serve/qwen3-8b');
     const last = await createLocalFirstStream({ probes: [ollama], cloud, fetch: fetchImpl })(toolTurn);
     expect(last.resolvedModel).toBe('local/ollama/qwen3-coder');
     expect(seen.at(-1)).toBe('http://127.0.0.1:11434/v1/chat/completions');
@@ -178,7 +178,7 @@ describe('createLocalFirstStream', () => {
     const long = { messages: [{ role: 'system' as const, content: 'sys' }, { role: 'assistant' as const, content: 'old' }, { role: 'user' as const, content: 'now' }] };
     await createLocalFirstStream({ probes, cloud, fetch: fetchImpl, fit })(long);
     expect(fit).toHaveBeenCalledOnce();
-    expect(fit.mock.calls[0]![1]).toMatchObject({ ref: 'local/synapse/qwen3-8b' });
+    expect(fit.mock.calls[0]![1]).toMatchObject({ ref: 'local/bfi-serve/qwen3-8b' });
     expect(sent).toEqual([[{ role: 'user', content: 'now' }]]);
     expect(cloud).toHaveBeenCalledOnce();
     expect(cloud.mock.calls[0]![0].messages).toBe(long.messages);
@@ -245,10 +245,10 @@ describe('completeLocalFirst', () => {
     const cloud = vi.fn(async () => 'summary-from-cloud');
     const probes: LocalRuntimeProbe[] = [
       {
-        provider: 'synapse',
+        provider: 'bfi-serve',
         endpoint: { baseUrl: 'http://127.0.0.1:11434' },
         reachable: true,
-        models: [{ ref: 'local/synapse/gemma:2b', provider: 'synapse', model: 'gemma:2b' }],
+        models: [{ ref: 'local/bfi-serve/gemma:2b', provider: 'bfi-serve', model: 'gemma:2b' }],
       },
     ];
     await expect(

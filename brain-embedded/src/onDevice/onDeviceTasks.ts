@@ -21,8 +21,8 @@ export type OnDeviceTaskKind =
   | 'summarize' | 'rewrite' | 'proofread' | 'write'
   | 'detectLanguage' | 'translate' | 'json';
 
-/** The runtime that served a call — a built-in model (`browser`) or a local engine. */
-export type OnDeviceEngine = 'browser' | 'bfi' | 'webllm' | 'synapse' | 'ollama' | 'freetoken';
+/** The runtime that served a call — a built-in model (`browser`) or a local engine. `synapse` is the retired id of `bfi-serve` (INF-G019 drops it). */
+export type OnDeviceEngine = 'browser' | 'bfi' | 'webllm' | 'bfi-serve' | 'synapse' | 'ollama' | 'freetoken';
 
 /** Who served ONE call (PRD 42 · Part F): its task kind, the engine and the bare model id. */
 export interface ServedBy {

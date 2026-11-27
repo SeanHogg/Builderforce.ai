@@ -55,7 +55,7 @@ export interface LocalModelsConfig {
    *  gateway. Only meaningful while `enabled`; absent = off. */
   localFirst?: boolean;
   /** Endpoint per runtime. `kimi-code` appears only when a signed-in install was found;
-   *  `synapse` only when one was configured or discovered. An unreachable engine simply
+   *  `bfi-serve` (labelled Synapse) only when one was configured or discovered. An unreachable engine simply
    *  contributes no models — the normal case for a developer running none. */
   endpoints: LocalEndpoints;
   /** Models the Kimi Code install declares. There is no `/v1/models` to probe — Kimi's

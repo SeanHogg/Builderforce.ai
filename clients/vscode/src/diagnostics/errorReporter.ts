@@ -165,7 +165,7 @@ export async function reportExtensionError(
     stack: error instanceof Error ? error.stack ?? null : null,
     level: details.level ?? "error",
     operation: details.operation,
-    release: vscode.extensions.getExtension("builderforce.builderforce")?.packageJSON?.version,
+    release: vscode.extensions.getExtension("builderforce.builderforce-ai")?.packageJSON?.version,
     timestamp: new Date().toISOString(),
     context: details.context ?? {},
   });

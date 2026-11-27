@@ -1557,5 +1557,6 @@
   "\"{0}\" is not a domain of the proposed layout, so nothing was moved.": "„{0}“ gehört nicht zum vorgeschlagenen Layout, daher wurde nichts verschoben.",
   "None of the chosen domains has a file to move.": "Keine der gewählten Domänen hat eine Datei zum Verschieben.",
   "That is {0} files to move; the limit is {1}, so nothing was moved.": "Das sind {0} Dateien zum Verschieben; das Limit ist {1}, daher wurde nichts verschoben.",
-  "Review this folder first: there is no graph to organize from.": "Prüfe zuerst diesen Ordner: Es gibt kein Diagramm, aus dem sich ordnen ließe."
+  "Review this folder first: there is no graph to organize from.": "Prüfe zuerst diesen Ordner: Es gibt kein Diagramm, aus dem sich ordnen ließe.",
+  "Could not get a BuilderForce session for the requested scope.": "Für den angeforderten Bereich konnte keine BuilderForce-Sitzung abgerufen werden."
 }

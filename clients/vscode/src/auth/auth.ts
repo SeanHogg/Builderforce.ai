@@ -8,6 +8,10 @@ import {
 } from "@builderforce/device-auth";
 import { getBaseUrl, SECRET_KEY } from "../gateway/gateway";
 import { clearLocalProviderCredentials } from "./localProviderCredentials";
+import { getScopedToken, invalidateScopedTokens, setScopedTokenErrorSink, type ScopedAudience } from "../bfApi/scopedToken";
+import { logLine } from "../diagnostics/errorReporter";
+import { messageOf } from "../shared/messageOf";
+import { BUILDERFORCE_AUTH_PROVIDER_ID } from "./providerId";
 
 /**
  * The editor's side of the shared device sign-in (`@builderforce/device-auth`, the same
@@ -26,8 +30,13 @@ function deviceAuthDeps(): DeviceAuthDeps {
   };
 }
 
-const PROVIDER_ID = "builderforce";
+export { BUILDERFORCE_AUTH_PROVIDER_ID };
+const PROVIDER_ID = BUILDERFORCE_AUTH_PROVIDER_ID;
 const PROVIDER_LABEL = "BuilderForce";
+
+function isScopedAudience(scope: string): scope is ScopedAudience {
+  return scope === "spawn";
+}
 
 /** The web app URL, derived from the gateway base (api.builderforce.ai → builderforce.ai). */
 export function appUrl(): string {
@@ -60,6 +69,7 @@ export class BuilderForceAuthProvider implements vscode.AuthenticationProvider {
 
   static register(ctx: vscode.ExtensionContext): BuilderForceAuthProvider {
     const provider = new BuilderForceAuthProvider(ctx);
+    setScopedTokenErrorSink((e) => logLine(`Scoped token mint failed: ${messageOf(e)}`));
     ctx.subscriptions.push(
       vscode.authentication.registerAuthenticationProvider(PROVIDER_ID, PROVIDER_LABEL, provider, {
         supportsMultipleAccounts: false,
@@ -68,16 +78,29 @@ export class BuilderForceAuthProvider implements vscode.AuthenticationProvider {
     return provider;
   }
 
-  async getSessions(): Promise<vscode.AuthenticationSession[]> {
+  /**
+   * Sessions are scope-aware (SEC-SYN-001). `spawn` yields a short-lived audience-scoped
+   * token (never the tenant JWT or the editor key); every other scope yields an opaque
+   * marker session with an EMPTY `accessToken` — the raw editor key stays in SecretStorage
+   * and no caller of this provider can read it.
+   */
+  async getSessions(scopes?: readonly string[]): Promise<vscode.AuthenticationSession[]> {
     const key = await this.ctx.secrets.get(SECRET_KEY);
-    return key ? [this.toSession(key)] : [];
+    if (!key) return [];
+    return this.sessionFor(scopes);
   }
 
-  async createSession(): Promise<vscode.AuthenticationSession> {
-    const key = await this.signIn();
-    await this.ctx.secrets.store(SECRET_KEY, key);
-    const session = this.toSession(key);
-    this._onDidChangeSessions.fire({ added: [session], removed: [], changed: [] });
+  async createSession(scopes?: readonly string[]): Promise<vscode.AuthenticationSession> {
+    // A request for a NEW session never serves a cached token: the caller is asking because the old one was rejected.
+    invalidateScopedTokens();
+    if (!(await this.ctx.secrets.get(SECRET_KEY))) {
+      const key = await this.signIn();
+      await this.ctx.secrets.store(SECRET_KEY, key);
+      const added = this.markerSession();
+      this._onDidChangeSessions.fire({ added: [added], removed: [], changed: [] });
+    }
+    const [session] = await this.sessionFor(scopes);
+    if (!session) throw new Error(vscode.l10n.t("Could not get a BuilderForce session for the requested scope."));
     return session;
   }
 
@@ -92,17 +115,22 @@ export class BuilderForceAuthProvider implements vscode.AuthenticationProvider {
       // of being left valid on the gateway. It never throws — a failed revoke must not
       // block local sign-out.
       await revokeKey(deviceAuthDeps(), key);
-      this._onDidChangeSessions.fire({ added: [], removed: [this.toSession(key)], changed: [] });
+      this._onDidChangeSessions.fire({ added: [], removed: [this.markerSession()], changed: [] });
     }
   }
 
-  private toSession(key: string): vscode.AuthenticationSession {
-    return {
-      id: PROVIDER_ID,
-      accessToken: key,
-      account: { id: PROVIDER_ID, label: PROVIDER_LABEL },
-      scopes: ["gateway"],
-    };
+  /** The session for `scopes`: the scoped token for `spawn`, else the opaque marker. Signed in is the caller's check. */
+  private async sessionFor(scopes?: readonly string[]): Promise<vscode.AuthenticationSession[]> {
+    const audience = scopes?.find(isScopedAudience);
+    if (!audience) return [this.markerSession()];
+    // An "unavailable" gateway (ScopedTokenUnavailableError) propagates as a throw: an empty
+    // array would read as "signed out" to the caller, which is a different state.
+    const token = await getScopedToken(this.ctx.secrets, audience);
+    return token ? [this.markerSession(token, [audience], `${PROVIDER_ID}:${audience}`)] : [];
+  }
+
+  private markerSession(accessToken = "", scopes: string[] = ["gateway"], id = PROVIDER_ID): vscode.AuthenticationSession {
+    return { id, accessToken, account: { id: PROVIDER_ID, label: PROVIDER_LABEL }, scopes };
   }
 
   private async signIn(): Promise<string> {

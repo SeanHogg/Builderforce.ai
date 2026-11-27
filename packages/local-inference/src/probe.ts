@@ -309,7 +309,7 @@ async function probeRuntime(
  *
  * One de-duplication: a model whose `owned_by` names ANOTHER configured runtime is that
  * runtime's, not this one's — `bfi serve` on the Ollama port must not list each `bfi`
- * model twice (once as `local/ollama/…`, once as `local/synapse/…`; the id is kept for data compatibility). When the owner is
+ * model twice (once as `local/ollama/…`, once as `local/bfi-serve/…`; saved `local/synapse/…` refs still resolve). When the owner is
  * not configured the row stays where it was found, so it remains servable.
  */
 export async function probeLocalRuntimes(
