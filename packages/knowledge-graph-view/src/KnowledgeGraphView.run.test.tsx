@@ -82,7 +82,7 @@ describe('the Reviews panel from the strip', () => {
         render(<div style={{ height: 600 }}><KnowledgeGraphView source={source} /></div>);
         fireEvent.click(await screen.findByRole('button', { name: L.reviewFolder }));
         await screen.findByTestId('kg-review-start');
-        const open = screen.getByRole('dialog');
+        const open = screen.getByTestId('kg-drawer');
         fireEvent.click(within(open).getByRole('button', { name: L.close }));
         await waitFor(() => expect(answers).toEqual([false]));
         expect(open.isConnected).toBe(false);
