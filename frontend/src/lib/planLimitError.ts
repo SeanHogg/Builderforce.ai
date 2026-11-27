@@ -106,9 +106,7 @@ export async function planLimitErrorFromResponse(
   try {
     body = await res.json() ?? {};
   } catch (cause) {
-    const fallback = new PlanLimitError({});
-    fallback.cause = cause;
-    return fallback;
+    return Object.defineProperty(new PlanLimitError({ error: '' }), 'cause', { value: cause });
   }
   if (body.checkoutRequired) return new PurchaseRequiredError(body);
   return new PlanLimitError(body);

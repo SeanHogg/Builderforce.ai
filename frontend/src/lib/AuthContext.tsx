@@ -31,6 +31,7 @@ import {
 } from './auth/credentials';
 import { profileApi } from './auth/session';
 import { signInWithPasskey } from './passkeys';
+import { recordedFailure } from './reportError';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -136,7 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let stop: (() => void) | undefined;
     void import('./auth/tokenRenewal').then(({ startTokenRenewal }) => {
       if (!disposed) stop = startTokenRenewal();
-    }).catch((error) => console.warn('Could not start session renewal', error));
+    }).catch(recordedFailure('Starting session renewal', undefined));
     return () => {
       disposed = true;
       stop?.();

@@ -13,6 +13,7 @@ import type { BrainConfig, BrainStreamFn, BrainTransport } from '@seanhogg/build
 import { AUTH_API_URL, getStoredTenantToken, checkUnauthorizedAndRedirect } from '../auth';
 import { brain, parseLlmError } from '../builderforceApi';
 import { getModality } from '../modality';
+import { recordedFailure } from '../reportError';
 
 /**
  * The local-first Brain stream over `transport`, loaded on the first turn rather than
@@ -40,7 +41,7 @@ const transport: BrainTransport = {
     void import('../auth/tokenRenewal').then(({ renewInBackgroundAfterUnauthorized }) => {
       if (!renewInBackgroundAfterUnauthorized()) checkUnauthorizedAndRedirect(res, hadToken);
     }, (error) => {
-      console.warn('Could not load session renewal for the Brain', error);
+      recordedFailure('Loading session renewal for the Brain', undefined)(error);
       checkUnauthorizedAndRedirect(res, hadToken);
     });
   },

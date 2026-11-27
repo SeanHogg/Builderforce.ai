@@ -27,6 +27,7 @@
  */
 
 import { readSession, writeSession } from './storage';
+import { recordedFailure } from './reportError';
 
 const RELOAD_AT_KEY = 'bf-chunk-reload-at';
 /** How long a just-happened auto-reload suppresses another one (loop guard). */
@@ -72,7 +73,7 @@ async function purgeStaleAssets(): Promise<void> {
       await Promise.all(keys.map((k) => caches.delete(k)));
     }
   } catch (error) {
-    console.warn('Chunk recovery could not clear browser caches', error);
+    recordedFailure('Clearing stale browser caches', undefined)(error);
   }
   try {
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
@@ -80,7 +81,7 @@ async function purgeStaleAssets(): Promise<void> {
       await Promise.all(regs.map((r) => r.unregister()));
     }
   } catch (error) {
-    console.warn('Chunk recovery could not unregister the service worker', error);
+    recordedFailure('Unregistering a stale service worker', undefined)(error);
   }
 }
 

@@ -34,6 +34,7 @@ import {
   SESSION_RENEWED_EVENT,
 } from '../auth';
 import { getTenantToken, renewWebToken } from './credentials';
+import { readLocalJson, removeLocal, writeLocalJson } from '../storage';
 import { decodeTokenClaims } from '../tokenClaims';
 
 /** Renew when this fraction of the remaining life has elapsed. */
@@ -79,12 +80,7 @@ export function isNearExpiry(token: string | null, nowMs = Date.now()): boolean 
 // ---------------------------------------------------------------------------
 
 function readLock(): { tab: string; until: number } | null {
-  try {
-    const raw = localStorage.getItem(LOCK_KEY);
-    return raw ? (JSON.parse(raw) as { tab: string; until: number }) : null;
-  } catch {
-    return null;
-  }
+  return readLocalJson(LOCK_KEY);
 }
 
 function heldByAnotherTab(): boolean {
@@ -94,20 +90,13 @@ function heldByAnotherTab(): boolean {
 
 function tryAcquire(): boolean {
   if (heldByAnotherTab()) return false;
-  try {
-    localStorage.setItem(LOCK_KEY, JSON.stringify({ tab: TAB_ID, until: Date.now() + LOCK_TTL_MS }));
-  } catch {
-    return true; // no storage to coordinate through — renew anyway
-  }
-  return readLock()?.tab === TAB_ID;
+  // If storage is unavailable, renew without cross-tab coordination.
+  const stored = writeLocalJson(LOCK_KEY, { tab: TAB_ID, until: Date.now() + LOCK_TTL_MS });
+  return !stored || readLock()?.tab === TAB_ID;
 }
 
 function release(): void {
-  try {
-    if (readLock()?.tab === TAB_ID) localStorage.removeItem(LOCK_KEY);
-  } catch {
-    // nothing to release
-  }
+  if (readLock()?.tab === TAB_ID) removeLocal(LOCK_KEY);
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
