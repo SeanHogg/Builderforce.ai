@@ -19,21 +19,13 @@
  * (fs-bridge backed) is the documented follow-up.
  */
 
-import { constants } from "node:fs";
-import {
-  access as fsAccess,
-  mkdir as fsMkdir,
-  readFile as fsReadFile,
-  readdir as fsReaddir,
-  rm as fsRm,
-  writeFile as fsWriteFile,
-} from "node:fs/promises";
-import { join, relative, resolve as resolvePath, sep } from "node:path";
-import { applyStringEdit, editFacts, matchGlobInScope, dirMayContainGlobMatch, normalizeScopeDir, semanticCapabilitiesOf } from "@builderforce/agent-tools";
-// The ONE workspace-containment resolver, shared with the VS Code local provider.
-// Node-only, so it comes from the `/node-path` export condition (the package root stays
-// node-builtin-free for the Worker).
-import { tryResolveInsideRootReal as resolveInside, type RealResolveOutcome } from "@builderforce/agent-tools/node-path.js";
+import { resolve as resolvePath } from "node:path";
+import { semanticCapabilitiesOf } from "@builderforce/agent-tools";
+// The ONE coding provider (list/read/search/write/edit/delete) over the ONE local-disk adapter,
+// shared with the VS Code provider and the workspace MCP. The adapter is Node-only, so it comes
+// from its own export condition (the package root stays node-builtin-free for the Worker).
+import { createRepoCapabilities } from "@builderforce/agent-tools/workspace";
+import { nodeWorkspaceFs } from "@builderforce/agent-tools/node-workspace";
 // The ONE definition index (shared with the VS Code workspace) behind `find_symbol` /
 // `file_outline`, in its one on-prem configuration (tree-sitter, persisted snapshot).
 import { onPremSymbolIndex } from "./on-prem-symbol-index.js";
@@ -42,18 +34,10 @@ import type {
   CapabilityProvider,
   HumanAskResult,
   LocalResearchCapability,
-  RepoDeleteResult,
-  RepoEditResult,
-  RepoListResult,
-  RepoReadResult,
-  RepoSearchResult,
   RepoSemanticCapability,
-  RepoWriteResult,
 } from "@builderforce/agent-tools";
 import { onDeviceCostLeverOn } from "../infra/cost-levers.js";
 import { resolveOnPremSemantic } from "./on-prem-semantic.js";
-import { isListedDirName } from "@builderforce/agent-tools/skip-dirs";
-import { searchWorkspace } from "@builderforce/agent-tools/node-text-search.js";
 import { execFile } from "node:child_process";
 import { requestHumanInput, type HumanInputRequest, type HumanInputResult } from "../infra/approval-gate.js";
 
@@ -66,8 +50,6 @@ function findOnPathRipgrep(): Promise<string | null> {
   });
   return onPathRipgrep;
 }
-
-const LIST_MAX_FILES = 5_000;
 
 /** The file-only capability set an on-prem disk surface backs (repo read/search/write/
  *  edit/delete). Kept as its own export for callers that want JUST the file tools. */
@@ -88,60 +70,6 @@ export const NODE_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
   ...NODE_FILE_SURFACE_CAPS,
   "human",
 ]);
-
-async function walkFiles(
-  root: string,
-  scope: string,
-  glob?: string,
-  scopeArg?: string,
-  unbounded = false,
-): Promise<{ paths: string[]; truncated: boolean }> {
-  const cap = unbounded ? Number.POSITIVE_INFINITY : LIST_MAX_FILES;
-  const out: string[] = [];
-  const queue: string[] = [scope];
-  let truncated = false;
-  while (queue.length > 0) {
-    if (out.length >= cap) {
-      truncated = true;
-      break;
-    }
-    const dir = queue.shift()!;
-    let entries: import("node:fs").Dirent[];
-    try {
-      entries = await fsReaddir(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        if (!isListedDirName(entry.name)) {
-          continue;
-        }
-        const childRel = relative(root, join(dir, entry.name)).split(sep).join("/");
-        // Prune directories the glob cannot reach so the match budget is not
-        // spent walking unrelated trees (and a truncated miss is not a miss).
-        if (glob && !dirMayContainGlobMatch(childRel, glob, scopeArg)) {
-          continue;
-        }
-        queue.push(join(dir, entry.name));
-      } else if (entry.isFile()) {
-        const rel = relative(root, join(dir, entry.name)).split(sep).join("/");
-        // Glob DURING the walk so the budget counts MATCHES, not candidates. Capping
-        // first and globbing the survivors turned "0 matches" into "the first 5,000
-        // paths have none", which the tool's note reported as "no such file".
-        if (glob && !matchGlobInScope(rel, glob, scopeArg)) {
-          continue;
-        }
-        if (out.length >= cap) {
-          truncated = true;
-          break;
-        }
-        out.push(rel);
-      }
-    }
-  }
-  return { paths: out.toSorted(), truncated };
-}
 
 /**
  * How far a PATH-ADDRESSED file op (read/write/edit/delete of one named file) may reach.
@@ -195,19 +123,6 @@ export interface NodeProviderOptions {
   research?: LocalResearchCapability;
 }
 
-/** Search one on-prem workspace using the shared editor search engine. */
-export async function searchNodeWorkspaceCode(
-  workspaceRoot: string,
-  query: string,
-  scope?: string,
-): Promise<RepoSearchResult> {
-  const root = resolvePath(workspaceRoot);
-  const scopeDir = normalizeScopeDir(scope);
-  const start = scopeDir ? await resolveInside(root, scopeDir) : { ok: true as const, abs: root };
-  if (!start.ok) return { ok: false, error: start.error };
-  return searchWorkspace({ root, start: start.abs, query, ripgrep: await findOnPathRipgrep() });
-}
-
 /**
  * Build the on-prem disk-backed {@link CapabilityProvider}. List/search the working tree
  * (always confined to {@link NodeProviderOptions.workspaceRoot}), read/write/edit/delete
@@ -217,12 +132,14 @@ export async function searchNodeWorkspaceCode(
 export function buildNodeCapabilityProvider(options: NodeProviderOptions): CapabilityProvider {
   const root = resolvePath(options.workspaceRoot);
   const askHuman = options.requestHuman ?? requestHumanInput;
-  // Per-file read/write/edit/delete resolve through this (one scope, so the write guard's
-  // probe sees the same file the write lands on); list/search always use `resolveInside`.
-  const resolveFile =
-    (options.scope ?? "workspace") === "workspace"
-      ? (p: string): Promise<RealResolveOutcome> => resolveInside(root, p)
-      : async (p: string): Promise<RealResolveOutcome> => ({ ok: true, abs: resolvePath(root, p) });
+  const scope = options.scope ?? "workspace";
+  // The ONE provider over the ONE adapter. Per-file read/write/edit/delete follow `scope` (one
+  // scope, so the write guard's probe sees the same file the write lands on); list/search are
+  // always confined to the root. A write marks the symbol index dirty.
+  const { repoRead, repoWrite } = createRepoCapabilities(nodeWorkspaceFs(root, { scope, ripgrep: findOnPathRipgrep }), {
+    unconfined: scope === "unconfined",
+    onWrite: (rel) => symbols.markDirty(resolvePath(root, rel)),
+  });
   // Process-wide per root: a provider is built per session, and an index per provider
   // would re-walk the tree every time. Persisted beside the on-prem search index.
   const symbols = onPremSymbolIndex(root);
@@ -276,128 +193,8 @@ export function buildNodeCapabilityProvider(options: NodeProviderOptions): Capab
         }
       },
     },
-    repoRead: {
-      async listFiles(sub, glob, opts): Promise<RepoListResult> {
-        const scope = sub ? await resolveInside(root, sub) : { ok: true as const, abs: root };
-        if (!scope.ok) {
-          return { ok: false, error: scope.error };
-        }
-        // The glob is applied DURING the walk (so the file budget counts matches) and
-        // resolved against the scope, because a glob is naturally written relative to
-        // the folder you asked about ("path": "src", "glob": "**\/*.ts").
-        const { paths, truncated } = await walkFiles(root, scope.abs, glob, sub, opts?.unbounded === true);
-        return { ok: true, paths, truncated };
-      },
-      async readFile(path): Promise<RepoReadResult> {
-        const resolved = await resolveFile(path);
-        if (!resolved.ok) {
-          return { ok: false, error: resolved.error };
-        }
-        const abs = resolved.abs;
-        try {
-          const content = await fsReadFile(abs, "utf-8");
-          return { ok: true, path, content };
-        } catch (err) {
-          // A raw `ENOENT: … open 'C:\Users\…\workspace\x.ts'` did two bad things:
-          // it leaked the host's ABSOLUTE path into the model's context (and every
-          // transcript), and it worded "missing file" differently from every other
-          // surface, so a prompt that recovers from `file not found` on the cloud did
-          // not recover on-prem. Both are cross-provider divergences the parity test
-          // caught. Normalize to the shared phrasing, keyed off the errno.
-          if ((err as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
-            return { ok: false, error: `file not found: ${path}` };
-          }
-          if ((err as NodeJS.ErrnoException | undefined)?.code === "EISDIR") {
-            return { ok: false, error: `'${path}' is a directory, not a file — use list_files to see its contents` };
-          }
-          return { ok: false, error: err instanceof Error ? err.message : String(err) };
-        }
-      },
-      async searchCode(query, scope): Promise<RepoSearchResult> {
-        // The `search_code` contract is EXACT substring / regex, so this runs the ONE
-        // shared searcher (the same one the editor uses), not the keyword-ranked
-        // `codebase_search` backend. The `path` scope is the search TARGET, resolved
-        // inside the workspace BEFORE searching (a directory or a single file) — never
-        // a post-filter over a whole-root result.
-        return searchNodeWorkspaceCode(root, query, scope);
-      },
-    },
-    repoWrite: {
-      async writeFile(path, content): Promise<RepoWriteResult> {
-        const resolved = await resolveFile(path);
-        if (!resolved.ok) {
-          return { ok: false, error: resolved.error };
-        }
-        const abs = resolved.abs;
-        let existed = true;
-        try {
-          await fsAccess(abs, constants.F_OK);
-        } catch {
-          existed = false;
-        }
-        try {
-          await fsMkdir(resolvePath(abs, ".."), { recursive: true });
-          await fsWriteFile(abs, content, "utf-8");
-          symbols.markDirty(abs);
-          return { ok: true, change: existed ? "modified" : "created" };
-        } catch (err) {
-          return { ok: false, error: err instanceof Error ? err.message : String(err) };
-        }
-      },
-      async editFile(path, oldString, newString, replaceAll): Promise<RepoEditResult> {
-        const resolved = await resolveFile(path);
-        if (!resolved.ok) {
-          return { ok: false, error: resolved.error };
-        }
-        const abs = resolved.abs;
-        let raw: string;
-        try {
-          raw = await fsReadFile(abs, "utf-8");
-        } catch {
-          return { ok: false, error: `file not found: ${path}` };
-        }
-        // The SHARED edit core, not a local copy. The copy this replaced normalized the
-        // WHOLE file to LF before writing, so a single surgical edit rewrote every line
-        // ending in a CRLF working tree and produced a huge spurious diff — and its error
-        // wording differed from the other two providers, so a prompt that recovers from a
-        // failed edit on the cloud did not recover on-prem.
-        const result = applyStringEdit(raw, oldString, newString, replaceAll === true);
-        if (!result.ok || result.content === undefined) {
-          return { ok: false, ...editFacts(result), error: result.error ?? "edit failed" };
-        }
-        try {
-          await fsWriteFile(abs, result.content, "utf-8");
-          symbols.markDirty(abs);
-          return { ok: true, change: "modified", ...editFacts(result) };
-        } catch (err) {
-          return { ok: false, error: err instanceof Error ? err.message : String(err) };
-        }
-      },
-      async deleteFile(path): Promise<RepoDeleteResult> {
-        const resolved = await resolveFile(path);
-        if (!resolved.ok) {
-          return { ok: false, error: resolved.error };
-        }
-        const abs = resolved.abs;
-        try {
-          await fsAccess(abs, constants.F_OK);
-        } catch {
-          // Not on disk — benign no-op so the model doesn't treat it as a failure.
-          return {
-            ok: true,
-            deleted: false,
-            note: `'${path}' does not exist, so there is nothing to delete.`,
-          };
-        }
-        try {
-          await fsRm(abs);
-          symbols.markDirty(abs);
-          return { ok: true, deleted: true };
-        } catch (err) {
-          return { ok: false, error: err instanceof Error ? err.message : String(err) };
-        }
-      },
-    },
+    repoRead,
+    repoWrite,
   };
 }
 

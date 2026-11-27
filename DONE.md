@@ -1,3 +1,25 @@
+## ✅ RESOLVED 2026-11-27 — The Tauri Synapse app's source leaves builderforce-inference (INF-G006, INF-G015, MEM-G105, MEM-G106, CHAT-G015, AVR-G016)
+
+- **Decision (user):** the Synapse desktop app is rebuilt as a fork of VS Code. The fork runs the unchanged Builderforce extension and the Spawn extension, and adds Scratch, Existing and Knowledge-pack AI-model project types (`UP-G015`). For end users the product stays "Synapse, the desktop app". Copy, labels and download sections are unchanged.
+- **builderforce-inference:** removed `app/` (vanilla-JS UI, Tauri shell, console) and the crates `bf-local`, `bf-teach` and `bf-memory`. `bf-cloud` and `bf-vault` moved to `builderforce-spawn`, their only remaining consumer.
+  - The release workflow now publishes `bfi` and `bf-context` for Windows, Linux and both Mac architectures, with `--latest=false`, so `releases/latest` stays on the last Synapse installer release.
+  - The `bfi` User-Agent comes from the crate version (INF-G015). `hub.rs` and its fit share are gone (INF-G006).
+- **Memory:** the hand-mirrored `bf-teach` experience types (MEM-G105) and Synapse's direct `memory.json` reads (MEM-G106) were deleted with the app.
+- **Chat:** the vanilla-JS Synapse chat fork is deleted (CHAT-G015).
+- **AVR-G016:** Self-Directed Agents were Windows-only. They have no host now and are tracked in `UP-G018`.
+- **Builderforce.ai dead code removed:**
+  - the VS Code "Install Synapse model" command, which called a `/v1/synapse/catalog` endpoint no server ever served;
+  - the `desktop.json` `models` reader (only `bf-local` wrote it). Local engine discovery is now the setting, then `bfi serve`'s `~/.builderforce/bfi.json`;
+  - the never-offered Synapse warm-embedder slot;
+  - `'synapse'` in brain-ui `EvermindHost`.
+- **`/api/spawn/downloads`** is a stub that serves the newest `builderforce-inference` release with Synapse installers (`api/src/application/desktop/synapseInstallers.ts`).
+- **Verified:**
+  - `cargo check --workspace --all-targets`, plus the `bf-context` and `bfi` test builds;
+  - typechecks of agent-tools, local-inference, brain-ui, brain-embedded, the VS Code extension, frontend and api;
+  - the i18n key guard and the route-namespace generator;
+  - targeted tests: embedder chain, host index, node-desktop, runtimes, desktop context, local models, Chrome route, Evermind diagnostics and Synapse installers.
+- **Still open:** `UP-G015` (the fork), `UP-G017` (Spawn as an extension), `UP-G018` (features only the Tauri app had), `INF-G012` (the `synapse` runtime id rename). CHAT-G016 and AUTH-G001/G002/G008/G009/G013 stay open for the Rust and JS copies now in `builderforce-spawn`. Details are in the [duplication audit](docs/specs/tasks/platform-duplication-audit.md#synapse-moves-from-tauri-to-a-vs-code-fork-user-decision-2026-11-27).
+
 ## ✅ RESOLVED 2026-11-26 — Evermind MCP protocol, connector catalog, and legacy Workspace search cutovers
 
 - Synapse’s private Evermind client uses the official Rust MCP SDK. Its default launch data comes from Memory’s installer. All six Rust tests, the Synapse build check, and a live connection to the Node Memory server passed.

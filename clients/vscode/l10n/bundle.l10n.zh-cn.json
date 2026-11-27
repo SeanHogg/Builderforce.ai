@@ -226,7 +226,6 @@
   "I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up.": "我刚刚把 {task} 派发到平台上运行。请查看最新一次执行的状态和轨迹，然后帮我跟进。",
   "IDE build": "IDE 构建",
   "Idle": "空闲",
-  "Install {0}": "安装 {0}",
   "Import": "导入",
   "Import & compact…": "导入并压缩…",
   "Import agent memory (JSON snapshot or memory folder)": "导入智能体记忆（JSON 快照或记忆文件夹）",

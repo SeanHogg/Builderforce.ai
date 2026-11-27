@@ -19,12 +19,13 @@
  *   • `repoWrite` — the commit stays the provider's (lease, outbound inspection, the
  *     file-change ledger, notifications): the sandbox then ABSORBS the committed change
  *     (fast-forwarding the clone to the ticket branch), so the shell builds against what
- *     the branch holds and the git tools see the commit as history. `editFile` reads the
- *     BRANCH (falling back to the working tree for a file only a command produced), so a
- *     stale clone can never revert another commit to that file, applies the shared edit
- *     core and commits the result via `writeFile`.
+ *     the branch holds and the git tools see the commit as history. `editFile` is the
+ *     provider's own edit of the BRANCH (so a stale clone can never revert another commit
+ *     to that file); only a file a command produced and the branch lacks falls back to the
+ *     same shared edit core over the working tree, committed via `writeFile`.
  */
-import { applyStringEdit, editFacts, posixCommandIn, type Capability, type CapabilityProvider, type RepoEditResult, type ShellCapability, type ShellRunOptions } from '@builderforce/agent-tools';
+import { posixCommandIn, type Capability, type CapabilityProvider, type RepoEditResult, type ShellCapability, type ShellRunOptions } from '@builderforce/agent-tools';
+import { createRepoCapabilities, WorkspaceError, type WorkspaceFs } from '@builderforce/agent-tools/workspace';
 import type { RunSandbox } from './runSandbox';
 import { SANDBOX_COMMAND_HEARTBEAT_MS } from '../cloudAgent/runContext';
 import { reportedFallback } from '../../observability/caughtErrorReporter';
@@ -82,18 +83,23 @@ export const SANDBOX_CAPABILITIES: readonly Capability[] = ['shell'];
 /** What a sandbox with a job table adds on top (`command_status` / `command_stop`). */
 export const SANDBOX_JOB_CAPABILITIES: readonly Capability[] = ['shell.jobs'];
 
+/** The clone's working tree as a `WorkspaceFs` for ONE edit: it reads the tree and commits through `commit`. */
+function workingTreeFs(sandbox: RunSandbox, commit: (path: string, content: string) => Promise<void>): WorkspaceFs {
+  return {
+    async *list() { /* an edit never lists */ },
+    read: async (path) => {
+      const r = await sandbox.fs({ op: 'read', path });
+      return r.ok && typeof r.content === 'string' ? { status: 'ok', content: r.content, truncated: false } : { status: 'not_found' };
+    },
+    write: commit,
+    remove: async () => 'missing',
+  };
+}
+
 export function withSandbox(base: CapabilityProvider, sandbox: RunSandbox, opts: SandboxProviderOptions): CapabilityProvider {
   const mirror = (req: Parameters<RunSandbox['fs']>[0]) => sandbox.fs(req).catch(reportedFallback(undefined, { source: 'application/runtime/sandbox/sandboxProvider.ts', operation: 'mirrorToWorkingTree', context: { op: req.op } }));
   const repoRead = base.repoRead;
   const repoWrite = base.repoWrite;
-  /** What an edit applies to: the branch the commit lands on, else the working tree (a
-   *  file only a command produced is not on the branch yet). */
-  const currentContent = async (path: string): Promise<{ ok: true; content: string } | { ok: false; error: string }> => {
-    const onBranch = repoRead ? await repoRead.readFile(path).catch(reportedFallback(null, { source: 'application/runtime/sandbox/sandboxProvider.ts', operation: 'readBranchForEdit', context: { path } })) : null;
-    if (onBranch?.ok && typeof onBranch.content === 'string') return { ok: true, content: onBranch.content };
-    const inTree = await sandbox.fs({ op: 'read', path });
-    return inTree.ok && typeof inTree.content === 'string' ? { ok: true, content: inTree.content } : { ok: false, error: inTree.error ?? 'read failed' };
-  };
   return {
     ...base,
     capabilities: new Set<Capability>([...base.capabilities, ...SANDBOX_CAPABILITIES, ...(sandbox.jobs ? SANDBOX_JOB_CAPABILITIES : [])]),
@@ -126,19 +132,24 @@ export function withSandbox(base: CapabilityProvider, sandbox: RunSandbox, opts:
           return r;
         },
         editFile: async (path, oldString, newString, replaceAll): Promise<RepoEditResult> => {
-          const current = await currentContent(path);
-          if (!current.ok) return { ok: false, error: `cannot edit '${path}': ${current.error}` };
-          const edit = applyStringEdit(current.content, oldString, newString, replaceAll);
-          if (!edit.ok || edit.content == null) return { ok: false, ...editFacts(edit), error: `cannot edit '${path}': ${edit.error ?? 'old_string not found'}` };
-          const committed = await repoWrite.writeFile(path, edit.content);
-          if (!committed.ok) return { ok: false, error: committed.error ?? `could not commit the edit to '${path}'` };
-          await mirror({ op: 'write', path, content: edit.content, committed: true });
-          return {
-            ok: true, change: 'modified',
-            ...(committed.branch ? { branch: committed.branch } : {}),
-            ...(committed.commitUrl !== undefined ? { commitUrl: committed.commitUrl } : {}),
-            ...editFacts(edit),
-          };
+          // The provider edits what the BRANCH holds and commits it (a stale clone can never revert another commit)...
+          const r = await repoWrite.editFile(path, oldString, newString, replaceAll);
+          if (r.ok) {
+            const left = await repoRead?.readFile(path).catch(reportedFallback(null, { source: 'application/runtime/sandbox/sandboxProvider.ts', operation: 'readCommittedEdit', context: { path } }));
+            if (left?.ok && typeof left.content === 'string') await mirror({ op: 'write', path, content: left.content, committed: true });
+            return r;
+          }
+          // ...and a file only a command produced is not on the branch yet: the same shared edit core over the working tree, committed through `writeFile`.
+          if (r.code !== 'not_found') return r;
+          let committedContent = '';
+          const viaTree = createRepoCapabilities(workingTreeFs(sandbox, async (p, c) => {
+            const w = await repoWrite.writeFile(p, c);
+            if (!w.ok) throw new WorkspaceError('io', w.error ?? `could not commit the edit to '${p}'`);
+            committedContent = c;
+          })).repoWrite;
+          const edited = await viaTree.editFile(path, oldString, newString, replaceAll);
+          if (edited.ok) await mirror({ op: 'write', path, content: committedContent, committed: true });
+          return edited.ok ? edited : { ...edited, error: `cannot edit '${path}': ${edited.error}` };
         },
       },
     } : {}),

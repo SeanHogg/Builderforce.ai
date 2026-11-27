@@ -65,8 +65,6 @@ export interface CodeDockModel {
     visible: boolean;
     /** The pane sits beside the map (a wide box); else it is one half of the Code | Picture switch. */
     split: boolean;
-    /** The map's own width. */
-    mapWidth: number;
     facts: SymbolFacts;
     /** The symbol whose level you are inside (the open method, else the drilled level's): its lens shows Out. */
     inside: string | null;
@@ -105,7 +103,6 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     const reading = codeOpen || !!zoom.code;
     const visible = shown;
     const split = visible && codePaneWidth(width) > 0;
-    const mapWidth = split ? width - codePaneWidth(width) : width;
     // Computed once per graph: the lens rows, the gutter and the outline's marks all read it.
     // While comparing, the graph is the union (both sides' findings): the facts read the shown side's own graph.
     const factsGraph = a.factsGraph ?? graph;
@@ -246,7 +243,7 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     }, [onSelectRef, enterCode, atCodeLevel, records, setSelected]);
 
     return {
-        reading, visible, split, mapWidth, facts, inside, types, records, reader, codeTarget, markTarget, acrossTarget, methodTarget, codeName, scrollLine, hoverRef,
+        reading, visible, split, facts, inside, types, records, reader, codeTarget, markTarget, acrossTarget, methodTarget, codeName, scrollLine, hoverRef,
         followCode, clearAcross, nodeSelected, openCode, closeCode, hide, drillTo, toggleFollow, out,
     };
 }

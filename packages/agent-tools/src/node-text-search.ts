@@ -45,6 +45,7 @@ import type { RepoSearchResult } from "./capabilities.js";
 import { toPosixRel } from "./node-path.js";
 import { WORKSPACE_SKIP_DIRS, isIndexedDirName } from "./skipDirs.js";
 import { SEARCH_MAX_MATCHES } from "@builderforce/tool-output-policy";
+import { compileSearchPattern, isValidRegex, orderMatches, smartCaseSensitive, type SearchMatch } from "./text-scan.js";
 
 /** Files the FALLBACK walk reads before giving up (ripgrep has no such cap). */
 const WALK_MAX_FILES = 4_000;
@@ -121,11 +122,6 @@ function toRepoRel(root: string, printed: string): string {
     if (same && posix.charAt(rootPosix.length) === "/") return posix.slice(rootPosix.length + 1);
   }
   return posix;
-}
-
-/** Sort by path then line so a result set reads like a file, whichever backend produced it. */
-function ordered(matches: SearchMatch[]): SearchMatch[] {
-  return [...matches].sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
 }
 
 export interface WorkspaceSearchOptions {

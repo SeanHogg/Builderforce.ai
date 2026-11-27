@@ -24,20 +24,20 @@ The OpenVSCode-in-Tauri shell is not being built. Until the fork ships, the edit
 
 **Kept in `builderforce-inference`:** the `bfi-*` engine (`bfi serve` announces itself in `~/.builderforce/bfi.json`; the extension also runs it in-process through `@seanhogg/bfi-node`), plus `bf-index`, `bf-context` and `bf-compress` (`bf-context serve` still writes `~/.builderforce/desktop.json`). `bf-index` stays behind the benchmark gate in §2.5. The release workflow now publishes only the `bfi` and `bf-context` binaries.
 
-**Deleted:** `app/` (vanilla-JS UI, Tauri shell, console) and the crates `bf-local`, `bf-cloud`, `bf-teach`, `bf-memory` and `bf-vault`. In Builderforce.ai, these were removed: the never-served "Install Synapse model" flow, the `desktop.json` `models` reader, the unused Synapse embedder slot. End-user copy, labels and download sections are unchanged: users still get the Synapse desktop app and Spawn. `/api/spawn/downloads` now returns the Synapse installers, because Spawn ships inside Synapse.
+**Deleted:** `app/` (vanilla-JS UI, Tauri shell, console) and the crates `bf-local`, `bf-teach` and `bf-memory`. `bf-cloud` and `bf-vault` moved to `builderforce-spawn`, their only remaining consumer. In Builderforce.ai, these were removed: the never-served "Install Synapse model" flow, the `desktop.json` `models` reader, the unused Synapse embedder slot. End-user copy, labels and download sections are unchanged: users still get the Synapse desktop app and Spawn. `/api/spawn/downloads` now returns the Synapse installers, because Spawn ships inside Synapse.
 
 | Finding | Status after retirement |
 |---|---|
-| CHAT-G015, CHAT-G016 | Closed. The Synapse chat fork and both dictation copies are deleted. |
+| CHAT-G015 | Closed. The Synapse chat fork is deleted. |
+| CHAT-G016 | Reduced to the Spawn copy of dictation. |
 | CHAT-G010, CHAT-G018 | The Synapse part is gone. The VS Code, brain-embedded and Chrome parts remain open. |
 | MEM-G105, MEM-G106 | Closed. `bf-teach` and the direct `memory.json` reads are deleted. |
 | MEM-G114 | Reduced to 2 brain-map UIs (`EvermindBrainMap`, `EvermindBrain3D`). |
 | INF-G006 | Closed. `hub.rs` is deleted. |
 | INF-G007, INF-G011 | The `bf-local` copies (its fit share and its `models_dir()`) are gone. The rest remains open. |
 | INF-G015 | Closed. The `bfi` User-Agent comes from the crate version. |
-| INF-G012 | Still open. The `synapse` runtime id now means `bfi serve`, is labelled `bfi serve`, and is kept as a wire id until the rename. |
-| AUTH-G001 | Closed. The Rust device flow is deleted. |
-| AUTH-G002, AUTH-G008, AUTH-G009, AUTH-G013 | The Rust copies are gone. The VS Code and Chrome parts remain open. |
+| INF-G012 | Still open. The `synapse` runtime id now means `bfi serve`. It keeps its "Synapse" label and stays a wire id until the rename. |
+| AUTH-G001, AUTH-G002, AUTH-G008, AUTH-G009, AUTH-G013 | Still open. `bf-cloud` and `bf-vault` moved to `builderforce-spawn`, their only consumer, so the Rust copies now live there. |
 | CIX-G012 | The never-offered Synapse embedder slot is removed. The fingerprint policy remains open. |
 | UP-G015 | Redefined: build Synapse as a VS Code fork. |
 

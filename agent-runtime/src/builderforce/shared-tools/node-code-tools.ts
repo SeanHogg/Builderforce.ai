@@ -2,8 +2,8 @@
  * Node-native code-intelligence tool backends (`run*` functions).
  *
  * These are the on-prem tools that read the checked-out working tree directly
- * (`git`, `rg`/`grep`, the project's `.builderForceAgents` knowledge dir, AST code
- * maps). They have NO cloud concretion — a bare Worker/DO cannot shell out — so they
+ * (`git`, `rg`/`grep`, the project's `.builderForceAgents` knowledge dir, the
+ * repo-map code graph). They have NO cloud concretion — a bare Worker/DO cannot shell out — so they
  * use `node:*` directly. The pure logic lives here in the `run*` functions; the live
  * native `create*Tool` `AgentTool`s (`builderforce/tools/*-tool.ts`) delegate to the
  * SAME implementation (DRY). 100% pi-free. (The earlier duplicate `*Tool`
@@ -14,7 +14,6 @@
 import { readRecentCommits } from "@builderforce/agent-tools/node-git-history";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { buildCodeMap, buildDependencyGraph } from "../code-map.js";
 import {
   loadCustomAgentRoles,
   loadProjectArchitecture,
@@ -23,6 +22,7 @@ import {
   loadProjectRules,
   resolveBuilderForceAgentsDir,
 } from "../project-context.js";
+import { analyzeWorkspaceCode } from "./workspace-code-graph.js";
 
 // ── git_history ────────────────────────────────────────────────────────────────
 
@@ -84,35 +84,22 @@ export async function runCodeAnalysis(projectRoot: string, opts: CodeAnalysisOpt
     const context = await loadProjectContext(projectRoot);
     const patterns =
       opts.filePatterns || (context?.languages.includes("typescript") ? ["**/*.ts", "**/*.tsx"] : ["**/*.js"]);
-    const codeMap = await buildCodeMap(projectRoot, patterns);
-    const dependencyGraph = buildDependencyGraph(codeMap);
-
-    const functionCount = Array.from(codeMap.files.values()).reduce((s, f) => s + f.functions.length, 0);
-    const classCount = Array.from(codeMap.files.values()).reduce((s, f) => s + f.classes.length, 0);
-    const interfaceCount = Array.from(codeMap.files.values()).reduce((s, f) => s + f.interfaces.length, 0);
+    const code = await analyzeWorkspaceCode(projectRoot, patterns);
+    const total = (pick: (f: (typeof code.files)[number]) => number): number =>
+      code.files.reduce((s, f) => s + pick(f), 0);
 
     return {
       summary: {
-        fileCount: codeMap.files.size,
-        functionCount,
-        classCount,
-        interfaceCount,
-        dependencyCount: codeMap.dependencies.size,
-        exportCount: codeMap.exports.size,
+        fileCount: code.files.length,
+        functionCount: total((f) => f.functions),
+        classCount: total((f) => f.classes),
+        interfaceCount: total((f) => f.interfaces),
+        dependencyCount: code.dependencyCount,
+        exportCount: code.exports.length,
       },
-      files: Array.from(codeMap.files.entries()).map(([p, info]) => ({
-        path: p,
-        language: info.language,
-        functions: info.functions.length,
-        classes: info.classes.length,
-        interfaces: info.interfaces.length,
-      })),
-      topLevelExports: Array.from(codeMap.exports.entries())
-        .slice(0, 50)
-        .map(([_key, exp]) => ({ name: exp.name, kind: exp.kind, file: exp.file })),
-      dependencyGraph: Array.from(dependencyGraph.entries())
-        .slice(0, 50)
-        .map(([file, node]) => ({ file, dependencies: node.dependencies.length, dependents: node.dependents.length })),
+      files: code.files,
+      topLevelExports: code.exports.slice(0, 50),
+      dependencyGraph: code.nodes.slice(0, 50),
     };
   } catch (error) {
     return { error: `Failed to analyze code: ${error instanceof Error ? error.message : String(error)}` };

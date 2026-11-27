@@ -31,6 +31,7 @@
     "./node-watch-port": "./src/node-watch-port.ts",
     "./node-git-ignore": "./src/node-git-ignore.ts",
     "./node-text-search": "./src/node-text-search.ts",
+    "./node-workspace": "./src/node-workspace.ts",
     "./node-git-remote": "./src/node-git-remote.ts",
     "./node-git-history": "./src/node-git-history.ts",
     "./node-desktop": "./src/node-desktop.ts",

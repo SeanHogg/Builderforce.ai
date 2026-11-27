@@ -48,6 +48,12 @@ export type WorkspaceRead =
   | { status: "is_directory" }
   | { status: "ok"; content: string; truncated: boolean };
 
+/** A native searcher that knows it stopped early (a timeout, its own cap) says so; a bare array is "complete". */
+export interface SearchFound {
+  matches: SearchMatch[];
+  truncated: boolean;
+}
+
 /** The only thing a host writes. Paths are root-relative POSIX; "" is the root. */
 export interface WorkspaceFs {
   /** The immediate children of `dir` (one level; the provider walks). A missing or unreadable `dir` throws. */
@@ -58,7 +64,7 @@ export interface WorkspaceFs {
   write(path: string, content: string): Promise<void>;
   remove(path: string): Promise<"deleted" | "missing">;
   /** An optional native searcher (ripgrep, a provider's code search). Absent: the neutral scanner walks `list`/`read`. */
-  search?(query: string, scope: string, opts: { signal?: AbortSignal }): Promise<SearchMatch[]>;
+  search?(query: string, scope: string, opts: { signal?: AbortSignal }): Promise<SearchMatch[] | SearchFound>;
 }
 
 /** An adapter throws this to name WHY an operation failed (containment, a too-large file, ...). */
@@ -143,8 +149,9 @@ export function createRepoCapabilities(fs: WorkspaceFs, opts: RepoCapabilityOpti
       try {
         if (!fs.search) return await scanFiles(fs, query, dir, run);
         const found = await fs.search(query, dir, run);
-        const matches = orderMatches(found).slice(0, SEARCH_MAX_MATCHES);
-        return { ok: true, query, total: matches.length, truncated: found.length > SEARCH_MAX_MATCHES, matches };
+        const all = Array.isArray(found) ? found : found.matches;
+        const matches = orderMatches(all).slice(0, SEARCH_MAX_MATCHES);
+        return { ok: true, query, total: matches.length, truncated: (!Array.isArray(found) && found.truncated) || all.length > SEARCH_MAX_MATCHES, matches };
       } catch (e) {
         return { ok: false, query, error: messageOf(e), code: codeOf(e) };
       }

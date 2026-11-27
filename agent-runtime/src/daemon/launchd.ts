@@ -1,3 +1,4 @@
+import { toPosixPath } from "@builderforce/agent-tools/glob";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
@@ -11,7 +12,7 @@ import {
   buildLaunchAgentPlist as buildLaunchAgentPlistImpl,
   readLaunchAgentProgramArgumentsFromFile,
 } from "./launchd-plist.js";
-import { formatLine, toPosixPath, writeFormattedLines } from "./output.js";
+import { formatLine, writeFormattedLines } from "./output.js";
 import { resolveGatewayStateDir, resolveHomeDir } from "./paths.js";
 import { parseKeyValueOutput } from "./runtime-parse.js";
 import type { GatewayServiceRuntime } from "./service-runtime.js";

@@ -46,9 +46,17 @@ const filling: CSSProperties = { flex: '1 1 0', minHeight: 0, display: 'flex', f
 /** The design's pane column, `minmax(300px, min(36%, 520px))`; boxes up to 900px wide show ONE of the code and the picture. */
 const CODE_SHARE = 0.36;
 
-/** The code pane's width beside the map in a box `width` wide; 0 when the box is too narrow to split (one half at a time). */
-export function codePaneWidth(width: number): number {
-    return width >= CODE_SPLIT_WIDTH ? Math.round(Math.max(300, Math.min(width * CODE_SHARE, 520))) : 0;
+export const MIN_CODE_PANE_WIDTH = 240;
+const MIN_PICTURE_WIDTH = 360;
+
+/** Keep room for the canvas while resizing the Code/Lines dock. */
+export const maxCodePaneWidth = (width: number): number => Math.floor(width - MIN_PICTURE_WIDTH);
+
+/** The split width, or 0 when the Code | Picture switch is shown. */
+export function codePaneWidth(width: number, preferred?: number): number {
+    if (width < CODE_SPLIT_WIDTH) return 0;
+    const desired = preferred ?? Math.max(300, Math.min(width * CODE_SHARE, 520));
+    return Math.min(maxCodePaneWidth(width), Math.max(MIN_CODE_PANE_WIDTH, Math.round(desired)));
 }
 
 const bar: CSSProperties = {

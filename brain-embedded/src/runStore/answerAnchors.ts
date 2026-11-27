@@ -10,6 +10,7 @@
 
 import type { BrainTraceEvent } from '../brainTriage';
 import type { AnswerFileAnchor } from '../evermindMemory';
+import { normalizeRelPath } from '../run/normalizeRelPath';
 
 /** Tools whose successful call returned a file's content. */
 const FILE_READ_TOOLS: ReadonlySet<string> = new Set(['read_file', 'view_file', 'open_file', 'read_files']);
@@ -17,10 +18,6 @@ const FILE_READ_TOOLS: ReadonlySet<string> = new Set(['read_file', 'view_file', 
 const PATH_KEYS = ['path', 'file', 'filePath'] as const;
 /** Anchors stored per answer — enough to cover a focused answer, bounded for the row. */
 export const MAX_ANSWER_ANCHORS = 16;
-
-function normalizePath(p: string): string {
-  return p.trim().split('\\').join('/').replace(/^\.\/+/, '');
-}
 
 /** The distinct files this run read, oldest first, as path-only anchors. */
 export function readFileAnchors(trace: readonly BrainTraceEvent[]): AnswerFileAnchor[] {
@@ -32,7 +29,7 @@ export function readFileAnchors(trace: readonly BrainTraceEvent[]): AnswerFileAn
     const paths = Array.isArray(args.paths) ? args.paths : PATH_KEYS.map((k) => args[k]);
     for (const raw of paths) {
       if (typeof raw !== 'string') continue;
-      const path = normalizePath(raw);
+      const path = normalizeRelPath(raw);
       if (!path || seen.has(path)) continue;
       seen.add(path);
       out.push({ path });

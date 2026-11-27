@@ -13128,7 +13128,7 @@
       },
       "synapse-runs-models-itself": {
         "title": "Synapse exécute désormais les modèles lui-même",
-        "description": "Synapse n'a plus besoin d'un Ollama installé séparément. Il supervise bfi, notre moteur natif, de sorte que les GGUF PQ2_0 et PTQ1_0 en 2 bits se chargent sur votre machine, et VS Code retrouve ces modèles dans ~/.builderforce/desktop.json. Le sidecar CPU est livré ; nous n'avons pas revendiqué 70 % de llama-bench sur GPU."
+        "description": "Synapse n'a plus besoin d'un Ollama installé séparément. Il supervise bfi, notre moteur natif, de sorte que les GGUF PQ2_0 et PTQ1_0 en 2 bits se chargent sur votre machine, et VS Code retrouve ces modèles grâce à l'annonce du moteur dans ~/.builderforce/bfi.json. Le sidecar CPU est livré ; nous n'avons pas revendiqué 70 % de llama-bench sur GPU."
       },
       "workspace-hooks-your-team-commits": {
         "title": "Dites à l'agent ce que chaque exécution doit faire, et versionnez-le avec le code",
@@ -38724,7 +38724,7 @@
         ],
         "status": "Le chemin CPU est livré. Les backends GPU (CUDA, ROCm, Metal, Vulkan) compilent, mais le débit GPU face à llama-bench n'a pas été mesuré, et les binaires de version ne sont pas encore signés.",
         "quickStartNote": "Installez la CLI depuis les sources avec Cargo, vérifiez qu'un modèle tient sur cette machine, téléchargez-le et démarrez le serveur.",
-        "usage": "Synapse, c'est Builderforce sur le bureau. Il sert les modèles locaux à Claude Code, à vos scripts et à l'extension VS Code de Builderforce, qui les trouve via ~/.builderforce/desktop.json, et son service de contexte et son index de code alimentent aussi l'extension."
+        "usage": "Synapse, c'est Builderforce sur le bureau. Il sert les modèles locaux à Claude Code, à vos scripts et à l'extension Builderforce. L'extension trouve le service bf-context via ~/.builderforce/desktop.json et un moteur bfi serve via ~/.builderforce/bfi.json, et le service de contexte et l'index de code l'alimentent aussi."
       },
       "spawn": {
         "tagline": "Créez des jeux Roblox en parlant : une application de bureau et un pont vers Roblox Studio.",
@@ -38733,7 +38733,7 @@
         "gets": [
           "Une application de bureau Tauri qui tourne à côté de Roblox Studio.",
           "bf-roblox, le pont : il installe le plugin Spawn pour Studio et sert le pont en boucle locale que le plugin interroge pour récupérer les builds, si bien que rien n'est accessible depuis l'extérieur de la machine.",
-          "La connexion à Builderforce et l'accès à l'API via bf-cloud, partagé avec Synapse depuis le dépôt builderforce-inference."
+          "La connexion à Builderforce et l'accès à l'API via bf-cloud, avec bf-vault à ses côtés, tous deux dans le dépôt builderforce-spawn lui-même."
         ],
         "status": "Les binaires de version ne sont pas encore signés.",
         "quickStartNote": "Clonez le dépôt et compilez l'espace de travail avec Cargo.",

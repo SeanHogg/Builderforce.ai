@@ -13114,7 +13114,7 @@
       },
       "synapse-runs-models-itself": {
         "title": "Synapse 现在自己运行模型",
-        "description": "Synapse 不再需要单独安装 Ollama。它管理我们的原生引擎 bfi，因此 2 位的 PQ2_0 和 PTQ1_0 GGUF 可以在你的机器上加载，VS Code 会在 ~/.builderforce/desktop.json 中找到这些模型。CPU 边车已发布；我们并未宣称 GPU 达到 llama-bench 的 70%。"
+        "description": "Synapse 不再需要单独安装 Ollama。它管理我们的原生引擎 bfi，因此 2 位的 PQ2_0 和 PTQ1_0 GGUF 可以在你的机器上加载，VS Code 会通过引擎在 ~/.builderforce/bfi.json 中的声明找到这些模型。CPU 边车已发布；我们并未宣称 GPU 达到 llama-bench 的 70%。"
       },
       "workspace-hooks-your-team-commits": {
         "title": "告诉智能体每次运行必须做什么，并随代码一起提交",
@@ -38724,7 +38724,7 @@
         ],
         "status": "CPU 路径已发布。GPU 后端（CUDA、ROCm、Metal、Vulkan）可以编译，但尚未测量与 llama-bench 相比的 GPU 吞吐量，发布的二进制文件也尚未签名。",
         "quickStartNote": "用 Cargo 从源码安装 CLI，检查模型是否适合这台电脑，下载模型并启动服务器。",
-        "usage": "Synapse 就是桌面上的 Builderforce。它为 Claude Code、你的脚本以及 Builderforce 的 VS Code 扩展提供本地模型，扩展通过 ~/.builderforce/desktop.json 找到这些模型，而它的上下文服务和代码索引也为扩展提供支持。"
+        "usage": "Synapse 就是桌面上的 Builderforce。它为 Claude Code、你的脚本以及 Builderforce 扩展提供本地模型。扩展通过 ~/.builderforce/desktop.json 找到 bf-context 服务，通过 ~/.builderforce/bfi.json 找到 bfi serve 引擎，而上下文服务和代码索引也为扩展提供支持。"
       },
       "spawn": {
         "tagline": "用对话制作 Roblox 游戏：一个桌面应用和一个连接 Roblox Studio 的桥接组件。",
@@ -38733,7 +38733,7 @@
         "gets": [
           "一个与 Roblox Studio 并行运行的 Tauri 桌面应用。",
           "bf-roblox 桥接组件：它安装 Spawn 的 Studio 插件，并提供插件轮询构建结果所用的本地回环桥接，因此机器外部无法访问任何内容。",
-          "通过 bf-cloud 登录 Builderforce 并访问 API，该组件与 builderforce-inference 仓库中的 Synapse 共用。"
+          "通过 bf-cloud 登录 Builderforce 并访问 API，旁边还有 bf-vault，两者都位于 builderforce-spawn 仓库本身。"
         ],
         "status": "发布的二进制文件尚未签名。",
         "quickStartNote": "克隆仓库，并用 Cargo 构建整个工作区。",

@@ -1,7 +1,7 @@
 /**
- * Where the Synapse desktop installers are. Spawn ships inside Synapse, so every
- * desktop download button (Synapse and Spawn alike) links to these: one click to the
- * file for the visitor's computer, not a trip through a list of releases.
+ * Where the Synapse desktop installers are. Today only the Spawn download button reads
+ * this route: one click to the file for the visitor's computer. The Synapse links on the
+ * site use GitHub's `releases/latest`.
  *
  * They come from SeanHogg/builderforce-inference with `v*` tags. That repo's releases
  * may carry only headless binaries (`bfi-*`, `bf-context-*`), so this picks the newest

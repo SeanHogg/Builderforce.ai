@@ -13099,7 +13099,7 @@
       },
       "synapse-runs-models-itself": {
         "title": "Synapse now runs models itself",
-        "description": "Synapse no longer needs a separately installed Ollama. It supervises bfi, our native engine, so 2-bit PQ2_0 and PTQ1_0 GGUF load on your machine, and VS Code finds those models in ~/.builderforce/desktop.json. The CPU sidecar ships; we have not claimed GPU 70% of llama-bench."
+        "description": "Synapse no longer needs a separately installed Ollama. It supervises bfi, our native engine, so 2-bit PQ2_0 and PTQ1_0 GGUF load on your machine, and VS Code finds those models through the engine's announcement in ~/.builderforce/bfi.json. The CPU sidecar ships; we have not claimed GPU 70% of llama-bench."
       },
       "workspace-hooks-your-team-commits": {
         "title": "Tell the agent what every run must do, and commit it with the code",
@@ -37982,7 +37982,7 @@
         ],
         "status": "The CPU path ships. GPU backends (CUDA, ROCm, Metal, Vulkan) compile, but GPU throughput against llama-bench has not been measured, and release binaries are not signed yet.",
         "quickStartNote": "Install the CLI from source with Cargo, check that a model fits this machine, pull it and start the server.",
-        "usage": "Synapse is Builderforce on the desktop. It serves local models to Claude Code, your scripts and the Builderforce VS Code extension, which finds them through ~/.builderforce/desktop.json, and its context service and code index feed the extension as well."
+        "usage": "Synapse is Builderforce on the desktop. It serves local models to Claude Code, your scripts and the Builderforce extension. The extension finds the bf-context service through ~/.builderforce/desktop.json and a bfi serve engine through ~/.builderforce/bfi.json, and the context service and code index feed it as well."
       },
       "spawn": {
         "tagline": "Build Roblox games by talking: a desktop app and a Roblox Studio bridge.",
@@ -37991,7 +37991,7 @@
         "gets": [
           "A Tauri desktop app that runs beside Roblox Studio.",
           "bf-roblox, the bridge: it installs the Spawn Studio plugin and serves the loopback bridge the plugin polls for builds, so nothing is reachable from outside the machine.",
-          "Builderforce sign-in and API access through bf-cloud, shared with Synapse from the builderforce-inference repository."
+          "Builderforce sign-in and API access through bf-cloud, with bf-vault beside it, both living in the builderforce-spawn repository itself."
         ],
         "status": "Release binaries are not signed yet.",
         "quickStartNote": "Clone the repository and build the workspace with Cargo.",

@@ -1,8 +1,10 @@
-import { realpath, stat } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import { isAbsolute, relative } from "node:path";
 import type { RepoReadCapability } from "@builderforce/agent-tools";
 import { readRecentCommits } from "@builderforce/agent-tools/node-git-history";
 import { resolveInsideRoot } from "@builderforce/agent-tools/node-path";
+import { nodeWorkspaceFs } from "@builderforce/agent-tools/node-workspace";
+import { createRepoCapabilities } from "@builderforce/agent-tools/workspace";
 
 /** Resolve symlinks before using a caller-supplied path to access the disk. */
 export async function workspacePath(root: string, requested: string): Promise<string | null> {
@@ -18,24 +20,21 @@ export async function workspacePath(root: string, requested: string): Promise<st
   }
 }
 
-/** Keep public MCP reads inside the selected real root, even through a symlink. */
+/** Public MCP reads are the ONE shared provider over the selected root: containment (links included) and a 1 MB read cap live there, once. */
+const MCP_MAX_READ_BYTES = 1_000_000;
+
+/**
+ * The MCP's read capability: reads come from the shared provider (contained to the root,
+ * byte-capped at 1 MB); list and search stay on the host's own `read`, which is built from the
+ * same provider and already confined, so it keeps the host's ripgrep.
+ */
 export function workspaceRepoRead(root: string, read?: RepoReadCapability): RepoReadCapability {
   if (!read) throw new Error("Workspace read capability unavailable");
+  const own = createRepoCapabilities(nodeWorkspaceFs(root), { maxReadBytes: MCP_MAX_READ_BYTES }).repoRead;
   return {
     listFiles: (scope, glob, options) => read.listFiles(scope, glob, options),
-    async readFile(path) {
-      const resolved = await workspacePath(root, path);
-      if (!resolved) return { ok: false, path, error: "File is unavailable in the workspace" };
-      const info = await stat(resolved);
-      if (!info.isFile() || info.size > 1_000_000) return { ok: false, path, error: "File is not a supported source file" };
-      return read.readFile(relative(await realpath(root), resolved));
-    },
-    async searchCode(query, path, options) {
-      if (!path) return read.searchCode(query, undefined, options);
-      const resolved = await workspacePath(root, path);
-      if (!resolved) return { ok: false, query, error: "Search path is unavailable in the workspace" };
-      return read.searchCode(query, relative(await realpath(root), resolved), options);
-    },
+    readFile: (path) => own.readFile(path),
+    searchCode: (query, path, options) => read.searchCode(query, path, options),
   };
 }
 

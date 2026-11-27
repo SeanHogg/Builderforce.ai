@@ -60,14 +60,14 @@ So the work is mostly *unify and extract*, not *build*. The pasted roadmap's pha
 - **Superseded:** the earlier recommendation to embed an OpenVSCode Server sidecar in the Synapse Tauri shell. It is not being built. A Code-OSS fork replaces it (`UP-G015`), and the earlier "why not a fork" concern (a second Electron shell) no longer applies, because the Tauri shell is gone.
 - **Deleted:**
   - the Synapse app (`builderforce-inference/app`: vanilla-JS UI, Tauri shell, console);
-  - its service crates (`bf-local`, `bf-cloud`, `bf-teach`, `bf-memory`, `bf-vault`).
+  - its service crates (`bf-local`, `bf-teach`, `bf-memory`). `bf-cloud` and `bf-vault` moved to `builderforce-spawn`.
 - **Kept** (each serves the extension):
   - the native engine `bfi` (`bfi serve`, plus `@seanhogg/bfi-node` in-process);
   - the `bf-context` loopback service and the `bf-index`/`bf-compress` crates behind the benchmark gate.
 - **Spawn** keeps its repo. It moves from its own Tauri shell to a VS Code extension shipped in the Synapse fork, and `bf-roblox` stays the Roblox Studio bridge (`UP-G017`).
 - **Project types** in the fork cover three AI-model scenarios: Scratch (train a new model), Existing (start from an existing model) and Knowledge pack (build on a portable knowledge pack). They are starter kits (`UP-G002`).
 - **Features that existed only in Synapse** have no host now: Teach-once desktop automation, Self-Directed Agents and their scheduler, and phone approvals for self-owned steps. Rebuilding them in the extension is a product decision (`UP-G018`).
-- Per-finding status: [duplication audit, retirement record](platform-duplication-audit.md#synapse-and-spawn-retirement-user-decision-2026-11-27).
+- Per-finding status: [duplication audit, retirement record](platform-duplication-audit.md#synapse-moves-from-tauri-to-a-vs-code-fork-user-decision-2026-11-27).
 
 ## 4. Where the pasted roadmap should change
 
@@ -78,7 +78,7 @@ So the work is mostly *unify and extract*, not *build*. The pasted roadmap's pha
 - **Phase 0 baseline.** The webcontainers `scripts/benchmark` measure the repo's own test and build times, not runtime performance. Add runtime benchmarks: cold/warm start, idle memory, per-language hello-world, and preview time-to-first-byte. Do this before any kernel work.
 - **Phase 1 "workspace, event bus, component contracts".** This is the real P0. It unblocks shared studios and agent/human parity.
 - **Phases 8 and 14 (inference, model virtualization).** These begin with *consolidating four engines into one* (`UP-G014`), not building a new one.
-- **No separate "Synapse IDE shell" phase.** The VS Code extension is the IDE (§3), so phase 6 (VS Code integration) covers it.
+- **The Synapse fork phase** (`UP-G015`) sits next to phase 6 (VS Code integration). The fork runs the same VSIX, so it builds on phase 6.
 
 ## 5. Target package map (aligned to what exists)
 
@@ -104,5 +104,5 @@ So the work is mostly *unify and extract*, not *build*. The pasted roadmap's pha
 2. **Spawn becomes a project type.** Its Roblox bridge (`bf-roblox`) becomes a starter kit and runtime adapter, and the separate Spawn app shell is retired.
    - **A new Movie/Video editor project type is required.** It must be built on the existing video pieces (the `canvasVideoTools.ts` tool set, the canvas video surfaces), not as a new silo.
    - Both live in the starter-kit registry (`UP-G002`).
-3. **IDE extensions: both** Open VSX and manually installed VSIX files. Superseded on 2026-11-27: the IDE is VS Code itself.
+3. **Synapse extensions: both** Open VSX and manually installed VSIX files. The Synapse VS Code fork takes both (`UP-G015`).
 4. **Kernel: interface first; Rust only where a benchmark proves a gain.**

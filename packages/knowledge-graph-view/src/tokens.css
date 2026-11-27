@@ -264,6 +264,21 @@ button.kg-file-tree__row {
   --kg-band-data: color-mix(in srgb, var(--vscode-charts-yellow, #a16207) 75%, black);
 }
 
+/* Keep the resize target wider than the separator line. The canvas begins at the same grid edge. */
+.kg-code-splitter {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: -5px;
+  width: 10px;
+  z-index: 4;
+  cursor: col-resize;
+  touch-action: none;
+}
+.kg-code-splitter:is(:hover, :active, :focus-visible) {
+  outline: none;
+  background: linear-gradient(to right, transparent 4px, var(--kg-accent) 4px 6px, transparent 6px);
+}
+
 /* Keyboard focus on the SVG nodes: stations, issue pins and the graph and map nodes show a ring from :focus-visible only (a mouse click draws none). */
 [data-station]:focus-visible,
 [data-pin]:focus-visible,

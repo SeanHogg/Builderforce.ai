@@ -1,4 +1,3 @@
-import { watch, type FSWatcher } from "node:fs";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { extname } from "node:path";
 import type { RepoReadCapability, SemanticSearchResult } from "@builderforce/agent-tools";
@@ -6,6 +5,8 @@ import { toPosixPath } from "@builderforce/agent-tools/glob";
 import { gitIgnoredMatcher } from "@builderforce/agent-tools/node-git-ignore";
 import { resolveInsideRoot, resolveInsideRootReal, toPosixRel } from "@builderforce/agent-tools/node-path";
 import { treeSitterSymbolExtractor } from "@builderforce/agent-tools/node-tree-sitter";
+import { nodeWatchPort } from "@builderforce/agent-tools/node-watch-port";
+import { isIndexStatePath, type WatchPort } from "@builderforce/agent-tools/watch-port";
 import { DEFAULT_REPO_MAP_LIMITS, isMapCandidate } from "@builderforce/repo-map";
 import {
   createKnowledgeIndex,
@@ -32,6 +33,10 @@ interface SearchInput {
   wasmDir?: string;
   embedder?: EmbedderPort;
   waitForIndexMs?: number;
+  /** The root's change feed; default {@link nodeWatchPort}. A host with its own watcher passes it so no second one is opened. */
+  watch?: WatchPort;
+  /** The root id the host's knowledge index uses; names the index file (`node-index-layout.ts`). Default: the layout's local id. */
+  rootId?: string;
 }
 
 const MAX_SNIPPET_CHARS = 4_000;
@@ -50,7 +55,7 @@ interface CodeSnapshot {
 }
 
 interface WarmCodeSnapshot extends CodeSnapshot {
-  watcher: FSWatcher;
+  unsubscribe: () => void;
   deadline: number;
   binding: string;
 }
@@ -192,7 +197,7 @@ async function refresh(input: Omit<SearchInput, "query" | "limit">, root: string
 }
 
 async function sharedSnapshot(input: SearchInput, root: string) {
-  const storage = await codeIndexStorage(root).catch(() => undefined);
+  const storage = await codeIndexStorage(root, input.rootId).catch(() => undefined);
   if (!storage) return undefined;
   const lock = await storage.lock();
   if (!lock) {
@@ -211,7 +216,7 @@ async function sharedSnapshot(input: SearchInput, root: string) {
 }
 
 function evictWarm(root: string) {
-  warm.get(root)?.watcher.close();
+  warm.get(root)?.unsubscribe();
   warm.delete(root);
 }
 
@@ -228,17 +233,16 @@ async function readSharedIndex(input: SearchInput, root: string): Promise<CodeSn
   if (building) return building.then((result) => result && { snapshot: result.snapshot });
 
   let invalidated = false;
-  let watcher: FSWatcher | undefined;
+  let unsubscribe: (() => void) | undefined;
   const invalidate = () => {
     invalidated = true;
-    if (warm.get(root)?.watcher === watcher) evictWarm(root);
+    if (warm.get(root)?.unsubscribe === unsubscribe) evictWarm(root);
   };
   try {
-    watcher = watch(root, { recursive: true, persistent: false }, (_event, file) => {
+    unsubscribe = (input.watch ?? nodeWatchPort()).subscribe(root, (paths) => {
       // The root index and its lock are generated under a directory the scanner skips.
-      if (!file || !/^\.builderforce(?:[\\/]|$)/i.test(file)) invalidate();
+      if (paths.some((path) => !isIndexStatePath(root, path))) invalidate();
     });
-    watcher.on("error", invalidate);
   } catch {
     // Filesystems without recursive watch can still use the shared on-disk snapshot.
   }

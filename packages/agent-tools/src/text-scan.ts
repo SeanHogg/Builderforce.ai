@@ -68,15 +68,24 @@ export interface ScanOptions {
   maxFiles?: number;
   /** Override {@link SCAN_MAX_FILE_BYTES}. */
   maxFileBytes?: number;
+  /** Override {@link SEARCH_MAX_MATCHES} (a host with its own panel cap). */
+  maxMatches?: number;
+  /** True skips a file before it is read or counted against `maxFiles` (a host's binary-extension rule). */
+  skipFile?: (path: string, size: number | undefined) => boolean;
+  /** Replaces the built-in per-line matcher: given a line's full text, returns that line's hits (a panel wants columns and every occurrence). */
+  lineMatcher?: (path: string, text: string, line: number) => SearchMatch[];
 }
 
 /** The matching lines of one file's text. */
-function scanText(rel: string, content: string, re: RegExp, limit: number): SearchMatch[] {
+function scanText(rel: string, content: string, re: RegExp, limit: number, lineMatcher?: ScanOptions["lineMatcher"]): SearchMatch[] {
   const out: SearchMatch[] = [];
   const lines = content.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const lineText = lines[i] ?? "";
-    if (re.test(lineText)) {
+    if (lineMatcher) {
+      out.push(...lineMatcher(rel, lineText, i + 1));
+      if (out.length >= limit) break;
+    } else if (re.test(lineText)) {
       out.push({ path: rel, line: i + 1, text: lineText.trim().slice(0, MATCH_TEXT_MAX) });
       if (out.length >= limit) break;
     }
@@ -94,6 +103,7 @@ export async function scanFiles(fs: WorkspaceFs, query: string, scope: string, o
   const dirFilter = opts.dirFilter ?? isIndexedDirName;
   const maxFiles = opts.maxFiles ?? SCAN_MAX_FILES;
   const maxBytes = opts.maxFileBytes ?? SCAN_MAX_FILE_BYTES;
+  const maxMatches = opts.maxMatches ?? SEARCH_MAX_MATCHES;
   const matches: SearchMatch[] = [];
   let scanned = 0;
   let truncated = false;
@@ -104,7 +114,7 @@ export async function scanFiles(fs: WorkspaceFs, query: string, scope: string, o
     const r = await fs.read(rel, { maxBytes });
     // Unreadable, a directory, or over the byte cap: skipped, like the node searcher.
     if (r.status !== "ok" || r.truncated || !r.content || r.content.includes("\0")) return;
-    for (const m of scanText(rel, r.content, re, SEARCH_MAX_MATCHES - matches.length)) matches.push(m);
+    for (const m of scanText(rel, r.content, re, maxMatches - matches.length, opts.lineMatcher)) matches.push(m);
   };
 
   if (scope) {
@@ -112,15 +122,15 @@ export async function scanFiles(fs: WorkspaceFs, query: string, scope: string, o
     if (probe.status === "not_found") return { ok: false, query, error: `path not found: ${scope}`, code: "not_found" };
     if (probe.status === "ok") {
       // A file scope searches that file (a file scope once reported "not referenced" for a file that declared the term).
-      if (!probe.truncated && probe.content && !probe.content.includes("\0")) matches.push(...scanText(scope, probe.content, re, SEARCH_MAX_MATCHES));
-      return { ok: true, query, total: matches.length, truncated: matches.length >= SEARCH_MAX_MATCHES, matches: orderMatches(matches) };
+      if (!probe.truncated && probe.content && !probe.content.includes("\0")) matches.push(...scanText(scope, probe.content, re, maxMatches, opts.lineMatcher));
+      return { ok: true, query, total: matches.length, truncated: matches.length >= maxMatches, matches: orderMatches(matches) };
     }
   }
 
   const queue: string[] = [scope];
   outer: while (queue.length > 0) {
     if (opts.signal?.aborted) return stopped();
-    if (matches.length >= SEARCH_MAX_MATCHES || scanned >= maxFiles) { truncated = true; break; }
+    if (matches.length >= maxMatches || scanned >= maxFiles) { truncated = true; break; }
     const dir = queue.shift() ?? "";
     const files: Array<{ path: string; size?: number }> = [];
     try {
@@ -134,11 +144,12 @@ export async function scanFiles(fs: WorkspaceFs, query: string, scope: string, o
       continue; // an unreadable directory is skipped; the walk goes on
     }
     for (const f of files) {
-      if (matches.length >= SEARCH_MAX_MATCHES || scanned >= maxFiles) { truncated = true; break outer; }
+      if (opts.skipFile?.(f.path, f.size)) continue;
+      if (matches.length >= maxMatches || scanned >= maxFiles) { truncated = true; break outer; }
       scanned++;
       await scanOne(f.path, f.size);
     }
   }
-  if (matches.length >= SEARCH_MAX_MATCHES) truncated = true;
+  if (matches.length >= maxMatches) truncated = true;
   return { ok: true, query, total: matches.length, truncated, matches: orderMatches(matches) };
 }

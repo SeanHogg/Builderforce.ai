@@ -8,7 +8,8 @@
  * is bounded: binary and oversized files are skipped, reads run in small batches,
  * and the result stops at a match cap and says it was cut.
  */
-import { listWorkspaceFiles, readWorkspaceFile } from './workspaceStore';
+import { scanFiles } from '@builderforce/agent-tools/text-scan';
+import { r2WorkspaceFs } from './r2WorkspaceFs';
 
 export interface WorkspaceSearchMatch {
   path: string;
@@ -31,7 +32,6 @@ export const SEARCH_QUERY_MAX = 200;
 const MAX_MATCHES = 200;
 const MAX_FILES = 400;
 const MAX_FILE_BYTES = 512 * 1024;
-const READ_BATCH = 8;
 const PREVIEW_RADIUS = 60;
 
 /** Files whose bytes are not text a person searches: images, fonts, archives, media. */
@@ -59,24 +59,21 @@ export function findMatches(path: string, text: string, query: string, limit = M
   return out;
 }
 
+/**
+ * The shared line scanner over the workspace, with the panel's own caps. Its matcher stays here
+ * (the panel is a literal, case-insensitive find that reports a column and every occurrence on a
+ * line), and no directory is skipped: the panel searches what the workspace holds.
+ */
 export async function searchWorkspace(bucket: R2Bucket, projectId: number, query: string): Promise<WorkspaceSearchResult> {
-  const files = (await listWorkspaceFiles(bucket, projectId))
-    .filter((file) => file.size > 0 && file.size <= MAX_FILE_BYTES && !BINARY_EXTENSION.test(file.path))
-    .sort((a, b) => a.path.localeCompare(b.path));
-
-  const searchable = files.slice(0, MAX_FILES);
-  let truncated = files.length > searchable.length;
-  const matches: WorkspaceSearchMatch[] = [];
-
-  for (let i = 0; i < searchable.length && matches.length < MAX_MATCHES; i += READ_BATCH) {
-    const batch = searchable.slice(i, i + READ_BATCH);
-    const texts = await Promise.all(batch.map((file) => readWorkspaceFile(bucket, projectId, file.path)));
-    batch.forEach((file, index) => {
-      const text = texts[index];
-      if (text == null || matches.length >= MAX_MATCHES) return;
-      matches.push(...findMatches(file.path, text, query, MAX_MATCHES - matches.length));
-    });
-  }
-  if (matches.length >= MAX_MATCHES) truncated = true;
-  return { matches, truncated };
+  const found = await scanFiles(r2WorkspaceFs(bucket, projectId), query, '', {
+    maxMatches: MAX_MATCHES,
+    maxFiles: MAX_FILES,
+    maxFileBytes: MAX_FILE_BYTES,
+    dirFilter: () => true,
+    skipFile: (path, size) => (size !== undefined && (size === 0 || size > MAX_FILE_BYTES)) || BINARY_EXTENSION.test(path),
+    lineMatcher: (path, text, line) => findMatches(path, text, query).map((m) => ({ ...m, line, text: m.preview })),
+  });
+  const hits = (found.matches ?? []) as unknown as WorkspaceSearchMatch[];
+  const matches = hits.slice(0, MAX_MATCHES).map(({ path, line, column, preview }) => ({ path, line, column, preview }));
+  return { matches, truncated: found.truncated === true || hits.length > MAX_MATCHES || !found.ok };
 }

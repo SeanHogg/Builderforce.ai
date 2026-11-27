@@ -68,6 +68,8 @@
       "@builderforce/agent-tools/sampling": ["../packages/agent-tools/src/sampling.ts"],
       "@builderforce/agent-tools/glob": ["../packages/agent-tools/src/glob.ts"],
       "@builderforce/agent-tools/edit": ["../packages/agent-tools/src/edit.ts"],
+      "@builderforce/agent-tools/text-scan": ["../packages/agent-tools/src/text-scan.ts"],
+      "@builderforce/agent-tools/memory-workspace-fs": ["../packages/agent-tools/src/memoryWorkspaceFs.ts"],
       "@builderforce/knowledge-browser": ["../packages/knowledge-browser/src/index.ts"],
       "@builderforce/agent-tools/knowledge-index": ["../packages/agent-tools/src/knowledge-index.ts"],
       "@builderforce/agent-tools/prefetch": ["../packages/agent-tools/src/prefetch/index.ts"],

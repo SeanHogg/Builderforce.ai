@@ -13,47 +13,21 @@
  * workspace root and a traversal escape is rejected, so the provider is self-guarding.
  */
 
-import * as fs from "fs/promises";
 import * as path from "path";
 import { hostCostLeverOn } from "../host/hostCostLevers";
-import { matchGlobInScope, dirMayContainGlobMatch, applyStringEdit, conformToExistingEol, editFacts, normalizeScopeDir, DELEGATION_CAPABILITIES } from "@builderforce/agent-tools";
-// The ONE workspace-containment resolver, shared with the agent-runtime Node provider.
-// Node-only, so it comes from the `/node-path` export condition (the package root stays
-// node-builtin-free for the Worker).
-import { resolveInsideRootRealOrThrow as resolveInRoot } from "@builderforce/agent-tools/node-path";
-import type {
-  Capability,
-  CapabilityProvider,
-  RepoDeleteResult,
-  RepoEditResult,
-  RepoListOptions,
-  RepoListResult,
-  RepoReadResult,
-  RepoSearchResult,
-  RepoWriteResult,
-} from "@builderforce/agent-tools";
+import { DELEGATION_CAPABILITIES } from "@builderforce/agent-tools";
+// The ONE coding provider (list/read/search/write/edit/delete) over the ONE local-disk adapter
+// (workspace containment, ripgrep-first search, byte caps) - shared with the on-prem provider and the
+// workspace MCP. The adapter is Node-only, so it comes from its own export condition (the package
+// root stays node-builtin-free for the Worker).
+import { createRepoCapabilities } from "@builderforce/agent-tools/workspace";
+import { nodeWorkspaceFs } from "@builderforce/agent-tools/node-workspace";
+import type { Capability, CapabilityProvider } from "@builderforce/agent-tools";
 
 import type { LocalResearchCapability, RepoSemanticCapability, RepoSymbolsCapability } from "@builderforce/agent-tools";
 import { desktopSemanticCapability } from "../context/desktopContext";
 import { createLocalShell } from "./localShell";
-import { searchWorkspace } from "@builderforce/agent-tools/node-text-search";
-import { isListedDirName } from "@builderforce/agent-tools/skip-dirs";
 import { workspaceSymbolIndex } from "../workspace/workspaceSymbols";
-import { messageOf } from "../shared/messageOf";
-
-// Bound the bytes pulled off disk per read. The shared `read_file` tool paginates the
-// returned content into line windows, and an oversized file returns a truncated PREFIX
-// (never a hard failure), so this only caps how much a single read loads into memory.
-const MAX_READ_BYTES = 2 * 1024 * 1024;
-// Walks (list_files / search_code): keep bounded so a huge repo can't hang the host.
-const LIST_MAX_FILES = 5_000;
-// list_files also bounds what it hands BACK to the model: a raw dump of a big monorepo
-// floods the context (the failure that made the Brain drown on an unscoped root
-// listing). Over this many files we collapse the result to a deduped directory summary
-// + truncated flag, so the model narrows with a subdir or search_code instead.
-const LIST_RETURN_MAX = 400;
-// search_code lives in `@builderforce/agent-tools/node-text-search` (ripgrep first, in-process
-// walk as the fallback); the ignore policy is `@builderforce/agent-tools/skip-dirs`.
 
 /** The capabilities the editor surface can physically back: read/search/write/edit/
  *  delete the open folder, plus a real shell (so `run_command` + the `git_*` tools
@@ -101,72 +75,6 @@ export const LOCAL_SURFACE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
  */
 export const EDITOR_DELEGATION_CAPS: ReadonlySet<Capability> = new Set<Capability>([...LOCAL_SURFACE_CAPS, ...DELEGATION_CAPABILITIES]);
 
-/**
- * Collapse a large file listing to the deduped set of directory prefixes just below the
- * listed folder (trailing "/"), so an over-broad `list_files` returns a scoping map the
- * model can drill into instead of thousands of paths that blow its context. Files that
- * sit directly at the listed folder are kept as-is (so a root doc like `ROADMAP.md` is
- * still discoverable). Bounded to LIST_RETURN_MAX entries.
- */
-function summarizeDirs(paths: string[], subdir?: string): string[] {
-  const baseDepth = subdir ? subdir.split("/").filter(Boolean).length : 0;
-  const depth = baseDepth + 2; // show up to two levels below the listed folder
-  const dirs = new Set<string>();
-  for (const p of paths) {
-    const segs = p.split("/");
-    if (segs.length <= 1) { dirs.add(p); continue; } // a file at the listed root
-    const cut = Math.min(depth, segs.length - 1);
-    dirs.add(`${segs.slice(0, cut).join("/")}/`);
-  }
-  return [...dirs].sort().slice(0, LIST_RETURN_MAX);
-}
-
-/**
- * Collect repo-relative file paths under `start`, bounded + ignoring noise.
- *
- * BREADTH-FIRST (a directory queue), not depth-first recursion: shallow files —
- * root docs like `ROADMAP.md` — are always collected before the `LIST_MAX_FILES`
- * budget is exhausted deep inside a huge early subtree (the bug that made a
- * root-level file invisible to `list_files`, so the agent wrongly concluded it did
- * not exist). Output is sorted for stable, scan-able results. Mirrors the on-prem
- * Node provider's walk so the two behave identically.
- */
-async function walkFiles(start: string, root: string, glob?: string, scope?: string, unbounded = false): Promise<{ paths: string[]; truncated: boolean }> {
-  const cap = unbounded ? Number.POSITIVE_INFINITY : LIST_MAX_FILES;
-  const out: string[] = [];
-  const queue: string[] = [start];
-  let truncated = false;
-  while (queue.length > 0) {
-    if (out.length >= cap) { truncated = true; break; }
-    const dir = queue.shift()!;
-    let entries: import("fs").Dirent[];
-    try {
-      entries = await fs.readdir(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        if (!isListedDirName(entry.name)) continue;
-        const childRel = path.relative(root, path.join(dir, entry.name)).split(path.sep).join("/");
-        // Prune directories the glob cannot reach so the match budget is not
-        // spent walking unrelated trees (and a truncated miss is not a miss).
-        if (glob && !dirMayContainGlobMatch(childRel, glob, scope)) continue;
-        queue.push(path.join(dir, entry.name));
-      } else if (entry.isFile()) {
-        const rel = path.relative(root, path.join(dir, entry.name)).split(path.sep).join("/");
-        // Glob DURING the walk so the budget counts matches, not candidates: capping
-        // first and globbing the survivors made "0 matches" mean "not in the first
-        // 5,000 paths", which the tool's own note then reported as "no such file".
-        if (glob && !matchGlobInScope(rel, glob, scope)) continue;
-        if (out.length >= cap) { truncated = true; break; }
-        out.push(rel);
-      }
-    }
-  }
-  return { paths: out.sort((a, b) => a.localeCompare(b)), truncated };
-}
-
 /** What the host can lend the provider beyond the folder itself. */
 export interface LocalProviderOptions {
   /**
@@ -197,103 +105,12 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
   const rootResolved = path.resolve(root);
   const symbols = options.symbols ?? workspaceSymbolIndex(rootResolved);
 
-  const repoRead = {
-    async listFiles(subdir?: string, glob?: string, opts?: RepoListOptions): Promise<RepoListResult> {
-      const start = subdir ? await resolveInRoot(rootResolved, subdir) : rootResolved;
-      // A glob is an explicit "find these files" — return the full matches (never the
-      // directory summary), so a named file is always surfaced even in a big repo. The
-      // glob is applied DURING the walk so the file budget counts MATCHES, not
-      // candidates, and it resolves against the scope so a glob written for the folder
-      // you asked about matches (see `matchGlobInScope`).
-      if (glob) {
-        const found = await walkFiles(start, rootResolved, glob, subdir, opts?.unbounded === true);
-        return { ok: true, paths: found.paths, truncated: found.truncated };
-      }
-      const { paths, truncated } = await walkFiles(start, rootResolved);
-      // Too many to hand back verbatim — return the child directories to scope into
-      // (with trailing "/") instead of flooding the model with every path. Root files
-      // are kept in the summary, so a top-level doc stays discoverable.
-      if (paths.length > LIST_RETURN_MAX) {
-        return { ok: true, paths: summarizeDirs(paths, subdir), truncated: true };
-      }
-      return { ok: true, paths, truncated };
-    },
-    async readFile(p: string): Promise<RepoReadResult> {
-      const abs = await resolveInRoot(rootResolved, p);
-      const stat = await fs.stat(abs).catch(() => null);
-      if (!stat) return { ok: false, path: p, error: "file not found" };
-      if (stat.isDirectory()) return { ok: false, path: p, error: "path is a directory, not a file — use list_files to see its contents" };
-      if (stat.size <= MAX_READ_BYTES) {
-        return { ok: true, path: p, content: await fs.readFile(abs, "utf-8") };
-      }
-      // Oversized: hand back a bounded prefix marked truncated instead of failing, so the
-      // model still gets the start of the file and the read_file tool paginates from there.
-      const handle = await fs.open(abs, "r");
-      try {
-        const buf = Buffer.alloc(MAX_READ_BYTES);
-        const { bytesRead } = await handle.read(buf, 0, MAX_READ_BYTES, 0);
-        return { ok: true, path: p, content: buf.subarray(0, bytesRead).toString("utf-8"), truncated: true };
-      } finally {
-        await handle.close();
-      }
-    },
-    async searchCode(query: string, scope?: string, searchOpts?: { signal?: AbortSignal }): Promise<RepoSearchResult> {
-      // Optional scope: a subdirectory OR a single file inside the workspace. Resolved
-      // here (the containment guard is the provider's job); the search itself — ripgrep
-      // when the editor has one, the bounded walk otherwise — lives in node-text-search.
-      let start = rootResolved;
-      const scopeDir = normalizeScopeDir(scope);
-      if (scopeDir) {
-        try {
-          start = await resolveInRoot(rootResolved, scopeDir);
-        } catch (e) {
-          return { ok: false, query, error: messageOf(e) };
-        }
-      }
-      const ripgrep = options.ripgrep ? await options.ripgrep().catch(() => null) : null;
-      // The run's Stop and this one search's own stop (a pre-search deadline) both kill rg.
-      const stops = [options.signal, searchOpts?.signal].filter((s): s is AbortSignal => !!s);
-      const signal = stops.length > 1 ? AbortSignal.any(stops) : stops[0];
-      return searchWorkspace({ root: rootResolved, start, query, ripgrep, ...(signal ? { signal } : {}) });
-    },
-  };
-
-  const repoWrite = {
-    async writeFile(p: string, content: string): Promise<RepoWriteResult> {
-      const abs = await resolveInRoot(rootResolved, p);
-      const existing = await fs.readFile(abs, "utf-8").catch(() => null);
-      await fs.mkdir(path.dirname(abs), { recursive: true });
-      // A rewrite keeps the file's line endings (shared rule with the edit core): an LF
-      // body over a CRLF file would otherwise flip, or mix, every line of it.
-      await fs.writeFile(abs, conformToExistingEol(existing, content), "utf-8");
-      symbols.markDirty(abs);
-      return { ok: true, change: existing !== null ? "modified" : "created" };
-    },
-    async deleteFile(p: string): Promise<RepoDeleteResult> {
-      const abs = await resolveInRoot(rootResolved, p);
-      try {
-        await fs.rm(abs);
-        symbols.markDirty(abs);
-        return { ok: true, deleted: true };
-      } catch {
-        return { ok: false, deleted: false, code: "not_found", error: "file not found" };
-      }
-    },
-    async editFile(p: string, oldString: string, newString: string, replaceAll?: boolean): Promise<RepoEditResult> {
-      const abs = await resolveInRoot(rootResolved, p);
-      const current = await fs.readFile(abs, "utf-8");
-      // EOL-tolerant, EOL-preserving match (shared with the cloud provider): an agent
-      // that emits LF `oldString` against a CRLF file still matches, and the file's
-      // existing line endings survive — the naive `indexOf` here used to fail every
-      // surgical edit on a Windows/CRLF working tree ("it tried to change code and
-      // couldn't").
-      const edit = applyStringEdit(current, oldString, newString, replaceAll);
-      if (!edit.ok || edit.content == null) return { ok: false, ...editFacts(edit), error: edit.error ?? "oldString not found in file" };
-      await fs.writeFile(abs, edit.content, "utf-8");
-      symbols.markDirty(abs);
-      return { ok: true, change: "modified", ...editFacts(edit) };
-    },
-  };
+  // The ONE provider over the ONE adapter; a write marks the symbol index dirty. The run's Stop
+  // and the lazily resolved ripgrep ride the adapter (a search's own stop is merged per call).
+  const { repoRead, repoWrite } = createRepoCapabilities(
+    nodeWorkspaceFs(rootResolved, { ripgrep: options.ripgrep ?? null, ...(options.signal ? { signal: options.signal } : {}) }),
+    { onWrite: (rel) => symbols.markDirty(path.resolve(rootResolved, rel)) },
+  );
 
   // The ONE local shell runner (`localShell.ts`) — shared with the workspace hooks.
   // The run's default checkout rides on it, so git and `run_command` start there.

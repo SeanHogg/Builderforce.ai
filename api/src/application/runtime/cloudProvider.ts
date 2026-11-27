@@ -5,7 +5,6 @@
  * it is the PROVIDER half of the cloud adapter, never policy. `cloudAdapter.ts` hands it
  * to the one agent through `cloudAgent/runProvider.ts`.
  */
-import { integrationCredentialSecret } from '../integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { getLatestBlueprint } from '../blueprint/blueprintDetection';
 import { buildMemoryCapability } from '../memory/memoryService';
@@ -15,24 +14,21 @@ import { type LeaseHolder } from '../coordination/leaseService';
 import { coordinationScopeKey } from '../../domain/coordination/resourceKey';
 import { fetchCached } from './cloudWeb';
 import { searchOwnedThenDiscover } from '../webSearch/demandSearch';
-import { commitAgentFile, deleteAgentFile, type TicketRepoContext } from '../repos/commitFileAsPendingChange';
-import { resolveTaskRepoRouter, recordRepoWrite, type TaskRepoRouter } from '../repos/taskRepoSet';
-import { readRepoFile, listRepoFiles, searchRepoCode } from '../repos/readRepoContents';
-import { editRefusalForTruncated } from '../repos/truncationMessages';
+import { type TicketRepoContext } from '../repos/commitFileAsPendingChange';
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { pollBranchCi } from '../ci/pollCommitCiStatus';
 import { durableRepoSemantic } from './cloudAgent/runSurfaceCaps';
-import { recordWrittenHash, type WrittenFileHashes } from './cloudAgent/writtenFileHashes';
+import { buildCloudRepoCapabilities } from './cloudAgent/cloudRepoCapabilities';
+import { type WrittenFileHashes } from './cloudAgent/writtenFileHashes';
 import { withAnswerReplay } from './costLoop/answerReplay';
-import { notifyExecutionSubscribers } from './executionEvents';
 import { pauseExecutionForQuestion } from './executionPause';
-import { applyStringEdit, editFacts, type CapabilityProvider, type Capability } from '@builderforce/agent-tools';
+import { type CapabilityProvider, type Capability } from '@builderforce/agent-tools';
 import { recordCloudToolEvent } from './cloudToolEvents';
 import type { Env } from '../../env';
 import { authorizeCredentialDelegation } from '../agentIdentity/agentRunIdentity';
-import { inspectOutboundContent, recordContextContribution } from '../trust/trustService';
+import { recordContextContribution } from '../trust/trustService';
 import { type Db } from '../../infrastructure/database/connection';
-import { agentCommitMessage, buildPrdCapability, recordTaskFileChange } from './cloudAgent/prd';
+import { buildPrdCapability } from './cloudAgent/prd';
 
 /**
  * The durable/Worker surface's {@link CapabilityProvider}: the concrete backing for
@@ -72,9 +68,6 @@ export function buildCloudProvider(args: {
   blueprint: Awaited<ReturnType<typeof getLatestBlueprint>>;
 }): CapabilityProvider {
   const { env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths, writtenHashes, blueprint } = args;
-  // Every commit names its RUN as well as its task (PRD 41 §D1): the per-run marker is what
-  // teardown/revert authorship and the run's commit attribution at finalize match on.
-  const commitRun = { taskId: taskRow.id, executionId };
   // Read/list against the ticket branch only once it exists (created on the first
   // commit). Before any write, the branch ref 404s — read from `base` instead, so
   // the agent sees the real codebase rather than mistaking the missing branch for
@@ -84,66 +77,14 @@ export function buildCloudProvider(args: {
   // the first commit, and a 404 there reads to the agent as "no repo access").
   const readRef = (): string =>
     args.frozenReadRef ?? (repoCtx ? (writtenPaths.size > 0 ? repoCtx.branch : repoCtx.base) : '');
-  const noRepo = (suffix = ''): string => `no repo bound to this task (${repoMiss})${suffix}`;
   const credentialAllowed = (scope: 'repository:read' | 'repository:write'): Promise<boolean> =>
     args.principalId && args.repositoryDelegationId
       ? authorizeCredentialDelegation(db, { tenantId, principalId: args.principalId, delegationId: args.repositoryDelegationId, requiredScope: scope })
       : Promise.resolve(false);
 
-  // ── REPEAT-READ GUARD ──────────────────────────────────────────────────────
-  // A model that re-reads a file it already holds pays for it twice: a git-API round
-  // trip here, and a `recordContextContribution` row per repeat. Nothing about
-  // re-reading an UNCHANGED file can return different bytes, so an identical repeat is
-  // served from the first result. Deliberately NOT the approval fingerprint
-  // (`policyGateCallKey`) or the prose-loop detector (`detectRepetitionLoop`): it keys
-  // on (ref, path), never on prose or approval identity.
-  //
-  // Correctness rests on two invalidations, both below: the memo is keyed by the SAME
-  // `readRef()` the read uses, so the base→branch switch is a different key; and every
-  // write/edit/delete to a path drops its entries, so a read that must see the run's
-  // own new content always goes to the repo. A FAILED read is never memoized, so a
-  // transient git failure is not cached for the rest of the run.
-  //
-  // Scope boundary, stated rather than implied: this saves the read's I/O and DB cost,
-  // NOT the model's context tokens. `read_file`'s result shaper in
-  // `@builderforce/agent-tools` rebuilds its payload from `content` and drops a
-  // provider `note`, so an "already read" hint cannot reach the model from here; and
-  // returning a content-less repeat would break `write_file`'s overwrite probe, which
-  // reads through this same capability (`core-tools.ts`). Truncating a repeat read into
-  // a stub belongs at that shaper.
-  //
-  // Lifetime, likewise: the memo lives as long as this provider, and the provider is
-  // rebuilt every tick (`buildCloudProvider` is called per tick, not per run), so this
-  // suppresses repeats WITHIN a tick — the repeated-read, repeated-search turn where
-  // they actually happen — and a durable DO tick starts with an empty memo. Carrying
-  // it ACROSS ticks is deliberately not done here: the only correct version of that
-  // must cache file CONTENT in `CloudLoopState` (a set of keys alone would either
-  // re-read anyway or wrongly serve stale bytes), which is a durable-state size
-  // decision, not a local one. Stated here rather than left for the next reader to
-  // assume.
-  const readMemo = new Map<string, { path: string; content: string; truncated?: boolean }>();
-  const forgetReads = (path: string): void => {
-    for (const [key, cached] of readMemo) if (cached.path === path) readMemo.delete(key);
-  };
-
-  // MULTI-REPO SPANNING (0956). `repoCtx` is the task's PRIMARY repo — the only one
-  // a single-repo task has, and the fallback for every write a spanning task cannot
-  // route by pathGlob. The router is resolved LAZILY and exactly once per run: a
-  // single-repo task therefore pays one indexed read on its first write, decrypts no
-  // extra credential, and gets `forPath() === repoCtx` — the pre-0956 behaviour to
-  // the letter. A task bound to 2+ repos routes each write to the repo whose
-  // `pathGlobs` claim the path, and records the write so finalize can open a PR only
-  // where code actually landed.
-  let routerPromise: Promise<TaskRepoRouter> | null = null;
-  const repoFor = async (path: string): Promise<TicketRepoContext | null> => {
-    if (!repoCtx) return null;
-    routerPromise ??= resolveTaskRepoRouter(db, integrationCredentialSecret(env), tenantId, taskRow.id, { ctx: repoCtx, reason: repoMiss });
-    const router = await routerPromise.catch((error) => {
-      reportCaughtError(error, { source: 'application/runtime/cloudProvider.ts', operation: 'repoFor', context: { logMessage: '[cloud-write] repo-set resolution failed — routing to the primary repo', details: { tenantId, taskId: taskRow.id, error } } });
-      return null;
-    });
-    return router?.forPath(path) ?? repoCtx;
-  };
+  // The repo tools (read memo, credential gate, secret inspection, multi-repo routing, bookkeeping)
+  // over the shared coding provider live in `cloudAgent/cloudRepoCapabilities.ts`.
+  const repo = buildCloudRepoCapabilities({ env, db, tenantId, executionId, taskRow, agentLabel, repoCtx, repoMiss, writtenPaths, writtenHashes, readRef, credentialAllowed });
 
   // WHO this run is, for coordination purposes. A ticket is one blackboard, so every
   // agent staffed onto the same ticket — in the same stage or a later one — shares a
@@ -163,133 +104,13 @@ export function buildCloudProvider(args: {
 
   return {
     capabilities: args.capabilities, semantic: durableRepoSemantic(args.capabilities, { env, tenantId, projectId, repoCtx }),
-    repoRead: {
-      async listFiles(sub, glob) {
-        if (!repoCtx) return { ok: false, error: noRepo() };
-        if (!(await credentialAllowed('repository:read'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
-        const ref = readRef();
-        // Glob is applied inside listRepoFiles, BEFORE the 400-path tree cap.
-        // Filtering the already-sliced listing dropped matches past the cap and
-        // the zero-match note then reported real files as missing.
-        const ls = await listRepoFiles({ ...repoCtx, ref }, sub, glob);
-        if (!ls.ok) return { ok: false, error: ls.reason };
-        return { ok: true, ref, paths: ls.paths, truncated: ls.truncated };
-      },
-      async readFile(path) {
-        if (!repoCtx) return { ok: false, error: noRepo() };
-        if (!(await credentialAllowed('repository:read'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
-        const ref = readRef();
-        // An identical repeat of a read this run already served. Keyed by ref so the
-        // base→branch switch reads for real, and consulted only BEFORE the round trip.
-        const memoKey = `${ref}\u0000${path}`;
-        const memo = readMemo.get(memoKey);
-        if (memo) return { ok: true, path: memo.path, content: memo.content, truncated: memo.truncated };
-        const rf = await readRepoFile({ ...repoCtx, ref }, path);
-        if (rf.ok) {
-          readMemo.set(memoKey, { path: rf.path, content: rf.content, ...(rf.truncated === true ? { truncated: true } : {}) });
-          await recordContextContribution(db, { tenantId, executionId, sourceKind: 'repository_file', sourceRef: `${repoCtx.owner}/${repoCtx.repo}:${path}`, trustTier: 'repository', content: rf.content });
-        }
-        return rf.ok ? { ok: true, path: rf.path, content: rf.content, truncated: rf.truncated } : { ok: false, error: rf.reason };
-      },
-      async searchCode(query, scope) {
-        if (!repoCtx) return { ok: false, error: noRepo() };
-        if (!(await credentialAllowed('repository:read'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
-        // The `path` scope is applied INSIDE searchRepoCode (server-side via GitHub's
-        // `path:` qualifier), not post-filtered here — a post-filter over the capped
-        // top-N global hits dropped a subdir's real matches and carried a stale
-        // `truncated` flag, yielding `total:0, truncated:true` that looped the agent.
-        const sr = await searchRepoCode({ ...repoCtx, ref: readRef() }, query, { maxResults: 30, path: scope });
-        if (!sr.ok) return { ok: false, error: sr.reason };
-        return { ok: true, query, total: sr.total, truncated: sr.truncated, matches: sr.matches };
-      },
-    },
+    repoRead: repo.repoRead,
     // Every write goes through the coordination guard, which takes an implicit
     // exclusive lease on the path first. Correctness must not depend on the model
     // choosing to call `claim_resource`, so the surface claims on its behalf: a peer
     // agent in the same stage now gets a refusal naming the holder instead of silently
     // reverting the other agent's change on the shared ticket branch.
-    repoWrite: guardRepoWrite({
-      async writeFile(path, content, _summary) {
-        if (!repoCtx) return { ok: false, error: noRepo('; include the file contents in your final summary instead') };
-        if (!(await credentialAllowed('repository:write'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
-        const inspection = await inspectOutboundContent(db, { tenantId, executionId, seam: 'repository_write', target: path, content });
-        if (!inspection.ok) return { ok: false, error: `Outbound content blocked: ${inspection.reasons.join(', ')}. Remove credential material; never commit secrets.` };
-        const firstWriteThisRun = !writtenPaths.has(path);
-        const target = (await repoFor(path)) ?? repoCtx;
-        const commit = await commitAgentFile(target, path, content, agentCommitMessage(firstWriteThisRun ? 'Add' : 'Update', path, commitRun, agentLabel));
-        if (!commit.ok) return { ok: false, error: commit.reason };
-        writtenPaths.add(path);
-        if (writtenHashes) await recordWrittenHash(writtenHashes, path, content);
-        // The run just changed this path: any memoized read of it is now stale, and
-        // leaving it would hand the model bytes from before its own edit.
-        forgetReads(path);
-        await recordRepoWrite(db, tenantId, taskRow.id, target);
-        // created vs modified comes from whether the path pre-existed in the repo
-        // (commit.existed), not first-write-this-run.
-        const change = commit.existed ? 'modified' : 'created';
-        await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, change, agentLabel, commit.commitSha);
-        notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change, ts: new Date().toISOString() });
-        return { ok: true, branch: target.branch, commitUrl: commit.commitUrl, change };
-      },
-      async editFile(path, oldString, newString, replaceAll) {
-        if (!repoCtx) return { ok: false, error: noRepo() };
-        if (!(await credentialAllowed('repository:write'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
-        // Read from the repo the write will land in, so a spanning task edits the
-        // file it is about to commit rather than a same-named file in the primary.
-        // For the primary that ref is the run-state-aware `readRef()`; for another
-        // repo in the set the ticket branch may not exist yet, so fall back to base
-        // (same base-before-first-commit rule `readRef` encodes for the primary).
-        const target = (await repoFor(path)) ?? repoCtx;
-        let rf = await readRepoFile({ ...target, ref: target === repoCtx ? readRef() : target.branch }, path);
-        if (!rf.ok && target !== repoCtx) rf = await readRepoFile({ ...target, ref: target.base }, path);
-        if (!rf.ok) return { ok: false, error: `cannot edit '${path}': ${rf.reason}` };
-        if (rf.truncated) return { ok: false, error: editRefusalForTruncated(path, rf.truncatedReason) };
-        // EOL-tolerant, EOL-preserving match (shared with the VS Code provider) so an
-        // agent that emits LF against a CRLF-committed file still edits it instead of
-        // failing with "old_string not found" and giving up.
-        const edit = applyStringEdit(rf.content, oldString, newString, replaceAll);
-        if (!edit.ok || edit.content == null) return { ok: false, ...editFacts(edit), error: `cannot edit '${path}': ${edit.error ?? 'old_string not found'}` };
-        const updated = edit.content;
-        const inspection = await inspectOutboundContent(db, { tenantId, executionId, seam: 'repository_write', target: path, content: updated });
-        if (!inspection.ok) return { ok: false, error: `Outbound content blocked: ${inspection.reasons.join(', ')}. Remove credential material; never commit secrets.` };
-        const firstWriteThisRun = !writtenPaths.has(path);
-        const commit = await commitAgentFile(target, path, updated, agentCommitMessage(firstWriteThisRun ? 'Edit' : 'Update', path, commitRun, agentLabel));
-        if (!commit.ok) return { ok: false, error: commit.reason };
-        writtenPaths.add(path);
-        if (writtenHashes) await recordWrittenHash(writtenHashes, path, updated);
-        // Same invalidation as `writeFile` — this run just changed the path. The
-        // read above went straight to `readRepoFile` precisely because an edit must
-        // always see the CURRENT bytes, memo or no memo.
-        forgetReads(path);
-        await recordRepoWrite(db, tenantId, taskRow.id, target);
-        await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, 'modified', agentLabel, commit.commitSha);
-        notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'modified', ts: new Date().toISOString() });
-        return { ok: true, branch: target.branch, commitUrl: commit.commitUrl, change: 'modified', ...editFacts(edit) };
-      },
-      async deleteFile(path, reason) {
-        if (!repoCtx) return { ok: false, error: noRepo() };
-        if (!(await credentialAllowed('repository:write'))) return { ok: false, error: 'repository credential delegation is absent, expired, or revoked' };
-        const suffix = reason && reason.trim() ? ` — ${reason.trim()}` : '';
-        const target = (await repoFor(path)) ?? repoCtx;
-        const del = await deleteAgentFile(target, path, agentCommitMessage('Remove', path, commitRun, agentLabel, suffix));
-        if (del.ok) {
-          writtenPaths.delete(path);
-          writtenHashes?.delete(path);
-          // The path is gone from the branch: a memoized read of it would hand back
-          // content that no longer exists.
-          forgetReads(path);
-          await recordRepoWrite(db, tenantId, taskRow.id, target);
-          await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, 'deleted', agentLabel, del.commitSha);
-          notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'deleted', ts: new Date().toISOString() });
-          return { ok: true, branch: target.branch, commitUrl: del.commitUrl };
-        }
-        if (del.code === 'not_found') {
-          // Not on the branch — benign no-op so the model doesn't treat it as a failure.
-          return { ok: true, deleted: false, note: `'${path}' is not on the branch, so there is nothing to delete.` };
-        }
-        return { ok: false, error: del.reason };
-      },
-    }, {
+    repoWrite: guardRepoWrite(repo.repoWrite, {
       env,
       db,
       holder: leaseHolder,

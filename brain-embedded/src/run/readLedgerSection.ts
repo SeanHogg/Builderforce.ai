@@ -18,6 +18,7 @@
 import { perFileResults, singleReadsOf } from '@builderforce/run-guards';
 import { isCodeChangeTool } from '../localWorkspaceTools';
 import { isUnscopedMutation } from '../readCoverage';
+import { normalizeRelPathKey } from './normalizeRelPath';
 import type { ProgressTraceEvent } from './progressLine';
 
 /** The trace-event slice this module reads — structural; `BrainTraceEvent` satisfies it. `truncated`: the host trimmed the
@@ -56,10 +57,6 @@ interface FileEntry {
   failed: boolean;
 }
 
-function normalizePath(value: string): string {
-  return value.trim().split('\\').join('/').replace(/^\.\/+/, '').replace(/\/+$/, '');
-}
-
 function objectOf(value: unknown): Record<string, unknown> | null {
   if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
   if (typeof value === 'string') {
@@ -83,13 +80,13 @@ function changedPaths(args: unknown): string[] {
   if (!a) return [];
   const out: string[] = [];
   for (const key of ['path', 'file', 'filePath'] as const) {
-    if (typeof a[key] === 'string' && (a[key] as string).trim()) out.push(normalizePath(a[key] as string));
+    if (typeof a[key] === 'string' && (a[key] as string).trim()) out.push(normalizeRelPathKey(a[key] as string));
   }
   for (const list of [a.edits, a.paths]) {
     if (!Array.isArray(list)) continue;
     for (const item of list) {
       const p = typeof item === 'string' ? item : (item as { path?: unknown } | null)?.path;
-      if (typeof p === 'string' && p.trim()) out.push(normalizePath(p));
+      if (typeof p === 'string' && p.trim()) out.push(normalizeRelPathKey(p));
     }
   }
   return out;
@@ -170,14 +167,14 @@ function ledgerOf(trace: readonly ReadLedgerTraceEvent[]): FileEntry[] {
       const singles = singleReadsOf('read_file', args);
       if (singles) {
         if (ev.isError || data?.ok === false) {
-          for (const s of singles) if (typeof s.path === 'string') noteFailure(normalizePath(s.path), at);
+          for (const s of singles) if (typeof s.path === 'string') noteFailure(normalizeRelPathKey(s.path), at);
           return;
         }
         if (!isRanRead(data)) return;
         const entries = perFileResults(data) ?? [];
         singles.forEach((single, i) => {
           if (typeof single.path !== 'string') return;
-          const path = normalizePath(single.path);
+          const path = normalizeRelPathKey(single.path);
           const entry = objectOf(entries[i]);
           if (!entry || entry.ok === false) noteFailure(path, at);
           else noteRead(path, at, servedSpan(entry, single, trimmed));
@@ -186,7 +183,7 @@ function ledgerOf(trace: readonly ReadLedgerTraceEvent[]): FileEntry[] {
       }
       const raw = typeof args.path === 'string' ? args.path : '';
       if (!raw.trim()) return;
-      const path = normalizePath(raw);
+      const path = normalizeRelPathKey(raw);
       if (ev.isError || data?.ok === false) {
         noteFailure(path, at);
         return;

@@ -35,6 +35,7 @@ import type { BrainTraceEvent } from '../brainTriage';
 import { readFileAnchors } from './answerAnchors';
 import type { BrainRunContext } from './brainRunContext';
 import { isCodeChangeTool } from '../localWorkspaceTools';
+import { normalizeRelPath } from '../run/normalizeRelPath';
 import { latestStatus, listChatTickets, listingScopeOf, stepSucceeded, ticketMovesInRun, ticketsCreatedInRun } from './chatTickets';
 import { bounded, continuationLimits } from './deadline';
 import { asksThePerson } from './openLinkedWorkHold';
@@ -71,11 +72,9 @@ const MD_PATH = /[\w.@-]+(?:[\\/][\w.@-]+)*\.md\b/gi;
  */
 const SPEC_LIKE = /(?:^|\/)docs\/specs?\/|(?:^|[^a-z])(?:specs?|prds?|roadmap|requirements)(?=[^a-z]|$)/i;
 
-const normalizePath = (p: string): string => p.trim().replace(/\\/g, '/').replace(/^\.\/+/, '');
-
 /** The markdown specs the request names by path (never a README, CHANGELOG …). */
 function namedSpecPaths(request: string): string[] {
-  return [...new Set((request.match(MD_PATH) ?? []).map(normalizePath))].filter((p) => !NOT_A_SPEC.test(p));
+  return [...new Set((request.match(MD_PATH) ?? []).map((p) => normalizeRelPath(p)))].filter((p) => !NOT_A_SPEC.test(p));
 }
 
 /** Does the request speak of a spec (spec / PRD / roadmap / gap register / requirements doc)? */
@@ -95,7 +94,7 @@ export function specPathsFor(request: string, trace: readonly BrainTraceEvent[])
   if (named.length) return named.slice(0, MAX_SPECS);
   if (!speaksOfSpec(request)) return [];
   return readFileAnchors(trace)
-    .map((a) => normalizePath(a.path))
+    .map((a) => normalizeRelPath(a.path))
     .filter((p) => /\.md$/i.test(p) && !NOT_A_SPEC.test(p) && SPEC_LIKE.test(p))
     .reverse()
     .slice(0, MAX_SPECS);
@@ -209,7 +208,7 @@ const samePath = (a: string, b: string): boolean => a === b || a.endsWith(`/${b}
 
 /** Did one of these steps write or edit `path` (the run's own workspace writers)? */
 function writesPath(events: readonly BrainTraceEvent[], path: string): boolean {
-  return events.some((ev) => stepSucceeded(ev) && isCodeChangeTool(ev.label) && editedPathsOf(ev.label, ev.args).some((p) => samePath(normalizePath(p), path)));
+  return events.some((ev) => stepSucceeded(ev) && isCodeChangeTool(ev.label) && editedPathsOf(ev.label, ev.args).some((p) => samePath(normalizeRelPath(p), path)));
 }
 
 /**

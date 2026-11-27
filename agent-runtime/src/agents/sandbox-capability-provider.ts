@@ -6,56 +6,26 @@
  * SANDBOXED session, where file ops are routed through the {@link SandboxFsBridge} into
  * the container rather than direct `node:fs`.
  *
- * This is the "documented follow-up" named in `node-capability-provider.ts`: until now
- * the converged on-prem file tools were gated to NON-sandboxed sessions (`&& !sandboxRoot`
- * in `coding-tools.ts`), because the disk provider cannot reach the container. This
- * provider closes that gap, so a sandboxed session converges onto the same shared
- * definitions a non-sandboxed one runs — one definition per tool across BOTH session
- * kinds (PRD 12 Phase B, completed).
- *
  * Capability surface: `repo.read` (list/read), `repo.write`, `repo.edit`, `repo.delete`.
  * `repo.search`/`repo.symbols` are NOT advertised — there is no indexed searcher inside
  * the container; grepping is the native `exec` tool's job (which stays native).
  * `shell`/`process`/`web`/`human`/etc. stay on their native tools this pass, exactly as
  * the non-sandboxed converged set already does.
  *
- * Backing split: per-file read/write/edit/delete go through the bridge (the container
- * view, mount-aware and traversal-confined). `list_files` walks the sandbox workspace's
- * HOST mount via `node:fs` — the same tree the bridge reads, and the same pattern the
- * native sandboxed tools and the test host-bridge already rely on (the bridge exposes
- * stat/path ops, not readdir). Path confinement for per-file ops resolves through
- * {@link resolveInsideRootReal} (links followed), so the provider is self-guarding — the
- * same property the disk provider gets from the same resolver.
+ * The behaviour is the ONE shared provider (`createRepoCapabilities`) over
+ * {@link sandboxWorkspaceFs}: per-file read/write/remove go through the bridge (the
+ * container view), `list_files` walks the sandbox workspace's HOST mount.
  *
- * `read`/`exec`/`process` are NOT routed through this provider (the ticket's explicit
- * constraint): `read` stays on the native sandboxed read tool (image + budget features
- * the text-only shared `read_file` cannot express), and `exec`/`process` stay on the
- * native shell tools.
+ * `read`/`exec`/`process` are NOT routed through this provider: `read` stays on the
+ * native sandboxed read tool (image + budget features the text-only shared `read_file`
+ * cannot express), and `exec`/`process` stay on the native shell tools.
  */
 
-import { readdir } from "node:fs/promises";
-import type { Dirent } from "node:fs";
-import { isAbsolute, relative, resolve, sep } from "node:path";
-import { tryResolveInsideRootReal, type RealResolveOutcome } from "@builderforce/agent-tools/node-path.js";
-import {
-  applyStringEdit,
-  dirMayContainGlobMatch,
-  editFacts,
-  matchGlobInScope,
-} from "@builderforce/agent-tools";
-import type {
-  Capability,
-  CapabilityProvider,
-  RepoDeleteResult,
-  RepoEditResult,
-  RepoListResult,
-  RepoReadResult,
-  RepoWriteResult,
-} from "@builderforce/agent-tools";
-import { isListedDirName } from "@builderforce/agent-tools/skip-dirs";
+import type { Capability, CapabilityProvider } from "@builderforce/agent-tools";
+// The ONE coding provider over the sandbox adapter (bridge read/write/remove, host-mount listing).
+import { createRepoCapabilities } from "@builderforce/agent-tools/workspace";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
-
-const LIST_MAX_FILES = 5_000;
+import { sandboxWorkspaceFs } from "./sandbox/sandboxWorkspaceFs.js";
 
 /** The capability set the sandbox provider advertises: read/write/edit/delete, WITHOUT
  *  `repo.search`/`repo.symbols` (no indexed searcher inside the container) and WITHOUT
@@ -84,58 +54,6 @@ export interface SandboxProviderOptions {
   scope?: SandboxWriteScope;
 }
 
-function toPosix(p: string): string {
-  return p.split(sep).join("/");
-}
-
-async function walkFiles(
-  root: string,
-  scope: string,
-  glob: string | undefined,
-  scopeArg: string | undefined,
-): Promise<{ paths: string[]; truncated: boolean }> {
-  const out: string[] = [];
-  const queue: string[] = [scope];
-  let truncated = false;
-  while (queue.length > 0) {
-    if (out.length >= LIST_MAX_FILES) {
-      truncated = true;
-      break;
-    }
-    const dir = queue.shift()!;
-    let entries: Dirent[];
-    try {
-      entries = await readdir(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      const full = resolve(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (!isListedDirName(entry.name)) {
-          continue;
-        }
-        const childRel = toPosix(relative(root, full));
-        if (glob && !dirMayContainGlobMatch(childRel, glob, scopeArg)) {
-          continue;
-        }
-        queue.push(full);
-      } else if (entry.isFile()) {
-        const rel = toPosix(relative(root, full));
-        if (glob && !matchGlobInScope(rel, glob, scopeArg)) {
-          continue;
-        }
-        if (out.length >= LIST_MAX_FILES) {
-          truncated = true;
-          break;
-        }
-        out.push(rel);
-      }
-    }
-  }
-  return { paths: out.toSorted(), truncated };
-}
-
 /**
  * Build the sandbox-aware {@link CapabilityProvider}. Per-file read/write/edit/delete
  * are backed by the {@link SandboxFsBridge} (container view, traversal-confined); the
@@ -144,121 +62,21 @@ async function walkFiles(
 export function buildSandboxCapabilityProvider(
   options: SandboxProviderOptions,
 ): CapabilityProvider {
-  const root = resolve(options.workspaceRoot);
-  const resolveFile =
-    (options.scope ?? "workspace") === "workspace"
-      ? (p: string): Promise<RealResolveOutcome> => tryResolveInsideRootReal(root, p)
-      : async (p: string): Promise<RealResolveOutcome> => ({ ok: true, abs: isAbsolute(p) ? resolve(p) : resolve(root, p) });
-  const bridge = options.bridge;
-
+  const scope = options.scope ?? "workspace";
+  const { repoRead, repoWrite } = createRepoCapabilities(
+    sandboxWorkspaceFs(options.bridge, options.workspaceRoot, { scope }),
+    { unconfined: scope === "unconfined" },
+  );
   return {
     capabilities: SANDBOX_SURFACE_CAPS,
+    // `repo.search` is not advertised, so the registry never routes `search_code` here; the
+    // shared searchCode would scan the host mount, so it stays refused exactly as before.
     repoRead: {
-      async listFiles(sub, glob): Promise<RepoListResult> {
-        const scope = sub ? await tryResolveInsideRootReal(root, sub) : { ok: true as const, abs: root };
-        if (!scope.ok) {
-          return { ok: false, error: scope.error };
-        }
-        const { paths, truncated } = await walkFiles(root, scope.abs, glob, sub);
-        return { ok: true, paths, truncated };
-      },
-      async readFile(path): Promise<RepoReadResult> {
-        const resolved = await resolveFile(path);
-        if (!resolved.ok) {
-          return { ok: false, error: resolved.error };
-        }
-        const abs = resolved.abs;
-        try {
-          const buf = await bridge.readFile({ filePath: abs, cwd: root });
-          return { ok: true, path, content: buf.toString("utf-8") };
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          // Normalize to the shared phrasing the disk provider uses, so a prompt that
-          // recovers from `file not found` on one surface recovers on the other.
-          if (msg.includes("No such file") || msg.includes("ENOENT")) {
-            return { ok: false, error: `file not found: ${path}` };
-          }
-          if (
-            msg.includes("Is a directory") ||
-            msg.includes("EISDIR") ||
-            msg.includes("illegal operation on a directory")
-          ) {
-            return {
-              ok: false,
-              error: `'${path}' is a directory, not a file — use list_files to see its contents`,
-            };
-          }
-          return { ok: false, error: msg };
-        }
-      },
-      // `repo.search` is not advertised, so the registry never routes `search_code` here.
+      ...repoRead,
       async searchCode(): Promise<never> {
         throw new Error("sandbox provider does not back repo.search");
       },
     },
-    repoWrite: {
-      async writeFile(path, content): Promise<RepoWriteResult> {
-        const resolved = await resolveFile(path);
-        if (!resolved.ok) {
-          return { ok: false, error: resolved.error };
-        }
-        const abs = resolved.abs;
-        const stat = await bridge.stat({ filePath: abs, cwd: root }).catch(() => null);
-        const existed = !!stat;
-        try {
-          await bridge.writeFile({ filePath: abs, cwd: root, data: content });
-          return { ok: true, change: existed ? "modified" : "created" };
-        } catch (err) {
-          return { ok: false, error: err instanceof Error ? err.message : String(err) };
-        }
-      },
-      async editFile(path, oldString, newString, replaceAll): Promise<RepoEditResult> {
-        const resolved = await resolveFile(path);
-        if (!resolved.ok) {
-          return { ok: false, error: resolved.error };
-        }
-        const abs = resolved.abs;
-        let raw: string;
-        try {
-          const buf = await bridge.readFile({ filePath: abs, cwd: root });
-          raw = buf.toString("utf-8");
-        } catch {
-          return { ok: false, error: `file not found: ${path}` };
-        }
-        // The SHARED edit core, not a local copy — parity with the disk provider.
-        const result = applyStringEdit(raw, oldString, newString, replaceAll === true);
-        if (!result.ok || result.content === undefined) {
-          return { ok: false, ...editFacts(result), error: result.error ?? "edit failed" };
-        }
-        try {
-          await bridge.writeFile({ filePath: abs, cwd: root, data: result.content });
-          return { ok: true, change: "modified", ...editFacts(result) };
-        } catch (err) {
-          return { ok: false, error: err instanceof Error ? err.message : String(err) };
-        }
-      },
-      async deleteFile(path): Promise<RepoDeleteResult> {
-        const resolved = await resolveFile(path);
-        if (!resolved.ok) {
-          return { ok: false, error: resolved.error };
-        }
-        const abs = resolved.abs;
-        const stat = await bridge.stat({ filePath: abs, cwd: root }).catch(() => null);
-        if (!stat) {
-          // Not in the container — benign no-op so the model doesn't treat it as a failure.
-          return {
-            ok: true,
-            deleted: false,
-            note: `'${path}' does not exist, so there is nothing to delete.`,
-          };
-        }
-        try {
-          await bridge.remove({ filePath: abs, cwd: root });
-          return { ok: true, deleted: true };
-        } catch (err) {
-          return { ok: false, error: err instanceof Error ? err.message : String(err) };
-        }
-      },
-    },
+    repoWrite,
   };
 }

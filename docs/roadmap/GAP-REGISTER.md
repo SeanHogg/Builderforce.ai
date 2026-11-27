@@ -546,6 +546,7 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 - `AVR-G013` **Local tool turns answered in prose are accepted.** `answered` in `localFirstTransport.ts`; the 0-tool case scores healthy. *Blocker: product decision on holding the first delta.*
 - `AVR-G014` **Ollama loaded at a larger `num_ctx` overstates our window.** *Blocker: move to `/api/chat` or an upstream route.*
 - `AVR-G015` **Windows command routed to bash loses backslashes** (`packages/agent-tools/src/node-posix-shell.ts`). *Blocker: a trace of the routing decision.*
+- `AVR-G017` **Spawn's installers are unsigned and have no updater.** Windows and macOS signing are wired through the shared composite actions in builderforce-inference. Tauri updater signing isn't. *Blocker: signing secrets in builderforce-spawn.*
 - `AVR-G018` **~3.3 GB after indexing one small package.** Profiled and the dominant retention fixed (2026-11-01): host `meta.text` kept the full card text per node; now clipped to a 256-char excerpt, full text stays in the engine. See DONE.md.
 - `AVR-G019` **Phase 3 browser/VM host.** *Blocker: prompt-injection defence first.*
 - `AVR-G020` **pi-tui is the last `@mariozechner/pi-*` dep.** 23 importers left; migrate to Ink.
@@ -607,10 +608,10 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
   - ships the Spawn extension (`UP-G017`);
   - offers three AI-model project types: Scratch, Existing model and Knowledge pack (as starter kits, `UP-G002`);
   - takes extensions from Open VSX and from manually installed VSIX files (the Microsoft marketplace is not licensed for forks).
-  - The download buttons (the Synapse sections and Spawn's, through `/api/spawn/downloads`) resolve the newest `builderforce-inference` release that has installers. Point that resolver at the fork's releases when the fork ships. The product name and copy stay "Synapse".
+  - Downloads: the Synapse links use `builderforce-inference` `releases/latest`, and headless `bfi`/`bf-context` releases are published with `--latest=false` so that link stays on the last installer release. Spawn's button (`/api/spawn/downloads`, a stub) resolves the newest release that has installers. Repoint both when the fork ships. The product name and copy stay "Synapse".
   - *Blocker: a design pass for the fork (repo, branding, build and update channel, project-type contract).*
-- `UP-G017` **Spawn is still a Tauri desktop app.** The `builderforce-spawn` repo stays. Spawn becomes a VS Code extension shipped in the Synapse fork (`UP-G015`), with `bf-roblox` as the Roblox Studio bridge. Spawn's download button already serves the Synapse installers.
-- `UP-G018` **Features that existed only in Synapse have no host since its retirement (2026-11-27).** They are Teach-once desktop automation (`bf-teach`), Self-Directed Agents with their scheduler and run history, and phone approvals for self-owned `synapse.step` steps. The API keeps the existing `synapse.step` rows private. The memory-mcp `experience_*` tools remain. *Blocker: a product decision on whether to rebuild them in the VS Code extension (desktop UI automation needs a native helper).*
+- `UP-G017` **Spawn is still a Tauri desktop app.** The `builderforce-spawn` repo stays and now owns `bf-cloud` and `bf-vault`. Spawn becomes an extension shipped in the Synapse fork (`UP-G015`), with `bf-roblox` as the Roblox Studio bridge. Its download button is a stub that serves the Synapse installers.
+- `UP-G018` **Features that existed only in the Tauri Synapse app have no host since its source was removed (2026-11-27).** They are Teach-once desktop automation (`bf-teach`), Self-Directed Agents with their scheduler and run history, and phone approvals for self-owned `synapse.step` steps. The API keeps the existing `synapse.step` rows private. The memory-mcp `experience_*` tools remain. *Blocker: a product decision on whether to rebuild them in the VS Code extension (desktop UI automation needs a native helper).*
 
 ### MCP consolidation `[platform]` `[agents]`
 
@@ -704,7 +705,7 @@ Gaps:
 - `INF-G011` **8 weight stores exist on one machine.**
   - The same Bonsai GGUF can be stored up to 3×.
   - VS Code `globalStorage/local-models` duplicates the machine store `~/.builderforce/models`.
-- `INF-G012` **One engine has two runtime ids**: `synapse` (now labelled `bfi serve`, the HTTP engine) and `bfi` (the in-page engine). Rename the `synapse` wire id, the `local/synapse/…` model ids and the `localModels.synapseUrl` and Chrome `synapseUrl` settings with an expand/contract migration.
+- `INF-G012` **One engine has two runtime ids**: `synapse` (the `bfi serve` HTTP engine, still labelled "Synapse" for users) and `bfi` (the in-page engine). Rename the `synapse` wire id, the `local/synapse/…` model ids and the `localModels.synapseUrl` and Chrome `synapseUrl` settings with an expand/contract migration.
 - `INF-G013` **Model ids and context defaults drift.**
   - Bonsai is `bonsai-1.7b-q1_0` in one place and `Bonsai-1.7B-q4-ONNX` in another.
   - Context-window defaults are 128000, 32768, and 1024–4096 in different places.
@@ -757,6 +758,7 @@ Details, paths and migration order: `docs/specs/tasks/platform-duplication-audit
 - `CHAT-G012` **There is no shared run-event vocabulary** across the gateway WebSocket, Tauri, SSE and the VS Code bridge. Define `RunEvent` with one adapter per transport.
 - `CHAT-G013` **The Control UI (Lit) has its own message normalizer, tool cards and copy-as-markdown.**
 - `CHAT-G014` **Agent-host chat (`chatRoutes.ts`) uses a second message store.** Fold it into `brain_chat_*` with an expand/contract migration.
+- `CHAT-G016` **`useVoiceDictation` is copied into Spawn** (`builderforce-spawn/spawn/ui/js/dictation.js`). The Tauri Synapse copy is gone. It is deleted when Spawn becomes an extension in Synapse (`UP-G017`).
 - `CHAT-G017` **brain-embedded `ui/PromptInput.tsx` may be dead code.** Verify its references and delete it if unused.
 - `CHAT-G018` **Chrome diagnostics and the shared limits have no tests.**
 
@@ -783,16 +785,17 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §6. 
 
 Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §7. The server side and the TypeScript device flow are shared; the client session code is not.
 
-- `AUTH-G002` **There are two copies of the editor-key session** (VS Code `bfApi/session.ts` and Chrome `auth/session.ts`; the Rust copy was deleted with Synapse). Extract a host-neutral `packages/editor-session`.
+- `AUTH-G001` **The Rust device flow (`builderforce-spawn/crates/bf-cloud`/src/device.rs) duplicates `packages/device-auth`,** with no shared contract fixture. `bf-cloud` moved from builderforce-inference to builderforce-spawn on 2026-11-27, where Spawn is its only consumer.
+- `AUTH-G002` **There are three copies of the editor-key session** (VS Code `bfApi/session.ts`, Chrome `auth/session.ts`, Rust `builderforce-spawn/crates/bf-cloud`/src/session.rs). Extract a host-neutral `packages/editor-session`.
 - `AUTH-G003` **The Chrome client has no 401 forced-refresh retry.**
 - `AUTH-G004` **The Chrome client has no workspace switch.**
 - `AUTH-G005` **agent-runtime has about 56 hand-built Bearer fetches and about 18 `BUILDERFORCE_URL` fallbacks.** Replace them with one `builderforceClient`.
 - `AUTH-G006` **The default base URL is split:** `api.builderforce.ai` (web, agent-runtime, SDK) vs `builderforce.ai/gateway` (VS Code, Chrome).
 - `AUTH-G007` **Configuration names and aliases are inconsistent** across hosts. Keep one documented table and deprecate the aliases.
-- `AUTH-G008` **Error flattening is copied three times** (web, Chrome, SDK).
-- `AUTH-G009` **Each TypeScript host keeps its own fallback for an omitted `expiresIn`.** Share one constant.
-- `AUTH-G012` **Auth-client test gaps:** Chrome `apiClient.test.ts` is 11 lines, and agent-runtime has none.
-- `AUTH-G013` **VS Code derives the web origin from the API URL by hand.**
+- `AUTH-G008` **Error flattening is copied four times** (web, Chrome, SDK, and Rust `builderforce-spawn/crates/bf-cloud` `CloudError`, which misses the nested `{error:{message,code}}` form).
+- `AUTH-G009` **The fallback when the server omits `expiresIn` differs:** 3600 s in TypeScript, 900 s in Rust (`builderforce-spawn/crates/bf-cloud`).
+- `AUTH-G012` **Auth-client test gaps:** Chrome `apiClient.test.ts` is 11 lines, Rust `bf-cloud` has 6 tests, and agent-runtime has none.
+- `AUTH-G013` **Rust (`builderforce-spawn/crates/bf-cloud` `web_base_of`) and VS Code derive the web origin from the API URL by hand.**
 - `AUTH-G014` **Not yet audited:** Chrome SettingsView sign-in, webcontainers `aiGateway`/`hostRelay`, `knowledge-client`, `provider-connect`.
 - `AUTH-G016` **Security-sensitive client and credential findings.** The local security findings file also covers `AUTH-G017` through `AUTH-G019`. See DONE.md for the resolution of `AUTH-G015` and `AUTH-G018`.
 - `AUTH-G021` **15-minute web and workspace tokens write about 2 `auth_tokens` rows every 11 minutes per active session,** each kept 7 days by the expired-credential sweep. Neon core storage was last noted at 504/512 MB.
@@ -811,7 +814,7 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §8. 
 - `SECP-G007` **There are three prompt-injection pattern sets** (`external-content.ts`, `instruction-firewall.ts`, M `cognition/sanitize.ts`).
 - `SECP-G008` **The W credential scrubber has no parity test with `secret-redaction`.** Fix in progress.
 - `SECP-G009` **Egress has six mechanisms and no single registry.**
-- `SECP-G010` **The inference host (builderforce-inference) has no scanner or egress policy.** Synapse was retired on 2026-11-27. The remaining `bfi serve` and `bf-context serve` binaries bind to loopback with a token. Decide whether they need a scanner or egress policy of their own.
+- `SECP-G010` **The inference host (builderforce-inference) has no scanner or egress policy.** The Tauri Synapse app's source left this repo on 2026-11-27. The remaining `bfi serve` and `bf-context serve` binaries bind to loopback with a token. Decide whether they need a scanner or egress policy of their own.
 - `SECP-G013` **Security-sensitive defaults and coverage gaps.** The local security findings file also covers `SECP-G014` and `SECP-G015`.
 
 ### Data model — PRD 20 `[platform]`

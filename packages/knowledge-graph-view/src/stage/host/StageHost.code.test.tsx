@@ -49,6 +49,21 @@ describe('the code pane in the host', () => {
         expect(container.querySelector('[data-pane-switch]')).toBeNull();
     });
 
+    it('resizes the code pane and the map together from the keyboard', async () => {
+        const { container } = mount(1000);
+        const divider = await screen.findByRole('separator', { name: sc.dockAria });
+        const picture = container.querySelector<HTMLElement>('[data-map-pane]')!;
+        expect(divider.getAttribute('aria-valuenow')).toBe('360');
+        fireEvent.keyDown(divider, { key: 'ArrowRight' });
+        expect(divider.getAttribute('aria-valuenow')).toBe('384');
+        expect(picture.style.width).toBe('616px');
+        fireEvent.keyDown(divider, { key: 'End' });
+        expect(picture.style.width).toBe('360px');
+        fireEvent.keyDown(divider, { key: 'Home' });
+        expect(divider.getAttribute('aria-valuenow')).toBe('240');
+        expect(picture.style.width).toBe('760px');
+    });
+
     it('uses the same dock for routes and code and restores the outline from the Code tab', async () => {
         const { container } = mount(1000, { lines: <div data-testid="routes" /> });
         const dock = await screen.findByRole('complementary', { name: sc.dockAria });
@@ -63,6 +78,7 @@ describe('the code pane in the host', () => {
         const code = mount(360);
         expect(await screen.findByRole('complementary', { name: sc.dockAria })).toBeTruthy();
         expect(code.container.querySelector('[data-code-split]')).toBeNull();
+        expect(screen.queryByRole('separator', { name: sc.dockAria })).toBeNull();
         expect(code.container.querySelector('[data-code-narrow] [data-level-outline]')).not.toBeNull();
         expect((code.container.querySelector('[data-map-pane]') as HTMLElement).style.visibility).toBe('hidden');
         code.unmount();

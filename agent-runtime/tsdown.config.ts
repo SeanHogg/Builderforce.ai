@@ -1,9 +1,6 @@
 import { defineConfig, type UserConfig } from "tsdown";
 
-// TypeScript is a devDependency used by ast-parser.ts at runtime.
-// Marking it external keeps it as a CJS module loaded by Node, which
-// avoids bundling TypeScript's CJS globals (__filename) into ESM output.
-const external = ["typescript", "tsx"];
+const external = ["tsx"];
 
 const base = {
   env: { NODE_ENV: "production" },

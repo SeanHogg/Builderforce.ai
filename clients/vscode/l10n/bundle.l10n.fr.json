@@ -226,7 +226,6 @@
   "I just dispatched {task} to run on the platform. Check the latest execution's status and trace, then help me follow up.": "Je viens de lancer {task} sur la plateforme. Vérifie le statut et la trace de la dernière exécution, puis aide-moi à assurer le suivi.",
   "IDE build": "Build de l’IDE",
   "Idle": "Inactif",
-  "Install {0}": "Installer {0}",
   "Import": "Importer",
   "Import & compact…": "Importer et compacter…",
   "Import agent memory (JSON snapshot or memory folder)": "Importer la mémoire de l’agent (instantané JSON ou dossier de mémoire)",

@@ -18,7 +18,7 @@
  * No WebGL, or a context lost for good: the List (the registry's `fallback` row) instead (B8).
  */
 
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { fillTemplate } from '../../labels';
 import { useComputed } from '../../compute/useComputed';
 import { viewportBandOf } from '../../compute/tasks/placement/request';
@@ -32,7 +32,8 @@ import { codeCompareOf, paintDiffEntries, type CompareView } from '../../surface
 import { showsTowers } from '../../surface/useShowInTower';
 import { TYPE } from '../../surface/ui/type';
 import { onePaneStage } from '../../layout';
-import { codePaneWidth } from '../overlay/CodeDock';
+import { codePaneWidth, maxCodePaneWidth, MIN_CODE_PANE_WIDTH } from '../overlay/CodeDock';
+import { CodePaneSplitter } from './CodePaneSplitter';
 import { ColourLegend } from './ColourLegend';
 import { LevelRail, useLevelRail } from './LevelRail';
 import { depthCrumbs } from '../../surface/DepthTrail';
@@ -140,6 +141,8 @@ const MAP_BANDS: readonly ZoomBand[] = ZOOM_BANDS.map((b) => b.band);
 function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, scale, codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, compare, flat = false, tools, journey, notice, ...p }: Omit<StageHostProps, 'fallback'> & { renderer: StageRenderer; onLost(): void; onRenderError(error: Error): void; onComputeError(): void }) {
     const box = useRef<HTMLDivElement>(null);
     const picture = useRef<HTMLDivElement>(null);
+    const codePaneId = useId();
+    const [preferredCodeWidth, setPreferredCodeWidth] = useState<number>();
     // Before the box is measured (and where nothing measures it: jsdom) the stage is laid out for a standard box.
     const measured = useContainerSize(box);
     const pictureSize = useContainerSize(picture);
@@ -162,7 +165,7 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     const drilled = !!surface.drill.view;
     // The map's own box is measured below the toolbar and above the journey.
     const code = wiring.code;
-    const codeWidth = code.split ? codePaneWidth(boxWidth) : 0;
+    const codeWidth = code.split ? codePaneWidth(boxWidth, preferredCodeWidth) : 0;
     const showCodeHalf = code.visible && !code.split;
     const barPx = code.reading && !showCodeHalf ? CODE_BAR_PX : 0;
     const width = Math.max(1, boxWidth - codeWidth), height = Math.max(1, (pictureSize.height || boxHeight) - barPx);
@@ -286,8 +289,11 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     return (
         <div ref={box} style={{ ...BOX, display: 'grid', gridTemplateColumns: code.split ? `${codeWidth}px minmax(0, 1fr)` : 'minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr)' }} data-stage-host data-stage-camera={camera}>
             {code.split && (
-                <div data-code-split style={{ position: 'relative', minHeight: 0, minWidth: 0 }}>
+                <div id={codePaneId} data-code-split style={{ position: 'relative', minHeight: 0, minWidth: 0 }}>
                     {code.pane}
+                    <CodePaneSplitter controls={codePaneId} label={labels.surface.code.dockAria}
+                        width={codeWidth} min={MIN_CODE_PANE_WIDTH} max={maxCodePaneWidth(boxWidth)}
+                        onResize={setPreferredCodeWidth} />
                 </div>
             )}
             {code.show && (

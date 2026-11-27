@@ -45,14 +45,16 @@ export interface SymbolExtractor {
 export const REGEX_SYMBOL_EXTRACTOR: SymbolExtractor = { id: "regex", extract: extractSymbols };
 
 export interface SymbolIndexOptions {
-  /** Directory names to skip instead of {@link WORKSPACE_SKIP_DIRS} (dot-directories are always skipped). */
+  /** Directory names to skip instead of {@link WORKSPACE_SKIP_DIRS} (dot-directories other than `.github` are always skipped). */
   skipDirs?: ReadonlySet<string>;
   /** Files indexed before the index reports itself partial. */
   maxFiles?: number;
   /** Larger files are skipped — generated bundles and data dumps are not code maps. */
   maxFileBytes?: number;
-  /** Where to persist the snapshot so a restart re-stats instead of re-reading. */
+  /** Where to persist the snapshot so a restart re-stats instead of re-reading (`symbolSnapshotLocation` in `node-index-layout.ts`). Written atomically into a gitignored directory. */
   cachePath?: string;
+  /** Older places a snapshot lived: read once when `cachePath` is missing, deleted after the first save to `cachePath`. */
+  legacyCachePaths?: readonly string[];
   /** Minimum gap between full stat walks. A host with a file watcher can set it high. */
   fullRefreshMs?: number;
   /** How definitions are read (default {@link REGEX_SYMBOL_EXTRACTOR}). */
@@ -118,6 +120,7 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
   private readonly maxFiles: number;
   private readonly maxFileBytes: number;
   private readonly cachePath?: string;
+  private readonly legacyCachePaths: readonly string[];
   private readonly fullRefreshMs: number;
   private readonly extractor: SymbolExtractor;
   private files = new Map<string, FileEntry>();
@@ -134,16 +137,22 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
     this.maxFiles = options.maxFiles ?? 40_000;
     this.maxFileBytes = options.maxFileBytes ?? 1_000_000;
     this.cachePath = options.cachePath;
+    this.legacyCachePaths = options.legacyCachePaths ?? [];
     this.fullRefreshMs = options.fullRefreshMs ?? 60_000;
     this.extractor = options.extractor ?? REGEX_SYMBOL_EXTRACTOR;
   }
 
-  /** True when the walk would never visit `rel`: under a skipped or dot directory (which
-   *  covers this index's own `.builderforce/symbols.json`). A watcher reports everything. */
+  /** True when the walk would never visit `rel`: under a directory the shared index policy
+   *  skips (`isIndexedDirName`; that covers this index's own `.builderforce/` files). A watcher reports everything. */
   private skipped(rel: string): boolean {
     const segments = rel.split("/");
     const dirs = isSymbolIndexable(rel) ? segments.slice(0, -1) : segments;
-    return dirs.some((d) => d.startsWith(".") || isSkippedDirName(d, this.skipDirs));
+    return dirs.some((d) => !isIndexedDirName(d, this.skipDirs));
+  }
+
+  /** Mark every file `watch` reports under this root dirty; returns the unsubscribe. The one change feed (`WatchPort`). */
+  follow(watch: WatchPort): () => void {
+    return watch.subscribe(this.root, (absPaths) => { for (const abs of absPaths) this.markDirty(abs); });
   }
 
   /** Repo-relative POSIX path for an absolute or relative path, or null when outside. */
@@ -324,7 +333,7 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
       for (const entry of entries) {
         const abs = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-          if (entry.name.startsWith(".") || isSkippedDirName(entry.name, this.skipDirs) || isIgnored(toRel(abs))) continue;
+          if (!isIndexedDirName(entry.name, this.skipDirs) || isIgnored(toRel(abs))) continue;
           queue.push(abs);
         } else if (entry.isFile() && isSymbolIndexable(entry.name)) {
           const rel = toRel(abs);
@@ -340,7 +349,9 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
   private async loadSnapshot(): Promise<void> {
     if (!this.cachePath) return;
     try {
-      const snap = JSON.parse(await fs.readFile(this.cachePath, "utf-8")) as Snapshot;
+      const text = await readSnapshotText(this.cachePath, this.legacyCachePaths);
+      if (text === undefined) return;
+      const snap = JSON.parse(text) as Snapshot;
       if (snap?.v !== 1 || !Array.isArray(snap.files)) return;
       // Another extractor's symbols are not this one's: re-parse rather than serve them.
       if ((snap.extractor ?? REGEX_SYMBOL_EXTRACTOR.id) !== this.extractor.id) return;
@@ -364,9 +375,8 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
       files.push([rel, entry.mtime, entry.size, entry.symbols.map((s) => [s.name, SYMBOL_KINDS.indexOf(s.kind), s.line, s.exported ? 1 : 0])]);
     }
     try {
-      await fs.mkdir(path.dirname(this.cachePath), { recursive: true });
       const snapshot: Snapshot = { v: 1, ...(this.extractor.id !== REGEX_SYMBOL_EXTRACTOR.id ? { extractor: this.extractor.id } : {}), files };
-      await fs.writeFile(this.cachePath, JSON.stringify(snapshot), "utf-8");
+      await writeSnapshotText(this.cachePath, this.legacyCachePaths, JSON.stringify(snapshot));
     } catch {
       /* best-effort: an unwritable snapshot only costs a re-read on the next start */
     }

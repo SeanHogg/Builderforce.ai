@@ -2,7 +2,7 @@
  * A repo-less cloud run's working tree: the project's IDE workspace (ticket 3089).
  *
  * A Brain / zero-setup project has no git, so the repo tools have nothing to commit to.
- * The IDE workspace (R2, `ideWorkspaceCoding.ts`) IS that project's working tree, and
+ * The IDE workspace (R2, `ide/r2WorkspaceFs.ts`) IS that project's working tree, and
  * the run reads, searches and writes it through the same shared tool definitions — only
  * the backing changes. Every write takes the same implicit coordination lease a repo
  * write takes (`guardRepoWrite`), keyed on the workspace, so two runs on one project
@@ -21,10 +21,9 @@ import { coordinationScopeKey } from '../../../domain/coordination/resourceKey';
 import { recordCloudToolEvent } from '../cloudToolEvents';
 import { recordWrittenHash, type WrittenFileHashes } from './writtenFileHashes';
 import { notifyExecutionSubscribers } from '../executionEvents';
-import {
-  deleteIdeWorkspaceFile, editIdeWorkspaceFile, listIdeWorkspaceFiles, readIdeWorkspaceFile, searchIdeWorkspace,
-  writeIdeWorkspaceFile, type IdeWorkspaceRun,
-} from './ideWorkspaceCoding';
+import type { IdeWorkspaceRun } from './ideWorkspaceCoding';
+import { r2Capabilities, r2WorkspaceFs } from '../../ide/r2WorkspaceFs';
+import { applyTaskWorkspaceChanges } from '../../ide/taskWorkspaceTarget';
 
 export interface IdeWorkspaceRunRef {
   tenantId: number;
@@ -46,7 +45,22 @@ export function withIdeWorkspace(
   deps: { env: Env; db: Db },
 ): CapabilityProvider {
   const { db } = deps;
-  const who = { tenantId: run.tenantId, taskId: run.taskId, executionId: run.executionId, agent: run.agentLabel };
+  // The shared coding provider over this project's R2 workspace; writes keep the store's path/content
+  // contract, history and the ticket's file-change record through `applyTaskWorkspaceChanges`.
+  const { repoRead, repoWrite } = r2Capabilities(r2WorkspaceFs(ide.bucket, ide.projectId, {
+    applyChanges: (changes) => applyTaskWorkspaceChanges(db, ide.bucket, {
+      tenantId: run.tenantId, taskId: run.taskId, executionId: run.executionId, agent: run.agentLabel,
+      projectId: ide.projectId, changes,
+    }),
+  }));
+  /** Hash what the run left: read back, so an edit (or an EOL-conformed write) hashes the stored text. */
+  const recordLeft = async (path: string): Promise<void> => {
+    if (!run.writtenHashes) return;
+    const left = await repoRead.readFile(path);
+    if (left.ok && typeof left.content === 'string') await recordWrittenHash(run.writtenHashes, path, left.content);
+    // Unreadable: drop any earlier hash rather than keep a stale one.
+    else run.writtenHashes.delete(path);
+  };
   const changed = (path: string, change: 'created' | 'modified' | 'deleted') => {
     if (change === 'deleted') { run.writtenPaths.delete(path); run.writtenHashes?.delete(path); } else run.writtenPaths.add(path);
     notifyExecutionSubscribers(run.executionId, { type: 'file_change', executionId: run.executionId, path, change, ts: new Date().toISOString() });
@@ -57,36 +71,26 @@ export function withIdeWorkspace(
   };
   return {
     ...provider,
-    repoRead: {
-      listFiles: (subdir, glob) => listIdeWorkspaceFiles(ide.bucket, ide.projectId, subdir, glob),
-      readFile: (path) => readIdeWorkspaceFile(ide.bucket, ide.projectId, path),
-      searchCode: (query, scope) => searchIdeWorkspace(ide.bucket, ide.projectId, query, scope),
-    },
+    repoRead,
     repoWrite: guardRepoWrite({
       async writeFile(path, content) {
-        const r = await writeIdeWorkspaceFile(db, ide, { ...who, path, content });
+        const r = await repoWrite.writeFile(path, content);
         if (r.ok) {
           changed(path, r.change ?? 'modified');
-          if (run.writtenHashes) await recordWrittenHash(run.writtenHashes, path, content);
+          await recordLeft(path);
         }
         return r;
       },
       async editFile(path, oldString, newString, replaceAll) {
-        const r = await editIdeWorkspaceFile(db, ide, { ...who, path, oldString, newString, ...(replaceAll !== undefined ? { replaceAll } : {}) });
+        const r = await repoWrite.editFile(path, oldString, newString, replaceAll);
         if (r.ok) {
           changed(path, 'modified');
-          // The edited text isn't returned, so read the file back: its hash is the text the run left.
-          if (run.writtenHashes) {
-            const left = await readIdeWorkspaceFile(ide.bucket, ide.projectId, path);
-            if (left.ok && typeof left.content === 'string') await recordWrittenHash(run.writtenHashes, path, left.content);
-            // Unreadable: drop any earlier hash rather than keep a stale one.
-            else run.writtenHashes.delete(path);
-          }
+          await recordLeft(path);
         }
         return r;
       },
       async deleteFile(path) {
-        const r = await deleteIdeWorkspaceFile(db, ide, { ...who, path });
+        const r = await repoWrite.deleteFile(path);
         if (r.ok && r.deleted) changed(path, 'deleted');
         return r;
       },

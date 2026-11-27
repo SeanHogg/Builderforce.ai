@@ -31,6 +31,9 @@
       "@builderforce/agent-tools/knowledge": ["../packages/agent-tools/src/knowledge/index.ts"],
       "@builderforce/agent-tools/node-git-history": ["../packages/agent-tools/src/node-git-history.ts"],
       "@builderforce/agent-tools/node-path": ["../packages/agent-tools/src/node-path.ts"],
+      // Exact entries: the ONE coding provider (`createRepoCapabilities`) and its Node adapter, imported extensionless (NodeNext does not probe `.ts` through the `/*` form).
+      "@builderforce/agent-tools/workspace": ["../packages/agent-tools/src/workspace.ts"],
+      "@builderforce/agent-tools/node-workspace": ["../packages/agent-tools/src/node-workspace.ts"],
       "@builderforce/agent-tools/node-desktop": ["../packages/agent-tools/src/node-desktop.ts"],
       "@seanhogg/builderforce-mcp/protocol": ["../packages/builderforce-mcp/src/protocol.ts"],
       "@seanhogg/builderforce-mcp/config": ["../packages/builderforce-mcp/src/config.ts"],

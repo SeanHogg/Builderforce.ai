@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { acquireReplicaLock } from "@builderforce/agent-tools/knowledge";
+import { codeIndexPath, ensureLocalIndexDir, localIndexStem, readRegularFile } from "@builderforce/agent-tools/node-index-layout";
 import { sha256Hex } from "@seanhogg/builderforce-memory/knowledge";
 import type { CodeChunk } from "./chunk.js";
 
@@ -22,21 +23,6 @@ export interface StoredCodeIndex {
 const FORMAT_VERSION = 1;
 const MAX_META_BYTES = 10 * 1024 * 1024;
 const MAX_INDEX_BYTES = 160 * 1024 * 1024;
-const CACHE_IGNORE = "*\n";
-
-function missing(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
-}
-
-async function regularFile(path: string, maxSize: number): Promise<Buffer | undefined> {
-  try {
-    const info = await lstat(path);
-    return info.isFile() && info.size <= maxSize ? await readFile(path) : undefined;
-  } catch (error) {
-    if (missing(error)) return undefined;
-    throw error;
-  }
-}
 
 function validRecord(value: unknown): value is CodeFileRecord {
   if (!value || typeof value !== "object") return false;
@@ -49,28 +35,36 @@ function validRecord(value: unknown): value is CodeFileRecord {
       && Number.isSafeInteger(chunk.endLine) && chunk.endLine >= chunk.startLine);
 }
 
-/** Use one atomic file per real workspace root. Generated source bodies stay gitignored. */
-export async function codeIndexStorage(root: string) {
-  const parent = join(root, ".builderforce");
-  const directory = join(parent, "index");
-  for (const path of [parent, directory]) {
-    await mkdir(path, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== "EEXIST") throw error;
-    });
-    if (!(await lstat(path)).isDirectory()) throw new Error("Code index cache directory is unavailable");
-  }
-  const ignore = join(directory, ".gitignore");
-  await writeFile(ignore, CACHE_IGNORE, { flag: "wx", mode: 0o600 }).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "EEXIST") throw error;
-  });
-  if ((await regularFile(ignore, 1_024))?.toString("utf-8").trim() !== "*") {
-    throw new Error("Code index cache directory is not gitignored");
-  }
+const MAX_FILE_BYTES = MAX_META_BYTES + MAX_INDEX_BYTES + 4;
 
-  const id = sha256Hex(root).slice(0, 24);
-  const path = join(directory, `${id}.idx`);
+function parseStored(bytes: Buffer | undefined): StoredCodeIndex | undefined {
+  if (!bytes || bytes.length < 4) return undefined;
+  const length = bytes.readUInt32LE();
+  if (length > MAX_META_BYTES || length + 4 >= bytes.length) return undefined;
+  try {
+    const meta = JSON.parse(bytes.toString("utf-8", 4, length + 4));
+    if (meta?.version !== FORMAT_VERSION || typeof meta.fingerprint !== "string" || typeof meta.partial !== "boolean"
+      || !Array.isArray(meta.records) || !meta.records.every(validRecord)) return undefined;
+    return { fingerprint: meta.fingerprint, records: meta.records, index: bytes.subarray(length + 4), partial: meta.partial };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Use one atomic file per real workspace root, named by the shared local-index layout
+ * (`<root>/.builderforce/index/<stem>.idx`, `codeIndexPath`). `rootId` is the id the host's
+ * knowledge index already uses; a caller without one gets the layout's default. Generated
+ * source bodies stay gitignored. A file under the older realpath-hash name is read once,
+ * rewritten under the new name, and deleted.
+ */
+export async function codeIndexStorage(root: string, rootId?: string) {
+  const directory = await ensureLocalIndexDir(root);
+  const id = localIndexStem(root, rootId);
+  const path = codeIndexPath(root, rootId);
+  const legacyPath = join(directory, `${sha256Hex(root).slice(0, 24)}.idx`);
   const lockFiles = {
-    async read(name: string) { return (await regularFile(join(directory, name), 1_024))?.toString("utf-8"); },
+    async read(name: string) { return (await readRegularFile(join(directory, name), 1_024))?.toString("utf-8"); },
     async write(name: string, text: string) {
       // Replacing the lock by rename keeps readers from observing partial JSON.
       const target = join(directory, name);
@@ -94,21 +88,28 @@ export async function codeIndexStorage(root: string) {
     rename: (from: string, to: string) => rename(join(directory, from), join(directory, to)),
     remove: (name: string) => rm(join(directory, name), { force: true }),
   };
+  /** Write the old file's bytes under the new name, then delete the old one; best-effort, the old file stays on any failure. */
+  const migrate = async (bytes: Buffer): Promise<void> => {
+    const temp = `${path}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temp, bytes, { flag: "wx", mode: 0o600 });
+      await rename(temp, path);
+      await rm(legacyPath, { force: true });
+    } catch {
+      /* the next read migrates again */
+    } finally {
+      await rm(temp, { force: true }).catch(() => undefined);
+    }
+  };
   return {
     lock: () => acquireReplicaLock(lockFiles, id),
     async read(): Promise<StoredCodeIndex | undefined> {
-      const bytes = await regularFile(path, MAX_META_BYTES + MAX_INDEX_BYTES + 4);
-      if (!bytes || bytes.length < 4) return undefined;
-      const length = bytes.readUInt32LE();
-      if (length > MAX_META_BYTES || length + 4 >= bytes.length) return undefined;
-      try {
-        const meta = JSON.parse(bytes.toString("utf-8", 4, length + 4));
-        if (meta?.version !== FORMAT_VERSION || typeof meta.fingerprint !== "string" || typeof meta.partial !== "boolean"
-          || !Array.isArray(meta.records) || !meta.records.every(validRecord)) return undefined;
-        return { fingerprint: meta.fingerprint, records: meta.records, index: bytes.subarray(length + 4), partial: meta.partial };
-      } catch {
-        return undefined;
-      }
+      const current = await readRegularFile(path, MAX_FILE_BYTES);
+      if (current) return parseStored(current);
+      const legacy = await readRegularFile(legacyPath, MAX_FILE_BYTES).catch(() => undefined);
+      const stored = parseStored(legacy);
+      if (legacy && stored) await migrate(legacy);
+      return stored;
     },
     async write(snapshot: StoredCodeIndex, fresh: () => boolean): Promise<void> {
       const meta = Buffer.from(JSON.stringify({
