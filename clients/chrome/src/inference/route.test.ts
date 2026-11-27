@@ -280,7 +280,7 @@ describe('Rovr model route — local first, failover to the gateway', () => {
 });
 
 describe('loopback runtimes', () => {
-  it('probes every on-device runtime at its default port, bfi serve at the bfi port or the person\'s address', () => {
+  it('probes every on-device runtime at its default port, Synapse at the bfi port or the person\'s address', () => {
     expect(loopbackEndpoints(null)).toEqual({
       synapse: { baseUrl: SYNAPSE_DEFAULT_URL },
       ollama: { baseUrl: 'http://127.0.0.1:11434' },
@@ -289,7 +289,7 @@ describe('loopback runtimes', () => {
     expect(loopbackEndpoints(' http://127.0.0.1:11500 ').synapse).toEqual({ baseUrl: 'http://127.0.0.1:11500' });
   });
 
-  it('does not let bfi serve claim an Ollama model found at the same address', () => {
+  it('does not let Synapse claim an Ollama model found at the same address', () => {
     const synapse: LocalRuntimeProbe = {
       provider: 'synapse',
       endpoint: { baseUrl: 'http://127.0.0.1:11434' },
@@ -304,7 +304,7 @@ describe('loopback runtimes', () => {
     expect(resolved.find((p) => p.provider === 'ollama')!.models.map((m) => m.model)).toEqual(['gemma:2b']);
   });
 
-  it('leaves bfi serve alone when it runs on its own port', () => {
+  it('leaves Synapse alone when it runs on its own port', () => {
     const synapse: LocalRuntimeProbe = { ...ollama, provider: 'synapse', endpoint: { baseUrl: 'http://127.0.0.1:11435' } };
     expect(resolveLoopbackProbes([synapse, ollama])).toEqual([synapse, ollama]);
   });

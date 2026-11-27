@@ -13,10 +13,11 @@
  * Node-only (node:fs), so it sits behind its own export; the knowledge barrel stays Worker-safe.
  */
 
+import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import type { KnowledgeIndexFiles } from "./knowledge/index/contract.js";
-import { rootFileStem } from "./knowledge/index/persistence.js";
+import { rootFileStem, writeIndexAtomic } from "./knowledge/index/persistence.js";
 import { folderIdOf, rootIdFor } from "./knowledge/rootId.js";
 
 /** The host segment of the root id a caller without a host of its own is given. */
@@ -101,6 +102,31 @@ export async function ensureIgnoredDir(dir: string): Promise<void> {
   if ((await readRegularFile(ignore, 1_024))?.toString("utf-8").trim() !== "*") {
     throw new Error("Index cache directory is not gitignored");
   }
+}
+
+/** The snapshot text from `cachePath`, else from the first legacy path that reads; undefined when none does. */
+export async function readSnapshotText(cachePath: string, legacyCachePaths: readonly string[]): Promise<string | undefined> {
+  for (const file of [cachePath, ...legacyCachePaths]) {
+    try {
+      return await readFile(file, "utf-8");
+    } catch {
+      /* try the next place */
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Write `json` to `cachePath` atomically (`writeIndexAtomic`: a temp file, then a rename) into a
+ * gitignored directory, then delete the legacy copies so nothing writes the old places again.
+ * Throws when the directory cannot be gitignored or the write fails.
+ */
+export async function writeSnapshotText(cachePath: string, legacyCachePaths: readonly string[], json: string): Promise<void> {
+  const dir = path.dirname(cachePath);
+  await mkdir(dir, { recursive: true });
+  await ensureIgnoredDir(dir);
+  await writeIndexAtomic(nodeIndexFiles, cachePath, new TextEncoder().encode(json), randomUUID().replace(/-/g, ""));
+  for (const legacy of legacyCachePaths) await rm(legacy, { force: true }).catch(() => undefined);
 }
 
 /** Create `<root>/.builderforce/index` (private, never a symlink) and gitignore it; returns it. */

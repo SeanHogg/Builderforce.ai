@@ -57,46 +57,8 @@ const RG_MAX_FILESIZE = "1M";
 /** Characters of a matching line kept — enough to read, not enough to flood the window. */
 const MATCH_TEXT_MAX = 200;
 
-export interface SearchMatch {
-  path: string;
-  line: number;
-  text: string;
-  /** The shared `RepoSearchResult.matches` element is an open record; stay assignable to it. */
-  [extra: string]: unknown;
-}
-
-/** True when `query` is a valid JS regular expression. */
-export function isValidRegex(query: string): boolean {
-  try {
-    new RegExp(query, "i");
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * The pattern `search_code` scans with: the query as a regex when it is one, else the
- * same text escaped and matched literally. A query that is not a valid regex is searched
- * LITERALLY rather than refused — the model reaches for this tool with text it just read
- * (`?task=`, `foo(bar`, `a[0]`), and "invalid regex: Nothing to repeat" once made it
- * retry the same words for a whole turn. Case-insensitive unless `caseSensitive` (the
- * searches pass {@link smartCaseSensitive}).
- */
-export function compileSearchPattern(query: string, caseSensitive = false): RegExp {
-  const flags = caseSensitive ? "" : "i";
-  return isValidRegex(query) ? new RegExp(query, flags) : new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), flags);
-}
-
-/**
- * Smart case, ripgrep's rule: a query with an upper-case letter is case-SENSITIVE, an
- * all-lower-case one is not. `BfBrainChat` then finds the type and not every
- * `bfbrainchat` in a URL, while `brain chat` still finds both spellings. A regex escape
- * (`\W`, `\S`, `\D`) is syntax, not a letter the user typed, so it does not count.
- */
-export function smartCaseSensitive(query: string): boolean {
-  return /[A-Z]/.test(query.replace(/\\./g, ""));
-}
+// The pattern rules (regex-or-literal, smart case) and the match type live in `./text-scan.js`,
+// the ONE copy shared with the runtime-neutral scanner.
 
 /**
  * Parse one ripgrep output line (`path:line:text`, as `--line-number --no-heading

@@ -8382,7 +8382,7 @@
       },
       {
         "question": "¿Puede mi Evermind ejecutarse en mi propio ordenador?",
-        "answer": "Sí: Synapse, el editor de escritorio de Builderforce basado en VS Code, funciona en tu propio equipo, y tu Evermind se queda allí: los hechos, demostraciones y habilidades que aprenden tus herramientas de IA se almacenan y entrenan en local, en un modelo que es tuyo, y solo salen si decides publicarlos. El motor nativo bfi ejecuta modelos locales a la medida de tu memoria, y el servicio bf-context da a las herramientas de IA del equipo un índice de código compartido. Synapse aún no se ha lanzado."
+        "answer": "Sí: para eso está Synapse, la aplicación de escritorio de Builderforce. Mantiene tu propio Evermind en tu equipo: los hechos, demostraciones y habilidades que aprenden tus herramientas de IA se almacenan y entrenan allí, en un modelo que es tuyo, y solo salen si los publicas. Synapse también ofrece a las herramientas de IA del equipo un índice de código compartido, ejecuta en dispositivos compatibles modelos locales dimensionados a tu memoria y aloja conectores MCP para el Brain."
       },
       {
         "question": "¿Qué es Write-Through Cognition?",
@@ -32721,7 +32721,7 @@
       },
       {
         "q": "¿Hay una app de escritorio?",
-        "a": "La superficie de escritorio de Builderforce es Synapse, el editor de escritorio de Builderforce basado en VS Code. Ejecuta la extensión de Builderforce (entorno de ejecución de agentes y visualizador de código), incluye la extensión de Spawn para Roblox y trabaja con tu Evermind privado y modelos locales en tu propio equipo: memoria y aprendizaje que se quedan allí salvo que los publiques. Synapse aún no se ha lanzado."
+        "a": "Sí. Synapse funciona en Windows, macOS y Linux y mantiene tu Evermind privado en tu propio equipo: la memoria y el aprendizaje permanecen allí salvo que los publiques. También conversa con el Brain, ejecuta agentes que enseñas una sola vez (con aprobaciones que puedes responder desde el móvil), gestiona modelos locales y aloja conectores MCP."
       }
     ],
     "closeTitle": "¿Listo para reemplazar tu stack?",
@@ -37081,6 +37081,40 @@
     "label": "Pro bono",
     "accessibleName": "Sin coste: esta persona asesora ofrece sesiones voluntarias"
   },
+  "desktopApp": {
+    "eyebrow": "App de escritorio · Windows, macOS, Linux",
+    "heading": "Synapse: tu Evermind privado, en tu equipo",
+    "intro": "Synapse es donde vive tu propio Evermind. Todo lo que tus herramientas de IA aprenden sobre ti y tu trabajo —datos, demostraciones, habilidades— se guarda y se entrena en tu ordenador, en un modelo que es tuyo. Solo sale de él si decides publicarlo.",
+    "points": [
+      {
+        "title": "Un Evermind privado",
+        "desc": "Recuerdos, habilidades Train Once y la experiencia que hay detrás se guardan en tu equipo y se entrenan en tu propio modelo `.evermind`. Empieza con uno de los modelos de tu espacio y solo aprende aquí."
+      },
+      {
+        "title": "Contexto para cada herramienta de IA",
+        "desc": "Un índice por repositorio —un mapa ordenado por dependencias, más `semantic_search`— compartido por el agente de Builderforce en VS Code, Claude Code, Cursor y cualquier cliente MCP. Los recuerdos que nombran código borrado se marcan en lugar de obedecerse."
+      },
+      {
+        "title": "Chatea con el Brain",
+        "desc": "Los chats y agentes de tu espacio en el escritorio. Las respuestas aprovechan lo que recuerda tu Evermind y pueden usar las herramientas de la plataforma y tus conectores; lo que cambia algo pregunta antes."
+      },
+      {
+        "title": "Agentes que enseñas una vez",
+        "desc": "Muéstrale a Synapse una tarea en cualquier app de escritorio; la repite y se detiene para tu aprobación en los pasos importantes. Aprueba esos pasos desde el móvil, con tu cuenta de Builderforce."
+      },
+      {
+        "title": "Modelos locales a la medida de tu equipo",
+        "desc": "Synapse gestiona Ollama, elige el tamaño y la cuantización que caben en tu memoria y los sirve con los formatos de OpenAI y Anthropic, para que Claude Code y tus scripts también los usen."
+      },
+      {
+        "title": "Conectores con un clic",
+        "desc": "GitHub, Slack, Playwright, tus archivos y cualquier servidor MCP se ejecutan en tu equipo para que el Brain use sus herramientas. Los tokens quedan en el almacén de credenciales del sistema."
+      }
+    ],
+    "privacy": "La indexación, los embeddings, la memoria y el entrenamiento se ejecutan en local. Tu código nunca se sube y nada de lo que aprende tu Evermind sale del equipo salvo que lo publiques.",
+    "download": "Descargar para Windows, macOS o Linux",
+    "readMore": "Cómo funciona"
+  },
   "siteBadge": {
     "body": "Los sitios gratuitos muestran una pequeña insignia «Made with Builderforce.ai».",
     "upgrade": "Mejora tu plan para quitarla"
@@ -37303,9 +37337,22 @@
       "badge": "🎮 Para creadores de Roblox de 13+",
       "titleLead": "Dilo.",
       "titleAccent": "Spawnéalo.",
-      "lede": "Escribe el juego que quieres. Spawn lo construye en Roblox Studio, desde una extensión de VS Code que se incluye en Synapse.",
+      "lede": "Escribe el juego que quieres. Spawn lo construye en Roblox Studio.",
       "start": "Empieza tu semana gratis",
       "fine": "7 días gratis · luego 1,99 $/mes · sin tarjeta para empezar"
+    },
+    "download": {
+      "windows": "Descargar para Windows",
+      "mac": "Descargar para Mac",
+      "any": "Descargar Spawn",
+      "windowsShort": "Windows",
+      "macArm": "Mac (chip Apple)",
+      "macIntel": "Mac (Intel)",
+      "alsoFor": "También para:",
+      "needsComputer": "Spawn funciona en un PC con Windows o un Mac con Roblox Studio.",
+      "all": "Todas las descargas",
+      "firstRunWindows": "Windows puede decir “Windows protegió su PC”. Toca Más información y luego Ejecutar de todas formas.",
+      "firstRunMac": "La primera vez en Mac: si no se abre, ve a Ajustes del Sistema → Privacidad y seguridad y pulsa Abrir igualmente."
     },
     "play": {
       "pick": "Pruébalo: toca un juego 👇",
@@ -37355,7 +37402,7 @@
       "items": [
         {
           "icon": "⬇️",
-          "label": "Consigue la extensión"
+          "label": "Descarga la app"
         },
         {
           "icon": "💬",
@@ -37388,7 +37435,7 @@
         }
       ],
       "parentsTitle": "Para padres",
-      "parents": "Para madres y padres: la membresía y los paquetes de tokens se compran en este sitio mediante el pago seguro de Stripe, y tú eliges cada recarga. No se cobra nada desde Synapse y no hay renovaciones sorpresa aparte de la membresía mensual de 1,99 $, que puedes cancelar cuando quieras."
+      "parents": "Para madres y padres: la membresía y los paquetes de tokens se compran en este sitio mediante el pago seguro de Stripe, y tú eliges cada recarga. No se cobra nada desde la app y no hay renovaciones sorpresa aparte de la membresía mensual de 1,99 $, que puedes cancelar cuando quieras."
     },
     "pricing": {
       "title": "Elige tu paquete",
@@ -37422,17 +37469,17 @@
         },
         {
           "q": "¿Spawn es de Roblox?",
-          "a": "No. Spawn lo crea Builderforce.ai y no está afiliado a Roblox Corporation ni cuenta con su aval. Funciona con Roblox Studio mediante un plugin de Studio normal que configura la extensión de Spawn."
+          "a": "No. Spawn está hecho por Builderforce.ai y no está afiliado ni respaldado por Roblox Corporation. Funciona con Roblox Studio mediante un plugin normal de Studio."
         }
       ]
     },
     "cta": {
-      "title": "Spawn se convierte en una extensión de VS Code que se incluye en Synapse."
+      "title": "¿Listo para construir?"
     },
     "account": {
       "eyebrow": "Spawn",
       "title": "Tu cuenta",
-      "signInBody": "Inicia sesión para unirte a Spawn, conseguir tokens y conectar la extensión de Spawn en Synapse.",
+      "signInBody": "Inicia sesión para unirte a Spawn, conseguir tokens y conectar la app de escritorio.",
       "signIn": "Iniciar sesión",
       "loading": "Cargando tu cuenta…",
       "tooYoungTitle": "Spawn es para jugadores de 13 años en adelante",
@@ -37441,7 +37488,7 @@
         "joined": "¡Bienvenido a Spawn! Tu membresía está activa.",
         "tokensAdded": "Tokens añadidos. ¡A construir!",
         "cancelled": "Se canceló el pago. No se cobró nada.",
-        "trialStarted": "¡Empezó tu semana gratis! Añade la extensión de Spawn en Synapse y ponte a crear."
+        "trialStarted": "¡Empezó tu semana gratis! Descarga la app y ponte a crear."
       },
       "errors": {
         "generic": "Algo salió mal. Inténtalo de nuevo.",
@@ -37479,7 +37526,7 @@
           "trial": "Prueba gratis",
           "trial_ended": "Prueba terminada"
         },
-        "activeBody": "Eres miembro ({price} al mes). El creador y la extensión de Spawn están abiertos.",
+        "activeBody": "Eres miembro ({price} al mes). El creador y la app de escritorio están abiertos.",
         "body": {
           "none": "Únete por {price} al mes para abrir el creador.",
           "past_due": "Tu último pago no se completó. Vuelve a unirte por {price} al mes para seguir construyendo.",
@@ -37501,6 +37548,16 @@
           "grant": "Tokens añadidos",
           "spend": "Creación"
         }
+      },
+      "desktop": {
+        "title": "A construir",
+        "ready": "Listo",
+        "steps": [
+          "Descarga y abre la app Spawn.",
+          "Haz clic en Iniciar sesión. Se abre tu navegador; aprueba el código que muestra.",
+          "Abre Roblox Studio y cualquier lugar. Spawn se conecta solo.",
+          "Escribe lo que quieres construir y pulsa Play."
+        ]
       },
       "trial": {
         "badge": "🎁 Prueba gratis",
@@ -38655,7 +38712,7 @@
         "usage": "Es el subsistema de memoria de Builderforce. El canvas entrena Evermind en el navegador con el motor, los agentes en la nube y en las instalaciones propias recuerdan y guardan a través de la biblioteca de ejecución mientras trabajan, y la extensión de Builderforce para VS Code usa el mismo almacén en disco que el servidor MCP."
       },
       "inference": {
-        "tagline": "bfi, el motor nativo en Rust para ejecutar LLM en tu propio equipo, y bf-context, el servicio de contexto de código. La antigua aplicación de escritorio pasa a Synapse, basado en VS Code.",
+        "tagline": "Synapse, la aplicación de escritorio de Builderforce, y bfi, su motor nativo en Rust para ejecutar LLM en tu propio equipo.",
         "summary": "Descarga un modelo GGUF dimensionado para tu hardware y sírvelo con API compatibles con OpenAI, Anthropic y Ollama, para que los clientes que ya usas funcionen sin cambios. Sin instalar Ollama por separado.",
         "problem": "Ejecutar modelos en local solía significar instalar el entorno de otro proveedor, confiar en que estuviera en el PATH, adivinar si un modelo cabría en memoria y conformarse con los tipos GGUF que ese entorno acepta. El llama.cpp estándar rechaza los formatos de 2 bits PQ2_0 y PTQ1_0 en los que se publican los modelos Ternary Bonsai de PrismML.",
         "gets": [
@@ -38663,24 +38720,24 @@
           "Un servidor HTTP que habla los dialectos de OpenAI, Anthropic y Ollama, en el puerto 11434 por defecto, con una clave bearer opcional.",
           "bfi fit: la memoria que necesita un modelo frente a este equipo (pesos, caché KV, estado recurrente y sobrecarga), leída de la cabecera del archivo antes de descargarlo.",
           "Descargas de Hugging Face reanudables con verificación sha256, e import-ollama para reutilizar una biblioteca de Ollama existente sin volver a descargarla.",
-          "bf-context, un servicio local de contexto de código que da a la extensión de Builderforce para VS Code, a Claude Code y a Cursor un único índice de tu repositorio."
+          "Synapse, la aplicación de escritorio que supervisa bfi serve y aloja conectores MCP, una memoria Evermind privada y un índice de código local."
         ],
         "status": "La ruta de CPU ya está disponible. Los backends de GPU (CUDA, ROCm, Metal, Vulkan) compilan, pero el rendimiento en GPU frente a llama-bench no se ha medido, y los binarios de las versiones todavía no están firmados.",
         "quickStartNote": "Instala la CLI desde el código fuente con Cargo, comprueba que un modelo cabe en este equipo, descárgalo y arranca el servidor.",
-        "usage": "bfi sirve modelos locales a Claude Code, a tus scripts y a la extensión de Builderforce para VS Code, que los encuentra mediante ~/.builderforce/desktop.json, y bf-context también le ofrece un índice de código. La antigua aplicación de escritorio Synapse pasa a un Synapse basado en VS Code, el editor de escritorio de Builderforce; este repositorio ahora incluye bfi y bf-context."
+        "usage": "Synapse es Builderforce en el escritorio. Sirve modelos locales a Claude Code, a tus scripts y a la extensión de Builderforce para VS Code, que los encuentra a través de ~/.builderforce/desktop.json, y su servicio de contexto y su índice de código también alimentan la extensión."
       },
       "spawn": {
-        "tagline": "Crea juegos de Roblox hablando. Spawn se convierte en una extensión de VS Code que se incluye en Synapse, el editor de escritorio de Builderforce.",
-        "summary": "Describe el juego y Spawn construye las piezas, el Luau y la interfaz dentro de Roblox Studio. Spawn se convierte en una extensión de VS Code que se incluye en Synapse, el editor de escritorio de Builderforce basado en VS Code.",
-        "problem": "Las herramientas de IA para Roblox piden a un creador joven que descargue una aplicación, instale un plugin de Studio, inicie un servidor local y conecte una herramienta de sincronización, y que mantenga las cuatro en marcha, antes del primer prompt. Spawn pasa a ser una sola extensión de VS Code dentro de Synapse.",
+        "tagline": "Crea juegos de Roblox hablando: una aplicación de escritorio y un puente con Roblox Studio.",
+        "summary": "Describe el juego y Spawn construye las piezas, el Luau y la interfaz dentro de Roblox Studio. Una sola instalación; el plugin de Studio se conecta solo.",
+        "problem": "Las herramientas de IA para Roblox piden a un creador joven que descargue una aplicación, instale un plugin de Studio, inicie un servidor local y conecte una herramienta de sincronización, y que mantenga las cuatro en marcha, antes del primer prompt.",
         "gets": [
-          "Una extensión de VS Code que se incluye en Synapse, el editor de escritorio de Builderforce, y sustituye a la anterior aplicación de escritorio Tauri.",
+          "Una aplicación de escritorio Tauri que se ejecuta junto a Roblox Studio.",
           "bf-roblox, el puente: instala el plugin de Spawn para Studio y sirve el puente local que el plugin consulta para recibir los builds, de modo que nada es accesible desde fuera del equipo.",
-          "Inicio de sesión en Builderforce y acceso a la API mediante bf-cloud."
+          "Inicio de sesión en Builderforce y acceso a la API mediante bf-cloud, compartido con Synapse desde el repositorio builderforce-inference."
         ],
-        "status": "En transición: la aplicación de escritorio ya no se publica y la extensión de VS Code la sustituye. Synapse aún no se ha lanzado.",
+        "status": "Los binarios de las versiones todavía no están firmados.",
         "quickStartNote": "Clona el repositorio y compila el espacio de trabajo con Cargo.",
-        "usage": "Spawn es el constructor de juegos de Roblox de Builderforce para creadores de 13 años en adelante, ofrecido como producto propio. El repositorio abierto contiene el puente con Studio y el código de la extensión de Spawn; el inicio de sesión y las llamadas a los modelos pasan por Builderforce."
+        "usage": "Spawn es el constructor de juegos de Roblox de Builderforce para creadores de 13 años en adelante, ofrecido como producto propio. El repositorio abierto contiene la aplicación de escritorio y el puente con Studio; el inicio de sesión y las llamadas a los modelos pasan por Builderforce."
       }
     }
   },

@@ -22,8 +22,10 @@ import * as path from "node:path";
 import type { RepoSymbolsCapability, SymbolFindResult, SymbolMatch } from "./capabilities.js";
 import { isUnderScopeDir, normalizeScopeDir } from "./glob.js";
 import { gitIgnoredMatcher, gitIgnoredSubset } from "./node-git-ignore.js";
+import { readSnapshotText, writeSnapshotText } from "./node-index-layout.js";
 import { extractSymbols, isSymbolIndexable, SYMBOL_KINDS, type CodeSymbol, type SymbolKind } from "./symbols.js";
-import { isSkippedDirName, WORKSPACE_SKIP_DIRS } from "./skipDirs.js";
+import { isIndexedDirName, WORKSPACE_SKIP_DIRS } from "./skipDirs.js";
+import type { WatchPort } from "./watchPort.js";
 
 // The tree-sitter extractor (web-tree-sitter WASM, regex fallback per language) lives in
 // its own module and is re-exported from this export condition.

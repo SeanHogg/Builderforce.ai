@@ -49,6 +49,8 @@
       "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"],
       // Exact entry: `packages/repo-map` imports `@builderforce/agent-tools/symbols` extensionless, and NodeNext does not probe `.ts` for a path-mapped target (the `/*` form above only serves imports that already end in `.js`).
       "@builderforce/agent-tools/symbols": ["../packages/agent-tools/src/symbols.ts"],
+      // Exact entry: the glob matcher and `toPosixPath` are imported extensionless (same NodeNext rule as `symbols`).
+      "@builderforce/agent-tools/glob": ["../packages/agent-tools/src/glob.ts"],
       // Exact entry (the ignore policy `packages/repo-map` imports): the subpath name is not the file name, so the `/*` form cannot serve it.
       "@builderforce/agent-tools/skip-dirs": ["../packages/agent-tools/src/skipDirs.ts"],
       "@builderforce/agent-run": ["../packages/agent-run/src/index.ts"],

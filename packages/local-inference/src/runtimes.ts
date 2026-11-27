@@ -154,7 +154,7 @@ const KIMI_CODE_CATALOG_ALIASES: Readonly<Record<string, string>> = {
 
 /** Runtime metadata. `automaticRank`, not array position, owns automatic preference. */
 export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
-  { id: 'synapse', automaticRank: 30, label: 'bfi serve', onDevice: true, catalog: 'probe', tools: 'all', reach: 'http', ownedBy: 'bfi' },
+  { id: 'synapse', automaticRank: 30, label: 'Synapse', onDevice: true, catalog: 'probe', tools: 'all', reach: 'http', ownedBy: 'bfi' },
   {
     id: 'ollama',
     automaticRank: 50,

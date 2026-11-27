@@ -26,6 +26,7 @@
     "local models",
     "ollama",
     "freetoken",
+    "synapse",
     "offline"
   ],
   "icon": "media/icon.png",
