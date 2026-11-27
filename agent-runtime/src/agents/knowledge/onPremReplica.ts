@@ -12,11 +12,11 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
-import type { KnowledgeStore } from "@seanhogg/builderforce-memory/knowledge";
+import { deferredHashCache, type HashCache, type KnowledgeStore } from "@seanhogg/builderforce-memory/knowledge";
 import { migrateLegacyKnowledge, nodeKnowledgeStore, type NodeKnowledgeStore } from "@builderforce/agent-tools/node-knowledge-store.js";
 import {
-  createReplicaHost, deferredHashCache, dirtyFileName, forgetRootPorts, migratingRootFiles, queuedRootIdOf, rootManifest, rootStore,
-  type HashCache, type KnowledgeFiles, type PumpSource, type ReplicaHost,
+  createReplicaHost, dirtyFileName, forgetRootPorts, migratingRootFiles, queuedRootIdOf, rootManifest, rootStore,
+  type KnowledgeFiles, type PumpSource, type ReplicaHost,
 } from "@builderforce/agent-tools/knowledge/index.js";
 import type { KnowledgeClient } from "@builderforce/knowledge-client";
 import { logDebug } from "../../logger.js";

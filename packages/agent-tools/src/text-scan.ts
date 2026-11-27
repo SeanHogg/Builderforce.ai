@@ -5,8 +5,9 @@
  * `node-text-search.ts` `walkSearch` so the cloud, the browser canvas and the tests scan the
  * same way the editor does. Pure: no node builtins (the Worker imports it).
  *
- * `node-text-search.ts` carries its own copies of `isValidRegex` / `compileSearchPattern` /
- * `smartCaseSensitive` because it imports `node:*`; it should import them from here.
+ * text-scan.ts is the one runtime-neutral line scanner and owns the regex/smart-case helpers
+ * (`isValidRegex` / `compileSearchPattern` / `smartCaseSensitive`); the Node ripgrep backend
+ * (`node-text-search.ts`) imports them from here.
  */
 
 import type { RepoSearchResult } from "./capabilities.js";
@@ -74,6 +75,8 @@ export interface ScanOptions {
   skipFile?: (path: string, size: number | undefined) => boolean;
   /** Replaces the built-in per-line matcher: given a line's full text, returns that line's hits (a panel wants columns and every occurrence). */
   lineMatcher?: (path: string, text: string, line: number) => SearchMatch[];
+  /** Files read in parallel (a remote store where each read is a round trip). Default 1: sequential. Results keep file order. */
+  concurrency?: number;
 }
 
 /** The matching lines of one file's text. */
@@ -109,12 +112,14 @@ export async function scanFiles(fs: WorkspaceFs, query: string, scope: string, o
   let truncated = false;
   const stopped = (): RepoSearchResult => ({ ok: false, query, error: "search stopped", code: "io" });
 
-  const scanOne = async (rel: string, size: number | undefined): Promise<void> => {
-    if (size !== undefined && size > maxBytes) return;
+  const concurrency = Math.max(1, Math.floor(opts.concurrency ?? 1));
+
+  const scanOne = async (rel: string, size: number | undefined, limit: number): Promise<SearchMatch[]> => {
+    if (size !== undefined && size > maxBytes) return [];
     const r = await fs.read(rel, { maxBytes });
     // Unreadable, a directory, or over the byte cap: skipped, like the node searcher.
-    if (r.status !== "ok" || r.truncated || !r.content || r.content.includes("\0")) return;
-    for (const m of scanText(rel, r.content, re, maxMatches - matches.length, opts.lineMatcher)) matches.push(m);
+    if (r.status !== "ok" || r.truncated || !r.content || r.content.includes("\0")) return [];
+    return scanText(rel, r.content, re, limit, opts.lineMatcher);
   };
 
   if (scope) {
@@ -143,11 +148,19 @@ export async function scanFiles(fs: WorkspaceFs, query: string, scope: string, o
     } catch {
       continue; // an unreadable directory is skipped; the walk goes on
     }
-    for (const f of files) {
-      if (opts.skipFile?.(f.path, f.size)) continue;
+    const pending = opts.skipFile ? files.filter((f) => !opts.skipFile?.(f.path, f.size)) : files;
+    for (let i = 0; i < pending.length;) {
       if (matches.length >= maxMatches || scanned >= maxFiles) { truncated = true; break outer; }
-      scanned++;
-      await scanOne(f.path, f.size);
+      const batch = pending.slice(i, i + Math.min(concurrency, maxFiles - scanned));
+      i += batch.length;
+      scanned += batch.length;
+      const limit = maxMatches - matches.length;
+      const found = await Promise.all(batch.map((f) => scanOne(f.path, f.size, limit)));
+      // Merged in file order; a parallel batch may have found more than the budget left, so it is trimmed.
+      for (const hits of found) for (const m of hits) {
+        if (batch.length > 1 && matches.length >= maxMatches) break;
+        matches.push(m);
+      }
     }
   }
   if (matches.length >= maxMatches) truncated = true;

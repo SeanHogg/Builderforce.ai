@@ -1,23 +1,20 @@
 /**
  * Cloud/board runs against a Brain project (no git) must write the IDE
  * workspace — not dump the deliverable in the finish summary.
+ *
+ * The file tools over that workspace (list / read / search / write / edit / delete) are the shared
+ * coding provider on `ide/r2WorkspaceFs.ts`, tested in `ide/r2WorkspaceFs.test.ts`.
  */
 import { describe, it, expect } from 'vitest';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
-import { writeWorkspaceFile, readWorkspaceFile } from '../../ide/workspaceStore';
+import { writeWorkspaceFile } from '../../ide/workspaceStore';
 import {
   codingTargetToolingLine,
   describeWorkspaceBlock,
-  deleteIdeWorkspaceFile,
-  editIdeWorkspaceFile,
-  listIdeWorkspaceFiles,
-  readIdeWorkspaceFile,
   resolveIdeWorkspaceForRun,
-  searchIdeWorkspace,
   snapshotIdeWorkspace,
   workspaceSourceRef,
-  writeIdeWorkspaceFile,
 } from './ideWorkspaceCoding';
 
 function fakeR2() {
@@ -97,158 +94,6 @@ describe('describeWorkspaceBlock / codingTargetToolingLine', () => {
     expect(describeWorkspaceBlock(view)).toMatch(/no files to edit/i);
     expect(codingTargetToolingLine(view)).toMatch(/no repository and no IDE workspace/i);
     expect(workspaceSourceRef(view)).toBe('unbound workspace');
-  });
-});
-
-describe('IDE workspace listing pagination', () => {
-  it('pages past an R2 cursor so a glob match on a later page is not a miss', async () => {
-    const prefix = 'ide/projects/7/';
-    const pages = [
-      {
-        objects: [{ key: `${prefix}noise/a.ts`, size: 1 }],
-        truncated: true,
-        cursor: 'page-2',
-      },
-      {
-        objects: [{ key: `${prefix}frontend/src/lib/widget.test.ts`, size: 1 }],
-        truncated: false,
-      },
-    ];
-    let call = 0;
-    const bucket = {
-      async list(opts: { prefix: string; cursor?: string }) {
-        expect(opts.prefix).toBe(prefix);
-        if (call === 1) expect(opts.cursor).toBe('page-2');
-        return pages[call++]!;
-      },
-    } as unknown as R2Bucket;
-    const listed = await listIdeWorkspaceFiles(bucket, 7, 'frontend/src/lib', '**/*.test.ts');
-    expect(listed.ok).toBe(true);
-    expect(listed.paths).toEqual(['frontend/src/lib/widget.test.ts']);
-    expect(listed.truncated).toBe(false);
-    expect(call).toBe(2);
-  });
-
-  it('says an empty truncated glob search is incomplete, not absence', async () => {
-    const bucket = {
-      async list() {
-        return { objects: [{ key: 'ide/projects/7/a.ts', size: 1 }], truncated: true, cursor: 'more' };
-      },
-    } as unknown as R2Bucket;
-    const listed = await listIdeWorkspaceFiles(bucket, 7, 'frontend/src/lib', '**/*.test.ts');
-    expect(listed.paths).toEqual([]);
-    expect(listed.truncated).toBe(true);
-    expect(listed.note).toContain('NOT proof the file does not exist');
-    expect(listed.note).not.toContain('0 matches means no such file exists');
-  });
-});
-
-describe('IDE workspace file ops', () => {
-  it('lists, reads, searches, writes, edits and deletes against R2', async () => {
-    const r2 = fakeR2();
-    const bucket = asBucket(r2);
-    await writeWorkspaceFile(bucket, 34, 'src/App.jsx', 'export const App = () => 1;\n');
-    await writeWorkspaceFile(bucket, 34, 'README.md', '# hi\n');
-
-    const listed = await listIdeWorkspaceFiles(bucket, 34, 'src');
-    expect(listed.ok).toBe(true);
-    expect(listed.paths).toEqual(['src/App.jsx']);
-
-    const globbed = await listIdeWorkspaceFiles(bucket, 34, undefined, '*.md');
-    expect(globbed.paths).toEqual(['README.md']);
-
-    const relative = await listIdeWorkspaceFiles(bucket, 34, 'src', '*.jsx');
-    expect(relative.paths).toEqual(['src/App.jsx']);
-
-    const read = await readIdeWorkspaceFile(bucket, 34, 'src/App.jsx');
-    expect(read).toEqual({ ok: true, path: 'src/App.jsx', content: 'export const App = () => 1;\n' });
-    expect((await readIdeWorkspaceFile(bucket, 34, 'missing.ts')).ok).toBe(false);
-
-    const found = await searchIdeWorkspace(bucket, 34, 'export const App');
-    expect(found.ok).toBe(true);
-    expect(found.matches?.map((m) => m.path)).toEqual(['src/App.jsx']);
-
-    const db = fakeDb([]);
-    const run = { bucket, projectId: 34, projectName: 'Brain App' };
-    const created = await writeIdeWorkspaceFile(db, run, {
-      tenantId: 1, taskId: 7, executionId: 9, agent: 'coder',
-      path: 'src/added.js', content: 'export const a = 1;\n',
-    });
-    expect(created.ok).toBe(true);
-    expect(created.change).toBe('created');
-    expect(await readWorkspaceFile(bucket, 34, 'src/added.js')).toBe('export const a = 1;\n');
-
-    const edited = await editIdeWorkspaceFile(db, run, {
-      tenantId: 1, taskId: 7, executionId: 9, agent: 'coder',
-      path: 'src/added.js', oldString: 'a = 1', newString: 'a = 2',
-    });
-    expect(edited.ok).toBe(true);
-    expect(await readWorkspaceFile(bucket, 34, 'src/added.js')).toBe('export const a = 2;\n');
-
-    const deleted = await deleteIdeWorkspaceFile(db, run, {
-      tenantId: 1, taskId: 7, executionId: 9, agent: 'coder', path: 'src/added.js',
-    });
-    expect(deleted.ok).toBe(true);
-    expect(deleted.deleted).toBe(true);
-    expect(await readWorkspaceFile(bucket, 34, 'src/added.js')).toBeNull();
-  });
-
-  it('write then read persists in the IDE workspace, not a git clone', async () => {
-    const r2 = fakeR2();
-    const bucket = asBucket(r2);
-    const db = fakeDb([]);
-    const run = { bucket, projectId: 34, projectName: 'Brain App' };
-    const written = await writeIdeWorkspaceFile(db, run, {
-      tenantId: 1, taskId: 7, executionId: 9, agent: 'coder',
-      path: 'src/hello.js', content: 'export const hello = 1;\n',
-    });
-    expect(written.ok).toBe(true);
-    expect(written.branch).toBe('workspace');
-    const read = await readIdeWorkspaceFile(bucket, 34, 'src/hello.js');
-    expect(read).toEqual({ ok: true, path: 'src/hello.js', content: 'export const hello = 1;\n' });
-  });
-
-  it('edit of a missing file and empty search are honest errors; delete of a missing path is a no-op', async () => {
-    const r2 = fakeR2();
-    const bucket = asBucket(r2);
-    const db = fakeDb([]);
-    const run = { bucket, projectId: 34, projectName: 'Brain App' };
-
-    const missingEdit = await editIdeWorkspaceFile(db, run, {
-      tenantId: 1, taskId: 7, executionId: 9, agent: 'coder',
-      path: 'src/gone.js', oldString: 'a', newString: 'b',
-    });
-    expect(missingEdit.ok).toBe(false);
-    expect(missingEdit.error).toMatch(/file not found/i);
-
-    await writeWorkspaceFile(bucket, 34, 'src/gone.js', 'export const a = 1;\n');
-    const noMatch = await editIdeWorkspaceFile(db, run, {
-      tenantId: 1, taskId: 7, executionId: 9, agent: 'coder',
-      path: 'src/gone.js', oldString: 'does-not-exist', newString: 'x',
-    });
-    expect(noMatch.ok).toBe(false);
-    expect(noMatch.error).toMatch(/oldString not found/i);
-
-    const empty = await searchIdeWorkspace(bucket, 34, '   ');
-    expect(empty.ok).toBe(false);
-    expect(empty.error).toMatch(/query is required/i);
-
-    const missingDelete = await deleteIdeWorkspaceFile(db, run, {
-      tenantId: 1, taskId: 7, executionId: 9, agent: 'coder', path: 'src/never.js',
-    });
-    expect(missingDelete.ok).toBe(true);
-    expect(missingDelete.deleted).toBe(false);
-  });
-
-  it('refuses a traversal write instead of dumping it into R2', async () => {
-    const r2 = fakeR2();
-    const result = await writeIdeWorkspaceFile(fakeDb([]), { bucket: asBucket(r2), projectId: 34, projectName: 'X' }, {
-      tenantId: 1, taskId: 7, executionId: 9, agent: 'coder',
-      path: '../../etc/passwd', content: 'x',
-    });
-    expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/traversal/i);
-    expect(r2.store.size).toBe(0);
   });
 });
 

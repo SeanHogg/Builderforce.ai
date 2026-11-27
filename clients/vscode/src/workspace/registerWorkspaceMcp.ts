@@ -2,9 +2,11 @@ import { isAbsolute, relative, resolve } from "node:path";
 import * as vscode from "vscode";
 import { createWorkspaceMcpTools, WORKSPACE_MCP_INFO } from "@builderforce/workspace-mcp";
 import { hostLog } from "../host/hostLog";
+import { knowledgeRootId } from "../knowledge/knowledgeRoots";
 import { buildLocalCapabilityProvider } from "../tools/localCapabilities";
 import { findRipgrep } from "../tools/ripgrep";
 import { startWorkspaceMcpListener } from "./workspaceMcpListener";
+import { vscodeWatchPort } from "./workspaceSymbolWatch";
 import { symbolGrammarOptions } from "./workspaceSymbols";
 
 function trustedWorkspaceRoots(): string[] {
@@ -24,7 +26,7 @@ export function registerWorkspaceMcp(context: vscode.ExtensionContext): void {
       : requestedRoot === undefined && roots.length === 1 ? roots[0] : undefined;
     if (!root) throw new Error("Choose an open, trusted workspace folder as projectRoot");
     return { root, caps: buildLocalCapabilityProvider(root, { ripgrep: findRipgrep }) };
-  }, { grammar: symbolGrammarOptions });
+  }, { grammar: symbolGrammarOptions, watch: vscodeWatchPort(), rootId: knowledgeRootId });
 
   let listener: ReturnType<typeof startWorkspaceMcpListener> | undefined;
   let disposed = false;

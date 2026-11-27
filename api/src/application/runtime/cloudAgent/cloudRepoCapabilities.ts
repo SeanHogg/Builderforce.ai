@@ -117,7 +117,7 @@ export function buildCloudRepoCapabilities(a: CloudRepoArgs): { repoRead: RepoRe
   const primaryRemote = (): Remote => remoteFor(repoCtx!);
 
   /** The run's bookkeeping after a commit landed in `target`. */
-  const landed = async (remote: Remote, target: TicketRepoContext, path: string, change: 'created' | 'modified' | 'deleted'): Promise<{ branch: string; commitUrl?: string }> => {
+  const landed = async (remote: Remote, target: TicketRepoContext, path: string, change: 'created' | 'modified' | 'deleted'): Promise<{ branch: string; commitUrl?: string; storedContent?: string }> => {
     const commit = remote.fs.takeCommit(path);
     if (change === 'deleted') { writtenPaths.delete(path); writtenHashes?.delete(path); } else {
       writtenPaths.add(path);
@@ -128,7 +128,7 @@ export function buildCloudRepoCapabilities(a: CloudRepoArgs): { repoRead: RepoRe
     await recordRepoWrite(db, tenantId, taskRow.id, target);
     await recordTaskFileChange(db, tenantId, taskRow.id, executionId, path, change, agentLabel, commit?.commitSha);
     notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change, ts: new Date().toISOString() });
-    return { branch: target.branch, ...(commit?.commitUrl ? { commitUrl: commit.commitUrl } : {}) };
+    return { branch: target.branch, ...(commit?.commitUrl ? { commitUrl: commit.commitUrl } : {}), ...(commit?.content !== undefined ? { storedContent: commit.content } : {}) };
   };
 
   const repoRead: RepoReadCapability = {

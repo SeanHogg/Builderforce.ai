@@ -1,9 +1,10 @@
 /**
  * Regression lock for a REAL product bug in the on-prem `search_code` backend.
  *
- * `runCodebaseSearch` (src/builderforce/shared-tools/node-code-tools.ts) picks ripgrep
- * when it is installed and otherwise falls back to GNU `grep`. The grep argument vector
- * it builds passes the long option and its value as TWO argv entries:
+ * The on-prem `search_code` backend (the shared `searchWorkspace` in
+ * `@builderforce/agent-tools/node-text-search`) picks ripgrep when it is installed and
+ * otherwise falls back to GNU `grep`. The grep argument vector the original backend
+ * built passes the long option and its value as TWO argv entries:
  *
  *     ["-ril", …, "--include", "*.ts", "--", keyword, projectRoot]
  *

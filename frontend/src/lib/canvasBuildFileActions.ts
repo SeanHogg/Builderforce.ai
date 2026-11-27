@@ -5,8 +5,9 @@
 
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import { coerceFileContent, validateFileContentForPath } from '@builderforce/ide-file-contract';
+import { applyStringEdit } from '@builderforce/agent-tools/edit';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
-import { MAX_SEARCH_MATCHES, workspacePathArg, resolveCanvasBuild, applySearchReplace, searchFileLines, summarizeWorkspace } from '@/lib/canvasBuildContext';
+import { workspacePathArg, resolveCanvasBuild, searchWorkspaceFiles, summarizeWorkspace } from '@/lib/canvasBuildContext';
 import type { CanvasBuildToolsContext, BuildWorkspaceHelpers } from '@/lib/canvasBuildContext';
 import { contentBytes, timeWrite } from '@/lib/browserRuntime/writeTiming';
 
@@ -48,7 +49,7 @@ export function canvasBuildFileActions(ctx: CanvasBuildToolsContext, helpers: Bu
     parameters: {
       type: 'object', required: ['query'], additionalProperties: false,
       properties: {
-        query: { type: 'string', description: 'Literal text to find. Not a regular expression.' },
+        query: { type: 'string', description: 'Text to find; a valid regular expression is matched as one, anything else literally. Case-insensitive unless it contains an upper-case letter.' },
         caseSensitive: { type: 'boolean', description: 'Defaults to false.' },
         objectId: { type: 'string', description: 'Builder object id. Omit when the board has one.' },
       },
@@ -62,17 +63,13 @@ export function canvasBuildFileActions(ctx: CanvasBuildToolsContext, helpers: Bu
       if ('error' in resolved) return resolved;
       try {
         const { files, unreadable } = await workspaceFiles(resolved.build.store);
-        const matches: { path: string; line: number; text: string }[] = [];
-        for (const file of files) {
-          matches.push(...searchFileLines(file.path, file.content, query, args.caseSensitive === true));
-          if (matches.length >= MAX_SEARCH_MATCHES) break;
-        }
+        const { matches, truncated } = await searchWorkspaceFiles(files, query, args.caseSensitive === true);
         return {
           ok: true,
           query,
           matchCount: matches.length,
-          truncated: matches.length >= MAX_SEARCH_MATCHES,
-          matches: matches.slice(0, MAX_SEARCH_MATCHES),
+          truncated,
+          matches,
           ...unreadable,
         };
       } catch (error) {
@@ -139,18 +136,25 @@ export function canvasBuildFileActions(ctx: CanvasBuildToolsContext, helpers: Bu
       } catch {
         return { error: `No file "${path}" in this workspace. Use canvas_write_build_file to create it.` };
       }
-      const edit = applySearchReplace(
-        source,
-        typeof args.find === 'string' ? args.find : '',
-        typeof args.replace === 'string' ? args.replace : '',
-        args.replaceAll === true,
-      );
-      if (!edit.ok) return { error: edit.reason };
-      const valid = validateFileContentForPath(path, edit.next);
+      const find = typeof args.find === 'string' ? args.find : '';
+      const replace = typeof args.replace === 'string' ? args.replace : '';
+      if (!find) return { error: 'find must not be empty. To replace a whole file use canvas_write_build_file.' };
+      // The shared matcher (EOL/escape/whitespace tolerant, literal splices: a `$&` in the
+      // replacement is never a capture reference). Only the model-facing wording is the canvas's.
+      const edit = applyStringEdit(source, find, replace, args.replaceAll === true);
+      if (!edit.ok || edit.content === undefined) {
+        if (edit.error?.includes('not unique')) {
+          const occurrences = applyStringEdit(source, find, replace, true).replaced ?? 2;
+          return { error: `find matched ${occurrences} times. Include more surrounding lines so it matches once, or pass replaceAll: true to change every occurrence.` };
+        }
+        return { error: 'find did not match. Read the file with canvas_read_build_file and copy the exact text, including indentation and line breaks.' };
+      }
+      const next = edit.content;
+      const valid = validateFileContentForPath(path, next);
       if (!valid.ok) return { error: valid.reason };
       try {
-        await timeWrite('perFile', { fileCount: 1, totalBytes: contentBytes(edit.next), path, workflowId: String(resolved.build.store.id), taskId: resolved.build.objectId }, () => resolved.build.store.write(path, edit.next));
-        return { ok: true, applied: true, path, replacements: edit.replacements, ...await committed(resolved.build, path, edit.next) };
+        await timeWrite('perFile', { fileCount: 1, totalBytes: contentBytes(next), path, workflowId: String(resolved.build.store.id), taskId: resolved.build.objectId }, () => resolved.build.store.write(path, next));
+        return { ok: true, applied: true, path, replacements: edit.replaced ?? 1, ...await committed(resolved.build, path, next) };
       } catch (error) {
         return { error: toolErrorMessage(error, `"${path}" could not be written.`) };
       }

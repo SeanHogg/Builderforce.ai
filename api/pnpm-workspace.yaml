@@ -2,6 +2,6 @@ allowBuilds:
   esbuild: set this to true or false
   workerd: set this to true or false
 minimumReleaseAgeExclude:
-  - '@seanhogg/builderforce-memory@2026.10.85'
+  - '@seanhogg/builderforce-memory@2026.10.87'
   - '@seanhogg/builderforce-webcontainers-core@2026.11.29'
   - '@seanhogg/builderforce-webcontainers@2026.11.29'

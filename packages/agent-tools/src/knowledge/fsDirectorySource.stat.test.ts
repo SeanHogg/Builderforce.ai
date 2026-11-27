@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createFsDirectorySource, DEFAULT_HASH_RULE, MAX_LISTED_FILES, type KnowledgeFs } from './fsDirectorySource.js';
 import { memoryKnowledgeFs, type MemoryFile } from './memoryKnowledgeFs.test-util.js';
-import { memoryHashCache, type GitHints, type HashCache, type StatDelta } from './statManifest.js';
+import { memoryHashCache, type GitHints, type HashCache, type StatDelta } from '@seanhogg/builderforce-memory/knowledge';
 
 const OLD = 1_000; // ms: a file last modified long before any walk
 const RULE = DEFAULT_HASH_RULE;

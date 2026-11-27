@@ -16,18 +16,27 @@ const h = vi.hoisted(() => ({
   knowledge: vi.fn(async () => ({ factsWritten: 1, relationsWritten: 0, staleMarked: 0 })),
 }));
 
-vi.mock('./ideWorkspaceCoding', () => ({
-  listIdeWorkspaceFiles: vi.fn(), searchIdeWorkspace: vi.fn(), deleteIdeWorkspaceFile: vi.fn(),
-  readIdeWorkspaceFile: vi.fn(async (_b: unknown, _p: unknown, path: string) =>
-    h.files.has(path) ? { ok: true, path, content: h.files.get(path) } : { ok: false, error: 'not found' }),
-  writeIdeWorkspaceFile: vi.fn(async (_db: unknown, _ide: unknown, a: { path: string; content: string }) => {
-    h.files.set(a.path, a.content);
-    return { ok: true, branch: 'workspace', change: 'created' };
-  }),
-  // The edit is applied in storage; the tool is NOT handed the resulting text.
-  editIdeWorkspaceFile: vi.fn(async (_db: unknown, _ide: unknown, a: { path: string; oldString: string; newString: string }) => {
-    h.files.set(a.path, (h.files.get(a.path) ?? '').replace(a.oldString, a.newString));
-    return { ok: true, branch: 'workspace', change: 'modified', replaced: 1 };
+vi.mock('../../ide/taskWorkspaceTarget', () => ({ applyTaskWorkspaceChanges: vi.fn() }));
+vi.mock('../../ide/r2WorkspaceFs', () => ({
+  r2WorkspaceFs: () => ({}),
+  r2Capabilities: () => ({
+    repoRead: {
+      listFiles: vi.fn(), searchCode: vi.fn(),
+      readFile: vi.fn(async (path: string) =>
+        h.files.has(path) ? { ok: true, path, content: h.files.get(path) } : { ok: false, error: 'not found' }),
+    },
+    repoWrite: {
+      deleteFile: vi.fn(),
+      writeFile: vi.fn(async (path: string, content: string) => {
+        h.files.set(path, content);
+        return { ok: true, branch: 'workspace', change: 'created' };
+      }),
+      // The edit is applied in storage; the tool is NOT handed the resulting text.
+      editFile: vi.fn(async (path: string, oldString: string, newString: string) => {
+        h.files.set(path, (h.files.get(path) ?? '').replace(oldString, newString));
+        return { ok: true, branch: 'workspace', change: 'modified', replaced: 1 };
+      }),
+    },
   }),
 }));
 vi.mock('../executionEvents', () => ({ notifyExecutionSubscribers: vi.fn() }));

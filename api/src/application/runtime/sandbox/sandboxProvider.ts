@@ -19,12 +19,12 @@
  *   • `repoWrite` — the commit stays the provider's (lease, outbound inspection, the
  *     file-change ledger, notifications): the sandbox then ABSORBS the committed change
  *     (fast-forwarding the clone to the ticket branch), so the shell builds against what
- *     the branch holds and the git tools see the commit as history. `editFile` is the
- *     provider's own edit of the BRANCH (so a stale clone can never revert another commit
- *     to that file); only a file a command produced and the branch lacks falls back to the
- *     same shared edit core over the working tree, committed via `writeFile`.
+ *     the branch holds and the git tools see the commit as history. `editFile` reads the
+ *     BRANCH (falling back to the working tree for a file only a command produced), so a
+ *     stale clone can never revert another commit to that file, runs the shared edit core
+ *     (`createRepoCapabilities`) over that read and commits the result via `writeFile`.
  */
-import { posixCommandIn, type Capability, type CapabilityProvider, type RepoEditResult, type ShellCapability, type ShellRunOptions } from '@builderforce/agent-tools';
+import { posixCommandIn, type Capability, type CapabilityProvider, type RepoEditResult, type RepoWriteResult, type ShellCapability, type ShellRunOptions } from '@builderforce/agent-tools';
 import { createRepoCapabilities, WorkspaceError, type WorkspaceFs } from '@builderforce/agent-tools/workspace';
 import type { RunSandbox } from './runSandbox';
 import { SANDBOX_COMMAND_HEARTBEAT_MS } from '../cloudAgent/runContext';
@@ -83,13 +83,19 @@ export const SANDBOX_CAPABILITIES: readonly Capability[] = ['shell'];
 /** What a sandbox with a job table adds on top (`command_status` / `command_stop`). */
 export const SANDBOX_JOB_CAPABILITIES: readonly Capability[] = ['shell.jobs'];
 
-/** The clone's working tree as a `WorkspaceFs` for ONE edit: it reads the tree and commits through `commit`. */
-function workingTreeFs(sandbox: RunSandbox, commit: (path: string, content: string) => Promise<void>): WorkspaceFs {
+/**
+ * What ONE edit applies to, as a `WorkspaceFs`: the branch the commit lands on, else the working
+ * tree (a file only a command produced is not on the branch yet); it commits through `commit`.
+ */
+function editTarget(sandbox: RunSandbox, repoRead: CapabilityProvider['repoRead'], commit: (path: string, content: string) => Promise<void>): WorkspaceFs {
   return {
     async *list() { /* an edit never lists */ },
     read: async (path) => {
-      const r = await sandbox.fs({ op: 'read', path });
-      return r.ok && typeof r.content === 'string' ? { status: 'ok', content: r.content, truncated: false } : { status: 'not_found' };
+      const onBranch = repoRead ? await repoRead.readFile(path).catch(reportedFallback(null, { source: 'application/runtime/sandbox/sandboxProvider.ts', operation: 'readBranchForEdit', context: { path } })) : null;
+      // The REAL truncated flag: a capped prefix is never edited in place (the shared core refuses with too_large), or the cut would be committed over the file.
+      if (onBranch?.ok && typeof onBranch.content === 'string') return { status: 'ok', content: onBranch.content, truncated: onBranch.truncated === true };
+      const inTree = await sandbox.fs({ op: 'read', path });
+      return inTree.ok && typeof inTree.content === 'string' ? { status: 'ok', content: inTree.content, truncated: inTree.truncated === true } : { status: 'not_found' };
     },
     write: commit,
     remove: async () => 'missing',
@@ -114,7 +120,7 @@ export function withSandbox(base: CapabilityProvider, sandbox: RunSandbox, opts:
         },
         readFile: async (path) => {
           const r = await sandbox.fs({ op: 'read', path });
-          return r.ok ? { ok: true, path, content: r.content ?? '' } : repoRead.readFile(path);
+          return r.ok ? { ok: true, path, content: r.content ?? '', ...(r.truncated ? { truncated: true } : {}) } : repoRead.readFile(path);
         },
         searchCode: (query, scope) => repoRead.searchCode(query, scope),
       },
@@ -123,7 +129,8 @@ export function withSandbox(base: CapabilityProvider, sandbox: RunSandbox, opts:
       repoWrite: {
         writeFile: async (path, content, summary) => {
           const r = await repoWrite.writeFile(path, content, summary);
-          if (r.ok) await mirror({ op: 'write', path, content, committed: true });
+          // Mirror what the commit STORED (line endings conformed to the file's), not the model's raw text, or the absorb would write LF over committed CRLF.
+          if (r.ok) await mirror({ op: 'write', path, content: r.storedContent ?? content, committed: true });
           return r;
         },
         deleteFile: async (path, reason) => {
@@ -132,24 +139,23 @@ export function withSandbox(base: CapabilityProvider, sandbox: RunSandbox, opts:
           return r;
         },
         editFile: async (path, oldString, newString, replaceAll): Promise<RepoEditResult> => {
-          // The provider edits what the BRANCH holds and commits it (a stale clone can never revert another commit)...
-          const r = await repoWrite.editFile(path, oldString, newString, replaceAll);
-          if (r.ok) {
-            const left = await repoRead?.readFile(path).catch(reportedFallback(null, { source: 'application/runtime/sandbox/sandboxProvider.ts', operation: 'readCommittedEdit', context: { path } }));
-            if (left?.ok && typeof left.content === 'string') await mirror({ op: 'write', path, content: left.content, committed: true });
-            return r;
-          }
-          // ...and a file only a command produced is not on the branch yet: the same shared edit core over the working tree, committed through `writeFile`.
-          if (r.code !== 'not_found') return r;
-          let committedContent = '';
-          const viaTree = createRepoCapabilities(workingTreeFs(sandbox, async (p, c) => {
-            const w = await repoWrite.writeFile(p, c);
-            if (!w.ok) throw new WorkspaceError('io', w.error ?? `could not commit the edit to '${p}'`);
-            committedContent = c;
+          const committed: { content?: string; result?: RepoWriteResult } = {};
+          // The shared edit core over what an edit applies to (the BRANCH, else the working tree) and commits through `writeFile`.
+          const edit = createRepoCapabilities(editTarget(sandbox, repoRead, async (p, c) => {
+            const result = await repoWrite.writeFile(p, c);
+            if (!result.ok) throw new WorkspaceError('io', result.error ?? `could not commit the edit to '${p}'`);
+            committed.content = result.storedContent ?? c;
+            committed.result = result;
           })).repoWrite;
-          const edited = await viaTree.editFile(path, oldString, newString, replaceAll);
-          if (edited.ok) await mirror({ op: 'write', path, content: committedContent, committed: true });
-          return edited.ok ? edited : { ...edited, error: `cannot edit '${path}': ${edited.error}` };
+          const r = await edit.editFile(path, oldString, newString, replaceAll);
+          const { content, result } = committed;
+          if (!r.ok || content === undefined || !result) return r.code === 'io' ? r : { ...r, error: `cannot edit '${path}': ${r.error}` };
+          await mirror({ op: 'write', path, content, committed: true });
+          return {
+            ...r,
+            ...(result.branch ? { branch: result.branch } : {}),
+            ...(result.commitUrl !== undefined ? { commitUrl: result.commitUrl } : {}),
+          };
         },
       },
     } : {}),

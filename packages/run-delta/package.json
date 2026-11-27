@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@seanhogg/builderforce-memory": "^2026.10.85",
+    "@seanhogg/builderforce-memory": "^2026.10.87",
     "@seanhogg/builderforce-memory-engine": "^2026.10.65"
   },
   "devDependencies": {

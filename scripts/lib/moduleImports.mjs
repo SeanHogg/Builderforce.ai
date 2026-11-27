@@ -191,10 +191,10 @@ export function parseModuleSpecifiers(ts, file, text) {
   return found;
 }
 
-/** A file whose imports are dev-time only: tests, and the configs that run them. */
+/** A file whose imports are dev-time only: tests, shared test utilities (`*.test-util.*`), and the configs that run them. */
 export function isTestFile(file) {
   const name = file.split(/[\\/]/).pop() ?? '';
-  return /\.(test|spec)\.[cm]?[jt]sx?$/.test(name) || /\.config\.[cm]?[jt]s$/.test(name);
+  return /\.(test|spec)(-util)?\.[cm]?[jt]sx?$/.test(name) || /\.config\.[cm]?[jt]s$/.test(name);
 }
 
 /**

@@ -8,7 +8,14 @@
  * satisfies it as-is.
  */
 
-import { isIndexedDirName } from '@builderforce/agent-tools/skip-dirs';
+import { isOutputDirName } from '@builderforce/agent-tools/skip-dirs';
+
+/**
+ * Directories the build-gate read skips: VCS store, dependencies and build output ONLY. The
+ * gate builds what the agent is about to push, so `.yarn/releases`, `.husky`, `.storybook`,
+ * `public/.well-known`, `vendor`, `target` must be read. NOT `isIndexedDirName`
+ * (search/index policy: skips every dot-dir, vendor, target). The shared `isOutputDirName` is that narrow set.
+ */
 
 export interface TreeFs {
   promises: {
@@ -49,7 +56,7 @@ export async function readWorkingTree(fs: TreeFs, dir: string, limits = TREE_LIM
       const path = relative ? `${relative}/${name}` : name;
       const stat = await fs.promises.stat(`${dir}/${path}`);
       if (stat.isDirectory()) {
-        if (isIndexedDirName(name)) pending.push(path);
+        if (!isOutputDirName(name)) pending.push(path);
         continue;
       }
       if (stat.size > limits.maxFileBytes) continue;

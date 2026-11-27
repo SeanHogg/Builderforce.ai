@@ -8,14 +8,14 @@
  *     takes the index lock.
  *
  * A tracked file that status does not name is clean against the index: its blob id is a HINT the stat prefilter may use to
- * reuse a stored sha256 without a read (`knowledge/statManifest.ts`). It is never an identity: facts are keyed by the content
+ * reuse a stored sha256 without a read (memory's `knowledge/statManifest.ts`). It is never an identity: facts are keyed by the content
  * hash. Not a work tree, no git, a timeout, any failure: undefined, and the walk takes the stat path. {@link gitBlobId} lets
  * the walk record a hint only for bytes whose blob id IS the index blob.
  */
 
 import { createHash } from 'node:crypto';
 import { runGit } from '../node-git-history.js';
-import { msToNs, type GitHints } from '../knowledge/statManifest.js';
+import { msToNs, type GitHints } from '@seanhogg/builderforce-memory/knowledge';
 
 /** git is a shortcut: past this the walk does not wait for it. */
 export const GIT_HINTS_TIMEOUT_MS = 10_000;

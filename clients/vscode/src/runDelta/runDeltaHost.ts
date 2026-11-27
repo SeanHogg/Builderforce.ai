@@ -16,11 +16,10 @@
 
 import * as path from "node:path";
 import type * as vscode from "vscode";
-import { reusedHash, reviewPacks } from "@builderforce/agent-tools/knowledge";
+import { reviewPacks } from "@builderforce/agent-tools/knowledge";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
 import { putPreimages, readPreimages, sweepPreimages, unpinPreimages } from "@builderforce/agent-tools/node-knowledge-store";
-import { CONTENT_HASH_RULE } from "@seanhogg/builderforce-memory/knowledge";
-import type { StatSet } from "@builderforce/agent-tools/knowledge";
+import { CONTENT_HASH_RULE, reusedHash, type StatSet } from "@seanhogg/builderforce-memory/knowledge";
 import { buildLocalCapabilityProvider } from "../tools/localCapabilities";
 import { folderKnowledge } from "../knowledge/folderKnowledge";
 import { openRoot, workspaceFolders } from "../knowledge/knowledgeService";

@@ -16,6 +16,7 @@
     "./workspace": "./src/workspace.ts",
     "./text-scan": "./src/text-scan.ts",
     "./memory-workspace-fs": "./src/memoryWorkspaceFs.ts",
+    "./workspace-conformance": "./src/workspaceConformance.test-util.ts",
     "./sampling": "./src/sampling.ts",
     "./edit": "./src/edit.ts",
     "./documents": "./src/documents.ts",
@@ -27,7 +28,7 @@
     "./node-process": "./src/node-process.ts",
     "./node-symbols": "./src/node-symbols.ts",
     "./node-index-layout": "./src/node-index-layout.ts",
-    "./watch-port": "./src/watchPort.ts",
+    "./watch-port": "./src/watch-port.ts",
     "./node-watch-port": "./src/node-watch-port.ts",
     "./node-git-ignore": "./src/node-git-ignore.ts",
     "./node-text-search": "./src/node-text-search.ts",
@@ -48,7 +49,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@seanhogg/builderforce-memory": "^2026.10.85",
+    "@seanhogg/builderforce-memory": "^2026.10.87",
     "@seanhogg/builderforce-memory-engine": "^2026.10.65",
     "fflate": "^0.8.2",
     "tree-sitter-wasms": "^0.1.11",

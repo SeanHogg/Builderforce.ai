@@ -725,6 +725,9 @@ export interface RepoWriteResult {
   branch?: string;
   commitUrl?: string | null;
   change?: "created" | "modified";
+  /** The exact text a host STORED (after line-ending conforming), when it differs from what was sent.
+   *  Host bookkeeping for a working-tree mirror; never shown to the model. */
+  storedContent?: string;
   /** Model-facing guidance about the write, e.g. that it was recorded rather than
    *  applied (rehearsal). Present on a SUCCESSFUL result — `error` is for failures. */
   note?: string;

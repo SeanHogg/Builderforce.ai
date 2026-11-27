@@ -66,6 +66,68 @@ describe('the workspace helper protocol', () => {
     expect(await readFile(join(workdir, '.git', 'config'), 'utf8')).toBe('[core]\n');
   });
 
+  it('guards the string it lists: a padded or backslashed climb out of the clone is refused, an absolute path stays clone-relative', async () => {
+    const w = ws();
+    await w.handle({ op: 'init' });
+    await mkdir(join(root, 'secret'));
+    await writeFile(join(root, 'secret', 'k.txt'), 'TOP-SECRET');
+    await mkdir(join(workdir, 'src'));
+    await writeFile(join(workdir, 'src', 'a.ts'), 'a');
+    for (const path of [' ../secret', '..\\secret', ' ..\\secret', '../secret', '\t../secret']) {
+      const r = await w.handle({ op: 'list', path });
+      expect(r.ok, `list ${JSON.stringify(path)}`).toBe(false);
+      expect(JSON.stringify(r)).not.toContain('k.txt');
+    }
+    for (const op of ['read', 'stat', 'delete', 'mkdir', 'write']) {
+      for (const path of [' ../secret/k.txt', '..\\secret\\k.txt']) {
+        // A padded name is a legal (odd) path INSIDE the clone, a backslashed one too on posix: neither may reach the sibling directory.
+        await w.handle({ op, path, content: 'pwned' });
+      }
+    }
+    expect(await readFile(join(root, 'secret', 'k.txt'), 'utf8')).toBe('TOP-SECRET');
+    // A leading slash is clone-relative: it lists the clone's own `src`, never the host's.
+    const abs = await w.handle({ op: 'list', path: '/src' });
+    expect(abs).toMatchObject({ ok: true, paths: ['src/a.ts'] });
+    const hostAbs = await w.handle({ op: 'list', path: '/etc' });
+    expect(hostAbs).toMatchObject({ ok: true, paths: [] });
+  });
+
+  it.skipIf(!posix)('refuses to list through a symlinked directory that leaves the clone', async () => {
+    const w = ws();
+    await w.handle({ op: 'init' });
+    await mkdir(join(root, 'secret'));
+    await writeFile(join(root, 'secret', 'k.txt'), 'TOP-SECRET');
+    await symlink(join(root, 'secret'), join(workdir, 'door'));
+    const r = await w.handle({ op: 'list', path: 'door' });
+    expect(r.ok).toBe(false);
+    expect(JSON.stringify(r)).not.toContain('k.txt');
+  });
+
+  it('summarises a big plain listing to directories and marks a read of a huge file truncated', async () => {
+    const w = ws();
+    await w.handle({ op: 'init' });
+    for (let d = 0; d < 5; d++) {
+      await mkdir(join(workdir, `pkg${d}`, 'src'), { recursive: true });
+      for (let f = 0; f < 90; f++) await writeFile(join(workdir, `pkg${d}`, 'src', `f${f}.ts`), 'x');
+    }
+    const big = await w.handle({ op: 'list' });
+    expect(big.ok).toBe(true);
+    expect(big.truncated).toBe(true);
+    expect(big.paths.length).toBeLessThan(40);
+    expect(big.paths.every((p: string) => p.endsWith('/'))).toBe(true);
+    const globbed = await w.handle({ op: 'list', glob: '**/*.ts' });
+    expect(globbed.paths).toHaveLength(450);
+
+    await writeFile(join(workdir, 'huge.txt'), 'y'.repeat(2 * 1024 * 1024 + 10));
+    const huge = await w.handle({ op: 'read', path: 'huge.txt' });
+    expect(huge.ok).toBe(true);
+    expect(huge.truncated).toBe(true);
+    expect(huge.content).toHaveLength(2 * 1024 * 1024);
+    const small = await w.handle({ op: 'read', path: 'pkg0/src/f0.ts' });
+    expect(small).toMatchObject({ ok: true, content: 'x' });
+    expect(small.truncated).toBeUndefined();
+  });
+
   it.skipIf(!posix)('keeps a file\'s mode on write, and replaces a read-only file through a temp file', async () => {
     const w = ws();
     await w.handle({ op: 'init' });

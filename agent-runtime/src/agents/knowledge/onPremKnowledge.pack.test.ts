@@ -9,7 +9,7 @@ import { fakeServer } from "../../../../packages/agent-tools/src/knowledge/repli
 import { onPremOnlyPackSpies } from "./onPremKnowledge.pack.testkit.js";
 import { onPremKnowledgeRowsHost } from "./onPremKnowledge.js";
 import { closeOnPremManifests, flushReplicasOnExit, onPremReplicaHost, onPremRootPorts, resumeQueuedReplicas, type ExitSignals } from "./onPremReplica.js";
-import { onPremRootId } from "./index/onPremKnowledgeIndex.js";
+import { onPremRootId } from "./index/onPremRootId.js";
 
 const caps = {} as CapabilityProvider;
 

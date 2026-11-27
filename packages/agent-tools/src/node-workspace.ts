@@ -7,26 +7,33 @@
  * Containment is the shared `node-path` resolvers, exactly as the hosts applied them before:
  * `workspace` scope resolves real paths (a link out of the root is refused), `unconfined` resolves
  * a path against the root only (absolute and `..` paths are the caller's call). List and search are
- * ALWAYS confined to the root, whatever the scope. An escape throws
+ * ALWAYS confined to the root, whatever the scope, and EVERY `list(dir)` is real-path checked (no
+ * cache of directories already seen: a directory swapped for a link is caught). An escape throws
  * `WorkspaceError("outside_root", "'<path>' is outside the workspace")`.
  *
- * Search is the existing exact/regex searcher (`node-text-search`: ripgrep first, the in-process
- * walk as the fallback); its scope is the search TARGET, resolved before the search.
+ * No host absolute path reaches the model: a missing directory or file is `not_found` naming only
+ * the root-relative path, and any other filesystem error has the root prefix stripped.
+ *
+ * Search ({@link searchWorkspace}) is ripgrep first, then the ONE neutral scan (`scanFiles` over this
+ * same filesystem) - so a `.gz` is inflated by `read`, and ripgrep and the scan share one file
+ * policy (see `node-text-search`).
  */
 
 import { mkdir, open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { tryResolveInsideRootReal } from "./node-path.js";
-import { searchWorkspace } from "./node-text-search.js";
+import type { RepoSearchResult } from "./capabilities.js";
+import { isGzipPath, readGzipText } from "./gzipText.js";
+import { resolveInsideRoot, toPosixRel, tryResolveInsideRootReal } from "./node-path.js";
+import { SEARCH_STOPPED, ripgrepSearch, type RgSemaphore } from "./node-text-search.js";
+import { scanFiles, type SearchMatch } from "./text-scan.js";
 import { WorkspaceError, type SearchFound, type WorkspaceEntry, type WorkspaceFs, type WorkspaceRead } from "./workspace.js";
-import type { SearchMatch } from "./text-scan.js";
 
 export interface NodeWorkspaceOptions {
   /** `workspace` (default): every path must resolve inside the root, links included. `unconfined`: file ops may reach outside it. */
   scope?: "workspace" | "unconfined";
-  /** The ripgrep binary, a lazy resolver for it (probed per search), or null/absent to walk in-process. */
+  /** The ripgrep binary, a lazy resolver for it (probed per search), or null/absent to scan in-process. */
   ripgrep?: string | null | (() => Promise<string | null>);
-  /** The run's Stop: kills a running ripgrep and ends the fallback walk. */
+  /** The run's Stop: kills a running ripgrep and ends the fallback scan. */
   signal?: AbortSignal;
 }
 
@@ -35,31 +42,79 @@ const isMissing = (e: unknown): boolean => {
   return code === "ENOENT" || code === "ENOTDIR";
 };
 
+export interface WorkspaceSearchOptions {
+  /** Absolute, resolved workspace root; every returned path is relative to it. */
+  root: string;
+  /** Absolute path to search - a directory OR a single file - inside `root`. */
+  start: string;
+  query: string;
+  /** The ripgrep binary to run, or null to scan the tree in-process. */
+  ripgrep: string | null;
+  /** The run's Stop: kills ripgrep and ends the scan. */
+  signal?: AbortSignal;
+  /** The run's ripgrep concurrency gate (`rgGateFor`); absent = the shared default gate. */
+  gate?: RgSemaphore;
+}
+
+/**
+ * Search `start` for `query`. A file target is scanned directly; a directory goes to ripgrep when one
+ * is available and to the neutral scan otherwise (or when ripgrep cannot run the pattern). Every
+ * result says which backend produced it and how long it took (`backend`/`ms`), so a slow search is
+ * visible in the trace.
+ */
+export async function searchWorkspace(opts: WorkspaceSearchOptions): Promise<RepoSearchResult> {
+  const { root, start, query } = opts;
+  const t0 = Date.now();
+  const stamp = (r: RepoSearchResult, backend: "rg" | "walk"): RepoSearchResult => Object.assign(r, { backend, ms: Date.now() - t0 });
+  const info = await stat(start).catch(() => null);
+  const scope = toPosixRel(root, start);
+  if (!info) return stamp({ ok: false, query, error: `path not found: ${scope || "."}` }, "walk");
+  const run = { ...(opts.signal ? { signal: opts.signal } : {}), ...(opts.gate ? { gate: opts.gate } : {}) };
+  if (opts.ripgrep && !info.isFile()) {
+    const r = await ripgrepSearch(root, start, query, opts.ripgrep, run);
+    if (r) return stamp(r, "rg");
+  }
+  // A file scope searches that file (the old directory walk threw on it and reported "not referenced").
+  const scanned = await scanFiles(nodeWorkspaceFs(resolve(root)), query, scope, opts.signal ? { signal: opts.signal } : {});
+  return stamp(scanned.error === "search stopped" ? { ...scanned, error: SEARCH_STOPPED } : scanned, "walk");
+}
+
 /** The local-disk workspace rooted at `root`. */
 export function nodeWorkspaceFs(root: string, options: NodeWorkspaceOptions = {}): WorkspaceFs {
   const rootResolved = resolve(root);
+  const rootPosix = rootResolved.split("\\").join("/");
   const unconfined = options.scope === "unconfined";
-  // Directories a listing already yielded: their children came from `readdir` (a link is not a
-  // directory entry here), so a nested list needs no second real-path check.
-  const emitted = new Set<string>();
+
+  /** A message with the host's root path taken out: the model sees root-relative paths only. */
+  const scrub = (message: string): string => message.split(rootResolved).join(".").split(rootPosix).join(".");
+
+  /** The error a filesystem failure becomes: `not_found` for a missing path, else `io` with no host path. */
+  const failure = (e: unknown, rel: string): WorkspaceError => {
+    if (e instanceof WorkspaceError) return e;
+    if (isMissing(e)) return new WorkspaceError("not_found", `'${rel || "."}' was not found`);
+    return new WorkspaceError("io", scrub(e instanceof Error ? e.message : String(e)));
+  };
 
   const confined = async (p: string): Promise<string> => {
     const r = await tryResolveInsideRootReal(rootResolved, p);
     if (r.ok) return r.abs;
-    throw new WorkspaceError(r.reason === "escapes" ? "outside_root" : "io", r.error);
+    if (r.reason === "escapes") throw new WorkspaceError("outside_root", r.error);
+    throw isMissing(r.cause) ? new WorkspaceError("not_found", `'${p || "."}' was not found`) : new WorkspaceError("io", r.error);
   };
   const fileAbs = (p: string): Promise<string> => (unconfined ? Promise.resolve(resolve(rootResolved, p)) : confined(p));
 
   async function* list(dir: string): AsyncIterable<WorkspaceEntry> {
-    const abs = dir === "" ? rootResolved : emitted.has(dir) ? resolve(rootResolved, dir) : await confined(dir);
-    for (const entry of await readdir(abs, { withFileTypes: true })) {
+    const abs = dir === "" ? rootResolved : await confined(dir);
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await readdir(abs, { withFileTypes: true });
+    } catch (e) {
+      throw failure(e, dir);
+    }
+    for (const entry of entries) {
       const path = dir === "" ? entry.name : `${dir}/${entry.name}`;
-      if (entry.isDirectory()) {
-        emitted.add(path);
-        yield { path, kind: "dir" };
-      } else if (entry.isFile()) {
-        yield { path, kind: "file" };
-      }
+      if (entry.isDirectory()) yield { path, kind: "dir" };
+      else if (entry.isFile()) yield { path, kind: "file" };
     }
   }
 
@@ -68,7 +123,11 @@ export function nodeWorkspaceFs(root: string, options: NodeWorkspaceOptions = {}
     try {
       const info = await stat(abs);
       if (info.isDirectory()) return { status: "is_directory" };
-      if (info.size <= maxBytes) return { status: "ok", content: await readFile(abs, "utf-8"), truncated: false };
+      if (info.size <= maxBytes) {
+        // A `.gz` is inflated through the one gzip reader; a corrupt archive is "no text", like an unreadable file.
+        const content = isGzipPath(abs) ? await readFile(abs).then((bytes) => readGzipText(bytes)).catch(() => "") : await readFile(abs, "utf-8");
+        return { status: "ok", content, truncated: false };
+      }
       // Oversized: a bounded prefix marked truncated; the read tool pages from there.
       const handle = await open(abs, "r");
       try {
@@ -81,7 +140,7 @@ export function nodeWorkspaceFs(root: string, options: NodeWorkspaceOptions = {}
     } catch (e) {
       if (isMissing(e)) return { status: "not_found" };
       if ((e as NodeJS.ErrnoException | undefined)?.code === "EISDIR") return { status: "is_directory" };
-      throw e;
+      throw failure(e, p);
     }
   }
 
@@ -101,8 +160,12 @@ export function nodeWorkspaceFs(root: string, options: NodeWorkspaceOptions = {}
     read,
     async write(p, content) {
       const abs = await fileAbs(p);
-      await mkdir(dirname(abs), { recursive: true });
-      await writeFile(abs, content, "utf-8");
+      try {
+        await mkdir(dirname(abs), { recursive: true });
+        await writeFile(abs, content, "utf-8");
+      } catch (e) {
+        throw failure(e, p);
+      }
     },
     async remove(p) {
       const abs = await fileAbs(p);
@@ -111,9 +174,14 @@ export function nodeWorkspaceFs(root: string, options: NodeWorkspaceOptions = {}
         return "deleted";
       } catch (e) {
         if (isMissing(e)) return "missing";
-        throw e;
+        throw failure(e, p);
       }
     },
     search,
+    toRelative(p) {
+      const abs = resolveInsideRoot(rootResolved, p);
+      if (abs === null) return unconfined ? p : undefined;
+      return toPosixRel(rootResolved, abs);
+    },
   };
 }

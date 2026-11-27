@@ -2,7 +2,8 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { parseRipgrepJsonLine, parseRipgrepLine, ripgrepSearch, searchWorkspace, walkSearch } from "@builderforce/agent-tools/node-text-search";
+import { parseRipgrepJsonLine, parseRipgrepLine, ripgrepSearch } from "@builderforce/agent-tools/node-text-search";
+import { searchWorkspace } from "@builderforce/agent-tools/node-workspace";
 import { compileSearchPattern } from "@builderforce/agent-tools/text-scan";
 import { bundledRipgrepCandidates, findRipgrep } from "../tools/ripgrep";
 
@@ -114,7 +115,7 @@ describe("searchWorkspace on a workspace tree", () => {
   });
 
   it("finds a symbol across the whole tree with the walk, skipping node_modules, in path order", async () => {
-    const r = await walkSearch(root, root, "BfBrainChat");
+    const r = await searchWorkspace({ root, start: root, query: "BfBrainChat", ripgrep: null });
     expect(r.ok).toBe(true);
     expect(r.truncated).toBe(false);
     expect(r.matches?.map((m) => `${m.path}:${m.line}`)).toEqual(["clients/vscode/src/bfApi.ts:3", "clients/vscode/src/sessionsTree.ts:1"]);
@@ -138,7 +139,7 @@ describe("searchWorkspace on a workspace tree", () => {
     if (!rg) return;
     const viaRg = await ripgrepSearch(root, root, "BfBrainChat", rg);
     expect(viaRg).not.toBeNull();
-    const viaWalk = await walkSearch(root, root, "BfBrainChat");
+    const viaWalk = await searchWorkspace({ root, start: root, query: "BfBrainChat", ripgrep: null });
     expect(viaRg!.matches).toEqual(viaWalk.matches);
     const scopedFile = await ripgrepSearch(root, path.join(root, "clients", "vscode", "src", "bfApi.ts"), "BfBrainChat", rg);
     expect(scopedFile?.matches?.map((m) => m.path)).toEqual(["clients/vscode/src/bfApi.ts"]);
@@ -176,7 +177,7 @@ describe("directory search finds source next to a bundled media hit (chat #111)"
   });
 
   it("walks the source file and does not treat media/ as the tree", async () => {
-    const r = await walkSearch(root, root, "addressedTo");
+    const r = await searchWorkspace({ root, start: root, query: "addressedTo", ripgrep: null });
     expect(r.ok).toBe(true);
     expect(r.truncated).toBe(false);
     expect(r.matches?.map((m) => m.path)).toEqual(["webview/src/chat/VsCodeChatSurface.tsx"]);
@@ -206,7 +207,7 @@ describe("search_code over a .gz file (PRD 49 §1.12)", () => {
   });
 
   it("the walk reaches it too", async () => {
-    const r = await walkSearch(root, root, "persona gate");
+    const r = await searchWorkspace({ root, start: root, query: "persona gate", ripgrep: null });
     expect(r.matches?.map((m) => m.path)).toEqual(["pack.bfkp.gz"]);
   });
 });

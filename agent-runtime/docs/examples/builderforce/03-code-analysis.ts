@@ -28,7 +28,7 @@ async function main() {
   console.log("Sample exports:", analysis.topLevelExports);
 
   // Example 2: Build the file graph yourself and ask what a change would reach
-  console.log("\n2. Dependency graph and impact radius\n");
+  console.log("\n2. Dependency graph and dependents\n");
   const root = "./src/builderforce";
   const builder = repoMapPort.create();
   for (const name of await fs.readdir(root)) {
@@ -41,12 +41,11 @@ async function main() {
   const sample = graph.paths()[0];
   const sampleIndex = sample === undefined ? undefined : graph.indexOf(sample);
   if (sample !== undefined && sampleIndex !== undefined) {
-    const impacted = graph.impactRadius(sampleIndex);
+    const dependents = graph.dependents(sampleIndex);
     console.log(`\nSample node: ${sample}`);
     console.log(`  Dependencies: ${graph.dependencies(sampleIndex).length}`);
-    console.log(`  Dependents: ${graph.dependents(sampleIndex).length}`);
-    console.log(`  Impact radius: ${impacted.length} files`);
-    console.log(`  (changing this file could affect ${impacted.length - 1} other files)`);
+    console.log(`  Dependents: ${dependents.length}`);
+    console.log(`  (changing this file directly affects ${dependents.length} other files)`);
   }
 }
 

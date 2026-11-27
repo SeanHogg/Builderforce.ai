@@ -17,11 +17,21 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { RepoReadCapability } from "@builderforce/agent-tools";
+import { createRepoCapabilities } from "@builderforce/agent-tools/workspace";
+import { nodeWorkspaceFs } from "@builderforce/agent-tools/node-workspace";
 
 const CODE_EXEC_TIMEOUT_MS = 10_000;
 const MAX_OUTPUT_CHARS = 4_000;
+// Presentation caps for a small local model's context window (the shared provider owns the data).
 const MAX_FILE_CHARS = 8_000;
-const MAX_LIST_ENTRIES = 60;
+/** Display budget for the one-level `list_files` answer fed back into a small local model's prompt. */
+const MAX_TOOL_LIST_DISPLAY = 60;
+/** Display budget for `grep_files` hits, and the characters kept of each hit line. */
+const MAX_GREP_DISPLAY = 20;
+const MAX_GREP_LINE_CHARS = 120;
+/** This surface greps source/doc files only. */
+const GREP_EXTENSIONS = /\.(ts|tsx|js|jsx|md|json)$/;
 
 // ── Tool call types ───────────────────────────────────────────────────────────
 
@@ -66,36 +76,60 @@ export function parseToolCalls(text: string): ToolCall[] {
   return calls;
 }
 
-// ── Path sandboxing ───────────────────────────────────────────────────────────
+// ── File tools: the shared coding provider, formatted for a small context window ──────
+// Traversal confinement, the walk and the search all live in `@builderforce/agent-tools`
+// (`createRepoCapabilities` over `nodeWorkspaceFs`); only the presentation below is local.
 
-function sandboxedPath(workspaceDir: string, userPath: string): string {
-  const workspaceRoot = path.resolve(workspaceDir);
-  const resolved = path.resolve(workspaceRoot, userPath);
-  const relative = path.relative(workspaceRoot, resolved);
-  if (path.isAbsolute(relative) || relative === ".." || relative.startsWith(`..${path.sep}`)) {
-    throw new Error(`Path traversal blocked: ${userPath}`);
+const repoReadByRoot = new Map<string, RepoReadCapability>();
+
+/** The shared read capability for one workspace root (always confined to the root). */
+function repoReadFor(workspaceDir: string): RepoReadCapability {
+  const root = path.resolve(workspaceDir);
+  let read = repoReadByRoot.get(root);
+  if (!read) {
+    read = createRepoCapabilities(nodeWorkspaceFs(root, { scope: "workspace" })).repoRead;
+    repoReadByRoot.set(root, read);
   }
-  return resolved;
+  return read;
 }
 
-// ── Individual tool implementations ──────────────────────────────────────────
+/** A provider refusal becomes this surface's error line (the caller prefixes "Error: "). */
+function refusal(r: { ok: boolean; error?: string }): never {
+  throw new Error(r.error ?? "request failed");
+}
+
+/** Root-relative POSIX form of a user-supplied directory ("" for the root). */
+function dirPrefix(dir: string | undefined): string {
+  const d = (dir ?? ".").replace(/\\/g, "/").replace(/^(?:\.\/+)+/, "").replace(/\/+$/, "");
+  return d === "." ? "" : d;
+}
 
 async function toolReadFile(workspaceDir: string, call: { path: string }): Promise<string> {
-  const target = sandboxedPath(workspaceDir, call.path);
-  const content = await fs.readFile(target, "utf-8");
+  const r = await repoReadFor(workspaceDir).readFile(call.path);
+  if (!r.ok) refusal(r);
+  const content = r.content ?? "";
   return content.length > MAX_FILE_CHARS
     ? `${content.slice(0, MAX_FILE_CHARS)}\n…(truncated)`
     : content;
 }
 
 async function toolListFiles(workspaceDir: string, call: { dir?: string }): Promise<string> {
-  const target = sandboxedPath(workspaceDir, call.dir ?? ".");
-  const entries = await fs.readdir(target, { withFileTypes: true });
-  const lines = entries
-    .slice(0, MAX_LIST_ENTRIES)
-    .map((e) => (e.isDirectory() ? `${e.name}/` : e.name));
-  if (entries.length > MAX_LIST_ENTRIES) {
-    lines.push(`…(${entries.length - MAX_LIST_ENTRIES} more)`);
+  const r = await repoReadFor(workspaceDir).listFiles(call.dir);
+  if (!r.ok) refusal(r);
+  // The provider lists the tree below `dir`; this surface shows ONE level: the first segment
+  // below `dir`, a trailing "/" marking a folder.
+  const prefix = dirPrefix(call.dir);
+  const base = prefix ? `${prefix}/` : "";
+  const entries = new Set<string>();
+  for (const p of r.paths ?? []) {
+    const rel = base && p.startsWith(base) ? p.slice(base.length) : p;
+    const slash = rel.indexOf("/");
+    entries.add(slash === -1 ? rel : `${rel.slice(0, slash)}/`);
+  }
+  const all = [...entries].filter(Boolean).sort();
+  const lines = all.slice(0, MAX_TOOL_LIST_DISPLAY);
+  if (all.length > MAX_TOOL_LIST_DISPLAY) {
+    lines.push(`…(${all.length - MAX_TOOL_LIST_DISPLAY} more)`);
   }
   return lines.join("\n") || "(empty)";
 }
@@ -104,46 +138,16 @@ async function toolGrepFiles(
   workspaceDir: string,
   call: { pattern: string; dir?: string },
 ): Promise<string> {
-  const target = sandboxedPath(workspaceDir, call.dir ?? ".");
-  const pattern = call.pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(pattern, "i");
-  const matches: string[] = [];
-
-  async function walk(dir: string) {
-    if (matches.length >= 20) {
-      return;
-    }
-    let entries: import("node:fs").Dirent<string>[];
-    try {
-      entries = await fs.readdir(dir, { withFileTypes: true, encoding: "utf-8" });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (matches.length >= 20) {
-        break;
-      }
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
-        await walk(full);
-      } else if (entry.isFile() && /\.(ts|tsx|js|jsx|md|json)$/.test(entry.name)) {
-        try {
-          const text = await fs.readFile(full, "utf-8");
-          const rel = path.relative(workspaceDir, full);
-          text.split("\n").forEach((line, i) => {
-            if (matches.length < 20 && re.test(line)) {
-              matches.push(`${rel}:${i + 1}: ${line.trim().slice(0, 120)}`);
-            }
-          });
-        } catch {
-          // skip unreadable files
-        }
-      }
-    }
+  const r = await repoReadFor(workspaceDir).searchCode(call.pattern, dirPrefix(call.dir) || undefined);
+  if (!r.ok) refusal(r);
+  const lines: string[] = [];
+  for (const m of r.matches ?? []) {
+    if (lines.length >= MAX_GREP_DISPLAY) break;
+    if (!GREP_EXTENSIONS.test(m.path)) continue;
+    const text = typeof m.text === "string" ? m.text.trim().slice(0, MAX_GREP_LINE_CHARS) : "";
+    lines.push(`${m.path}:${String(m.line ?? "")}: ${text}`);
   }
-
-  await walk(target);
-  return matches.length > 0 ? matches.join("\n") : "(no matches)";
+  return lines.length > 0 ? lines.join("\n") : "(no matches)";
 }
 
 async function toolRunCode(

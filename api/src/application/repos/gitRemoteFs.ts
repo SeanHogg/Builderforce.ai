@@ -8,7 +8,7 @@
  *   remembered (`listingIncomplete`) so an empty glob is never reported as absence.
  * - read: `readRepoFile`, which keeps the source's 60k-character cap as a `truncated` prefix.
  *   A failed read names why: a missing file is `not_found` (a write probes with it), a file past
- *   the contents API size is `too_large`, a directory is `is_directory`, anything else `io`.
+ *   the contents API size is `too_large`, a directory is `is_directory`, a symlink or submodule (not a file the contents API serves) is `unsupported` (existence unknown), anything else `io`.
  * - write / remove: the existing commit functions; the commit each made is kept for the host
  *   (`takeCommit`) so its records can name the sha and the committed text.
  * - search: `searchRepoCode`, fragments as `{path, text}` with NO `line`. Provider code search
@@ -90,7 +90,13 @@ export function gitRemoteFs(repo: TicketRepoContext, opts: GitRemoteFsOptions): 
       if (!rf.ok && opts.fallbackRef) rf = await readAt(path, opts.fallbackRef);
       if (!rf.ok) {
         if (/^file not found/.test(rf.reason)) return { status: 'not_found' };
-        if (/^not a readable file/.test(rf.reason)) return { status: 'is_directory' };
+        if (/^not a readable file/.test(rf.reason)) {
+          // The contents API answers a directory, a symlink and a submodule the same way. The (cached, once-per-ref) tree says which: a directory is
+          // one; anything else is a path it cannot serve as a file - `unsupported`, so a write probe treats its existence as UNKNOWN (never absent, never a directory).
+          const tree = await treeAt(opts.readRef()).catch(() => null);
+          if (tree?.dirs.has(path)) return { status: 'is_directory' };
+          throw new WorkspaceError('unsupported', rf.reason);
+        }
         throw new WorkspaceError(/too large/.test(rf.reason) ? 'too_large' : 'io', rf.reason);
       }
       reasons.set(path, rf.truncated ? rf.truncatedReason : undefined);

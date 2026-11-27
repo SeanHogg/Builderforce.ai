@@ -22,10 +22,10 @@ import * as path from "node:path";
 import type { RepoSymbolsCapability, SymbolFindResult, SymbolMatch } from "./capabilities.js";
 import { isUnderScopeDir, normalizeScopeDir } from "./glob.js";
 import { gitIgnoredMatcher, gitIgnoredSubset } from "./node-git-ignore.js";
-import { readSnapshotText, writeSnapshotText } from "./node-index-layout.js";
+import { readSnapshotText, reportIndexFailure, writeSnapshotText, type IndexFailureSink } from "./node-index-layout.js";
 import { extractSymbols, isSymbolIndexable, SYMBOL_KINDS, type CodeSymbol, type SymbolKind } from "./symbols.js";
 import { isIndexedDirName, WORKSPACE_SKIP_DIRS } from "./skipDirs.js";
-import type { WatchPort } from "./watchPort.js";
+import type { WatchPort } from "./watch-port.js";
 
 // The tree-sitter extractor (web-tree-sitter WASM, regex fallback per language) lives in
 // its own module and is re-exported from this export condition.
@@ -59,6 +59,8 @@ export interface SymbolIndexOptions {
   fullRefreshMs?: number;
   /** How definitions are read (default {@link REGEX_SYMBOL_EXTRACTOR}). */
   extractor?: SymbolExtractor;
+  /** Receives a snapshot save failure (the index keeps working without it). Default: a process warning. */
+  onFailure?: IndexFailureSink;
 }
 
 interface FileEntry {
@@ -123,6 +125,8 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
   private readonly legacyCachePaths: readonly string[];
   private readonly fullRefreshMs: number;
   private readonly extractor: SymbolExtractor;
+  private readonly onFailure?: IndexFailureSink;
+  private lastSaveFailure?: string;
   private files = new Map<string, FileEntry>();
   private readonly dirty = new Set<string>();
   private lastFullRefresh = 0;
@@ -140,6 +144,7 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
     this.legacyCachePaths = options.legacyCachePaths ?? [];
     this.fullRefreshMs = options.fullRefreshMs ?? 60_000;
     this.extractor = options.extractor ?? REGEX_SYMBOL_EXTRACTOR;
+    this.onFailure = options.onFailure;
   }
 
   /** True when the walk would never visit `rel`: under a directory the shared index policy
@@ -377,8 +382,13 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
     try {
       const snapshot: Snapshot = { v: 1, ...(this.extractor.id !== REGEX_SYMBOL_EXTRACTOR.id ? { extractor: this.extractor.id } : {}), files };
       await writeSnapshotText(this.cachePath, this.legacyCachePaths, JSON.stringify(snapshot));
-    } catch {
-      /* best-effort: an unwritable snapshot only costs a re-read on the next start */
+    } catch (error) {
+      // Non-fatal (an unwritable snapshot only costs a re-read on the next start) but never silent:
+      // the path and reason are reported, once per distinct reason so a watcher burst does not flood.
+      const reason = error instanceof Error ? error.message : String(error);
+      if (reason === this.lastSaveFailure) return;
+      this.lastSaveFailure = reason;
+      reportIndexFailure("symbol index snapshot not saved", this.cachePath, error, this.onFailure);
     }
   }
 }

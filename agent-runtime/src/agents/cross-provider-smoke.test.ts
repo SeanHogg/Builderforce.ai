@@ -23,9 +23,9 @@
  *  - the failure modes agree too — a missing file, a non-unique edit, a delete of nothing.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   type Capability,
@@ -45,7 +45,10 @@ import {
   writeFileTool,
 } from "@builderforce/agent-tools";
 import { applyStringEdit, editFacts, filterByGlob } from "@builderforce/agent-tools";
+import { runWorkspaceConformance } from "@builderforce/agent-tools/workspace-conformance";
 import { buildNodeCapabilityProvider } from "./node-capability-provider.js";
+import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
+import { sandboxWorkspaceFs } from "./sandbox/sandboxWorkspaceFs.js";
 
 /** The file capabilities both surfaces claim to back. */
 const FILE_CAPS: ReadonlySet<Capability> = new Set<Capability>([
@@ -265,3 +268,48 @@ describe("cross-provider parity — one shared contract, two backings", () => {
     expect(n.paths).toEqual(["src/a.ts"]);
   });
 });
+
+/** A sandbox fs bridge over a host directory: the same read/write/remove/stat the container bridge answers, minus Docker. */
+function fakeBridge(root: string): SandboxFsBridge {
+  const abs = (filePath: string, cwd?: string) => resolve(cwd ?? root, filePath);
+  return {
+    resolvePath: ({ filePath, cwd }) => ({ hostPath: abs(filePath, cwd), relativePath: filePath, containerPath: abs(filePath, cwd) }),
+    readFile: async ({ filePath, cwd }) => readFile(abs(filePath, cwd)),
+    async writeFile({ filePath, cwd, data }) {
+      await mkdir(dirname(abs(filePath, cwd)), { recursive: true });
+      await writeFile(abs(filePath, cwd), data);
+    },
+    mkdirp: async ({ filePath, cwd }) => {
+      await mkdir(abs(filePath, cwd), { recursive: true });
+    },
+    remove: async ({ filePath, cwd, recursive, force }) => rm(abs(filePath, cwd), { recursive: recursive ?? false, force: force ?? false }),
+    rename: async () => {
+      throw new Error("not used");
+    },
+    async stat({ filePath, cwd }) {
+      const s = await stat(abs(filePath, cwd)).catch(() => null);
+      return s ? { type: s.isDirectory() ? "directory" : s.isFile() ? "file" : "other", size: s.size, mtimeMs: s.mtimeMs } : null;
+    },
+  };
+}
+
+// The sandbox backing has no searcher (the container has no index), so search is not part of its contract.
+runWorkspaceConformance(
+  "sandboxWorkspaceFs (fake bridge over a temp dir)",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bf-sandbox-conformance-"));
+    return {
+      fs: sandboxWorkspaceFs(fakeBridge(dir), dir),
+      async seed(files) {
+        for (const [path, content] of Object.entries(files)) {
+          await mkdir(dirname(join(dir, path)), { recursive: true });
+          await writeFile(join(dir, path), content, "utf8");
+        }
+      },
+      async cleanup() {
+        await rm(dir, { recursive: true, force: true });
+      },
+    };
+  },
+  { search: false },
+);

@@ -13,8 +13,9 @@
  * keeps the engine's fs ops inside the repository and out of `.git`.
  *
  * Protocol: one JSON object per line. Request `{ id, op, ... }`, reply `{ id, ok, ... }`.
- * Plain ESM, node builtins only. It is NOT inlined into the Actions runner (it is its own process):
- * the runner writes `WORKSPACE_AGENT_SOURCE` (generated) to a file the server owns and spawns it.
+ * Plain ESM, node builtins plus two generated siblings (`toolOutputPolicy.mjs`, `workspaceGlob.mjs`). It is NOT
+ * inlined into the Actions runner (it is its own process): the runner writes `WORKSPACE_AGENT_SOURCE` (generated,
+ * with those siblings inlined, so it needs nothing beside it) to a file the server owns and spawns it.
  */
 import { execFile } from 'node:child_process';
 import { constants as fsConstants } from 'node:fs';
@@ -22,8 +23,10 @@ import { appendFile, chmod, lstat, mkdir, open as openFile, readFile, readdir, r
 import { dirname, join, relative, resolve as resolvePath, sep } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
+// Generated from ONE source each (api/scripts/gen-container-shared.mjs): the tool caps and the shared glob + ignore policy.
+import { LIST_MAX_FILES, LIST_RETURN_MAX, READ_MAX_BYTES } from './toolOutputPolicy.mjs';
+import { dirMayContainGlobMatch, emptyGlobListingNote, isListedDirName, isVcsMetadataName, matchGlobInScope, normalizeScopeDir, summarizeDirs } from './workspaceGlob.mjs';
 
-const MAX_LIST_ENTRIES = 500;
 const GIT_TIMEOUT_MS = 10 * 60 * 1000;
 const GIT_MAX_BUFFER = 64 * 1024 * 1024;
 /** A bundle returned over the pipe (base64) is bounded: past this the publish fails loudly rather than exhausting memory. */
@@ -102,8 +105,10 @@ export function createWorkspace(workdir) {
       return { ok: true };
     },
     async list(req) {
-      if (typeof req.path === 'string' && req.path && !(await insideClone(root, req.path))) return { ok: false, error: 'path must stay inside the repository' };
-      return listFiles(root, typeof req.path === 'string' && req.path ? req.path : undefined, typeof req.glob === 'string' && req.glob.trim() ? req.glob.trim() : undefined);
+      // ONE normalised scope: the string the guard checks is exactly the string that is listed (a leading space or a backslash must not pass the guard as one path and list as another).
+      const sub = normalizeScopeDir(typeof req.path === 'string' ? req.path : '');
+      if (sub && !(await insideClone(root, sub))) return { ok: false, error: 'path must stay inside the repository' };
+      return listFiles(root, sub || undefined, typeof req.glob === 'string' && req.glob.trim() ? req.glob.trim() : undefined);
     },
     async read(req) {
       const abs = await insideClone(root, req.path);
@@ -111,7 +116,14 @@ export function createWorkspace(workdir) {
       try {
         const real = await realpath(abs);
         if (!lexicallyInside(await realpath(root), real)) return { ok: false, error: 'path must stay inside the repository' };
-        return { ok: true, path: req.path, content: await readFile(real, 'utf8') };
+        // Bounded like every other read (READ_MAX_BYTES): a prefix marked truncated, never the whole of a huge file over the pipe.
+        const fh = await openFile(real, 'r');
+        try {
+          const buf = Buffer.alloc(Math.min((await fh.stat()).size, READ_MAX_BYTES) + 1);
+          const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+          const truncated = bytesRead > READ_MAX_BYTES;
+          return { ok: true, path: req.path, content: buf.subarray(0, Math.min(bytesRead, READ_MAX_BYTES)).toString('utf8'), ...(truncated ? { truncated: true } : {}) };
+        } finally { await fh.close(); }
       } catch (e) { return { ok: false, error: `read failed: ${e.message}` }; }
     },
     async stat(req) {
@@ -321,130 +333,50 @@ async function parentStillInside(workdir, abs) {
   return lexicallyInside(realRoot, parent) && !touchesGitDir(relative(realRoot, parent));
 }
 
-/** Case-insensitive glob → RegExp (mirror of packages/agent-tools `globToRegExp`;
- *  inlined because this container is plain ESM with no build step / package imports).
- *  `**` crosses `/`, `*` stays within a segment, `?` is one non-slash char. */
-function globToRegExp(pattern) {
-  let re = '';
-  for (let i = 0; i < pattern.length; i++) {
-    const c = pattern[i];
-    if (c === '*') {
-      // `**/` is one token: zero or more directories, matching glob.ts.
-      if (pattern[i + 1] === '*') {
-        if (pattern[i + 2] === '/') { re += '(?:.*/)?'; i += 2; }
-        else { re += '.*'; i++; }
-      } else { re += '[^/]*'; }
-    } else if (c === '?') {
-      re += '[^/]';
-    } else {
-      re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    }
-  }
-  return new RegExp(`^${re}$`, 'i');
-}
-/** A slash-free glob matches the basename at any depth; otherwise the full path. */
-function matchGlob(p, pattern) {
-  const re = globToRegExp(pattern);
-  return pattern.includes('/') ? re.test(p) : re.test(p.slice(p.lastIndexOf('/') + 1));
-}
 /**
- * Scope-aware glob: `sub` is where the walk started, so a glob written against THAT
- * folder must resolve against the scope-relative path too. Filtering only the
- * repo-root-relative path silently dropped every match (and the tool's zero-match
- * note then reported real files as missing). Mirrors `matchGlobInScope` in
- * `@builderforce/agent-tools` — this server is standalone, so it keeps a local copy.
- */
-function matchGlobScoped(p, pattern, sub) {
-  const scope = (sub ?? '').split('\\').join('/').trim().replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
-  if (!scope) return matchGlob(p, pattern);
-  if (p !== scope && !p.startsWith(scope + '/')) return false;
-  return matchGlob(p, pattern) || matchGlob(p.slice(scope.length + 1), pattern);
-}
-
-/** Mirror of `dirMayContainGlobMatch` in packages/agent-tools/src/glob.ts. */
-function dirMayContainGlob(dir, pattern, sub) {
-  const norm = (s) => (s ?? '').split('\\').join('/').trim().replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
-  const d = norm(dir);
-  const scope = norm(sub);
-  const pat = String(pattern).split('\\').join('/');
-  if (scope && d && d !== scope && !d.startsWith(scope + '/') && !scope.startsWith(d + '/')) return false;
-  const literalPrefix = (p) => {
-    if (!p.includes('/')) return null;
-    const meta = p.search(/[*?\[]/);
-    if (meta === 0) return null;
-    const head = meta < 0 ? p : p.slice(0, meta);
-    const slash = head.lastIndexOf('/');
-    return slash < 0 ? null : head.slice(0, slash + 1);
-  };
-  const canReach = (directory, prefix) => {
-    if (directory === '') return true;
-    const dirSlash = directory + '/';
-    return prefix.startsWith(dirSlash) || dirSlash.startsWith(prefix);
-  };
-  const readings = [literalPrefix(pat)];
-  if (scope) {
-    const rel = literalPrefix(pat);
-    readings.push(rel == null ? scope + '/' : scope + '/' + rel);
-  }
-  for (const prefix of readings) {
-    if (prefix == null) {
-      if (!scope || d === '' || d === scope || d.startsWith(scope + '/') || scope.startsWith(d + '/')) return true;
-      continue;
-    }
-    if (canReach(d, prefix)) return true;
-  }
-  return false;
-}
-
-function emptyGlobNote(glob, sub, truncated) {
-  const scope = (sub ?? '').split('\\').join('/').trim().replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
-  const base = 'No file matches glob "' + glob + '"' + (scope ? ' under "' + scope + '"' : '') + '.';
-  if (truncated) {
-    return base + ' This is NOT proof the file does not exist: the search was cut off before the tree was fully scanned, so this only means "not among the paths scanned so far". Narrow path to a smaller folder and re-run before concluding anything is missing.';
-  }
-  return base + ' Try a broader pattern, or list_files without a glob to see the tree. 0 matches means no such file exists in the paths scanned — do not claim one is missing without trying a broader glob first.';
-}
-
-/**
- * List repo files under `dir` (skipping .git/node_modules), capped. BREADTH-FIRST so
- * shallow files (root docs like ROADMAP.md) are collected before the cap is hit deep
- * in a large subtree; sorted for stable output. `glob` filters by name (case-
- * insensitive; a bare name matches the basename at any depth) so a file can be found
- * without dumping the tree.
+ * List repo files under `dir`, capped at `LIST_MAX_FILES`. BREADTH-FIRST so shallow files (root
+ * docs like ROADMAP.md) are collected before the cap is hit deep in a large subtree; sorted for
+ * stable output. Which directories it enters (`isListedDirName`) and how a glob matches
+ * (`matchGlobInScope`, `dirMayContainGlobMatch`) are the shared policy, generated into
+ * `workspaceGlob.mjs` from agent-tools, so the container lists what every other host lists.
  *
  * The glob is applied DURING the walk, so the cap counts MATCHES: a globbed listing is
  * never starved by unrelated files ahead of the match in the queue.
  */
 async function listFiles(dir, sub, glob) {
-  const root = sub ? join(dir, sub) : dir;
+  const scope = normalizeScopeDir(sub);
+  const root = scope ? join(dir, scope) : dir;
   const acc = [];
   const queue = [root];
   let truncated = false;
   while (queue.length > 0) {
-    if (acc.length >= MAX_LIST_ENTRIES) { truncated = true; break; }
+    if (acc.length >= LIST_MAX_FILES) { truncated = true; break; }
     const d = queue.shift();
     let entries;
     try { entries = await readdir(d, { withFileTypes: true }); } catch { continue; }
     for (const e of entries) {
-      if (e.name === '.git' || e.name === 'node_modules') continue;
       const full = join(d, e.name);
       if (e.isDirectory()) {
+        if (!isListedDirName(e.name)) continue;
         if (glob) {
           const relDir = relative(dir, full).split(sep).join('/');
-          if (!dirMayContainGlob(relDir, glob, sub)) continue;
+          if (!dirMayContainGlobMatch(relDir, glob, sub)) continue;
         }
         queue.push(full);
       }
       else {
+        if (isVcsMetadataName(e.name)) continue;
         const rel = relative(dir, full).split(sep).join('/');
-        if (glob && !matchGlobScoped(rel, glob, sub)) continue;
-        if (acc.length >= MAX_LIST_ENTRIES) { truncated = true; break; }
+        if (glob && !matchGlobInScope(rel, glob, sub)) continue;
+        if (acc.length >= LIST_MAX_FILES) { truncated = true; break; }
         acc.push(rel);
       }
     }
   }
   acc.sort((a, b) => a.localeCompare(b));
-  const result = { ok: true, paths: acc, truncated };
-  if (glob && acc.length === 0) result.note = emptyGlobNote(glob, sub, truncated);
+  // A glob returns every match; a big plain listing collapses to the directory summary (the same rule every host applies).
+  const summarised = !glob && acc.length > LIST_RETURN_MAX;
+  const result = { ok: true, paths: summarised ? summarizeDirs(acc, scope) : acc, truncated: truncated || summarised };
+  if (glob && acc.length === 0) result.note = emptyGlobListingNote(glob, sub, truncated);
   return result;
 }

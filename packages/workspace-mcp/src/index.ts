@@ -8,6 +8,7 @@ import {
   type RepoSemanticCapability,
   type ToolDefinition,
 } from "@builderforce/agent-tools";
+import type { WatchPort } from "@builderforce/agent-tools/watch-port";
 import {
   desktopCompressAvailable,
   desktopCompressProse,
@@ -75,6 +76,10 @@ interface WorkspaceMcpOptions {
   requireRoot?: boolean;
   grammar?: () => { wasmDir?: string };
   embedder?: () => Promise<EmbedderPort | undefined>;
+  /** The host's change feed for the code index (default: the Node `fs.watch` port). */
+  watch?: WatchPort;
+  /** The host's knowledge root id of a workspace root; names the code index file beside the knowledge index. */
+  rootId?: (root: string) => string;
 }
 
 /** Default index policy for the Workspace catalog and its saved search calls. */
@@ -94,11 +99,13 @@ export async function searchWorkspaceMcpIndex(
  */
 export function workspaceSemantic(
   { root, caps }: Workspace,
-  options: Pick<WorkspaceMcpOptions, "grammar" | "embedder"> = {},
+  options: Pick<WorkspaceMcpOptions, "grammar" | "embedder" | "watch" | "rootId"> = {},
 ): RepoSemanticCapability {
   return {
     search: (query, { scope, limit } = {}) => searchWorkspaceMcpIndex({
       root, files: caps.repoRead!, query, limit: limit ?? 8, scope, ...options.grammar?.(),
+      ...(options.watch ? { watch: options.watch } : {}),
+      ...(options.rootId ? { rootId: options.rootId(root) } : {}),
     }, options.embedder),
     repoMap: (args = {}) => workspaceRepoMap({ caps }, args),
   };

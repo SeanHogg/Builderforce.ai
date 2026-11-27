@@ -9,11 +9,11 @@
  * file the plan skips as too large (it needs the size only).
  */
 
-import { createFsDirectorySource, type FsDirectorySource, type FsDirectorySourceOptions, type HashCache, type KnowledgeFs } from "@builderforce/agent-tools/knowledge";
-import { CONTENT_HASH_RULE, DEFAULT_MAX_FILE_BYTES } from "@seanhogg/builderforce-memory/knowledge";
+import { createFsDirectorySource, type FsDirectorySource, type FsDirectorySourceOptions, type KnowledgeFs } from "@builderforce/agent-tools/knowledge";
+import { CONTENT_HASH_RULE, DEFAULT_MAX_FILE_BYTES, type HashCache } from "@seanhogg/builderforce-memory/knowledge";
 import { nodeContentHash } from "./nodeSha256";
 
-export type { HashCache, KnowledgeFs };
+export type { KnowledgeFs };
 
 export interface DirectorySourceOptions extends Pick<FsDirectorySourceOptions, "gitHints" | "gitBlobId" | "onHashCacheError"> {
   fs: KnowledgeFs;

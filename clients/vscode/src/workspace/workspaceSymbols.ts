@@ -4,7 +4,7 @@
  * on-prem runtime), backing `find_symbol` / `file_outline` for the open folder.
  *
  * What the editor adds over the defaults: the snapshot lives in the workspace's own
- * `.builderforce/` (beside the scan's map), the walk skips what `search_code` skips, and
+ * `.builderforce/index/` (the shared local index layout, named by the knowledge root id), the walk skips what `search_code` skips, and
  * the full stat walk is rare because the extension's file watcher reports every change
  * as it happens (`markSymbolFileChanged`) — the walk is only the backstop for changes a
  * watcher cannot see.
@@ -12,7 +12,7 @@
  * Pure Node (no `vscode` import), so the capability provider and its tests can use it.
  */
 
-import * as path from "path";
+import { symbolSnapshotLocation } from "@builderforce/agent-tools/node-index-layout";
 import {
   sharedSymbolIndex,
   treeSitterSymbolExtractor,
@@ -20,6 +20,8 @@ import {
   type WorkspaceSymbolIndex,
 } from "@builderforce/agent-tools/node-symbols";
 import { WORKSPACE_SKIP_DIRS } from "@builderforce/agent-tools/skip-dirs";
+import { knowledgeRootId } from "../knowledge/knowledgeRoots";
+import { HOST_EXTRA_SKIP_DIRS } from "./hostSkipDirs";
 
 /** Watcher-backed, so the full re-walk is a 10-minute backstop rather than per query. */
 const FULL_REFRESH_MS = 10 * 60_000;
@@ -32,7 +34,6 @@ const FULL_REFRESH_MS = 10 * 60_000;
  * already covered by the shared policy's name rule; only this host-specific
  * checkout name needs naming here.
  */
-const HOST_EXTRA_SKIP_DIRS = ["bf-verify-fdc"] as const;
 
 const skipDirs: ReadonlySet<string> = new Set([...WORKSPACE_SKIP_DIRS, ...HOST_EXTRA_SKIP_DIRS]);
 
@@ -58,11 +59,23 @@ function editorExtractor(): SymbolExtractor {
   return extractor;
 }
 
+/** Where each folder's snapshot lives; the knowledge root id reads the folder's git config, so it is computed once. */
+const snapshotLocations = new Map<string, ReturnType<typeof symbolSnapshotLocation>>();
+
+function snapshotLocation(root: string): ReturnType<typeof symbolSnapshotLocation> {
+  let location = snapshotLocations.get(root);
+  if (!location) {
+    location = symbolSnapshotLocation(root, knowledgeRootId(root));
+    snapshotLocations.set(root, location);
+  }
+  return location;
+}
+
 /** The process-wide definition index for the workspace folder at `root`. */
 export function workspaceSymbolIndex(root: string): WorkspaceSymbolIndex {
   return sharedSymbolIndex(root, {
     skipDirs,
-    cachePath: path.join(root, ".builderforce", "symbols.json"),
+    ...snapshotLocation(root),
     fullRefreshMs: FULL_REFRESH_MS,
     extractor: editorExtractor(),
   });
@@ -78,7 +91,7 @@ const GROUNDING_CHARS = 3_500;
 /**
  * A bounded view of the fresh definition index, for the run's grounding.
  *
- * `find_symbol` already reads `.builderforce/symbols.json`, but only once the model
+ * `find_symbol` already reads the snapshot under `.builderforce/index/`, but only once the model
  * asks. Loading it here means the turn starts with the index warm and a sample of
  * what it holds, instead of discovering the index exists by guessing a tool call.
  * The full index is not injected — a workspace snapshot is megabytes, and the
@@ -104,7 +117,7 @@ export async function symbolIndexGrounding(root: string): Promise<string> {
     const more = ordered.length - lines.length;
     const body = [
       "## Symbol index",
-      `Fresh definition index (\`.builderforce/symbols.json\`): ${ordered.length} files, ${symbolCount} symbols. Loaded before this run — call \`find_symbol\` for a name not listed below.`,
+      `Fresh definition index (\`.builderforce/index/\`): ${ordered.length} files, ${symbolCount} symbols. Loaded before this run — call \`find_symbol\` for a name not listed below.`,
       ...lines,
       more > 0 ? `- … (${more} more files in the index)` : "",
     ]

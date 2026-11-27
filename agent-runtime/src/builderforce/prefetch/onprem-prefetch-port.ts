@@ -32,7 +32,8 @@ import { requestHumanInput } from "../../infra/approval-gate.js";
 import { withOnPremKnowledgeRows } from "../../agents/knowledge/onPremKnowledge.js";
 import { buildNodeCapabilityProvider } from "../../agents/node-capability-provider.js";
 import { buildNodeShell } from "../../run/nodeShell.js";
-import { onPremRootId, onPremWorkspaceKnowledgeIndex } from "../../agents/knowledge/index/onPremKnowledgeIndex.js";
+import { onPremWorkspaceKnowledgeIndex } from "../../agents/knowledge/index/onPremKnowledgeIndex.js";
+import { onPremRootId } from "../../agents/knowledge/index/onPremRootId.js";
 
 /** `knowledge.ask` (the workspace's knowledge index), then the shared rows — validated once. */
 export const ONPREM_PREFETCH_REGISTRY: readonly PrefetchAction[] = defineRegistry([KNOWLEDGE_ASK_ROW, ...SHARED_PREFETCH_ROWS]);

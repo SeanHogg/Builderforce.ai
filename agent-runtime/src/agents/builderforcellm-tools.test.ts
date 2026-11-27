@@ -115,7 +115,7 @@ describe("executeToolCall — path traversal protection", () => {
 
   it("blocks path traversal with ../", async () => {
     const result = await executeToolCall({ tool: "read_file", path: "../etc/passwd" }, tmpDir);
-    expect(result.output).toMatch(/Error:.*traversal/i);
+    expect(result.output).toMatch(/Error:.*outside the workspace/i);
   });
 
   it("blocks sibling-directory bypass (startsWith edge case)", async () => {

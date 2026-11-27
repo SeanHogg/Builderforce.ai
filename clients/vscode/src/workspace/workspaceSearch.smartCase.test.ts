@@ -3,7 +3,8 @@ import * as os from "os";
 import * as path from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { findRipgrep } from "../tools/ripgrep";
-import { ripgrepSearch, searchWorkspace, walkSearch } from "@builderforce/agent-tools/node-text-search";
+import { ripgrepSearch } from "@builderforce/agent-tools/node-text-search";
+import { searchWorkspace } from "@builderforce/agent-tools/node-workspace";
 import { compileSearchPattern, smartCaseSensitive } from "@builderforce/agent-tools/text-scan";
 
 describe("smart case", () => {
@@ -48,7 +49,7 @@ describe("search_code — smart case and Stop", () => {
     if (!rg) return;
     for (const query of ["BrainChat", "brainchat"]) {
       const viaRg = await ripgrepSearch(root, root, query, rg);
-      const viaWalk = await walkSearch(root, root, query);
+      const viaWalk = await searchWorkspace({ root, start: root, query, ripgrep: null });
       expect(viaRg?.matches).toEqual(viaWalk.matches);
     }
   });

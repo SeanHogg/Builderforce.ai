@@ -9,7 +9,7 @@
  * and the result stops at a match cap and says it was cut.
  */
 import { scanFiles } from '@builderforce/agent-tools/text-scan';
-import { r2WorkspaceFs } from './r2WorkspaceFs';
+import { R2_READ_CONCURRENCY, r2WorkspaceFs } from './r2WorkspaceFs';
 
 export interface WorkspaceSearchMatch {
   path: string;
@@ -65,7 +65,10 @@ export function findMatches(path: string, text: string, query: string, limit = M
  * line), and no directory is skipped: the panel searches what the workspace holds.
  */
 export async function searchWorkspace(bucket: R2Bucket, projectId: number, query: string): Promise<WorkspaceSearchResult> {
-  const found = await scanFiles(r2WorkspaceFs(bucket, projectId), query, '', {
+  // One page of keys (the panel's bound): a workspace past it is reported truncated rather than paged whole per keystroke.
+  const fs = r2WorkspaceFs(bucket, projectId, { maxPages: 1 });
+  const found = await scanFiles(fs, query, '', {
+    concurrency: R2_READ_CONCURRENCY,
     maxMatches: MAX_MATCHES,
     maxFiles: MAX_FILES,
     maxFileBytes: MAX_FILE_BYTES,
@@ -75,5 +78,5 @@ export async function searchWorkspace(bucket: R2Bucket, projectId: number, query
   });
   const hits = (found.matches ?? []) as unknown as WorkspaceSearchMatch[];
   const matches = hits.slice(0, MAX_MATCHES).map(({ path, line, column, preview }) => ({ path, line, column, preview }));
-  return { matches, truncated: found.truncated === true || hits.length > MAX_MATCHES || !found.ok };
+  return { matches, truncated: found.truncated === true || hits.length > MAX_MATCHES || !found.ok || fs.listingIncomplete() };
 }

@@ -8,7 +8,7 @@ import { setDesktopFetchForTests } from "@builderforce/agent-tools/node-desktop.
 import { CORE_PACKAGE_NAME } from "../infra/package-names.js";
 import { catalogConvergedFileTools } from "./converged-coding-tools.js";
 import { catalogNodeCapabilityProvider } from "./node-capability-provider.js";
-import { isLocalIndexSemantic, resolveOnPremSemantic } from "./on-prem-semantic.js";
+import { resolveOnPremSemantic } from "./on-prem-semantic.js";
 import { onPremTreeSitterDir } from "./on-prem-symbol-index.js";
 import { TREE_SITTER_DIST_DIR } from "./tree-sitter-dist.js";
 
@@ -39,9 +39,8 @@ describe("on-prem repo_map without Builderforce Desktop", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("resolves the definition index as the backing and marks it local", async () => {
+  it("resolves the definition index as the backing", async () => {
     const semantic = await resolveOnPremSemantic(root);
-    expect(isLocalIndexSemantic(semantic)).toBe(true);
     const map = await semantic.repoMap({ maxTokens: 800 });
     expect(map.ok).toBe(true);
     expect(map.map).toContain("src/billing.ts");
@@ -52,14 +51,14 @@ describe("on-prem repo_map without Builderforce Desktop", () => {
     const provider = await catalogNodeCapabilityProvider({ workspaceRoot: root });
     expect(provider.capabilities.has("repo.semantic")).toBe(true);
     expect(provider.capabilities.has("repo.compress")).toBe(false);
-    expect(isLocalIndexSemantic(provider.semantic)).toBe(true);
+    expect(provider.semantic).toBeDefined();
   });
 
-  it("offers repo_map and withholds semantic_search in the converged catalog", async () => {
+  it("offers repo_map and semantic_search in the converged catalog", async () => {
     const tools = await catalogConvergedFileTools({ workspaceRoot: root });
     const names = tools.map((t) => t.name);
     expect(names).toContain("repo_map");
-    expect(names).not.toContain("semantic_search");
+    expect(names).toContain("semantic_search");
     expect(names).not.toContain("read_compressed");
     const repoMap = tools.find((t) => t.name === "repo_map")!;
     const result = await repoMap.execute("call-1", { query: "invoice" }, undefined as unknown as AbortSignal);

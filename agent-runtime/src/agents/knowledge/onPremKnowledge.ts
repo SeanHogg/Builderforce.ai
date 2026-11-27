@@ -44,7 +44,8 @@ import { loggedFallback } from "./loggedFallback.js";
 import {
   closeOnPremManifests, drainAfterReview, onPremPumpSource, onPremReplicaHost, onPremRootPorts, resumeQueuedReplicas,
 } from "./onPremReplica.js";
-import { getHostKnowledgeIndex, onPremLegacyRootId, onPremRootId } from "./index/onPremKnowledgeIndex.js";
+import { getHostKnowledgeIndex } from "./index/onPremKnowledgeIndex.js";
+import { onPremLegacyRootId, onPremRootId } from "./index/onPremRootId.js";
 
 const DEFAULT_WEB_URL = "https://builderforce.ai";
 /** The agent-host key door the knowledge routes are mounted under (the API's `agentHostDoor`). */

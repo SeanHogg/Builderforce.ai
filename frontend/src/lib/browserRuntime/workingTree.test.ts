@@ -40,6 +40,21 @@ describe('readWorkingTree', () => {
     expect(tree.files['src/logo.png']).toBeInstanceOf(Uint8Array);
   });
 
+  it('regression: includes .yarn/releases, .husky, vendor and public/.well-known', async () => {
+    const tree = await readWorkingTree(memoryFs({
+      '/repo/.yarn/releases/yarn.cjs': text('y'),
+      '/repo/.husky/pre-commit': text('h'),
+      '/repo/vendor/x.js': text('v'),
+      '/repo/public/.well-known/assetlinks.json': text('[]'),
+      '/repo/.git/HEAD': text('ref'),
+    }), '/repo');
+    expect(tree.kind).toBe('files');
+    if (tree.kind !== 'files') return;
+    expect(Object.keys(tree.files).sort()).toEqual([
+      '.husky/pre-commit', '.yarn/releases/yarn.cjs', 'public/.well-known/assetlinks.json', 'vendor/x.js',
+    ]);
+  });
+
   it('declines a tree past its limits', async () => {
     const tree = await readWorkingTree(
       memoryFs({ '/repo/a.ts': text('a'), '/repo/b.ts': text('b') }),

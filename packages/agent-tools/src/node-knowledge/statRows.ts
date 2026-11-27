@@ -15,7 +15,7 @@
  */
 
 import type { LocalSqliteDb } from '../node-local-sqlite.js';
-import { EMPTY_STAT_SET, StatSetMemo, type HashCache, type StatDelta, type StatRow, type StatSet } from '../knowledge/statManifest.js';
+import { EMPTY_STAT_SET, StatSetMemo, type HashCache, type StatDelta, type StatRow, type StatSet } from '@seanhogg/builderforce-memory/knowledge';
 import type { SqliteKnowledgeDb } from './sqliteRows.js';
 
 const writtenKey = (rootId: string): string => `stat_written:${rootId}`;

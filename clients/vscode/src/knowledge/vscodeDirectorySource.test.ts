@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sha256Hex } from "@seanhogg/builderforce-memory/knowledge";
-import { memoryHashCache } from "@builderforce/agent-tools/knowledge";
+import { memoryHashCache, sha256Hex } from "@seanhogg/builderforce-memory/knowledge";
 import { createDirectorySource, EVENT_LOOP_YIELD_EVERY, withEventLoopYield, type KnowledgeFs } from "./vscodeDirectorySource";
 
 const enc = new TextEncoder();

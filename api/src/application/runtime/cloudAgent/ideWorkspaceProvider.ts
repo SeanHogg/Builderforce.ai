@@ -23,6 +23,7 @@ import { recordWrittenHash, type WrittenFileHashes } from './writtenFileHashes';
 import { notifyExecutionSubscribers } from '../executionEvents';
 import type { IdeWorkspaceRun } from './ideWorkspaceCoding';
 import { r2Capabilities, r2WorkspaceFs } from '../../ide/r2WorkspaceFs';
+import { WORKSPACE_BRANCH } from '../../ide/workspaceStore';
 import { applyTaskWorkspaceChanges } from '../../ide/taskWorkspaceTarget';
 
 export interface IdeWorkspaceRunRef {
@@ -33,7 +34,7 @@ export interface IdeWorkspaceRunRef {
   cloudAgentRef?: string;
   /** The run's live set of written paths (the verify / finalize tail reads it). */
   writtenPaths: Set<string>;
-  /** Content hash per written file; set for a full write (an edit's resulting text isn't returned, so it falls back). */
+  /** Content hash per written file: of the text the provider stored (a write's or an edit's), read back when it surfaces none. */
   writtenHashes?: WrittenFileHashes;
 }
 
@@ -47,15 +48,21 @@ export function withIdeWorkspace(
   const { db } = deps;
   // The shared coding provider over this project's R2 workspace; writes keep the store's path/content
   // contract, history and the ticket's file-change record through `applyTaskWorkspaceChanges`.
+  // The text the provider just stored per path (line endings already conformed to the existing file),
+  // surfaced by its `onWrite`: the hash of a write or edit comes from this, never from what the model sent.
+  const stored = new Map<string, string>();
   const { repoRead, repoWrite } = r2Capabilities(r2WorkspaceFs(ide.bucket, ide.projectId, {
     applyChanges: (changes) => applyTaskWorkspaceChanges(db, ide.bucket, {
       tenantId: run.tenantId, taskId: run.taskId, executionId: run.executionId, agent: run.agentLabel,
       projectId: ide.projectId, changes,
     }),
-  }));
-  /** Hash what the run left: read back, so an edit (or an EOL-conformed write) hashes the stored text. */
-  const recordLeft = async (path: string): Promise<void> => {
+  }), { projectName: ide.projectName, onWrite: (path, written) => { if (written) stored.set(path, written.content); else stored.delete(path); } });
+  /** Hash the text the provider stored for `path`; with none surfaced, read the file back (its hash is the text the run left). */
+  const recordStored = async (path: string, fallback?: string): Promise<void> => {
     if (!run.writtenHashes) return;
+    const text = stored.get(path) ?? fallback;
+    stored.delete(path);
+    if (text !== undefined) { await recordWrittenHash(run.writtenHashes, path, text); return; }
     const left = await repoRead.readFile(path);
     if (left.ok && typeof left.content === 'string') await recordWrittenHash(run.writtenHashes, path, left.content);
     // Unreadable: drop any earlier hash rather than keep a stale one.
@@ -67,7 +74,7 @@ export function withIdeWorkspace(
   };
   const holder: LeaseHolder = {
     tenantId: run.tenantId, executionId: run.executionId, label: run.agentLabel, taskId: run.taskId,
-    repoSlug: `workspace:${ide.projectId}`, branch: 'workspace', scopeKey: coordinationScopeKey(run.taskId),
+    repoSlug: `workspace:${ide.projectId}`, branch: WORKSPACE_BRANCH, scopeKey: coordinationScopeKey(run.taskId),
   };
   return {
     ...provider,
@@ -77,7 +84,7 @@ export function withIdeWorkspace(
         const r = await repoWrite.writeFile(path, content);
         if (r.ok) {
           changed(path, r.change ?? 'modified');
-          await recordLeft(path);
+          await recordStored(path, content);
         }
         return r;
       },
@@ -85,7 +92,7 @@ export function withIdeWorkspace(
         const r = await repoWrite.editFile(path, oldString, newString, replaceAll);
         if (r.ok) {
           changed(path, 'modified');
-          await recordLeft(path);
+          await recordStored(path);
         }
         return r;
       },

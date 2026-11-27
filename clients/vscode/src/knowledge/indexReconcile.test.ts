@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createFsDirectorySource, memoryHashCache, planKnowledgeReviewDetail, type KnowledgeFs } from "@builderforce/agent-tools/knowledge";
+import { createFsDirectorySource, planKnowledgeReviewDetail, type KnowledgeFs } from "@builderforce/agent-tools/knowledge";
+import { memoryHashCache } from "@seanhogg/builderforce-memory/knowledge";
 import { InMemoryIngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import { listingFilter, planIndex } from "./indexReconcile";
 

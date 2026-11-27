@@ -18,9 +18,13 @@ const h = vi.hoisted(() => ({
   del: vi.fn(async () => ({ ok: true, deleted: true })),
 }));
 
-vi.mock('./ideWorkspaceCoding', () => ({
-  listIdeWorkspaceFiles: h.list, readIdeWorkspaceFile: h.read, searchIdeWorkspace: h.search,
-  writeIdeWorkspaceFile: h.write, editIdeWorkspaceFile: h.edit, deleteIdeWorkspaceFile: h.del,
+vi.mock('../../ide/taskWorkspaceTarget', () => ({ applyTaskWorkspaceChanges: vi.fn() }));
+vi.mock('../../ide/r2WorkspaceFs', () => ({
+  r2WorkspaceFs: () => ({}),
+  r2Capabilities: () => ({
+    repoRead: { listFiles: h.list, readFile: h.read, searchCode: h.search },
+    repoWrite: { writeFile: h.write, editFile: h.edit, deleteFile: h.del },
+  }),
 }));
 vi.mock('../executionEvents', () => ({ notifyExecutionSubscribers: h.notify }));
 vi.mock('../cloudToolEvents', () => ({ recordCloudToolEvent: h.record }));
@@ -65,15 +69,15 @@ describe('withIdeWorkspace', () => {
     await expect(p.repoRead!.readFile('index.html')).resolves.toMatchObject({ ok: true, content: '<h1/>' });
     await p.repoRead!.listFiles('src', '*.ts');
     await p.repoRead!.searchCode('h1', 'src');
-    expect(h.read).toHaveBeenCalledWith(ide.bucket, 12, 'index.html');
-    expect(h.list).toHaveBeenCalledWith(ide.bucket, 12, 'src', '*.ts');
-    expect(h.search).toHaveBeenCalledWith(ide.bucket, 12, 'h1', 'src');
+    expect(h.read).toHaveBeenCalledWith('index.html');
+    expect(h.list).toHaveBeenCalledWith('src', '*.ts');
+    expect(h.search).toHaveBeenCalledWith('h1', 'src');
   });
 
   it('writes the workspace, records the path and notifies the live run', async () => {
     const { p, writtenPaths } = provider();
     await expect(p.repoWrite!.writeFile('index.html', '<h1>Hi</h1>')).resolves.toMatchObject({ ok: true });
-    expect(h.write).toHaveBeenCalledWith(expect.anything(), ide, expect.objectContaining({ tenantId: 1, taskId: 5, executionId: 77, agent: 'Agent', path: 'index.html', content: '<h1>Hi</h1>' }));
+    expect(h.write).toHaveBeenCalledWith('index.html', '<h1>Hi</h1>');
     expect([...writtenPaths]).toEqual(['index.html']);
     expect(h.notify).toHaveBeenCalledWith(77, expect.objectContaining({ type: 'file_change', path: 'index.html', change: 'created' }));
   });
@@ -81,7 +85,7 @@ describe('withIdeWorkspace', () => {
   it('edits through the shared edit core and deletes, keeping writtenPaths true', async () => {
     const { p, writtenPaths } = provider();
     await p.repoWrite!.editFile('index.html', '<h1/>', '<h2/>', true);
-    expect(h.edit).toHaveBeenCalledWith(expect.anything(), ide, expect.objectContaining({ path: 'index.html', oldString: '<h1/>', newString: '<h2/>', replaceAll: true }));
+    expect(h.edit).toHaveBeenCalledWith('index.html', '<h1/>', '<h2/>', true);
     expect(writtenPaths.has('index.html')).toBe(true);
     await p.repoWrite!.deleteFile('index.html');
     expect(writtenPaths.has('index.html')).toBe(false);
@@ -133,7 +137,7 @@ describe('withIdeWorkspace', () => {
       await p.repoWrite!.writeFile('index.html', '<h1/>');
       h.read.mockResolvedValueOnce({ ok: true, path: 'index.html', content: '<h2/>' });
       await p.repoWrite!.editFile('index.html', '<h1/>', '<h2/>');
-      expect(h.read).toHaveBeenLastCalledWith(ide.bucket, 12, 'index.html');
+      expect(h.read).toHaveBeenLastCalledWith('index.html');
       expect(writtenHashes.get('index.html')).toBe(await sha256Hex('<h2/>'));
     });
 

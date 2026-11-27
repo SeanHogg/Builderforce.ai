@@ -23,7 +23,7 @@
 import { answerWhereDefined, preSearch, whereDefinedTargets, type PreSearchResult, type RepoSymbolsCapability } from "@builderforce/agent-tools";
 import type { RunContextPack } from "../brain/brainRunHostContract";
 import { findRipgrep } from "../tools/ripgrep";
-import { searchWorkspace } from "@builderforce/agent-tools/node-text-search";
+import { searchWorkspace } from "@builderforce/agent-tools/node-workspace";
 import { workspaceSymbolIndex } from "../workspace/workspaceSymbols";
 import { REQUEST_SYMBOL_LIMIT } from "./requestSymbols";
 import { knowledgePart, knowledgeRecall, preSearchPaths } from "./knowledgeSource";

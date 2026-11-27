@@ -51,15 +51,15 @@ export async function brainToolCatalog(
   const platformTools = await listPlatformTools(secrets, opts.chatIdentity);
   // The ticket branch review needs both halves: the project's tickets AND a checkout to
   // compare their branches in.
-  // `semantic_search` stays only while Builderforce Desktop answers and `read_compressed`
-  // only while it has its compressor — a run never sees a tool whose only backing is a
-  // service that is not running. `repo_map` always stays: without Desktop it is served
-  // from the workspace's own symbol index (`localSemantic.ts`). `local_research` stays only
+  // `read_compressed` stays only while Builderforce Desktop has its compressor — a run
+  // never sees a tool whose only backing is a service that is not running. `semantic_search`
+  // and `repo_map` always stay: without Desktop they are served from the workspace's own
+  // local index (`localSemantic.ts`, `resolveLocalSemantic`). `local_research` stays only
   // while a model on this machine can answer it.
   const localTools = root
     ? await withLocalResearch(await desktopBackedTools(
         [...TOOL_DEFS, ...(projectId != null ? [ticketBranchReviewToolDef(secrets, projectId)] : [])],
-        { localRepoMap: true },
+        { localRepoMap: true, localSemanticSearch: true },
       ))
     : [];
   // Delegation needs a workspace AND a host that can run the child. Spawning stops at the

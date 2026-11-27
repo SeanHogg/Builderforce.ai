@@ -5,11 +5,11 @@ import * as crypto from "crypto";
 import { gitIgnoredMatcher } from "@builderforce/agent-tools/node-git-ignore";
 import { isIndexedDirName } from "@builderforce/agent-tools/skip-dirs";
 import { routeComplete, type ModelRoute } from "../models/modelRouting";
+import { HOST_EXTRA_SKIP_DIRS } from "../workspace/hostSkipDirs";
 
 // Sibling checkout that sits beside the product tree when the parent folder is
 // opened. It is not this repo, and its manifests were landing in the map as if they
 // were sub-projects. (Vendored `_*_src` trees are covered by the shared policy.)
-const HOST_EXTRA_SKIP_DIRS: ReadonlySet<string> = new Set(["bf-verify-fdc"]);
 const MANIFEST_FILES = new Set([
   "package.json", "pyproject.toml", "requirements.txt", "Cargo.toml", "go.mod",
   "pom.xml", "build.gradle", "Gemfile", "composer.json", "wrangler.toml",

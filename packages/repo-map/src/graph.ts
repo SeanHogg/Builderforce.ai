@@ -201,28 +201,6 @@ export class FileGraph {
     return this.reverse()[file] ?? [];
   }
 
-  /**
-   * The files a change to `file` can reach: `file` plus every file that transitively
-   * depends on it, nearest first. `maxDepth` (≥ 0) bounds the walk; omitted = the whole closure.
-   */
-  impactRadius(file: number, maxDepth = Number.POSITIVE_INFINITY): number[] {
-    if (file < 0 || file >= this.pathList.length) return [];
-    const seen = new Set<number>([file]);
-    let frontier = [file];
-    for (let depth = 0; depth < maxDepth && frontier.length > 0; depth += 1) {
-      const next: number[] = [];
-      for (const f of frontier) {
-        for (const d of this.dependents(f)) {
-          if (seen.has(d)) continue;
-          seen.add(d);
-          next.push(d);
-        }
-      }
-      frontier = next;
-    }
-    return [...seen];
-  }
-
   private reverseEdges: number[][] | undefined;
 
   private reverse(): number[][] {

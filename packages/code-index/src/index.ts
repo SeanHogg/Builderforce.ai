@@ -253,14 +253,14 @@ async function readSharedIndex(input: SearchInput, root: string): Promise<CodeSn
       if (!result) return result;
       const { snapshot } = result;
       const active = load(snapshot, snapshot.fingerprint === binding ? input.embedder : undefined);
-      if (watcher && result.fresh && active && !invalidated) {
-        warm.set(root, { snapshot, active, watcher, binding, deadline: Date.now() + WATCH_REFRESH_MS });
+      if (unsubscribe && result.fresh && active && !invalidated) {
+        warm.set(root, { snapshot, active, unsubscribe, binding, deadline: Date.now() + WATCH_REFRESH_MS });
         if (warm.size > MAX_WARM_ROOTS) evictWarm(warm.keys().next().value!);
       }
       return { snapshot, ...(active ? { active } : {}) };
     } finally {
       pending.delete(root);
-      if (watcher && warm.get(root)?.watcher !== watcher) watcher.close();
+      if (unsubscribe && warm.get(root)?.unsubscribe !== unsubscribe) unsubscribe();
     }
   })();
   pending.set(root, build);

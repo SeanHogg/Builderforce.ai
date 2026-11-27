@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   appModalityFor,
-  applySearchReplace,
   hasCodeWorkspace,
   resolveCanvasBuild,
-  searchFileLines,
+  searchWorkspaceFiles,
   summarizeWorkspace,
   workspacePathArg,
   CANVAS_BUILD_TOOL_NAMES,
@@ -48,56 +47,73 @@ describe('resolveCanvasBuild', () => {
   });
 });
 
-describe('applySearchReplace', () => {
-  it('replaces a single occurrence', () => {
-    const result = applySearchReplace('const a = 1;\nconst b = 2;', 'const b = 2;', 'const b = 3;', false);
-    expect(result).toEqual({ ok: true, next: 'const a = 1;\nconst b = 3;', replacements: 1 });
+describe('canvas_edit_build_file', () => {
+  /** Seed one file, run the edit action over it, and return the action result plus the file after. */
+  const edit = async (id: string, source: string, args: { find: string; replace: string; replaceAll?: boolean }) => {
+    await seedLocalWorkspace(id, { 'a.js': source });
+    const store = localFileStore(id);
+    const actions = canvasBuildActions({
+      builds: () => [{ objectId: 'b1', title: 'Local', modality: 'designer', store }],
+      createBuild: async () => { throw new Error('unused'); },
+    });
+    const action = actions.find((candidate) => candidate.name === 'canvas_edit_build_file')!;
+    const result = await action.run({ path: 'a.js', ...args } as never) as Record<string, unknown>;
+    return { result, next: await store.read('a.js') };
+  };
+
+  it('replaces a single occurrence', async () => {
+    const { result, next } = await edit('edit-single', 'const a = 1;\nconst b = 2;', { find: 'const b = 2;', replace: 'const b = 3;' });
+    expect(result).toMatchObject({ ok: true, replacements: 1 });
+    expect(next).toBe('const a = 1;\nconst b = 3;');
   });
 
-  it('tells the model to re-read when the anchor is absent', () => {
-    const result = applySearchReplace('hello', 'goodbye', 'x', false);
-    expect(result.ok).toBe(false);
-    expect(!result.ok && result.reason).toContain('canvas_read_build_file');
+  it('tells the model to re-read when the anchor is absent', async () => {
+    const { result } = await edit('edit-absent', 'hello', { find: 'goodbye', replace: 'x' });
+    expect(String(result.error)).toContain('canvas_read_build_file');
   });
 
   // The whole point of a surgical edit is that an ambiguous anchor must NOT
   // silently pick the first match — that is how an agent edits the wrong line.
-  it('refuses an ambiguous anchor unless replaceAll is explicit', () => {
+  it('refuses an ambiguous anchor unless replaceAll is explicit', async () => {
     const source = 'x = 1;\nx = 1;';
-    const refused = applySearchReplace(source, 'x = 1;', 'x = 2;', false);
-    expect(refused.ok).toBe(false);
-    expect(!refused.ok && refused.reason).toContain('matched 2 times');
+    const refused = await edit('edit-ambiguous', source, { find: 'x = 1;', replace: 'x = 2;' });
+    expect(String(refused.result.error)).toContain('matched 2 times');
+    expect(refused.next).toBe(source);
 
-    const all = applySearchReplace(source, 'x = 1;', 'x = 2;', true);
-    expect(all).toEqual({ ok: true, next: 'x = 2;\nx = 2;', replacements: 2 });
+    const all = await edit('edit-all', source, { find: 'x = 1;', replace: 'x = 2;', replaceAll: true });
+    expect(all.result).toMatchObject({ ok: true, replacements: 2 });
+    expect(all.next).toBe('x = 2;\nx = 2;');
   });
 
-  it('deletes when replace is empty, and rejects an empty anchor', () => {
-    expect(applySearchReplace('keep\ndrop\n', 'drop\n', '', false)).toEqual({ ok: true, next: 'keep\n', replacements: 1 });
-    const empty = applySearchReplace('anything', '', 'x', false);
-    expect(!empty.ok && empty.reason).toContain('canvas_write_build_file');
+  it('deletes when replace is empty, and rejects an empty anchor', async () => {
+    const deleted = await edit('edit-delete', 'keep\ndrop\n', { find: 'drop\n', replace: '' });
+    expect(deleted.result).toMatchObject({ ok: true, replacements: 1 });
+    expect(deleted.next).toBe('keep\n');
+    const empty = await edit('edit-empty', 'anything', { find: '', replace: 'x' });
+    expect(String(empty.result.error)).toContain('canvas_write_build_file');
   });
 
   // `String.replace` treats `$&`, `$1`, `$'` in the REPLACEMENT as references.
   // A model replacing a price string or a regex literal would otherwise get
   // silently mangled text back.
-  it('treats a replacement containing $ patterns literally', () => {
-    const result = applySearchReplace('const label = "PRICE";', 'PRICE', '$&$1 total', false);
-    expect(result.ok && result.next).toBe('const label = "$&$1 total";');
+  it('treats a replacement containing $ patterns literally', async () => {
+    const { next } = await edit('edit-dollar', 'const label = "PRICE";', { find: 'PRICE', replace: '$&$1 total' });
+    expect(next).toBe('const label = "$&$1 total";');
   });
 });
 
-describe('searchFileLines', () => {
-  it('returns 1-indexed line numbers and trims long lines', () => {
+describe('searchWorkspaceFiles', () => {
+  it('returns 1-indexed line numbers and trims long lines', async () => {
     const content = 'first\nconst Header = () => null;\nthird';
-    expect(searchFileLines('src/App.jsx', content, 'Header', false)).toEqual([
+    expect((await searchWorkspaceFiles([{ path: 'src/App.jsx', content }], 'Header', false)).matches).toEqual([
       { path: 'src/App.jsx', line: 2, text: 'const Header = () => null;' },
     ]);
   });
 
-  it('is case-insensitive by default and case-sensitive on request', () => {
-    expect(searchFileLines('a.js', 'const Foo = 1;', 'foo', false)).toHaveLength(1);
-    expect(searchFileLines('a.js', 'const Foo = 1;', 'foo', true)).toHaveLength(0);
+  it('is case-insensitive by default and case-sensitive on request', async () => {
+    const files = [{ path: 'a.js', content: 'const Foo = 1;' }];
+    expect((await searchWorkspaceFiles(files, 'foo', false)).matches).toHaveLength(1);
+    expect((await searchWorkspaceFiles(files, 'foo', true)).matches).toHaveLength(0);
   });
 });
 

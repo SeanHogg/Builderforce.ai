@@ -17,7 +17,7 @@ import { checkPinpointDataUrl, matchAnchors, parseVisionReply, pinpointVisionReq
 import type { ChatMessage } from "../gateway/gateway";
 import { resolveModelRoute, routeComplete } from "../models/modelRouting";
 import { findRipgrep } from "../tools/ripgrep";
-import { searchWorkspace } from "@builderforce/agent-tools/node-text-search";
+import { searchWorkspace } from "@builderforce/agent-tools/node-workspace";
 import type { KnowledgePinpointResult } from "./knowledgeProtocol";
 import type { KnowledgeRoot } from "./knowledgeRoots";
 import { loadGraph } from "./knowledgeService";

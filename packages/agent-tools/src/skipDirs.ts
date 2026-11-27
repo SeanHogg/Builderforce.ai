@@ -6,10 +6,16 @@
  * — so the same folder gives the same graph on every host. Pure.
  */
 
-export const WORKSPACE_SKIP_DIRS: ReadonlySet<string> = new Set([
-  "node_modules", ".git", ".hg", ".svn", "dist", "build", "out", ".next", ".nuxt", "coverage", ".turbo", ".vercel", ".cache",
-  "target", "vendor", ".venv", "venv", "__pycache__", ".idea", ".vscode-test",
+/** Build, dependency, VCS and cache OUTPUT directories: what a snapshot walk that must see every user-edited file still skips. */
+export const OUTPUT_DIRS: ReadonlySet<string> = new Set([
+  "node_modules", ".git", ".hg", ".svn", ".next", ".nuxt", "dist", "build", "out", ".cache", ".turbo", ".vercel", "coverage", ".venv", "venv", "__pycache__", ".vscode-test",
 ]);
+
+/** Whether `name` is a build/dependency/VCS output directory. */
+export const isOutputDirName = (name: string): boolean => OUTPUT_DIRS.has(name);
+
+/** {@link OUTPUT_DIRS} plus the directories not worth indexing (vendored code, target, IDE state). */
+export const WORKSPACE_SKIP_DIRS: ReadonlySet<string> = new Set([...OUTPUT_DIRS, "vendor", "target", ".idea"]);
 
 /** The one hidden directory an index walk still enters: CI workflows and issue templates are source worth indexing. */
 const INDEXED_DOT_DIR = ".github";

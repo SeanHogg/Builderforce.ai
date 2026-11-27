@@ -43,6 +43,9 @@ import { IDE_PREFIX } from '../project/projectTemplate';
 // worker's file router validates with, so the two edges accept identical paths.
 export { validateWorkspacePath, type PathValidation };
 
+/** The "branch" an IDE-workspace write reports and its coordination lease names: the workspace is not a git ref. */
+export const WORKSPACE_BRANCH = 'workspace';
+
 /** The R2 key prefix for a project's workspace. Trailing slash is load-bearing:
  *  it is what keeps project 1's listing from matching project 12's keys. */
 export function workspacePrefix(projectId: number): string {

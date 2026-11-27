@@ -243,18 +243,20 @@ export async function catalogDesktopSemantic(root: string, opts?: { adaptive?: b
  * answers — decided per run, so starting or quitting the app takes effect next turn.
  * `read_compressed` additionally needs the service's compressor. `localRepoMap`: the
  * surface serves `repo_map` from its own repo map (`workspaceSemantic`), so
- * that one tool stays when the service is down.
+ * that one tool stays when the service is down; `localSemanticSearch` does the same for
+ * `semantic_search` (the surface backs it from its own local semantic index).
  */
 export async function desktopBackedTools<T extends { name: string }>(
   defs: readonly T[],
-  opts: { localRepoMap?: boolean } = {},
+  opts: { localRepoMap?: boolean; localSemanticSearch?: boolean } = {},
 ): Promise<T[]> {
   const live = (await liveDesktop()) != null;
   const compress = live && probe?.compress === true;
   return defs.filter((d) => {
     if (d.name === readCompressedTool.name) return compress;
     if (!SEMANTIC_TOOL_NAMES.has(d.name)) return true;
-    return live || (opts.localRepoMap === true && d.name === "repo_map");
+    // A surface with its own local backing (`resolveLocalSemantic`) keeps the tool without Desktop.
+    return live || (opts.localRepoMap === true && d.name === "repo_map") || (opts.localSemanticSearch === true && d.name === "semantic_search");
   });
 }
 

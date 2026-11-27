@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { acquireReplicaLock } from "@builderforce/agent-tools/knowledge";
-import { codeIndexPath, ensureLocalIndexDir, localIndexStem, readRegularFile } from "@builderforce/agent-tools/node-index-layout";
+import { codeIndexPath, ensureLocalIndexDir, localIndexStem, readRegularFile, reportIndexFailure, type IndexFailureSink } from "@builderforce/agent-tools/node-index-layout";
 import { sha256Hex } from "@seanhogg/builderforce-memory/knowledge";
 import type { CodeChunk } from "./chunk.js";
 
@@ -58,7 +58,7 @@ function parseStored(bytes: Buffer | undefined): StoredCodeIndex | undefined {
  * source bodies stay gitignored. A file under the older realpath-hash name is read once,
  * rewritten under the new name, and deleted.
  */
-export async function codeIndexStorage(root: string, rootId?: string) {
+export async function codeIndexStorage(root: string, rootId?: string, onFailure?: IndexFailureSink) {
   const directory = await ensureLocalIndexDir(root);
   const id = localIndexStem(root, rootId);
   const path = codeIndexPath(root, rootId);
@@ -95,8 +95,9 @@ export async function codeIndexStorage(root: string, rootId?: string) {
       await writeFile(temp, bytes, { flag: "wx", mode: 0o600 });
       await rename(temp, path);
       await rm(legacyPath, { force: true });
-    } catch {
-      /* the next read migrates again */
+    } catch (error) {
+      // Non-fatal (the old file stays, the next read migrates again) but never silent.
+      reportIndexFailure("code index legacy migration failed", legacyPath, error, onFailure);
     } finally {
       await rm(temp, { force: true }).catch(() => undefined);
     }

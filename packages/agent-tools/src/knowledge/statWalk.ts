@@ -15,7 +15,7 @@
  *     save would move it out of the racy window.
  */
 
-import { EMPTY_STAT_SET, isRacy, msToNs, reusedHash, sameRow, type FileStat, type GitHints, type HashCache, type StatRow, type StatSet } from './statManifest.js';
+import { EMPTY_STAT_SET, isRacy, msToNs, reusedHash, sameRow, type FileStat, type GitHints, type HashCache, type StatRow, type StatSet } from '@seanhogg/builderforce-memory/knowledge';
 
 export interface StatWalkDeps {
     cache: HashCache;

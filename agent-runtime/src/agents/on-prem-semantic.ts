@@ -13,27 +13,19 @@
 
 import type { RepoSemanticCapability } from "@builderforce/agent-tools";
 import { catalogDesktopSemantic, setDesktopClientName } from "@builderforce/agent-tools/node-desktop.js";
+import { nodeWatchPort } from "@builderforce/agent-tools/node-watch-port.js";
 import { workspaceSemantic } from "@builderforce/workspace-mcp";
+import { onPremRootId } from "./knowledge/index/onPremRootId.js";
 import { buildNodeCapabilityProvider } from "./node-capability-provider.js";
 import { onPremTreeSitterDir } from "./on-prem-symbol-index.js";
 import { logDebug } from "../logger.js";
 
-/** The local-index backings this module made — they are not Desktop. */
-const localIndexBackings = new WeakSet<RepoSemanticCapability>();
-
-/** True when `semantic` is the local code-index backing (no Desktop behind it). */
-export function isLocalIndexSemantic(semantic: RepoSemanticCapability | undefined): boolean {
-  return semantic != null && localIndexBackings.has(semantic);
-}
-
 /** `semantic_search` + `repo_map` from the working tree's code index — the backing without Desktop. */
-export function localIndexSemantic(workspaceRoot: string): RepoSemanticCapability {
-  const semantic = workspaceSemantic(
+function localIndexSemantic(workspaceRoot: string): RepoSemanticCapability {
+  return workspaceSemantic(
     { root: workspaceRoot, caps: buildNodeCapabilityProvider({ workspaceRoot }) },
-    { grammar: () => ({ wasmDir: onPremTreeSitterDir() }) },
+    { grammar: () => ({ wasmDir: onPremTreeSitterDir() }), watch: nodeWatchPort(), rootId: (root) => onPremRootId(root) },
   );
-  localIndexBackings.add(semantic);
-  return semantic;
 }
 
 /** Desktop's backing when it answers, else the local code index and repo map. */

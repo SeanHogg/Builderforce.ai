@@ -10,16 +10,21 @@
  *     and `repo_map` both answer locally.
  *
  * The probe is cached for 30 s in node-desktop, so a per-call resolve costs nothing.
- * Pure Node (no `vscode` import).
+ * The local index rides the editor's ONE change feed (`vscodeWatchPort`, the one
+ * FileSystemWatcher) and the editor's knowledge root id, exactly as the Workspace MCP does, so
+ * both share one watcher and one index file per folder.
  */
 
 import { type RepoSemanticCapability } from "@builderforce/agent-tools";
 import { workspaceSemantic } from "@builderforce/workspace-mcp";
 import { catalogDesktopSemantic } from "../context/desktopContext";
 import { hostCostLeverOn } from "../host/hostCostLevers";
+import { knowledgeRootId } from "../knowledge/knowledgeRoots";
+import { symbolGrammarOptions } from "../workspace/workspaceSymbols";
+import { vscodeWatchPort } from "../workspace/workspaceSymbolWatch";
 import { buildLocalCapabilityProvider } from "./localCapabilities";
 
 export async function resolveLocalSemantic(root: string): Promise<RepoSemanticCapability> {
   const desktop = await catalogDesktopSemantic(root, { adaptive: hostCostLeverOn("c4_adaptive_context") }).catch(() => undefined);
-  return desktop ?? workspaceSemantic({ root, caps: buildLocalCapabilityProvider(root) });
+  return desktop ?? workspaceSemantic({ root, caps: buildLocalCapabilityProvider(root) }, { grammar: symbolGrammarOptions, watch: vscodeWatchPort(), rootId: knowledgeRootId });
 }

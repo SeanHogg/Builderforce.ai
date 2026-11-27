@@ -20,14 +20,14 @@
 
 import * as vscode from "vscode";
 import {
-  createReviewRecorder, deferredHashCache, migratingRootFiles,
+  createReviewRecorder, migratingRootFiles,
   rootManifest, rootStore, runKnowledgeReview,
   type FsDirectorySource, type KnowledgeReviewOptions, type ReviewRecorder,
 } from "@builderforce/agent-tools/knowledge";
 import { readPartitions } from "@builderforce/agent-tools/prefetch";
 import { gitBlobId, gitIndexHints } from "@builderforce/agent-tools/node-knowledge-store";
 import { createKnowledgeClient, type KnowledgeClient } from "@builderforce/knowledge-client";
-import type { KnowledgeGraph, KnowledgeStore, LocalSnapshotStore, PlanDetail, ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
+import { deferredHashCache, type KnowledgeGraph, type KnowledgeStore, type LocalSnapshotStore, type PlanDetail, type ReviewReport } from "@seanhogg/builderforce-memory/knowledge";
 import type { IngestManifest } from "@seanhogg/builderforce-memory/ingest";
 import { NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import { fetchAuthed, type AuthedInit } from "../bfApi";

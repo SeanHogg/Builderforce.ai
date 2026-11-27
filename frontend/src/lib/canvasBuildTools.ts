@@ -53,8 +53,8 @@ import { canvasBuildHistoryActions } from '@/lib/canvasBuildHistoryActions';
 
 // The vocabulary's public surface stays here; its parts live beside it.
 export {
-  BUILDABLE_MODALITIES, MAX_SEARCH_MATCHES, NO_HISTORY, appModalityFor, applySearchReplace, hasCodeWorkspace,
-  resolveCanvasBuild, searchFileLines, summarizeWorkspace, workspacePathArg,
+  BUILDABLE_MODALITIES, NO_HISTORY, appModalityFor, hasCodeWorkspace,
+  resolveCanvasBuild, searchWorkspaceFiles, summarizeWorkspace, workspacePathArg,
 } from '@/lib/canvasBuildContext';
 export type { BoundCanvasBuild, CanvasBuildToolsContext } from '@/lib/canvasBuildContext';
 export { MAX_READ_CHARS, MAX_READ_FILES } from '@/lib/canvasBuildReads';

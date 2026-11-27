@@ -28,6 +28,8 @@ const CONTAINER = join(API_ROOT, 'container');
 const MODULES = ['toolOutputPolicy.mjs', 'postEditChecks.mjs', 'sandboxJobs.mjs', 'workspaceClient.mjs', 'sandboxGit.mjs', 'sandboxCore.mjs'];
 /** The workspace helper is NOT inlined: it is its own process (run as the shell user), so the runner writes it to a file. */
 const HELPER = 'workspaceAgent.mjs';
+/** The generated modules the helper imports. The runner writes the helper ALONE to a file, so they are inlined into it (see {@link toHelperInline}). */
+const HELPER_SIBLINGS = ['toolOutputPolicy.mjs', 'workspaceGlob.mjs'];
 const OUT = join(API_ROOT, 'src', 'application', 'runtime', 'generated', 'sandboxCoreSource.ts');
 
 /**
@@ -43,6 +45,21 @@ function toInline(name, source) {
     .replace(/^export \{[^}]*\};?[ \t]*\n/gm, '')
     .replace(/^export /gm, '');
   return `// ── ${name} ──\n${body.trim()}\n`;
+}
+
+/**
+ * The helper as the runner writes it: a file of its own with no siblings beside it, so the
+ * generated modules it imports (`./toolOutputPolicy.mjs`, `./workspaceGlob.mjs`) are inlined
+ * after its `node:` imports and the relative import lines dropped. The container image runs
+ * the helper unchanged, with those files beside it.
+ */
+function toHelperInline(helper, siblings) {
+  // `[^;]` keeps each match inside ONE import statement (a lazy `[\s\S]` would run on to a later `./` import).
+  const body = helper.replace(/^import\s[^;]*?\sfrom\s+['"]\.\/[^'"]+['"];?[ \t]*\n/gm, '');
+  const lastImport = [...body.matchAll(/^import\s[^;]*?\sfrom\s+['"][^'"]+['"];?[ \t]*\n/gm)].pop();
+  const at = lastImport ? lastImport.index + lastImport[0].length : 0;
+  const inlined = HELPER_SIBLINGS.map((name, i) => toInline(name, siblings[i])).join('\n');
+  return `${body.slice(0, at)}${inlined}${body.slice(at)}`;
 }
 
 /** Every `node:` builtin the modules import, merged per specifier, as import lines. */
@@ -81,13 +98,14 @@ export const SANDBOX_CORE_IMPORTS = ${JSON.stringify(imports)};
 
 export const SANDBOX_CORE_INLINE = ${JSON.stringify(inline)};
 
-/** \`workspaceAgent.mjs\` verbatim: the runner writes it to a file and the server spawns it as the shell user. */
+/** \`workspaceAgent.mjs\` with its generated siblings inlined: the runner writes it to a file and the server spawns it as the shell user. */
 export const WORKSPACE_AGENT_SOURCE = ${JSON.stringify(helper)};
 `;
 }
 
 const sources = await Promise.all(MODULES.map((m) => readFile(join(CONTAINER, m), 'utf8')));
-const helperSource = (await readFile(join(CONTAINER, HELPER), 'utf8')).replace(/\r\n/g, '\n');
+const helperSiblings = await Promise.all(HELPER_SIBLINGS.map((m) => readFile(join(CONTAINER, m), 'utf8')));
+const helperSource = toHelperInline((await readFile(join(CONTAINER, HELPER), 'utf8')).replace(/\r\n/g, '\n'), helperSiblings);
 const expected = render(sources, helperSource);
 
 if (process.argv.includes('--check')) {

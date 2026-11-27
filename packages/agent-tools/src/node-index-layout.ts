@@ -93,6 +93,15 @@ export async function readRegularFile(file: string, maxSize: number): Promise<Bu
   }
 }
 
+/** Receives a non-fatal index failure: what was being done, the file involved, and why it failed. */
+export type IndexFailureSink = (failure: { what: string; file: string; error: unknown }) => void;
+
+/** Report a non-fatal index failure (the index keeps working) to `sink`, else as a process warning naming the path and reason. */
+export function reportIndexFailure(what: string, file: string, error: unknown, sink?: IndexFailureSink): void {
+  if (sink) sink({ what, file, error });
+  else process.emitWarning(`${what} (${file}): ${error instanceof Error ? error.message : String(error)}`);
+}
+
 /** Make `dir` a gitignored cache directory: write its `.gitignore` (`*`) when absent, and refuse a directory whose own is anything else. */
 export async function ensureIgnoredDir(dir: string): Promise<void> {
   const ignore = path.join(dir, ".gitignore");
@@ -122,16 +131,20 @@ export async function readSnapshotText(cachePath: string, legacyCachePaths: read
  * Throws when the directory cannot be gitignored or the write fails.
  */
 export async function writeSnapshotText(cachePath: string, legacyCachePaths: readonly string[], json: string): Promise<void> {
-  const dir = path.dirname(cachePath);
-  await mkdir(dir, { recursive: true });
-  await ensureIgnoredDir(dir);
+  // The same guarded directory the code index uses (lstat, never a symlink), not a plain `mkdir -p`.
+  await ensureIndexDirAt(path.dirname(cachePath));
   await writeIndexAtomic(nodeIndexFiles, cachePath, new TextEncoder().encode(json), randomUUID().replace(/-/g, ""));
   for (const legacy of legacyCachePaths) await rm(legacy, { force: true }).catch(() => undefined);
 }
 
 /** Create `<root>/.builderforce/index` (private, never a symlink) and gitignore it; returns it. */
-export async function ensureLocalIndexDir(root: string): Promise<string> {
-  const directory = localIndexDir(root);
+export function ensureLocalIndexDir(root: string): Promise<string> {
+  return ensureIndexDirAt(localIndexDir(root));
+}
+
+/** Create `directory` and its parent one level at a time (private, each lstat-checked as a real directory, never a symlink) and gitignore `directory`; returns it. Anything above the parent is the caller's own tree. */
+export async function ensureIndexDirAt(directory: string): Promise<string> {
+  await mkdir(path.dirname(path.dirname(directory)), { recursive: true });
   for (const dir of [path.dirname(directory), directory]) {
     await mkdir(dir, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
       if (error.code !== "EEXIST") throw error;

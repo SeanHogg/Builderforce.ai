@@ -46,7 +46,12 @@ export function sandboxWorkspaceFs(bridge: SandboxFsBridge, root: string, option
 
   async function* list(dir: string): AsyncIterable<WorkspaceEntry> {
     const abs = dir === "" ? rootResolved : await confined(dir);
-    for (const entry of await readdir(abs, { withFileTypes: true })) {
+    const entries = await readdir(abs, { withFileTypes: true }).catch((e: unknown) => {
+      const code = (e as NodeJS.ErrnoException | undefined)?.code;
+      if (code === "ENOENT" || code === "ENOTDIR") throw new WorkspaceError("not_found", `directory not found: ${dir}`);
+      throw e;
+    });
+    for (const entry of entries) {
       const path = dir === "" ? entry.name : `${dir}/${entry.name}`;
       if (entry.isDirectory()) yield { path, kind: "dir" };
       else if (entry.isFile()) yield { path, kind: "file" };

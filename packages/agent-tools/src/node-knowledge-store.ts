@@ -14,14 +14,13 @@
  */
 
 import { existsSync } from 'node:fs';
-import { localSnapshotStore, type LocalSnapshotStore } from '@seanhogg/builderforce-memory/knowledge';
+import { localSnapshotStore, type HashCache, type LocalSnapshotStore } from '@seanhogg/builderforce-memory/knowledge';
 import type { IngestManifest } from '@seanhogg/builderforce-memory/ingest';
 import { bufferedManifest, ManifestBuffer } from './node-knowledge/manifestBuffer.js';
 import { knowledgeDbPath, openKnowledgeDb, KNOWLEDGE_BUSY_TIMEOUT_MS } from './node-knowledge/openKnowledgeDb.js';
 import { SqliteKnowledgeDb } from './node-knowledge/sqliteRows.js';
 import { openLocalSqlite } from './node-local-sqlite.js';
 import { sqliteHashCache } from './node-knowledge/statRows.js';
-import type { HashCache } from './knowledge/statManifest.js';
 
 export { gitBlobId, gitIndexHints } from './node-knowledge/gitIndexHints.js';
 export { migrateLegacyKnowledge, type MigrationOptions, type MigrationResult } from './node-knowledge/legacyMigration.js';

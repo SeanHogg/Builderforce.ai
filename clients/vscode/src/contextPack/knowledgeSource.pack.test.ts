@@ -4,8 +4,8 @@ import { configureHostKnowledgeIndex, workspaceKnowledgeIndex } from "../knowled
 import { preSearchBlock, withPreSearch } from "./preSearchSource";
 
 vi.mock("../tools/ripgrep", () => ({ findRipgrep: async () => "rg" }));
-vi.mock("@builderforce/agent-tools/node-text-search", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@builderforce/agent-tools/node-text-search")>()),
+vi.mock("@builderforce/agent-tools/node-workspace", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@builderforce/agent-tools/node-workspace")>()),
   searchWorkspace: async (opts: { query: string }) => ({ ok: true, query: opts.query, matches: [{ path: "src/billing/invoice.ts", line: 4, text: "createInvoice()" }] }),
 }));
 

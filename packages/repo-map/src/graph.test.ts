@@ -48,7 +48,7 @@ describe('FileGraph (mirror of bf-index graph.rs)', () => {
     expect(g.pagerank(p)[g.indexOf('d.ts')!]!).toBeGreaterThan(rank[g.indexOf('d.ts')!]!);
   });
 
-  it('answers dependencies, dependents and a bounded impact radius from the edges', () => {
+  it('answers dependencies and dependents from the edges', () => {
     const refs = [r('a.ts', 'B', 'b.ts'), r('b.ts', 'C', 'c.ts'), r('d.ts', 'C', 'c.ts')];
     const g = FileGraph.build(['a.ts', 'b.ts', 'c.ts', 'd.ts', 'e.ts'], refs, []);
     const names = (ids: number[]): string[] => ids.map((i) => g.paths()[i]!).sort();
@@ -56,10 +56,6 @@ describe('FileGraph (mirror of bf-index graph.rs)', () => {
     expect(names(g.dependencies(a!))).toEqual(['b.ts']);
     expect(names(g.dependents(c!))).toEqual(['b.ts', 'd.ts']);
     expect(g.dependents(e!)).toEqual([]);
-    expect(names(g.impactRadius(c!))).toEqual(['a.ts', 'b.ts', 'c.ts', 'd.ts']);
-    expect(names(g.impactRadius(c!, 1))).toEqual(['b.ts', 'c.ts', 'd.ts']);
-    expect(names(g.impactRadius(c!, 0))).toEqual(['c.ts']);
-    expect(g.impactRadius(99)).toEqual([]);
   });
 
   it('round-trips through JSON without changing ranks', () => {

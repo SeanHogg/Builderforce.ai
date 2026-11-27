@@ -10,20 +10,27 @@
  * scaffold rule, R2 history, task file-change record), handed in by the host as `applyChanges`.
  */
 import type { RepoReadCapability, RepoWriteCapability } from '@builderforce/agent-tools';
+import { scanFiles } from '@builderforce/agent-tools/text-scan';
 import {
   createRepoCapabilities, WorkspaceError,
-  type WorkspaceEntry, type WorkspaceFs, type WorkspaceRead,
+  type RepoCapabilityOptions, type SearchMatch, type WorkspaceEntry, type WorkspaceFs, type WorkspaceRead,
 } from '@builderforce/agent-tools/workspace';
 import { indexByDir, withListingSignal } from '../workspaceFs/flatListing';
-import { readWorkspaceFile, workspacePrefix } from './workspaceStore';
+import { readWorkspaceFile, WORKSPACE_BRANCH, workspacePrefix } from './workspaceStore';
 import type { WorkspaceApplyResult, WorkspaceChangeSet } from './taskWorkspaceTarget';
 
 /** R2 pages read for one snapshot (1,000 keys each). A listing past this is reported incomplete. */
 const MAX_LIST_PAGES = 200;
+/** Files an UNSCOPED agent search reads: one R2 page of keys, the bound the search always had (each read is a GET, and a Worker has a subrequest budget). */
+const AGENT_SEARCH_MAX_FILES = 1_000;
+/** Parallel GETs per scan. */
+export const R2_READ_CONCURRENCY = 8;
 
 export interface R2WorkspaceFsOptions {
   /** How a write or delete lands (validation, history, change records). Absent: the adapter is read-only. */
   applyChanges?: (changes: WorkspaceChangeSet) => Promise<WorkspaceApplyResult>;
+  /** R2 list pages the snapshot may read (default {@link MAX_LIST_PAGES}). A caller that wants one page of keys (the file panel's search) passes 1; a listing the bound cut short is reported incomplete. */
+  maxPages?: number;
 }
 
 export interface R2WorkspaceFs extends WorkspaceFs {
@@ -34,6 +41,7 @@ export interface R2WorkspaceFs extends WorkspaceFs {
 /** The workspace of `projectId` in `bucket` as a `WorkspaceFs`. */
 export function r2WorkspaceFs(bucket: R2Bucket, projectId: number, opts: R2WorkspaceFsOptions = {}): R2WorkspaceFs {
   const prefix = workspacePrefix(projectId);
+  const maxPages = Math.max(1, opts.maxPages ?? MAX_LIST_PAGES);
   let snapshot: Promise<Map<string, number>> | null = null;
   let loaded: Map<string, number> | null = null;
   let index: Map<string, Map<string, WorkspaceEntry>> | null = null;
@@ -44,7 +52,7 @@ export function r2WorkspaceFs(bucket: R2Bucket, projectId: number, opts: R2Works
     const seenCursors = new Set<string>();
     let cursor: string | undefined;
     let finished = false;
-    for (let pageNo = 0; pageNo < MAX_LIST_PAGES; pageNo++) {
+    for (let pageNo = 0; pageNo < maxPages; pageNo++) {
       if (cursor) {
         if (seenCursors.has(cursor)) break;
         seenCursors.add(cursor);
@@ -83,7 +91,7 @@ export function r2WorkspaceFs(bucket: R2Bucket, projectId: number, opts: R2Works
     return opts.applyChanges(changes);
   };
 
-  return {
+  const fs: R2WorkspaceFs = {
     listingIncomplete: () => incomplete,
 
     async *list(dir) {
@@ -111,15 +119,52 @@ export function r2WorkspaceFs(bucket: R2Bucket, projectId: number, opts: R2Works
       settle(path, null);
       return 'deleted';
     },
+
+    /**
+     * The shared neutral scan with R2's budget: bounded parallel GETs, and an UNSCOPED search reads at most one
+     * page of keys' worth of files (a scoped one may read the whole scope). A listing the page bound cut short is truncated too.
+     */
+    async search(query, scope, { signal }) {
+      const found = await scanFiles(fs, query, scope, {
+        concurrency: R2_READ_CONCURRENCY,
+        ...(scope ? {} : { maxFiles: AGENT_SEARCH_MAX_FILES }),
+        ...(signal ? { signal } : {}),
+      });
+      if (!found.ok) throw new WorkspaceError(found.code ?? 'io', found.error ?? 'search failed');
+      return { matches: (found.matches ?? []) as SearchMatch[], truncated: found.truncated === true || incomplete };
+    },
   };
+  return fs;
 }
+
+/** `note` joined to what an IDE-workspace result adds to it. */
+const withNote = (existing: string | undefined, added: string): string => (existing ? `${added}. ${existing}` : added);
 
 /**
  * The shared coding capabilities over `fs`, plus the one thing R2 adds: its listing can be cut
  * short by the page budget, so a truncated listing says so (the tool then words an empty glob
  * as "incomplete", never "absent").
  */
-export function r2Capabilities(fs: R2WorkspaceFs): { repoRead: RepoReadCapability; repoWrite: RepoWriteCapability } {
-  const { repoRead, repoWrite } = createRepoCapabilities(fs);
-  return { repoRead: withListingSignal(repoRead, { incomplete: fs.listingIncomplete, ref: () => 'workspace' }), repoWrite };
+export function r2Capabilities(fs: R2WorkspaceFs, opts: Pick<RepoCapabilityOptions, 'onWrite'> & { projectName?: string } = {}): { repoRead: RepoReadCapability; repoWrite: RepoWriteCapability } {
+  const { projectName, ...shared } = opts;
+  const { repoRead, repoWrite } = createRepoCapabilities(fs, shared);
+  const where = projectName ? `IDE workspace ${projectName}` : 'the IDE workspace';
+  // A workspace write reports the "workspace" branch and says where it landed (the tool result surfaces `branch` to the model); the shared provider stays host-neutral.
+  return {
+    repoRead: withListingSignal(repoRead, { incomplete: fs.listingIncomplete, ref: () => WORKSPACE_BRANCH }),
+    repoWrite: {
+      async writeFile(path, content, summary) {
+        const r = await repoWrite.writeFile(path, content, summary);
+        return r.ok ? { ...r, branch: WORKSPACE_BRANCH, note: withNote(r.note, `wrote to ${where}`) } : r;
+      },
+      async editFile(path, oldString, newString, replaceAll) {
+        const r = await repoWrite.editFile(path, oldString, newString, replaceAll);
+        return r.ok ? { ...r, branch: WORKSPACE_BRANCH, note: withNote(r.note, `wrote to ${where}`) } : r;
+      },
+      async deleteFile(path, reason) {
+        const r = await repoWrite.deleteFile(path, reason);
+        return r.ok && r.deleted ? { ...r, branch: WORKSPACE_BRANCH, note: withNote(r.note, `deleted from ${where}`) } : r;
+      },
+    },
+  };
 }

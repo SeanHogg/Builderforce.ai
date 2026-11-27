@@ -5,7 +5,7 @@
  *
  *   list   — a walk of the folder, every file with the SHA-256 of its bytes (the content
  *            hash the extracted cache and the platform share). The stat manifest
- *            (`statManifest.ts`, PRD 41 B2) is loaded once and saved once per walk: a file whose
+ *            (memory's `statManifest.ts`, PRD 41 B2) is loaded once and saved once per walk: a file whose
  *            (size, mtimeNs, fileId) is unchanged, and is not racy, is not read; on a Node host
  *            git's clean blob ids reuse a hash across a checkout. No cap on the file count;
  *   read   — the file as text (memory's binary check and size cap decide what is used);
@@ -19,12 +19,11 @@
  * `.builderforce/ignore` rules are applied by `planReview`. Pure: no `fs`, no `crypto`.
  */
 
-import { CONTENT_HASH_RULE, contentHash, mediaTypeOfPath, type DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
+import { CONTENT_HASH_RULE, contentHash, mediaTypeOfPath, memoryHashCache, msToNs, type DirectorySource, type GitHints, type HashCache } from '@seanhogg/builderforce-memory/knowledge';
 import type { SourceDocument } from '@seanhogg/builderforce-memory/ingest';
 import { isSkippedDirName, isVcsMetadataName, skippedDirReason, WORKSPACE_SKIP_DIRS, type SkippedFolder } from '../skipDirs.js';
 import { toPosixPath } from '../glob.js';
 import { slashPath } from './rootRelative.js';
-import { memoryHashCache, msToNs, type GitHints, type HashCache } from './statManifest.js';
 import { StatWalk } from './statWalk.js';
 import { withDocumentText } from './documents/withDocumentText.js';
 
@@ -62,8 +61,6 @@ export interface KnowledgeFs {
     /** Changed absolute paths under `base`; returns the unsubscribe. */
     watch?(base: string, cb: (paths: string[]) => void): () => void;
 }
-
-export type { HashCache } from './statManifest.js';
 
 /** The review's own inputs inside `.builderforce/` — everything else there is the host's state. */
 const BUILDERFORCE_INPUTS: ReadonlySet<string> = new Set(['.builderforce/ignore', '.builderforce/partitions.json']);

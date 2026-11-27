@@ -85,6 +85,31 @@ describe("scanFiles", () => {
     expect(r).toMatchObject({ ok: true, total: 0, truncated: true });
   });
 
+  it("concurrency reads files in parallel, keeps the same results and the same file budget", async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 20; i++) files[`f${String(i).padStart(2, "0")}.txt`] = i % 2 === 0 ? "needle" : "nothing";
+    const inner = memoryWorkspaceFs(files);
+    let inFlight = 0;
+    let peak = 0;
+    const fs = {
+      ...inner,
+      async read(path: string, o: { maxBytes: number }) {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await Promise.resolve();
+        try { return await inner.read(path, o); } finally { inFlight--; }
+      },
+    };
+    const sequential = await scanFiles(inner, "needle", "");
+    const parallel = await scanFiles(fs, "needle", "", { concurrency: 8 });
+    expect(parallel.matches).toEqual(sequential.matches);
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(8);
+    // The file budget is exact: 6 files read, however wide the batch.
+    const capped = await scanFiles(inner, "needle", "", { concurrency: 8, maxFiles: 6 });
+    expect(capped).toMatchObject({ ok: true, total: 3, truncated: true });
+  });
+
   it("stops when the signal is already aborted", async () => {
     const ctl = new AbortController();
     ctl.abort();

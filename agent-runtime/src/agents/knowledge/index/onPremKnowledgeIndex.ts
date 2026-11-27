@@ -11,61 +11,22 @@
  * (`onPremWorkspaceKnowledgeIndex`); a reviewed root under it resolves to the same folder.
  */
 
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { basename, resolve } from "node:path";
-import { folderIdOf, repoIdOfRemote, rootIdFor } from "@builderforce/agent-tools/knowledge/index.js";
-import { gitOriginUrlSync } from "@builderforce/agent-tools/node-git-remote.js";
+import { resolve } from "node:path";
 import {
   KNOWLEDGE_IDLE_MS,
   createKnowledgeIndexRegistry,
   debouncedIdle,
   type HostKnowledgeIndex,
   type HostKnowledgeIndexCore,
-  type KnowledgeIndexFiles,
   type KnowledgeIndexRegistry,
 } from "@builderforce/agent-tools/knowledge-index.js";
+import { nodeIndexFiles } from "@builderforce/agent-tools/node-index-layout.js";
 import { logDebug } from "../../../logger.js";
 import { onPremSymbolIndex } from "../../on-prem-symbol-index.js";
 import { onPremEmbedder } from "./onPremEmbedder.js";
+import { onPremRootId } from "./onPremRootId.js";
 
 export type { HostKnowledgeIndex, HostKnowledgeIndexCore };
-
-/** The disk, as the index's files. */
-export const nodeIndexFiles: KnowledgeIndexFiles = {
-  async read(path) {
-    try {
-      return new Uint8Array(await readFile(path));
-    } catch {
-      return undefined;
-    }
-  },
-  write: (path, bytes) => writeFile(path, bytes),
-  rename: (from, to) => rename(from, to),
-  mkdir: async (dir) => {
-    await mkdir(dir, { recursive: true });
-  },
-  remove: (path) => rm(path, { force: true }),
-};
-
-/** On-prem's host segment of a root id. */
-export const ONPREM_HOST = "onprem";
-
-/**
- * The root id of a workspace — or of `rel`, a folder inside it — by THE root-id rule
- * (`rootIdFor`, PRD 38 §4.2): `onprem:<repo>` from the checkout's git remote, else
- * `onprem:<hash of the container path>`; `…:<rel>` for a folder inside. What the PreFetch
- * port's Open-in-graph refs name.
- */
-export function onPremRootId(workspaceRoot: string, rel = ""): string {
-  const abs = resolve(workspaceRoot);
-  return rootIdFor({ host: ONPREM_HOST, repoId: repoIdOfRemote(gitOriginUrlSync(abs)), folderId: folderIdOf(abs), path: rel });
-}
-
-/** The pre-`rootIdFor` id (`<folder name>`, `/<rel>` inside it) its local manifest was named by. */
-export function onPremLegacyRootId(workspaceRoot: string, rel = ""): string {
-  const base = basename(resolve(workspaceRoot)) || "workspace";
-  return rel ? `${base}/${rel}` : base;
-}
 
 const workspaces = new Set<string>();
 const registry: KnowledgeIndexRegistry = createKnowledgeIndexRegistry({

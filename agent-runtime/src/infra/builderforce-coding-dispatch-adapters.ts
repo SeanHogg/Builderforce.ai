@@ -12,7 +12,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import { isIndexedDirName } from "@builderforce/agent-tools/skip-dirs";
+import { isOutputDirName } from "@builderforce/agent-tools/skip-dirs";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 import type {
   CodingDispatchAgent,
@@ -230,6 +230,14 @@ export function makeCodingAgent(getGateway: () => GatewayLike | null): CodingDis
 /** Above this a file is treated as an asset, not source, and is not sent back. */
 const MAX_SNAPSHOT_FILE_BYTES = 512 * 1024;
 
+/**
+ * Directories the snapshot walk skips: build output, dependencies and the VCS store ONLY.
+ * The snapshot is diffed against the materialised tree and every before-path missing from
+ * it is DELETED upstream, so anything a user edits (`.vscode`, `.husky`, `vendor`, `target`)
+ * must be walked. NOT `isIndexedDirName`/`WORKSPACE_SKIP_DIRS` (search/index policy, which
+ * also skips dot-dirs, vendor, target, .idea). The shared `isOutputDirName` is that narrow set.
+ */
+
 export function makeCodingFs(): CodingDispatchFs {
   return {
     async materialize(dir, files): Promise<void> {
@@ -247,7 +255,7 @@ export function makeCodingFs(): CodingDispatchFs {
         const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
         for (const entry of entries) {
           if (entry.isDirectory()) {
-            if (!isIndexedDirName(entry.name)) continue;
+            if (isOutputDirName(entry.name)) continue;
             await walk(join(current, entry.name));
             continue;
           }

@@ -1,11 +1,12 @@
 /**
  * The build tools' shared ground: the bound-build and context types, the pure helpers every
- * action leans on (path reading, build resolution, search/replace, the workspace summary) and
+ * action leans on (path reading, build resolution, the workspace summary) and
  * the workspace helpers a committed change reports through. Split out of `canvasBuildTools.ts`.
  */
 
-import { applyStringEdit } from '@builderforce/agent-tools/edit';
 import { exportedSymbols } from '@builderforce/agent-tools/symbols';
+import { memoryWorkspaceFs } from '@builderforce/agent-tools/memory-workspace-fs';
+import { MATCH_TEXT_MAX, compileSearchPattern, scanFiles, type SearchMatch } from '@builderforce/agent-tools/text-scan';
 import { MODALITIES, type ProjectModality } from '@/lib/modality';
 import { type WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 import { readStoreFiles } from '@/lib/workspace/readStoreFiles';
@@ -82,9 +83,6 @@ export function appModalityFor(modality: unknown, durable: boolean): ProjectModa
 /** What the history tools answer for a workspace held in this browser, which keeps none. */
 export const NO_HISTORY = 'This workspace is held in this browser and keeps no file history yet. Saving the board to an account turns on history and restore.';
 
-/** Match cap for one `canvas_search_build_files` call. */
-export const MAX_SEARCH_MATCHES = 100;
-
 /**
  * The one reading of a model-supplied `path` argument.
  *
@@ -133,58 +131,33 @@ export function resolveCanvasBuild(
 }
 
 /**
- * Apply a search/replace edit to a file body.
- *
- * Exported and pure so the edit contract is testable on its own. Returns a
- * `reason` rather than throwing for the two cases the MODEL must be able to
- * recover from — the anchor is absent, or it is ambiguous — because both are
- * answerable by reading the file again, and a thrown error would just end the
- * turn.
+ * Find `query` across the workspace files: the shared line scanner over the files held in
+ * memory (the same one the editor and the cloud search with), so a match, its cap and its
+ * `truncated` flag read the same everywhere. The query is a regular expression when it is
+ * one, else literal text. Smart case unless `caseSensitive` is asked for explicitly.
  */
-export function applySearchReplace(
-  source: string,
-  find: string,
-  replace: string,
-  replaceAll: boolean,
-): { ok: true; next: string; replacements: number } | { ok: false; reason: string } {
-  if (!find) return { ok: false, reason: 'find must not be empty. To replace a whole file use canvas_write_build_file.' };
-  // The shared matcher (EOL/escape/whitespace tolerant, literal splices — a `$&` in the
-  // replacement is never a capture reference). Only the model-facing wording is ours.
-  const edit = applyStringEdit(source, find, replace, replaceAll);
-  if (edit.ok && edit.content !== undefined) {
-    return { ok: true, next: edit.content, replacements: edit.replaced ?? 1 };
-  }
-  if (edit.error?.includes('not unique')) {
-    const occurrences = applyStringEdit(source, find, replace, true).replaced ?? 2;
-    return { ok: false, reason: `find matched ${occurrences} times. Include more surrounding lines so it matches once, or pass replaceAll: true to change every occurrence.` };
-  }
-  return { ok: false, reason: 'find did not match. Read the file with canvas_read_build_file and copy the exact text, including indentation and line breaks.' };
-}
-
-/**
- * Find `query` in a file's text, returning the matching lines with their numbers.
- *
- * Plain substring matching, deliberately: a model that wants a regex can ask for
- * a distinctive literal instead, and a bad regex from a model is a hang rather
- * than a miss.
- */
-export function searchFileLines(
-  path: string,
-  content: string,
+export async function searchWorkspaceFiles(
+  files: { path: string; content: string }[],
   query: string,
   caseSensitive: boolean,
-): { path: string; line: number; text: string }[] {
-  const needle = caseSensitive ? query : query.toLowerCase();
-  const out: { path: string; line: number; text: string }[] = [];
-  const lines = content.split('\n');
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const haystack = caseSensitive ? line : line.toLowerCase();
-    if (haystack.includes(needle)) {
-      out.push({ path, line: index + 1, text: line.trim().slice(0, 300) });
-    }
-  }
-  return out;
+): Promise<{ matches: { path: string; line: number; text: string }[]; truncated: boolean }> {
+  const fs = memoryWorkspaceFs(new Map(files.map((file) => [file.path, file.content])));
+  const pattern = compileSearchPattern(query, true);
+  const result = await scanFiles(fs, query, '', {
+    // Every workspace file is searchable, whatever its directory is called.
+    dirFilter: () => true,
+    ...(caseSensitive
+      ? {
+          lineMatcher: (path: string, text: string, line: number): SearchMatch[] =>
+            pattern.test(text) ? [{ path, line, text: text.trim().slice(0, MATCH_TEXT_MAX) }] : [],
+        }
+      : {}),
+  });
+  if (!result.ok) return { matches: [], truncated: false };
+  return {
+    matches: (result.matches ?? []).map((match) => ({ path: match.path as string, line: match.line as number, text: match.text as string })),
+    truncated: result.truncated === true,
+  };
 }
 
 /**

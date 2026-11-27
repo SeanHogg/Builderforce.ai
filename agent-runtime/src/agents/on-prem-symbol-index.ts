@@ -16,13 +16,16 @@
 
 import fs from "node:fs";
 import { join, resolve } from "node:path";
+import { symbolSnapshotLocation } from "@builderforce/agent-tools/node-index-layout.js";
 import {
   sharedSymbolIndex,
   treeSitterSymbolExtractor,
   type SymbolExtractor,
   type WorkspaceSymbolIndex,
 } from "@builderforce/agent-tools/node-symbols.js";
+import { nodeWatchPort } from "@builderforce/agent-tools/node-watch-port.js";
 import { resolveBuilderForceAgentsPackageRootSync } from "../infra/builderforce-root.js";
+import { onPremRootId } from "./knowledge/index/onPremRootId.js";
 import { TREE_SITTER_DIST_DIR } from "./tree-sitter-dist.js";
 
 /**
@@ -55,12 +58,35 @@ function onPremExtractor(): SymbolExtractor {
   return extractor;
 }
 
-/** The process-wide definition index for the working tree at `root`. Persisted beside the
- *  on-prem search index. */
+/** Roots whose index already follows the change feed (one subscription per root, for the process). */
+const followed = new Map<string, () => void>();
+
+/** Stop following `root`'s change feed (its index is being disposed); the next `onPremSymbolIndex(root)` follows again. */
+export function releaseOnPremSymbolIndex(root: string): void {
+  const abs = resolve(root);
+  const unsubscribe = followed.get(abs);
+  if (!unsubscribe) return;
+  followed.delete(abs);
+  unsubscribe();
+}
+
+/** The process-wide definition index for the working tree at `root`. Persisted in the shared
+ *  local index layout (`.builderforce/index/<stem>.symbols.json`, named by the knowledge root id),
+ *  and fed by the one process-wide Node change feed the gateway's code index rides too. */
 export function onPremSymbolIndex(root: string): WorkspaceSymbolIndex {
   const abs = resolve(root);
-  return sharedSymbolIndex(abs, {
-    cachePath: join(abs, ".builderForceAgents", "symbols.json"),
+  const index = sharedSymbolIndex(abs, {
+    ...symbolSnapshotLocation(abs, onPremRootId(abs)),
     extractor: onPremExtractor(),
   });
+  if (!followed.has(abs)) {
+    try {
+      followed.set(abs, index.follow(nodeWatchPort()));
+    } catch {
+      // Remembered as not-following so a root that cannot be watched is not retried on every call.
+      followed.set(abs, () => undefined);
+      // A filesystem without recursive watch keeps the stat-walk backstop and write-time markDirty.
+    }
+  }
+  return index;
 }
