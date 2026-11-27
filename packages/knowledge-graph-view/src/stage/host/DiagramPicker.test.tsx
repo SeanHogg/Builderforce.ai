@@ -28,7 +28,7 @@ function Harness({ start = null, project = graph, scope = null, onCamera, camera
 }) {
     const [active, setActive] = useState<DiagramId | null>(start);
     return <DiagramPicker active={active} onPick={setActive} graph={project} records={[]} scope={scope} stations={stations}
-        flat labels={L} onOpen={vi.fn()} onCamera={onCamera} cameras={cameras} onLoadSymbols={onLoadSymbols} />;
+        labels={L} onOpen={vi.fn()} onCamera={onCamera} cameras={cameras} onLoadSymbols={onLoadSymbols} />;
 }
 
 const select = () => screen.getByRole('combobox', { name: t.diagramUml }) as HTMLSelectElement;

@@ -137,7 +137,7 @@ export interface LabelRun {
      * Drawn as a DOM CHIP (a bordered panel label projected above its shape, `labels/ChipLayer`) instead of SDF text lying on
      * the ground: the perspective Map's names. `risky` gives it the warn border.
      */
-    chip?: { risky: boolean };
+    chip?: { risky: boolean; title?: string | undefined };
 }
 
 /**

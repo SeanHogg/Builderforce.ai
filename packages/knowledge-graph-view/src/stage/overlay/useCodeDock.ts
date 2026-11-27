@@ -71,6 +71,8 @@ export interface CodeDockModel {
     types: ReadonlyMap<string, MarkType>;
     records: readonly SymbolRecord[];
     reader: CodeReading;
+    /** The active source or symbol, also used to highlight its file in the hierarchy. */
+    sourceRef: string | null;
     codeTarget: CodeTarget | null;
     markTarget: CodeTarget | null;
     acrossTarget: CodeTarget | null;
@@ -99,15 +101,17 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     const index = useMemo(() => nodeIndex(graph), [graph]);
     const t = p.labels.surface.code;
     const [codeOpen, setCodeOpen] = useState(false);
-    // The pane opens as a reading with the code level too: there the code is the primary view, beside the map.
-    const reading = codeOpen || !!zoom.code;
+    const top = drill.stack.at(-1);
+    const drillSource = top?.level === 'class' || top?.level === 'function' ? top : null;
+    const [closedFrame, setClosedFrame] = useState<typeof drillSource>(null);
+    // A file or symbol entered on the stage opens its source; closing it applies to this drill frame only.
+    const reading = codeOpen || !!zoom.code || !!drillSource && drillSource !== closedFrame;
     const visible = shown;
     const split = visible && codePaneWidth(width) > 0;
     // Computed once per graph: the lens rows, the gutter and the outline's marks all read it.
     // While comparing, the graph is the union (both sides' findings): the facts read the shown side's own graph.
     const factsGraph = a.factsGraph ?? graph;
     const facts = useMemo(() => symbolFacts(factsGraph, surface.stations), [factsGraph, surface.stations]);
-    const top = drill.stack[drill.stack.length - 1];
     const inside = zoom.code?.target.ref ?? top?.ref ?? null;
     // The level tree is always drawn in the pane, and the cards name their shape from it.
     const types = useMemo(() => stationTypes(graph, map.stations, index), [graph, map.stations, index]);
@@ -151,14 +155,18 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     const stop = surface.path?.stops[surface.step];
     const stopStation = stop ? surface.stations.byId.get(stop.id) ?? map.stations.byId.get(stop.id) ?? null : null;
     const stopRef = codeRefForStop(stop?.id ?? null, stopStation);
-    // At the code level the pane reads the open method; else the selected mark, else the journey stop.
+    // The active drill wins over a file left selected at the previous level. An explicit symbol in the same file can still set the line.
     const explicitRef = a.codeRef ?? (p.selected && fileRefOf(p.selected) === p.selected ? p.selected : null);
-    const dockRef = methodRef ?? explicitRef ?? markRef ?? stopRef;
-    const codeName = subject.name || (dockRef === stopRef && stopStation ? stopStation.name : '') || (dockRef ? index.get(dockRef)?.label ?? dockRef : '');
+    const drillRef = drillSource?.ref ?? null;
+    const scopedRef = drillRef && (!a.codeRef || fileRefOf(a.codeRef) !== fileRefOf(drillRef)) ? drillRef : explicitRef;
+    const sourceRef = methodRef ?? scopedRef ?? markRef;
+    const dockRef = sourceRef ?? stopRef;
+    const codeName = (dockRef === markRef ? subject.name : '') || (dockRef === stopRef ? stopStation?.name : '')
+        || (dockRef ? index.get(dockRef)?.label ?? dockRef : '');
     // The pane reads the whole file; the mark's own line is `scrollLine`, so another method in the same file only scrolls it.
     const markTarget = reading ? (methodTarget ?? targetForMark(dockRef, codeName, records)) : null;
     const codeTarget = markTarget ? fileTargetOf(markTarget) : null;
-    const scrollLine = reading ? (methodTarget?.startLine ?? focusLine(records, explicitRef ?? markRef, stopRef)) : undefined;
+    const scrollLine = reading ? methodTarget?.startLine ?? focusLine(records, sourceRef, drillRef ? null : stopRef) ?? markTarget?.startLine : undefined;
     // Code scrolled onto another symbol: the stage rings and centres its mark (else its file's), without selecting it;
     // selection would scroll the code back (`scrollLine`).
     const followCode = useCallback((ref: string) => {
@@ -182,8 +190,8 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     useEffect(() => {
         if (!editor || !following) return;
         if (panePath === editor.path) { jumpTo(editor.firstLine); return; }
-        if (!atCodeLevel && editorFileRef) setSelected(`node:${editorFileRef}`);
-    }, [editor, following, panePath, atCodeLevel, editorFileRef, jumpTo, setSelected]);
+        if (!atCodeLevel && !drillSource && editorFileRef) setSelected(`node:${editorFileRef}`);
+    }, [editor, following, panePath, atCodeLevel, drillSource, editorFileRef, jumpTo, setSelected]);
     // The open method's calls on the stage, resolved again on every placement (a band crossed, a drill) so the arcs stay on their marks.
     // The Sequence camera draws those calls itself (raised bars), so the Flow arcs are off there.
     const { steps, current } = reader;
@@ -221,7 +229,7 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     const toggleFollow = useCallback(() => { toast(reader.follow ? t.toastFollowOff : t.toastFollowOn); reader.toggleFollow(); }, [reader, toast, t]);
     // Closing the file leaves the code level. Collapsing the pane keeps the reading position.
     const leaveCode = zoom.leaveCode;
-    const closeCode = useCallback(() => { setCodeOpen(false); setHoverRef(null); setAcross(null); if (atCodeLevel) leaveCode(); }, [atCodeLevel, leaveCode]);
+    const closeCode = useCallback(() => { setCodeOpen(false); setClosedFrame(drillSource); setHoverRef(null); setAcross(null); if (atCodeLevel) leaveCode(); }, [atCodeLevel, drillSource, leaveCode]);
     const hide = useCallback(() => { if (shown) onToggle?.(); }, [shown, onToggle]);
     const openCode = useCallback(() => { setCodeOpen(true); if (!shown) onToggle?.(); }, [shown, onToggle]);
     const previousCode = useRef<string | undefined>(undefined);
@@ -243,7 +251,7 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     }, [onSelectRef, enterCode, atCodeLevel, records, setSelected]);
 
     return {
-        reading, visible, split, facts, inside, types, records, reader, codeTarget, markTarget, acrossTarget, methodTarget, codeName, scrollLine, hoverRef,
+        reading, visible, split, facts, inside, types, records, reader, sourceRef, codeTarget, markTarget, acrossTarget, methodTarget, codeName, scrollLine, hoverRef,
         followCode, clearAcross, nodeSelected, openCode, closeCode, hide, drillTo, toggleFollow, out,
     };
 }

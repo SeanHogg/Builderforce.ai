@@ -13,6 +13,7 @@ import { makeOverlay, segmentUntested } from '../../../surface/overlays';
 import { towerHeight } from '../../../surface/transit/towerHeight';
 import { layoutFloors } from './mapFloors';
 import { systemName } from '../../../surface/systems';
+import { tailOf } from '../../../surface/outlineGraph';
 import { CAMERA_WORD, wordIn } from './cameraStrings';
 import { RESTING_DEPTH } from '../../../stage/depth';
 import { FORM_RISE, TYPE_FORM } from '../../../stage/marks/forms';
@@ -42,7 +43,8 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
     const width = VIEWPORT_BANDS[req.viewportBand] ?? VIEWPORT_BANDS[2]!;
     const hidden = new Set(req.hiddenStations);
     const visible = stations.stations.filter((station) => !hidden.has(station.id));
-    const { layout, floors } = layoutFloors(visible, lines.lines, width, model.order);
+    const architecture = req.camera === '3d' && !req.drill;
+    const { layout, floors, modules } = layoutFloors(visible, lines.lines, width, model.order, architecture);
     const depth = Math.max(0, Math.min(1, req.depth ?? RESTING_DEPTH));
     const d = draftFor(marks.keys.length);
     const labels: LabelRun[] = [];
@@ -59,11 +61,11 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
         top = Math.max(top, extrude);
         show(d, slot, at.x, 0, at.y, size, extrude);
         labels.push({
-            slot, text: s.name, offsetPx: [0, size + 12], font: 'mono', size: 11, weight: 500, anchor: 'middle',
+            slot, text: marks.label[slot] ?? s.name, offsetPx: [0, size + 12], font: 'mono', size: 11, weight: 500, anchor: 'middle',
             tone: TEXT, halo: { tone: BG_TONE, px: 3 }, priority: s.use, scale: 'world',
-            chip: { risky: s.anti >= 3 },
+            chip: { risky: s.anti >= 3, title: marks.tooltip[slot] },
         });
-        a11y.push({ slot, label: s.path ?? s.name });
+        a11y.push({ slot, label: marks.tooltip[slot] ?? s.path ?? s.name });
     }
     roofMinis(model, d, layout.drawn);
     anchorHidden(marks, d, 'station', [layout.width / 2, 0, layout.height / 2]);
@@ -86,14 +88,18 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
 
     const thick = Math.max(4, layout.width * PLATE_THICKNESS), inside = req.drill != null;
     const planes: PlaneSpec[] = visible.length ? floors.map((floor) => ({
-        kind: 'room', min: [0, -thick, floor.offset], max: [floor.width, 0, floor.offset + floor.depth],
+        kind: 'room', min: [0, -thick, floor.offset], max: [floor.width, architecture ? -0.5 : 0, floor.offset + floor.depth],
         tone: toneIndex(inside ? 'room' : 'floor'), edge: toneIndex(inside ? 'lit' : 'edge'),
     })) : [];
-    const captions: Caption[] = !inside && (floors.length > 1 || (lines.systems?.length ?? 0) > 1) && visible.length
+    const captions: Caption[] = !inside && (architecture || floors.length > 1 || (lines.systems?.length ?? 0) > 1) && visible.length
         ? floors.map((floor) => ({
             role: 'plane', anchor: 'start', tone: TEXT, position: [20, 0, floor.offset + 16],
             text: systemName(lines.systems, floor.system) || wordIn(model.strings, CAMERA_WORD.systemLoose),
         })) : [];
+    for (const area of modules) {
+        planes.push({ kind: 'partition', min: [area.x, -0.2, area.z], max: [area.x + area.width, -0.2, area.z + area.depth], tone: toneIndex('room'), edge: toneIndex('edge') });
+        captions.push({ role: 'band', anchor: 'start', tone: TEXT, position: [area.x + 10, 0, area.z + 12], text: tailOf(area.app) });
+    }
     const { cx, cz, radius } = mapFit(layout, contentPoints(layout.positions, layout.drawn, layout.routes), top);
     const decor = g ? mapDecorations(g, stations, layout) : [];
     const bounds = widenMapBounds(layout, widths, neutralWidth, CASING_EXTRA, top, decor);

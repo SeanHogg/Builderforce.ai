@@ -61,7 +61,7 @@ export function stationItem(model: StageModel, overlay: OverlayModel, depth: num
     const slot = model.stationSlot.get(s.id);
     if (slot === undefined) return null;
     const size = overlay.style(s).size;
-    return { slot, scale: size, extrude: depth * towerHeight(size, s.cx), label: s.name, a11y: s.path ?? s.name, priority: s.use };
+    return { slot, scale: size, extrude: depth * towerHeight(size, s.cx), label: model.marks.label[slot] ?? s.name, a11y: model.marks.tooltip[slot] ?? s.path ?? s.name, priority: s.use };
 }
 
 /** The request's tilt, 0 (flat) to 1; omitted = the resting tilt (`RESTING_DEPTH`), an explicit 0 stays flat. */

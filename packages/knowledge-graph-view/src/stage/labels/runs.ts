@@ -38,7 +38,7 @@ export interface PlacedLabel {
 }
 
 /** A chip (`LabelRun.chip`): a screen-facing DOM label at a mark's top, projected by `ChipLayer` every frame. */
-export interface PlacedChip { slot: number; text: string; position: [number, number, number]; risky: boolean; ghost: boolean; priority: number }
+export interface PlacedChip { slot: number; text: string; title?: string | undefined; position: [number, number, number]; risky: boolean; ghost: boolean; priority: number }
 
 export interface PlacedLabels { sdf: PlacedLabel[]; dom: Caption[]; chips: PlacedChip[] }
 
@@ -69,7 +69,7 @@ export function placeLabels(
         const textUnit = r.scale === 'world' ? Math.max(1, 1 / px) : unit;
         const x = p.position[r.slot * 3]! + (r.offsetWorld?.[0] ?? 0) + r.offsetPx[0] * unit;
         const y = (p.extrude[r.slot] ?? 0) * view.depth + LIFT;
-        if (r.chip) { chips.push({ slot: r.slot, text: r.text, position: [p.position[r.slot * 3]!, y, p.position[r.slot * 3 + 2]!], risky: r.chip.risky, ghost: p.ghost?.[r.slot] === 1, priority: r.priority }); continue; }
+        if (r.chip) { chips.push({ slot: r.slot, text: r.text, ...(r.chip.title ? { title: r.chip.title } : {}), position: [p.position[r.slot * 3]!, y, p.position[r.slot * 3 + 2]!], risky: r.chip.risky, ghost: p.ghost?.[r.slot] === 1, priority: r.priority }); continue; }
         const z = p.position[r.slot * 3 + 2]! + (r.offsetWorld?.[1] ?? 0) + r.offsetPx[1] * unit;
         if (!sdfAvailable || !monoCovers(r.text) || (r.note && !monoCovers(r.note.text))) {
             dom.push({ text: r.text, position: [x, y, z], anchor: r.anchor, tone: r.tone, font: 'mono' });

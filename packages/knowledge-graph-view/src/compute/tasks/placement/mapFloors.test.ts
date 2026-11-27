@@ -1,10 +1,27 @@
 import { describe, expect, it } from 'vitest';
+import type { KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { surfaceFixture } from '../../../testing';
 import { buildStageModel } from '../stageModel';
 import { placeMap } from './map';
 import type { PlacementReq } from './request';
 
 describe('Map systems', () => {
+    it('shows one concise label for each community segment and exposes the local file path', () => {
+        const base = surfaceFixture();
+        const file = (path: string, app: string) => ({
+            ref: `src:sys::repo/${path}`, label: path, kind: 'file', pack: 'code', importance: 1, origin: 'extracted',
+            system: 'repo', app, badges: { communityId: 9, communityConfidence: 0.9 },
+        }) as KNode;
+        const nodes = [file('frontend/dashboard/gauge.ts', 'frontend'), file('frontend/dashboard/tiles.ts', 'frontend'),
+            file('api/actions/logs.ts', 'api'), file('api/actions/users.ts', 'api')];
+        const graph = { ...base, nodes, edges: [], findings: [], outline: { communities: [{ id: 9, label: 'repo/frontend/dashboard/gauge.ts' }] } } as typeof base;
+        const model = buildStageModel(graph);
+        const map = placeMap(model, { graph: 1, generation: model.marks.generation, camera: 'map',
+            viewportBand: 2, lod: 0, drill: null, unfolded: null, pins: [], pathId: null }, graph);
+        expect(map.labels.map((run) => run.text).sort()).toEqual(['gauge.ts', 'logs.ts']);
+        expect(map.labels.map((run) => run.chip?.title).sort()).toEqual(['repo/api/actions/logs.ts', 'repo/frontend/dashboard/gauge.ts']);
+    });
+
     it('places separate bases and removes a hidden system without changing mark identities', () => {
         const fixture = surfaceFixture();
         const nodes = fixture.nodes.map((node) => node.kind === 'file'

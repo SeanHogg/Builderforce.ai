@@ -135,11 +135,12 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const toast = useStageToast();
     const t = p.labels.surface.code;
     useEffect(() => {
-        if (!stationKey || drill.view) return undefined;
+        // A direct pick is already in view. Moving the camera here can carry a chip away between the clicks of a drill.
+        if (!stationKey || drill.view || stationKey === pickedKey) return undefined;
         const reveal = () => { const slot = bus.slotOf(stationKey); if (slot >= 0) bus.reveal(slot); };
         reveal();
         return bus.onPlacement(reveal);
-    }, [stationKey, drill.view, bus]);
+    }, [stationKey, drill.view, bus, pickedKey]);
 
     // The ranked incident index, once per graph; the selected line is the path the overlay highlights.
     const generation = marks?.generation ?? 0;
@@ -244,7 +245,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
         ...(fileGroups ?? architectureGroupsOf(component, systems, p.rootTitle, layers)).map((group) => ({ ...group, depth: 0 })),
         ...(fileFrame || singleFile ? drillCrumbs.filter((crumb) => crumb.depth !== 1) : drillCrumbs),
     ];
-    const codeSelection = dock.codeRef ?? p.selected;
+    const codeSelection = d.sourceRef;
     const openFile = (ref: string) => {
         const local = stationOfRef(map.stations, ref);
         if (drill.openFile && dock.codeFiles?.get(ref)?.isCode) drill.openFile(ref);

@@ -76,6 +76,7 @@ const SEQUENCE_LAST = 2;
 const CODE = 3;
 
 const cameraOf = (p: Placement): string => p.cacheKey.split('|')[1] ?? '';
+const hasSemanticMap = (camera: string): boolean => camera === 'map' || camera === '3d';
 
 interface Candidate { id: string; key: string }
 
@@ -137,7 +138,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
             if (next !== s.seqBand) { s.seqBand = next; setSeqBand(next); }
             return;
         }
-        if (camera !== 'map' || (drillOfPlacement(p) || null) !== s.map.drill) return;
+        if (!hasSemanticMap(camera) || (drillOfPlacement(p) || null) !== s.map.drill) return;
         const px = proj.pxPerWorld;
         const entry = s.map.drill ? s.entries.get(s.map.drill) : undefined;
         const parentPx = s.band === CODE ? drawnPx(p, bus.slotOf(s.codeKey), px) : entry ? entry.diameter * px : Number.POSITIVE_INFINITY;
@@ -193,7 +194,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         const station = s.map.stations.byId.get(stationId);
         const slot = station ? bus.slotOf(s.map.keyOfStation(station)) : -1;
         const scale = p && slot >= 0 ? p.scale[slot] ?? 0 : 0;
-        if (!rig || !p || !(scale > 0) || s.band >= CODE || cameraOf(p) !== 'map') { s.drill.enter(stationId); return; }
+        if (!rig || !p || !(scale > 0) || s.band >= CODE || !hasSemanticMap(cameraOf(p))) { s.drill.enter(stationId); return; }
         rig.flyTo(p.position[slot * 3]!, p.position[slot * 3 + 2]!, zoomForBand(s.band + 1, scale), now(), ms, p.position[slot * 3 + 1]);
     }, [bus, ms]);
 

@@ -14,7 +14,6 @@ import { placeMap } from './map';
 import { placeMind } from './mindmap';
 import { placeSequence } from './sequence';
 import type { PlacementReq } from './request';
-import { placeScene3d } from './scene3d';
 import { placeFeatures } from './features';
 import { placeHeat } from './heat';
 import { placeStyle } from './style';
@@ -25,7 +24,7 @@ export type PlacementBuilder = (g: KnowledgeGraph, model: StageModel, req: Place
 export const PLACEMENTS: Readonly<Record<PlacementCamera, PlacementBuilder>> = {
     map: (g, model, req) => once(() => placeMap(model, req, g)),
     graph: placeGraph,
-    '3d': placeScene3d,
+    '3d': (g, model, req) => once(() => placeMap(model, req, g)),
     mind: (g, model, req) => once(() => placeMind(g, model, req)),
     sequence: (g, model, req) => once(() => placeSequence(g, model, req)),
     flow: (g, model, req) => once(() => placeFlow(g, model, req)),

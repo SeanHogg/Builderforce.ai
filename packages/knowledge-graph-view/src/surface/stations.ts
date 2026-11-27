@@ -19,7 +19,7 @@ import { LAYER_ORDER, layerRank, type Provenance } from './layers';
 import type { Group } from './areaRollup';
 import { communityNamer, foldGroups, REPO_CONFIG_STATION_ID, scopedCommunityKey, type CommunityName } from './communityGroups';
 import { communityIdOf } from '../placement';
-import { fileNodesOf, isArchitectureFile, outlineView } from './outlineGraph';
+import { fileNodesOf, isArchitectureFile, outlineView, tailOf } from './outlineGraph';
 import { reachOf, staticReach } from './staticReach';
 import { isRepoConfigFile, REPO_CONFIG_NAME, stationNames } from './stationName';
 import { appOfNode, copyMap, foldedSystem, modulesOfFiles, systemOfNode, systemsOf } from './systems';
@@ -135,6 +135,14 @@ export function entryFileOf(station: Station | undefined | null): string | undef
 
 export function stationOfRef(model: Pick<StationModel, 'stationOf'>, ref: string): string | undefined {
     return model.stationOf.get(ref) ?? model.stationOf.get(fileRefOf(ref));
+}
+
+/** The file represented by a single-file station or used to name a community. */
+export function stationSourcePath(station: Pick<Station, 'id' | 'kind' | 'refs' | 'path'>): string | undefined {
+    if (station.id === REPO_CONFIG_STATION_ID) return undefined;
+    if (station.refs.length === 1) return pathOf(station.refs[0]!);
+    if (station.kind === 'community' && station.path && station.refs.some((ref) => pathOf(ref) === station.path)) return station.path;
+    return undefined;
 }
 
 const tail = (ref: string): string => {
@@ -262,6 +270,13 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
     // Past MAX_STATIONS, files group by community when those fit, else areas fold into their parent directory.
     const communityName = communityNamer(graph, opts.communityFallback);
     const groups = splitEntry(foldGroups(baseGroups(files, index, opts.repoConfigName ?? REPO_CONFIG_NAME, communityName), (id) => index.get(id)?.label ?? tail(id), communityName));
+    const filePaths = new Set(files.map((node) => pathOf(node.ref)).filter(Boolean));
+    for (const group of groups) {
+        // A community can span several modules. Each station must be named for a file it actually contains.
+        if (group.kind !== 'community' || !filePaths.has(group.name) || group.nodes.some((node) => pathOf(node.ref) === group.name)) continue;
+        const representative = group.nodes.reduce((best, node) => byImportance(node, best) < 0 ? node : best);
+        group.name = pathOf(representative.ref) ?? tailOf(representative.label);
+    }
     const groupIds = new Set(groups.map((g) => g.id));
     const stationOf = new Map<string, string>();
     for (const g of groups) for (const n of g.nodes) stationOf.set(n.ref, g.id);

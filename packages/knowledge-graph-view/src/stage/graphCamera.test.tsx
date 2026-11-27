@@ -4,7 +4,7 @@
  * graph's own modules is `compute/tasks/placement/graphParity.test.ts`; this file holds the rest:
  *
  * - "a band per partition" → one `partition` plane and one band caption per partition;
- * - "names each node and selects on click and on Enter" → a proxy per shown node, named by its label, selecting `node:<ref>`;
+ * - "names each node and selects on click and on Enter" → a proxy per shown node, with a filename for files, selecting `node:<ref>`;
  * - "walks nodes in importance order" → the a11y reading order;
  * - "rings the selected node" → the selected proxy is pressed, no other is; none without a selection;
  * - "dims nodes the lens does not highlight" → `markPaint`'s DIM flag;
@@ -50,13 +50,14 @@ describe('the Graph camera on the stage (was Graph2D)', () => {
         expect(graph.captions).toHaveLength(partitions.size);
     });
 
-    it('shows every node of the graph as a mark, each a proxy named by its label that selects its key on click and on Enter', async () => {
+    it('selects the full source ref from a proxy with a short filename', async () => {
         const shown = graph.a11y.map((a) => a.slot);
         expect(shown).toHaveLength(g.nodes.length);
         for (const s of shown) { expect(marks.slotKind[s]).toBe(SLOT_NODE); expect(graph.scale[s]).toBeGreaterThan(0); }
         const { onSelect } = mount();
         const first = g.nodes[0]!;
-        const proxy = (await screen.findAllByRole('button', { name: first.label }))[0]!;
+        const proxy = await screen.findByRole('button', { name: 'page.tsx' });
+        expect(marks.tooltip[0]).toBe('app/page.tsx');
         fireEvent.click(proxy);
         expect(onSelect).toHaveBeenLastCalledWith(`node:${first.ref}`);
         fireEvent.keyDown(proxy, { key: 'Enter' });
@@ -72,12 +73,12 @@ describe('the Graph camera on the stage (was Graph2D)', () => {
     it('presses the selected node\'s proxy and no other; none without a selection', async () => {
         const node = g.nodes[3]!;
         const { unmount } = mount({ selected: `node:${node.ref}` });
-        await screen.findAllByRole('button', { name: node.label });
+        await screen.findByRole('button', { name: 'invoice.ts' });
         const pressed = screen.getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true');
         expect(pressed.map((b) => b.getAttribute('data-id'))).toEqual([`node:${node.ref}`]);
         unmount();
         mount();
-        await screen.findAllByRole('button', { name: g.nodes[0]!.label });
+        await screen.findByRole('button', { name: 'page.tsx' });
         expect(screen.getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true')).toHaveLength(0);
     });
 

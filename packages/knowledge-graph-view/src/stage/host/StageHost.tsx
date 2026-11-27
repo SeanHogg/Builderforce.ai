@@ -35,7 +35,9 @@ import { onePaneStage } from '../../layout';
 import { codePaneWidth, maxCodePaneWidth, MIN_CODE_PANE_WIDTH, recordsForCode, targetForMark } from '../overlay/CodeDock';
 import type { DiagramId } from '../../surface/diagrams/catalog';
 import { fileRefOf } from '../../surface/stations';
-import { DiagramPicker } from './DiagramPicker';
+import { C4_NEXT, DiagramPicker } from './DiagramPicker';
+import { DiagramInspector } from './DiagramView';
+import { diagramKey, placeDiagram, type DiagramScene } from './diagramPlacement';
 import { CodePaneSplitter } from './CodePaneSplitter';
 import { ColourLegend } from './ColourLegend';
 import { SystemVisibility, useSystemVisibility } from './SystemVisibility';
@@ -121,7 +123,7 @@ function StageFallback({ fallback: Fallback, ...p }: StageHostProps) {
     return <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {p.tools}
         <DiagramPicker active={diagram} onPick={setDiagram} graph={graph} records={records} scope={scope}
-            stations={surface.stations.stations} flat labels={p.labels} onCamera={p.onCamera} cameras={p.cameras}
+            stations={surface.stations.stations} labels={p.labels} onCamera={p.onCamera} cameras={p.cameras}
             onLoadSymbols={load} onOpen={(ref) => {
                 const target = targetForMark(ref, ref, records);
                 if (target) p.onOpenSource?.({ path: target.path, startLine: target.startLine, endLine: target.startLine });
@@ -170,6 +172,9 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     const codePaneId = useId();
     const [preferredCodeWidth, setPreferredCodeWidth] = useState<number>();
     const [diagramPick, setDiagramPick] = useState<{ root: string; camera: PlacementCamera; id: DiagramId } | null>(null);
+    const [diagramScene, setDiagramScene] = useState<DiagramScene | null>(null);
+    const [diagramSelection, setDiagramSelection] = useState<string | null>(null);
+    const activateDiagram = useRef<((ref: string) => void) | null>(null);
     // Before the box is measured (and where nothing measures it: jsdom) the stage is laid out for a standard box.
     const measured = useContainerSize(box);
     const pictureSize = useContainerSize(picture);
@@ -180,7 +185,8 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     const activeFrame = surface.drill.stack.at(-1);
     const graphScope = activeFrame?.level !== 'package' ? activeFrame?.ref ?? null : null;
     const activeFile = surface.station?.refs[0];
-    const diagramScope = codeRef ?? graphScope ?? (activeFile && codeFiles?.get(activeFile)?.isCode ? activeFile : null);
+    const diagramScope = graphScope && (!codeRef || fileRefOf(codeRef) !== fileRefOf(graphScope))
+        ? graphScope : codeRef ?? graphScope ?? (activeFile && codeFiles?.get(activeFile)?.isCode ? activeFile : null);
     const loadedSymbols = surface.drill.symbols;
     const loadDiagramSymbols = surface.drill.loadFileSymbols;
     useEffect(() => {
@@ -230,6 +236,8 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
 
     // Placement: Map always (its drill and unfold wiring read it; the worker caches it), and the camera on show.
     const channels = useMemo(() => ({ size: bindings.size, width: bindings.width }), [bindings.size, bindings.width]);
+    const isMap = camera === 'map' || camera === '3d';
+    const mapCamera = camera === '3d' ? '3d' : 'map';
     const lineId = surface.line?.id ?? null;
     // The Sequence's band is the semantic zoom's (its participants' size, or the band control that flies to it): one state, not two.
     const seqBand = wiring.zoom.sequenceLod;
@@ -251,32 +259,41 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
         graph, generation, camera: cam, drill, unfolded: null, pins: [], pathId: path, viewportBand: band, lod: l, channels,
         ...(depth === undefined ? {} : { depth }),
         ...(m ? { method: m } : {}),
-        ...(cam === 'map' && !drill && hiddenStations.length ? { hiddenStations } : {}),
+        ...((cam === 'map' || cam === '3d') && !drill && hiddenStations.length ? { hiddenStations } : {}),
         // Flow reads symbols only inside a drilled level; at system level they are not an input (nor part of its key).
         ...(drill || cam === 'sequence' ? { symbols } : {}),
     });
-    const mapResult = useComputed('placement', place('map', mapDepth, wiring.map.drill, 0, null), [graph, generation, band, channels, wiring.map.drill, symbols, mapDepth, hiddenStations], null, { enabled: !!marks, scope: [generation, wiring.map.drill] });
+    const mapResult = useComputed('placement', place(mapCamera, mapDepth, wiring.map.drill, 0, null), [graph, generation, band, channels, mapCamera, wiring.map.drill, symbols, mapDepth, hiddenStations], null, { enabled: !!marks, scope: [generation, mapCamera, wiring.map.drill] });
     const map = mapResult.value;
-    const other = camera === 'map' ? 'graph' : camera;
+    const other = isMap ? 'graph' : camera;
     // The zoom's nesting survives a rebuilt world: its entries are re-derived from the ancestor levels' placements of the new generation.
-    const nestBasis = useNestBasis(marks, surface.drill.stack, camera === 'map' && wiring.zoom.nests, (d) => place('map', mapDepth, d, 0, null), [graph, generation, band, channels, symbols, mapDepth, hiddenStations]);
+    const nestBasis = useNestBasis(marks, surface.drill.stack, isMap && wiring.zoom.nests, (d) => place(mapCamera, mapDepth, d, 0, null), [graph, generation, band, channels, mapCamera, symbols, mapDepth, hiddenStations]);
     const setBasis = wiring.zoom.setBasis;
     useEffect(() => { setBasis(nestBasis.basis); }, [setBasis, nestBasis.basis]);
-    const otherDepth = other === '3d' ? 1 : flat ? 0 : undefined;
+    const otherDepth = flat ? 0 : undefined;
     const otherSymbols = otherDrill || other === 'sequence' ? symbols : null;
-    const otherResult = useComputed('placement', place(other, otherDepth, otherDrill, lod, pathId, method), [graph, generation, band, channels, other, lod, pathId, otherSymbols, otherDepth, otherDrill, method], null, { enabled: !!marks && camera !== 'map', scope: [generation, other, otherDrill] });
+    const otherResult = useComputed('placement', place(other, otherDepth, otherDrill, lod, pathId, method), [graph, generation, band, channels, other, lod, pathId, otherSymbols, otherDepth, otherDrill, method], null, { enabled: !!marks && !isMap, scope: [generation, other, otherDrill] });
     const otherPlacement = otherResult.value;
     // Before / After: the same placement with the slots the side lacks shrunk onto their anchor (the tween moves them).
-    const placement = useSideMask(camera === 'map' ? wiring.patchMap(map) : otherPlacement, marks, compare);
+    const placement = useSideMask(isMap ? wiring.patchMap(map) : otherPlacement, marks, compare);
     // A zoom-entered level whose entry went stale with the rebuilt world waits for the placements it re-nests from (not when they failed: nothing is coming).
-    const nesting = camera === 'map' && !!map && holdsForNestBasis(nestBasis.pending, nestBasis.basis, wiring.zoom.awaitsBasis(map));
+    const nesting = isMap && !!map && holdsForNestBasis(nestBasis.pending, nestBasis.basis, wiring.zoom.awaitsBasis(map));
     const ready = !!marks && !!placement && placement.generation === marks.generation && !nesting;
     // The last ready frame bridges a regeneration of the SAME root, camera and drill depth (a live or growth repaint, a re-anchor);
     // any navigation (another root, camera or level) drops it. The Stage itself stays mounted on the MarkSet, as before.
     const drillIdentity = useDrillIdentity(surface.drill.stack, surface.drill.reanchored.moves);
     const frame = useHeldFrame(`${graph.scope.rootId}|${camera}|${drillIdentity}`, ready ? { marks, paint, placement } : null);
     const shownMarks = frame?.marks ?? marks;
-    const computeFailed = markResult.failed || (camera === 'map' ? mapResult.failed : otherResult.failed);
+    const notation = activeDiagram && diagramScene?.id === activeDiagram ? diagramScene : null;
+    const notationFrame = useMemo(() => notation ? placeDiagram(notation, labels, -generation - 1) : null, [notation, labels, generation]);
+    const stageMarks = notationFrame?.marks ?? shownMarks;
+    const notationNode = notation?.model.nodes.find((node) => diagramKey(node.id) === diagramSelection);
+    const pickNotation = (key: string, open = false) => {
+        setDiagramSelection(key);
+        const node = notation?.model.nodes.find((candidate) => diagramKey(candidate.id) === key);
+        if (notation && node?.ref && (open || C4_NEXT[notation.id])) activateDiagram.current?.(node.ref);
+    };
+    const computeFailed = markResult.failed || (isMap ? mapResult.failed : otherResult.failed);
     useEffect(() => { if (computeFailed) onComputeError(); }, [computeFailed, onComputeError]);
     const trace = useRenderTrace();
     useEffect(() => {
@@ -297,7 +314,7 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     const zoom = labels.surface.zoom;
     const nav = useMemo(() => ({ nav: labels.surface.nav, zoomIn: labels.zoomIn, zoomOut: labels.zoomOut, zoomReset: labels.zoomReset }), [labels]);
     const drill = surface.drill;
-    const levelNote = camera !== 'map' ? null
+    const levelNote = !isMap ? null
         : drill.notice ? fillTemplate(labels.surface.map.drillReset, { name: drill.notice }) : drill.view?.noSymbols ? labels.surface.map.noSymbolsNote : null;
     const sc = labels.surface.code;
     const caption = ready ? placement.caption : null;
@@ -316,7 +333,11 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     const onWheelStep = useCallback((dir: 1 | -1) => { noteStep(dir); wheelStep(dir); }, [noteStep, wheelStep]);
 
     // Esc clears the pick, else goes out, from anywhere over a shown map (not while typing, in a dialog, or when a pane already took it).
-    const onEscape = wiring.onEscape;
+    const onEscape = useCallback(() => {
+        if (!activeDiagram) { wiring.onEscape(); return; }
+        if (diagramSelection) setDiagramSelection(null);
+        else setDiagramPick(null);
+    }, [activeDiagram, diagramSelection, wiring.onEscape]);
     useEffect(() => {
         const el = box.current;
         if (!el) return undefined;
@@ -348,38 +369,45 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
             {tools}
             {!showCodeHalf && <DiagramPicker active={activeDiagram} onPick={(id) => {
+                setDiagramSelection(null);
                 setDiagramPick(id ? { root: graph.scope.rootId, camera, id } : null);
-            }} graph={graph} records={diagramRecords} scope={diagramScope} stations={diagramStations} flat={flat} labels={labels}
+            }} graph={graph} records={diagramRecords} scope={diagramScope} stations={diagramStations} labels={labels} onScene={setDiagramScene} activationRef={activateDiagram}
                 onCamera={p.onCamera} cameras={p.cameras} onLoadSymbols={loadDiagramSymbols} onOpen={(ref) => {
                     const file = fileRefOf(ref);
                     if (file !== ref) wiring.openDefinition(ref);
                     else if (codeFiles?.has(file)) wiring.openFile(file);
                 }} />}
-            <div ref={picture} style={{ display: activeDiagram && !showCodeHalf ? 'none' : undefined, position: 'relative', flex: 1, minHeight: 0, overflow: 'auto' }}>
+            <div ref={picture} style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'auto' }}>
             {!!barPx && <div style={{ position: 'absolute', top: 0, insetInline: 0 }}>{code.bar}</div>}
-            <div data-map-pane style={{ position: 'absolute', top: barPx, insetInlineStart: 0, width, height, ...(showCodeHalf ? { visibility: 'hidden', pointerEvents: 'none' } : null) }}>
-                {levelNote && <p data-level-note style={{ position: 'absolute', zIndex: 1, insetBlockEnd: 74, insetInlineStart: 10, maxWidth: 'calc(100% - 80px)', margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'), ...TYPE.bodyMuted }}>{levelNote}</p>}
-                <LevelRail zoom={zoom} rail={rail} narrow={narrowStage} filters={camera === 'map' && !wiring.map.drill
+            <div data-map-pane data-diagram-pane={activeDiagram ?? undefined} style={{ position: 'absolute', top: barPx, insetInlineStart: 0, width, height, ...(showCodeHalf ? { visibility: 'hidden', pointerEvents: 'none' } : null) }}>
+                {!activeDiagram && levelNote && <p data-level-note style={{ position: 'absolute', zIndex: 1, insetBlockEnd: 74, insetInlineStart: 10, maxWidth: 'calc(100% - 80px)', margin: 0, padding: '2px 8px', borderRadius: 6, background: cssVar('panel'), ...TYPE.bodyMuted }}>{levelNote}</p>}
+                {!activeDiagram && <LevelRail zoom={zoom} rail={rail} narrow={narrowStage} filters={isMap && !wiring.map.drill
                     ? <SystemVisibility label={labels.surface.code.architecture} {...visibility} /> : undefined} />
-                {ready && <ColourLegend labels={labels} surface={surface} types={legendTypesOf(shownMarks?.type)} comparing={!!compare} narrow={narrowStage} scale={scale} />}
-                {shownMarks && (
+                }
+                {!activeDiagram && ready && <ColourLegend labels={labels} surface={surface} types={legendTypesOf(shownMarks?.type)} comparing={!!compare} narrow={narrowStage} scale={scale} />}
+                {stageMarks && (
                     <Stage
-                        renderer={renderer} marks={shownMarks} paint={frame?.paint ?? paint} placement={frame?.placement ?? null} colors={colors}
-                        width={width} height={height} reducedMotion={p.reducedMotion} selected={selected} onSelect={wiring.onSelect} onDrill={wiring.onDrill}
-                        nav={nav} description={labels.regionLabel}
-                        onOut={wiring.onEscape} onClear={wiring.clearSelection}
-                        {...(camera === 'map' ? { tilt: flat ? 0 : 1, onWheelStep } : {})} flat={flat} onContextLost={onLost} onRenderError={onRenderError}
+                        renderer={renderer} marks={stageMarks} paint={notationFrame?.paint ?? frame?.paint ?? paint} placement={notationFrame?.placement ?? frame?.placement ?? null} colors={colors}
+                        width={width} height={height} reducedMotion={p.reducedMotion} selected={activeDiagram ? diagramSelection : selected}
+                        onSelect={activeDiagram ? pickNotation : wiring.onSelect} onDrill={activeDiagram ? (key) => pickNotation(key, true) : wiring.onDrill}
+                        nav={nav} description={activeDiagram ? sc[activeDiagram] : labels.regionLabel}
+                        onOut={onEscape} onClear={activeDiagram ? () => setDiagramSelection(null) : wiring.clearSelection}
+                        {...(!activeDiagram && isMap ? { tilt: flat ? 0 : 1, onWheelStep } : {})} flat={flat} onContextLost={onLost} onRenderError={onRenderError}
                     />
                 )}
-                {!ready && <LayingOut labels={labels} corner={!!frame} />}
-                {ready && wiring.card}
-                {ready && camera === 'map' && !drilled && (
+                {notation && notation.model.nodes.length === 0 && <p role="status" style={{ position: 'absolute', top: 8, left: 12, ...TYPE.body }}>{sc.diagramNoData}</p>}
+                {notationNode && <div style={{ position: 'absolute', zIndex: 2, top: 12, right: 12, width: 'min(280px, 75%)', maxHeight: '65%', overflow: 'auto', background: cssVar('panel'), border: `1px solid ${cssVar('border')}`, borderRadius: 6 }}>
+                    <DiagramInspector node={notationNode} labels={labels} onOpen={(ref) => activateDiagram.current?.(ref)} onClose={() => setDiagramSelection(null)} />
+                </div>}
+                {!activeDiagram && !ready && <LayingOut labels={labels} corner={!!frame} />}
+                {!activeDiagram && ready && wiring.card}
+                {!activeDiagram && ready && isMap && !drilled && (
                     <StageBusContext.Provider value={bus}>
                         <StagePins pins={surface.pins} stations={surface.stations.byId} labels={labels} onActivate={wiring.onSelect} />
                     </StageBusContext.Provider>
                 )}
-                {(drill.loading && camera === 'map') && <LayingOut labels={labels} corner />}
-                <EdgesCapped caption={caption} labels={labels} text={camera === 'map' ? labels.surface.scene.stationsCapped : undefined} />
+                {!activeDiagram && drill.loading && isMap && <LayingOut labels={labels} corner />}
+                {!activeDiagram && <EdgesCapped caption={caption} labels={labels} text={isMap ? labels.surface.scene.stationsCapped : undefined} />}
                 {notice}
             </div>
             {showCodeHalf && (

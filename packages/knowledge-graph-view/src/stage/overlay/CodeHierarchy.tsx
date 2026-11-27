@@ -32,6 +32,8 @@ function fileTree(files: ReadonlyMap<string, CodeFile>, view: FileView): Folder 
 interface Location { ref: string; folders: readonly string[] }
 interface TreeProps { node: Folder; location: Location | null; onFile(ref: string): void }
 
+const revealCurrentFile = (row: HTMLButtonElement | null) => row?.scrollIntoView?.({ block: 'nearest' });
+
 function TreeFolder({ name, node, location, onFile }: TreeProps & { name: string }) {
     const ref = location?.ref;
     const [expanded, setExpanded] = useState(!!ref);
@@ -55,7 +57,8 @@ function FolderContents({ node, location, onFile }: TreeProps) {
             <TreeFolder key={id} name={child.name} node={child.node} location={location && head === id ? { ref: location.ref, folders: location.folders.slice(1) } : null} onFile={onFile} />
         ))}
         {[...node.files].sort((a, b) => cmp(a.name, b.name) || cmp(a.path, b.path)).map(({ ref, name, path }) => (
-            <button key={ref} type="button" className="kg-file-tree__row" title={path} aria-current={location?.ref === ref ? 'true' : undefined} onClick={() => onFile(ref)}>{name}</button>
+            <button key={ref} type="button" className="kg-file-tree__row" title={path} aria-current={location?.ref === ref ? 'true' : undefined}
+                ref={location?.ref === ref ? revealCurrentFile : undefined} onClick={() => onFile(ref)}>{name}</button>
         ))}
     </>;
 }

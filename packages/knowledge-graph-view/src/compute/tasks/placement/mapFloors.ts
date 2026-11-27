@@ -4,9 +4,10 @@ import type { Line } from '../../../surface/lines';
 import type { Station } from '../../../surface/stations';
 
 export interface Floor { system: string; width: number; depth: number; offset: number }
+export interface ModuleArea { app: string; x: number; z: number; width: number; depth: number }
 
 /** Each system has its own base. Keep one set of coordinates so lines can cross between bases. */
-export function layoutFloors(stations: readonly Station[], lines: readonly Line[], width: number, order?: readonly string[]) {
+export function layoutFloors(stations: readonly Station[], lines: readonly Line[], width: number, order?: readonly string[], showModules = false) {
     const systems = new Map<string, Station[]>();
     for (const station of stations) {
         const key = station.system ?? '';
@@ -14,27 +15,42 @@ export function layoutFloors(stations: readonly Station[], lines: readonly Line[
         if (!systems.has(key)) systems.set(key, group);
         group.push(station);
     }
-    if (order || systems.size < 2) {
+    if (order || !showModules && systems.size < 2) {
         const layout = layoutTransit(stations, lines, width, order ? { order } : {});
-        return { layout, floors: [{ system: systems.keys().next().value ?? '', width: layout.width, depth: layout.height, offset: 0 }] as Floor[] };
+        return { layout, floors: [{ system: systems.keys().next().value ?? '', width: layout.width, depth: layout.height, offset: 0 }] as Floor[], modules: [] as ModuleArea[] };
     }
     const floors: Floor[] = [];
+    const modules: ModuleArea[] = [];
     const layout: TransitLayout = {
         width: 0, height: 0, bands: [], positions: new Map(), drawn: [], routes: [], bandIndex: new Map(), hiddenOnLine: 0,
     };
     let offset = 0;
     for (const [system, group] of systems) {
-        const floor = layoutTransit(group, lines, width);
-        floors.push({ system, width: floor.width, depth: floor.height, offset });
-        for (const [id, p] of floor.positions) layout.positions.set(id, { x: p.x, y: p.y + offset });
-        for (const [id, index] of floor.bandIndex) layout.bandIndex.set(id, layout.bands.length + index);
-        for (const band of floor.bands) layout.bands.push({ ...band, y: band.y + offset });
-        layout.drawn.push(...floor.drawn);
-        layout.width = Math.max(layout.width, floor.width);
-        layout.height = offset + floor.height;
-        layout.hiddenOnLine += floor.hiddenOnLine;
-        offset = layout.height + 96;
+        const byApp = new Map<string, Station[]>();
+        for (const station of group) {
+            const app = showModules ? station.app ?? '' : '';
+            const held = byApp.get(app);
+            if (held) held.push(station);
+            else byApp.set(app, [station]);
+        }
+        let z = offset + (showModules ? 48 : 0), floorWidth = width;
+        for (const [app, items] of byApp) {
+            const bandLayout = layoutTransit(items, lines, showModules ? width - 48 : width);
+            const x = showModules ? 24 : 0;
+            for (const [id, p] of bandLayout.positions) layout.positions.set(id, { x: p.x + x, y: p.y + z });
+            for (const [id, index] of bandLayout.bandIndex) layout.bandIndex.set(id, layout.bands.length + index);
+            for (const band of bandLayout.bands) layout.bands.push({ ...band, y: band.y + z });
+            layout.drawn.push(...bandLayout.drawn);
+            layout.hiddenOnLine += bandLayout.hiddenOnLine;
+            if (showModules && app) modules.push({ app, x, z, width: bandLayout.width, depth: bandLayout.height });
+            floorWidth = Math.max(floorWidth, bandLayout.width + x * 2);
+            z += bandLayout.height + (showModules ? 32 : 0);
+        }
+        floors.push({ system, width: floorWidth, depth: z - offset, offset });
+        layout.width = Math.max(layout.width, floorWidth);
+        layout.height = z;
+        offset = z + 96;
     }
     layout.routes = routeLines({ lines, positions: layout.positions, bands: layout.bands, bandIndex: layout.bandIndex });
-    return { layout, floors };
+    return { layout, floors, modules };
 }

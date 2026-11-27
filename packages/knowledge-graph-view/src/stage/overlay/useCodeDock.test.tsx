@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, renderHook } from '@testing-library/react';
+import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { buildStageModel } from '../../compute/tasks/stageModel';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from '../../labels';
 import type { SceneProps } from '../../surface/registry';
+import { buildCodeHierarchy } from '../../surface/codeHierarchy';
 import { surfaceFixture } from '../../testing';
 import { createNoopStage } from '../renderer';
 import { recordsForCode } from './CodeDock';
@@ -51,6 +52,32 @@ describe('the docked pane is not the reading pane', () => {
         const { result } = renderHook(() => useStageWiring(withEditor, stage, null, 1000));
         expect(result.current.selected).toBe(`node:${file.ref}`);
         expect(result.current.code).toMatchObject({ visible: true, reading: false });
+    });
+
+    it('reads and highlights the file and symbol entered on the stage, even after closing another source', async () => {
+        const readSource = vi.fn(async (path: string) => ({
+            startLine: 1, lines: [`// ${path}`, 'const run = 1;'], truncated: false,
+        }));
+        const { graph, p } = scene(readSource);
+        const stage = createNoopStage();
+        const file = 'src:sys::api/useCase.ts', symbol = `${file}#run`;
+        const codeFiles = buildCodeHierarchy(graph, 'Fixture', L.surface.layers);
+        const fileFrame = { level: 'class' as const, ref: file, name: 'useCase.ts' };
+        const stacks = { class: [fileFrame], function: [fileFrame, { level: 'function' as const, ref: symbol, name: 'run' }] };
+        const symbols = [{ ref: symbol, name: 'run', parent: file, kind: 'function' as const, line: 2, exported: false }];
+        function Harness({ level }: { level: 'class' | 'function' }) {
+            const drill = { ...p.surface.drill, stack: stacks[level], symbols };
+            const next = { ...p, surface: { ...p.surface, drill } };
+            return <>{useStageWiring(next, stage, null, 1000, { codeFiles, hierarchy: 'filesystem', codeRef: 'src:sys::web/page.ts' }).code.pane}</>;
+        }
+        const { rerender, container } = render(<Harness level="class" />);
+        await screen.findByText('// api/useCase.ts');
+        expect(container.querySelector('.kg-file-tree [aria-current="true"]')?.textContent).toBe('useCase.ts');
+        fireEvent.click(screen.getByRole('button', { name: L.surface.map.card.close }));
+        expect(screen.queryByText('// api/useCase.ts')).toBeNull();
+        rerender(<Harness level="function" />);
+        await waitFor(() => expect(container.querySelector('[data-code-line="2"]')?.textContent).toContain('const run = 1;'));
+        expect(container.querySelector('.kg-file-tree [aria-current="true"]')?.textContent).toBe('useCase.ts');
     });
 
     it("below CODE_SPLIT_WIDTH the pane is not split (the header's Code | Picture switch picks one); hidden, it has no pane and offers Show", () => {

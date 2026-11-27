@@ -1,4 +1,4 @@
-import { useContext, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from '../../labels';
 import { cssVar } from '../../scene/themeColors';
@@ -11,24 +11,27 @@ import type { Station } from '../../surface/stations';
 import { TYPE } from '../../surface/ui/type';
 import type { SymbolRecord, ViewMode } from '../../types';
 import { DiagramView } from './DiagramView';
+import type { DiagramScene } from './diagramPlacement';
 
 interface Props {
     active: DiagramId | null; onPick(id: DiagramId | null): void;
     graph: KnowledgeGraph; records: readonly SymbolRecord[]; scope: string | null;
-    stations: readonly Station[]; flat: boolean; labels: KnowledgeGraphLabels; onOpen(ref: string): void;
+    stations: readonly Station[]; labels: KnowledgeGraphLabels; onOpen(ref: string): void;
     /** Switches the stage camera. Without it, or when the camera is not available, the views the stage draws are not offered. */
     onCamera?: ((mode: ViewMode) => void) | undefined; cameras?: readonly ViewMode[] | undefined;
     onLoadSymbols?: ((ref: string) => void) | undefined;
+    onScene?: ((scene: DiagramScene | null) => void) | undefined;
+    activationRef?: Ref<(ref: string) => void> | undefined;
 }
 
 const IMPORT_BYTES = 1024 * 1024;
-const C4_NEXT: Partial<Record<DiagramId, DiagramId>> = { c4Context: 'c4Containers', c4Containers: 'c4Components', c4Components: 'c4Code' };
+export const C4_NEXT: Partial<Record<DiagramId, DiagramId>> = { c4Context: 'c4Containers', c4Containers: 'c4Components', c4Components: 'c4Code' };
 
 export function DiagramPicker(props: Props) {
     return <ProjectDiagramPicker key={props.graph.scope.rootId} {...props} />;
 }
 
-function ProjectDiagramPicker({ active: requested, onPick, graph, records, scope, stations, flat, labels, onOpen, onCamera, cameras, onLoadSymbols }: Props) {
+function ProjectDiagramPicker({ active: requested, onPick, graph, records, scope, stations, labels, onOpen, onCamera, cameras, onLoadSymbols, onScene, activationRef }: Props) {
     const t = labels.surface.code;
     // A camera-routed id is never a board: should one arrive as `active`, nothing is drawn for it.
     const active = requested && !STAGE_CAMERA_VIEWS[requested] ? requested : null;
@@ -43,6 +46,17 @@ function ProjectDiagramPicker({ active: requested, onPick, graph, records, scope
     const key = active ? JSON.stringify([graph.scope.rootId, active]) : null;
     const provided = key ? imported.get(key) : undefined;
     const diagram = provided ?? indexed;
+    useEffect(() => {
+        onScene?.(active && diagram ? { id: active, model: diagram } : null);
+    }, [active, diagram, onScene]);
+    const activate = (ref: string) => {
+        const next = active ? C4_NEXT[active] : undefined;
+        if (!next) { onOpen(ref); return; }
+        setC4Anchor({ level: next, ref, scope });
+        if (next === 'c4Code') onLoadSymbols?.(ref);
+        onPick(next);
+    };
+    useImperativeHandle(activationRef, () => activate);
     /** The camera a camera-routed id switches to, or null when the stage cannot (no switch, or no such camera). */
     const cameraOf = (id: DiagramId): ViewMode | null => {
         const target = STAGE_CAMERA_VIEWS[id];
@@ -102,17 +116,11 @@ function ProjectDiagramPicker({ active: requested, onPick, graph, records, scope
                 {failed === key && <span role="alert">{t.diagramInvalid}</span>}
             </>}
         </div>
-        {active && <div data-diagram-pane style={{
-            position: 'relative', flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto', perspective: '1200px', background: cssVar('bg'),
+        {active && !onScene && <div data-diagram-pane style={{
+            position: 'relative', flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto', background: cssVar('bg'),
         }}>
             {diagram?.nodes.length
-                ? <DiagramView id={active} model={diagram} flat={flat} labels={labels} onOpen={(ref) => {
-                    const next = C4_NEXT[active];
-                    if (!next) { onOpen(ref); return; }
-                    setC4Anchor({ level: next, ref, scope });
-                    if (next === 'c4Code') onLoadSymbols?.(ref);
-                    onPick(next);
-                }} />
+                ? <DiagramView id={active} model={diagram} labels={labels} onOpen={activate} />
                 : <p role="status" style={{ ...TYPE.body, margin: 14 }}>{t.diagramNoData}</p>}
         </div>}
     </>;

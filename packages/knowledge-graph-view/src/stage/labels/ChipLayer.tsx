@@ -24,6 +24,7 @@ export interface ChipLayerProps {
 
 /** Px above the mark's top the chip floats, and the gutter kept from the stage edge. */
 const RISE_PX = 8, GUTTER_PX = 2;
+const DOUBLE_CLICK_MS = 280;
 
 const LAYER: CSSProperties = { position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 2 };
 
@@ -45,6 +46,12 @@ export const ChipLayer = memo(function ChipLayer({ bus, chips, selected, hidden,
     const live = useRef({ chips, selected, hidden });
     live.current = { chips, selected, hidden };
     const out = useRef(new Float64Array(2));
+    const pendingPick = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const cancelPick = () => {
+        if (pendingPick.current !== null) clearTimeout(pendingPick.current);
+        pendingPick.current = null;
+    };
+    useEffect(() => cancelPick, []);
 
     useEffect(() => {
         // Sizes and the box are read ONCE per chip set (and on a resize), never inside the frame loop: a read after the
@@ -93,9 +100,21 @@ export const ChipLayer = memo(function ChipLayer({ bus, chips, selected, hidden,
                 return (
                     <button
                         key={`${c.slot}:${c.text}`} ref={(el) => { els.current[i] = el; }} type="button" tabIndex={-1} data-chip={key}
-                        style={chipStyle(c.risky, false, c.ghost)}
-                        onClick={() => { if (key) onSelect(key); }}
-                        onDoubleClick={() => { if (key) onDrill?.(key); }}
+                        style={chipStyle(c.risky, false, c.ghost)} title={c.title}
+                        onPointerDownCapture={(event) => event.stopPropagation()}
+                        onPointerUpCapture={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                            if (!key) return;
+                            cancelPick();
+                            if (!onDrill || event.detail === 0) { onSelect(key); return; }
+                            // Wait before opening the selection card: it can cover the chip before the second click.
+                            if (event.detail === 1) pendingPick.current = setTimeout(() => { pendingPick.current = null; onSelect(key); }, DOUBLE_CLICK_MS);
+                        }}
+                        onDoubleClickCapture={(event) => {
+                            event.stopPropagation();
+                            cancelPick();
+                            if (key) onDrill?.(key);
+                        }}
                     >
                         {c.text}
                     </button>

@@ -90,6 +90,24 @@ describe('the Map ladder goes back out to a band', () => {
     });
 });
 
+describe('the 3D architecture camera uses the Map drill', () => {
+    it('opens the file when a station crosses its semantic zoom threshold', () => {
+        const ref = 'src:sys::app.ts';
+        const station = { id: 'entry', refs: [ref], entry: true };
+        const map = { ...mapAt(''), drill: null, stations: { stations: [station], byId: new Map([['entry', station]]) },
+            keyOfStation: () => 'st:entry' } as unknown as StageMap;
+        const openFile = vi.fn();
+        const world = { ...drill, stack: [], canEnter: () => ({ can: true, level: 'package' }), openFile } as DrillModel;
+        const camera = { ...bus, slotOf: () => 0, placement: { cacheKey: '1|3d||', scale: new Float32Array([10]),
+            position: new Float32Array(3), extrude: new Float32Array(1) }, projector: {
+            width: 400, height: 300, pxPerWorld: 10,
+            project: (_x: number, _y: number, _z: number, out: Float64Array) => { out[0] = 200; out[1] = 150; return true; },
+        } } as unknown as StageBus;
+        renderHook(() => useSemanticZoom(camera, world, map, true));
+        expect(openFile).toHaveBeenCalledWith(ref);
+    });
+});
+
 describe('the Sequence band control sets the band itself', () => {
     it('an explicit click on System sets band 0 even though that band only fits, and a click on Method sets 2', () => {
         const { result } = setup();

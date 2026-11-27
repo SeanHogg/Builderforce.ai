@@ -15,7 +15,8 @@ import { buildDirs, dirParts, walkDirs, type Dir } from '../../map/folderTree';
 import { pathOf } from '../../graphModel';
 import { importanceOf } from '../../order';
 import { dominantOfCounts, dominantType, markTypeOf, MARK_TYPE_ORDER, type MarkType } from '../../shapes';
-import { fileRefOf, stationOfRef, type StationModel } from '../../surface/stations';
+import { tailOf } from '../../surface/outlineGraph';
+import { fileRefOf, stationOfRef, stationSourcePath, type StationModel } from '../../surface/stations';
 import { capacityFor } from '../../stage/slots';
 import { SLOT_FOLDER, SLOT_NODE, SLOT_STATION, SLOT_UNIT, type MarkSet } from '../../stage/types';
 
@@ -75,7 +76,8 @@ export function buildMarkSet(g: KnowledgeGraph, stations: StationModel, generati
     const nodeType: MarkType[] = new Array(nodes.length);
     nodes.forEach((node, i) => {
         nodeAt.set(node.ref, i);
-        keys[i] = `node:${node.ref}`; label[i] = node.label; tooltip[i] = pathOf(node.ref) ?? node.label;
+        const path = pathOf(node.ref);
+        keys[i] = `node:${node.ref}`; label[i] = node.kind === 'file' && path ? tailOf(path) : node.label; tooltip[i] = path ?? node.label;
         nodeType[i] = markTypeOf(node);
         slotKind[i] = nodeType[i] === 'unit' ? SLOT_UNIT : SLOT_NODE; importance[i] = importanceOf(node);
         type[i] = typeIndex(nodeType[i]!);
@@ -87,7 +89,8 @@ export function buildMarkSet(g: KnowledgeGraph, stations: StationModel, generati
     stations.stations.forEach((s, j) => {
         const slot = stationBase + j;
         stationAt.set(s.id, slot);
-        keys[slot] = `st:${s.id}`; label[slot] = s.name; tooltip[slot] = s.path ?? s.name;
+        const path = stationSourcePath(s);
+        keys[slot] = `st:${s.id}`; label[slot] = path ? tailOf(path) : s.name; tooltip[slot] = path ?? s.path ?? s.name;
         slotKind[slot] = SLOT_STATION; importance[slot] = s.use;
         const memberTypes = s.refs.map((ref) => { const at = nodeAt.get(ref); return at !== undefined ? nodeType[at]! : markTypeOf(asFile(ref)); });
         type[slot] = typeIndex(dominantType(memberTypes));

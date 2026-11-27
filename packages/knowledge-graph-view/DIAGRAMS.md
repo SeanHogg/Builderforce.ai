@@ -1,6 +1,6 @@
 # Visualizer diagrams
 
-Choose a view from **Diagrams** above the canvas. The current file, class, or method scopes the code diagrams. Select a definition in an indexed diagram to open its source. **Flat** and **3D** switch between an orthogonal and a perspective view. DSM uses a dependency table.
+Choose a view from **Diagrams** above the canvas. The current file, class, or method scopes the code diagrams. Select a mark to inspect its definition or members. Double-click an indexed mark to open its source. Diagrams share the stage's orbit, zoom and reset controls. **Flat** shows the diagram from above and **3D** restores its perspective. DSM lays out the dependency matrix on the stage. A host without WebGL shows an accessible list or table.
 
 The Visualizer derives its Class, Package, Component, Composite Structure, Deployment and C4 views from the reviewed graph and loaded symbols. The Use Case view can show indexed routes. It needs an authored model for actors and goals. Communication, Interaction Overview and Call Graph can use indexed calls. Those calls describe possible interactions in the code. Use a trace for observed order or time.
 
