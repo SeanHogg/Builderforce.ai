@@ -1,12 +1,11 @@
 import * as vscode from "vscode";
-import { createBuilderForceHandler } from "./chatParticipant";
+import { createBuilderForceHandler } from "./chatRequestHandler";
 import { localBrainApplication } from "../localFirst/localFirstStore";
 import type { BrainRunHost } from "../brain/brainRunHost";
 
 const SESSION_TYPE = "builderforce";
-/** The id `registerChatParticipant` creates the participant under. The session tab binds
- *  to that same agent so `@builderforce` and the tab are ONE agent, not two. */
-const PARTICIPANT_ID = "builderforce.agent";
+/** The agent id stamped on the restored history turns' participant field. */
+const SESSION_AGENT_ID = "builderforce.agent";
 
 /**
  * Registers BuilderForce as a dedicated chat-session tab (like CLAUDE CODE / CODEX),
@@ -70,8 +69,8 @@ const PARTICIPANT_ID = "builderforce.agent";
  * were never two implementations of one thing:
  *
  *  - This file is a REGISTRATION ADAPTER. It owns no chat logic: every turn is
- *    served by {@link createBuilderForceHandler}, the exact handler the stable
- *    `@builderforce` participant uses. There is no duplicated loop, tool wiring, model
+ *    served by {@link createBuilderForceHandler}, which runs the same shared turn
+ *    (`builderforceTurn.ts`) the `builderforce_runAgent` tool runs. There is no duplicated loop, tool wiring, model
  *    resolution or persistence here to converge — that consolidation already happened.
  *  - `BuilderForcePanel` is a different SURFACE, not a second copy of this one. It carries what
  *    the native chat UI has no contract for: the Evermind console, the model picker, the
@@ -85,11 +84,7 @@ const PARTICIPANT_ID = "builderforce.agent";
  *
  * Returns a Disposable, or undefined when the proposed API isn't available.
  */
-export function registerChatSessions(
-  ctx: vscode.ExtensionContext,
-  participant: vscode.ChatParticipant,
-  runHost: BrainRunHost,
-): vscode.Disposable | undefined {
+export function registerChatSessions(ctx: vscode.ExtensionContext, runHost: BrainRunHost): vscode.Disposable | undefined {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const chatApi = vscode.chat as any;
   if (typeof chatApi.registerChatSessionContentProvider !== "function") {
@@ -99,7 +94,7 @@ export function registerChatSessions(
         "`--enable-proposed-api builderforce.builderforce-ai` — our own manifest cannot " +
         "enable it, because on a packaged stable build the workbench strips any proposal the " +
         "extension is not allowlisted for in product.json (only GitHub/OpenAI are). The " +
-        "sidebar and @builderforce are unaffected either way.",
+        "sidebar, the BuilderForce chat agent and its runAgent tool are unaffected either way.",
     );
     return undefined;
   }
@@ -132,18 +127,12 @@ export function registerChatSessions(
 
   // The session CONTENT (the actual chat in the tab) — bind the type to our agent.
   //
-  // THIRD ARGUMENT IS THE CHAT PARTICIPANT, not a handle. The public wrapper is
+  // THE THIRD ARGUMENT (a chat participant in Copilot's own calls) IS IGNORED. The public wrapper is
   // `registerChatSessionContentProvider(I, S, D, Ce)` → `dn.registerChatSessionContentProvider(
-  // ext, I, D, S, Ce)`, and the internal implementation stores `provider: D`, keyed by the
-  // TYPE only — the third argument is the participant object Copilot's own shipped code
-  // passes: `wc.chat.registerChatSessionContentProvider(this.copilotcliSessionType, c, B)`
-  // where `B = wc.chat.createChatParticipant(...)` (extensions/copilot/dist/extension.js).
-  //
-  // This previously read a non-existent `participant.handle` property and bailed out, so
-  // the tab was bound to NOTHING even where the proposal WAS granted. There is no `handle`
-  // on the public ChatParticipant: the object returned by `createChatParticipant` exposes
-  // id/iconPath/requestHandler/followupProvider/helpTextPrefix, and its `apiAgent` getter
-  // returns a literal carrying the same fields — no handle anywhere.
+  // ext, I, D, S, Ce)`, and the extension-host implementation stores only the scheme, the provider
+  // (`S`), the extension and the capabilities (`Ce`) — the participant `D` is never kept (verified
+  // against the vendored 1.140 build). So this tab needs NO ChatParticipant: the tab is bound by
+  // `SESSION_TYPE` and the `requestHandler` the provider returns, and `undefined` is passed.
   //
   // The call is guarded rather than merely feature-detected because on a stable build the
   // method EXISTS and the guard `L(P, "chatSessionsProvider")` throws only when called.
@@ -159,7 +148,7 @@ export function registerChatSessions(
       chatApi.registerChatSessionContentProvider(
         SESSION_TYPE,
         contentProvider,
-        participant,
+        undefined,
       ) as vscode.Disposable,
     );
   } catch (e) {
@@ -172,7 +161,7 @@ export function registerChatSessions(
       "[BuilderForce] chat-session content registration failed. On a packaged stable " +
         "VS Code this is expected unless the extension was launched with " +
         "`--enable-proposed-api builderforce.builderforce-ai`; the sidebar and " +
-        "@builderforce still work. Cause:",
+        "BuilderForce chat agent and its runAgent tool still work. Cause:",
       e,
     );
   }
@@ -265,7 +254,7 @@ async function sessionHistory(ctx: vscode.ExtensionContext, resource: vscode.Uri
           row.content,
           undefined,
           [],
-          PARTICIPANT_ID,
+          SESSION_AGENT_ID,
           [],
           undefined,
           `bf-${chatId}-${row.seq ?? index}`,
@@ -280,7 +269,7 @@ async function sessionHistory(ctx: vscode.ExtensionContext, resource: vscode.Uri
       new Turn.ChatResponseTurn(
         [new vscode.MarkdownString(row.content)],
         { metadata: { brainChatId: chatId } },
-        PARTICIPANT_ID,
+        SESSION_AGENT_ID,
       ),
     );
   });

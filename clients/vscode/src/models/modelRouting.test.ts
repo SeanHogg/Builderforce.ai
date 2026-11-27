@@ -173,8 +173,9 @@ describe("the platform stays on the gateway when the model does not", () => {
   it("fetches the tool catalogue from the gateway, never from the route's endpoint", () => {
     expect(ports).toContain("brainToolCatalog(");
     // The catalogue's base URL is the platform's, resolved without consulting the route.
-    expect(catalog).toMatch(/fetch\(`\$\{url\}\/llm\/v1\/mcp\/tools`/);
     expect(catalog).toContain("const url = getBaseUrl();");
+    expect(catalog).toContain("platformRelay(url, key).list()");
+    expect(catalog).toMatch(/createMcpRelay\(\{\s*baseUrl,/);
     expect(catalog).not.toContain("resolveModelRoute");
   });
 
@@ -186,7 +187,7 @@ describe("the platform stays on the gateway when the model does not", () => {
   it("starts provisioning a local model only from a turn — never from a panel opening or a scan", () => {
     // `turn: true` is what lets the route call `hostModelProvisioner.ensure()`; the two
     // chat surfaces pass it, the panel init and the workspace scan resolve without it.
-    const participant = stripComments(fs.readFileSync(path.join(SRC, "chat/chatParticipant.ts"), "utf8"));
+    const participant = stripComments(fs.readFileSync(path.join(SRC, "chat/builderforceTurn.ts"), "utf8"));
     expect(participant).toContain("resolveModelRoute(ctx.secrets, { turn: true })");
     const init = stripComments(fs.readFileSync(path.join(SRC, "workspace/workspaceInit.ts"), "utf8"));
     const extension = stripComments(fs.readFileSync(path.join(SRC, "extension.ts"), "utf8"));
@@ -197,7 +198,7 @@ describe("the platform stays on the gateway when the model does not", () => {
 
   it("never lets a Hybrid fallback be silent — both chat surfaces hear onFallback", () => {
     const routing = stripComments(fs.readFileSync(path.join(SRC, "models/modelRouting.ts"), "utf8"));
-    const participant = stripComments(fs.readFileSync(path.join(SRC, "chat/chatParticipant.ts"), "utf8"));
+    const participant = stripComments(fs.readFileSync(path.join(SRC, "chat/builderforceTurn.ts"), "utf8"));
     const host = stripComments(fs.readFileSync(path.join(SRC, "brain/brainRunHost.ts"), "utf8"));
     const participantRun = stripComments(fs.readFileSync(path.join(SRC, "chat/participantRun.ts"), "utf8"));
     // The seam hands the shared step the surface's handler…

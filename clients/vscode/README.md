@@ -100,9 +100,9 @@ plan.
 your BuilderForce account exactly as it always has — that is what makes it the same
 conversation in the web app — so the text of a local chat is stored server-side like any
 other. The model that produced the text has no bearing on where the text is kept. The
-`@builderforce` participant and the codebase scan store nothing when you are signed out.
+BuilderForce chat agent's runs and the codebase scan store nothing when you are signed out.
 
-If you need a turn that touches no server at all, use `@builderforce` in the VS Code chat view
+If you need a turn that touches no server at all, use the BuilderForce agent in the VS Code chat view
 with a local model picked and no account signed in.
 
 ## Settings

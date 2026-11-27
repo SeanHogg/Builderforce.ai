@@ -2,7 +2,7 @@
  * The editor's assembly of a run's workspace directives: read `.builderforce/`, gate its
  * commands on the person's approval, and hand back the run's {@link RunDirectives}. The
  * ONE entry both chat surfaces call — the panel's run host (`brainRunHostPorts.ts`) and
- * the native chat participant (`chatParticipant.ts`).
+ * the BuilderForce chat turn (`builderforceTurn.ts`).
  */
 
 import * as vscode from "vscode";

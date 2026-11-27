@@ -16,7 +16,7 @@ import { closeComposerLaunchers, composerCommandHost } from "./composerCommands/
 import { registerChatView } from "./panels/chatView";
 import { Project360Panel } from "./panels/project360Panel";
 import { ProjectPagePanel, projectPageChoices } from "./panels/projectPagePanel";
-import { registerChatParticipant } from "./chat/chatParticipant";
+import { registerRunAgentTool } from "./chat/runAgentTool";
 import { registerChatSessions } from "./chat/chatSessions";
 import { scanCodebase } from "./diagnostics/codebaseScan";
 import { currentCapabilities } from "./tools/capabilityContext";
@@ -401,10 +401,10 @@ export function activate(context: vscode.ExtensionContext): void {
   void editorAccounts(context.secrets).hydrate()
     .catch((error: unknown) => void reportExtensionError(error, { operation: "connectedAccounts.hydrate" }));
 
-  // Native Chat participant (@builderforce) + dedicated session tab (proposed API,
-  // feature-detected — no-ops unless launched with --enable-proposed-api).
-  const participant = registerChatParticipant(context, runHost);
-  const sessions = registerChatSessions(context, participant, runHost);
+  // The `builderforce_runAgent` language-model tool (what the BuilderForce chat agent, `assets/agents/builderforce.agent.md`,
+  // calls) + the dedicated session tab (proposed API, feature-detected — no-ops unless launched with --enable-proposed-api).
+  context.subscriptions.push(registerRunAgentTool(context, runHost));
+  const sessions = registerChatSessions(context, runHost);
   if (sessions) context.subscriptions.push(sessions);
 
   // Live builder-insights surface — status bar + tree fed by the gateway SSE
@@ -506,7 +506,6 @@ export function activate(context: vscode.ExtensionContext): void {
   registerLocalWork(context);
 
   context.subscriptions.push(
-    participant,
     vscode.commands.registerCommand("builderforce.refreshInbox", () => { inbox.refresh(); meetings?.refresh(); }),
     // Work Inbox entry points — each hands the unified Brain a job to do with its
     // shared platform + git tools (one Brain, one tool catalog; no bespoke dashboards).
@@ -785,10 +784,10 @@ export function activate(context: vscode.ExtensionContext): void {
       void syncWorkspaceFacts(context.secrets);
     }),
     // A manual model pick re-pushes Brain init so an open chat switches immediately
-    // (parity with project change; the native participant re-resolves per turn).
+    // (parity with project change; the chat turn re-resolves per turn).
     onModelChange(() => refreshWorkspaceSurfaces()),
     // Changing the permission setting has to reach an ALREADY-OPEN panel. The
-    // participant re-reads it per turn, so without this the two surfaces disagree for
+    // chat turn re-reads it per turn, so without this the two surfaces disagree for
     // as long as the panel stays open — which is the whole failure this seam exists to
     // prevent, just delayed.
     vscode.workspace.onDidChangeConfiguration((e) => {
@@ -1437,7 +1436,7 @@ async function signOut(
  * `buildModelItems` (brain-embedded — deliberately React-free so this Node host can
  * import it) and the copy from the shared `modelChoiceLabels`, so the two surfaces
  * can only differ in chrome. It stays because a user who never opens the Brain panel
- * (Sessions view overflow, command palette, the native `@builderforce` participant)
+ * (Sessions view overflow, command palette, the BuilderForce chat agent)
  * still needs a way to change models.
  */
 /** Display name of each on-device runtime. Product names, so they are NOT localized —

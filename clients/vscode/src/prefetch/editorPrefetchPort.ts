@@ -1,7 +1,7 @@
 /**
  * The editor's PreFetch port WITH its editor-only parts — the ONE construction both
- * surfaces use (the panel's run host, `runSetupPorts.ts`; the native participant,
- * `chatParticipant.ts`): the open workspace files as the focus, the language servers'
+ * surfaces use (the panel's run host, `runSetupPorts.ts`; the BuilderForce chat turn,
+ * `builderforceTurn.ts`): the open workspace files as the focus, the language servers'
  * diagnostics for `diag.typecheck`, the local-model settings for tier 3, and the starter
  * scaffolds (`@builderforce/ide-templates`) for `scaffold.template`.
  *

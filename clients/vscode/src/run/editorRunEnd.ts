@@ -1,7 +1,7 @@
 /**
  * What every editor run leaves behind when it settles — ONE step for both editor
  * surfaces: the panel's host-owned runs (`brainRunHostPorts.ts` `sessionNote`) and the
- * native chat participant (`chatParticipant.ts`). Before this, only the panel wrote a
+ * BuilderForce chat turn (`builderforceTurn.ts`). Before this, only the panel wrote a
  * note and a code map; a run in the native chat view taught the next run nothing.
  *
  *   1. The dated `.builderforce/memory` note — awaited, because the next run's

@@ -981,13 +981,34 @@
         }
       ]
     },
-    "chatParticipants": [
+    "languageModelTools": [
       {
-        "id": "builderforce.agent",
-        "name": "builderforce",
-        "fullName": "BuilderForce",
-        "description": "%chatParticipant.description%",
-        "isSticky": true
+        "name": "builderforce_runAgent",
+        "toolReferenceName": "runAgent",
+        "displayName": "%tool.runAgent.displayName%",
+        "userDescription": "%tool.runAgent.userDescription%",
+        "modelDescription": "Hands a coding task (build, fix, investigate, refactor) in the open workspace to the BuilderForce agent, which runs its own model routing, project context (PRD, OKRs, project memory), governance gates and tools, and returns its final report. Use for substantial multi-step work in this codebase. Pass continueChatId from a previous result to continue the same BuilderForce conversation.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(sparkle)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "task": {
+              "type": "string",
+              "description": "The task for BuilderForce, in the user's words, including any relevant attached context verbatim."
+            },
+            "continueChatId": {
+              "type": "number",
+              "description": "The BuilderForce chat id from a previous runAgent result, to continue that conversation. Omit to start a new one."
+            }
+          },
+          "required": ["task"]
+        }
+      }
+    ],
+    "chatAgents": [
+      {
+        "path": "./assets/agents/builderforce.agent.md"
       }
     ],
     "chatSessions": [

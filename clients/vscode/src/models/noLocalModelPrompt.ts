@@ -1,7 +1,7 @@
 /**
  * The editor's answer to the two "nothing can take this turn" verdicts that are NOT a
- * sign-in problem — ONE place for the native surfaces (the `@builderforce` chat
- * participant, notifications), so none of them falls back to the sign-in prompt; the
+ * sign-in problem — ONE place for the native surfaces (the BuilderForce chat turn,
+ * notifications), so none of them falls back to the sign-in prompt; the
  * webview's banner offers the same remedies from the same commands.
  *
  *   - `no_local_model` — nothing on this machine can answer and the gateway is out for a
@@ -19,6 +19,7 @@ import * as vscode from "vscode";
 import { INFERENCE_MODES, isInferenceMode } from "@builderforce/local-first";
 import { inferenceModeState, onDidChangeInferenceMode, setInferenceMode } from "./inferenceModeSetting";
 import { inferenceModeCopy } from "./inferenceModeLabels";
+import type { TurnSink } from "../chat/builderforceTurn";
 
 export const SET_INFERENCE_MODE_COMMAND = "builderforce.setInferenceMode";
 /** Where a model is picked — and a local one downloaded: the model picker. */
@@ -54,7 +55,7 @@ export function noLocalModelRemedies(kind: ModelRemedyKind = "no_local_model"): 
 }
 
 /** In a chat response: the sentence and a button per remedy. */
-export function streamNoLocalModel(stream: vscode.ChatResponseStream, kind: ModelRemedyKind = "no_local_model"): void {
+export function streamNoLocalModel(stream: Pick<TurnSink, "markdown" | "button">, kind: ModelRemedyKind = "no_local_model"): void {
   stream.markdown(noLocalModelMessage(kind));
   stream.markdown("\n\n");
   for (const remedy of noLocalModelRemedies(kind)) stream.button(remedy);

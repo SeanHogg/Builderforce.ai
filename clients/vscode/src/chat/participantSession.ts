@@ -1,6 +1,6 @@
 /**
- * The reading the native chat participant makes of the editor's chat session, kept apart
- * from the request handler (`chatParticipant.ts`): which Brain chat a session already is.
+ * The reading the BuilderForce chat turn makes of the editor's chat session, kept apart
+ * from the turn (`builderforceTurn.ts`): which Brain chat a session already is.
  */
 
 import * as vscode from "vscode";

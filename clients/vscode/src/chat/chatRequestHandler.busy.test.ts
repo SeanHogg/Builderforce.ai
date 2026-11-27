@@ -63,7 +63,7 @@ vi.mock("../hooks/editorDirectives", () => ({}));
 vi.mock("../memory/memoryStaleness", () => ({}));
 vi.mock("../run/runSetupPorts", () => ({}));
 
-import { createBuilderForceHandler } from "./chatParticipant";
+import { createBuilderForceHandler } from "./chatRequestHandler";
 
 function turn(runHost?: { isBusy: (chatId: number) => boolean; childControls?: () => undefined }) {
   const markdown = vi.fn();

@@ -1,5 +1,5 @@
 /**
- * The native `@builderforce` participant's run: its VS Code chat-stream RENDERING around the ONE host start.
+ * The BuilderForce chat turn's run (`builderforceTurn.ts`, `chatRequestHandler.ts`, `runAgentTool.ts`): its VS Code chat-stream RENDERING around the ONE host start.
  *
  * The participant used to drive the shared loop itself (`runBrainLoop` with its own ports, its own run journal and no entry
  * point). It now starts exactly as the panel does - `host.start` (the editor's gated start: change-set identity, the run

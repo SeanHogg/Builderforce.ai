@@ -6,7 +6,7 @@ import * as path from "node:path";
  * Guards the recorded decision in `chatSessions.ts`: the proposed-API chat tab and the
  * stable `BuilderForcePanel` session tabs stay as they are because they are NOT two
  * implementations of one thing — this file is a registration adapter over the SAME
- * handler the `@builderforce` participant uses.
+ * handler (the shared BuilderForce turn) the `builderforce_runAgent` tool runs.
  *
  * That claim is only true while the adapter stays thin. The moment turn handling, tool
  * wiring, model resolution or persistence is written HERE instead of in the shared
@@ -16,8 +16,8 @@ import * as path from "node:path";
 const SOURCE = fs.readFileSync(path.join(__dirname, "chatSessions.ts"), "utf8");
 
 describe("chatSessions stays a thin registration adapter", () => {
-  it("serves every turn through the SHARED participant handler", () => {
-    expect(SOURCE).toContain('import { createBuilderForceHandler } from "./chatParticipant"');
+  it("serves every turn through the SHARED request handler", () => {
+    expect(SOURCE).toContain('import { createBuilderForceHandler } from "./chatRequestHandler"');
     expect(SOURCE).toContain("createBuilderForceHandler(ctx, runHost)");
   });
 
@@ -35,7 +35,7 @@ describe("chatSessions stays a thin registration adapter", () => {
   });
 
   it("self-disables instead of failing when the proposed API is absent", () => {
-    // The stable sidebar and `@builderforce` participant must be unaffected on the
+    // The stable sidebar and the BuilderForce chat agent must be unaffected on the
     // overwhelming majority of installs, which have no proposed API at all.
     expect(SOURCE).toContain('typeof chatApi.registerChatSessionContentProvider !== "function"');
     expect(SOURCE).toContain("return undefined");
@@ -56,17 +56,15 @@ describe("chatSessions stays a thin registration adapter", () => {
     expect(SOURCE).toContain("Decision: the two per-tab surfaces do NOT converge");
   });
 
-  it("binds the tab to the CHAT PARTICIPANT, not a non-existent handle", () => {
-    // Regression: the third argument of registerChatSessionContentProvider is the participant
-    // object (verified against Copilot's shipped `registerChatSessionContentProvider(
-    // this.copilotcliSessionType, c, B)` where B = createChatParticipant(...)). Reading a
-    // `handle` property that the public ChatParticipant never had made the adapter bail out
-    // and bind the tab to nothing, even where the proposal WAS granted.
+  it("binds the tab by session type and provider, with no chat participant", () => {
+    // The extension host's registerChatSessionContentProvider IGNORES its third argument (it stores only
+    // scheme/provider/extension/capabilities — verified against the vendored 1.140 build), so the tab needs no
+    // ChatParticipant. Regression: it once read a non-existent `participant.handle` and bound the tab to nothing.
     // (comments stripped: this file documents the old `.handle` read on purpose)
     const code = SOURCE.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
     expect(code).not.toContain(".handle");
     expect(code).toMatch(
-      /registerChatSessionContentProvider\(\s*SESSION_TYPE,\s*contentProvider,\s*participant,?\s*\)/,
+      /registerChatSessionContentProvider\(\s*SESSION_TYPE,\s*contentProvider,\s*undefined,?\s*\)/,
     );
   });
 
@@ -113,10 +111,14 @@ describe("chatSessions stays a thin registration adapter", () => {
     expect(Array.isArray(sessions) && sessions.length).toBeTruthy();
     expect(sessions[0].type).toBeTruthy();
     expect(sessions[0].displayName).toBeTruthy();
-    // And it must be bound to the same identity as the @builderforce participant.
-    expect(SOURCE).toContain('const PARTICIPANT_ID = "builderforce.agent"');
-    const participants = pkg.contributes.chatParticipants;
-    expect(participants.some((p: { id: string }) => p.id === "builderforce.agent")).toBe(true);
+    // The replacement for the retired chat participant: the custom chat agent (its file ships) and the tool it calls.
+    expect(SOURCE).toContain('const SESSION_AGENT_ID = "builderforce.agent"');
+    expect(pkg.contributes.chatParticipants).toBeUndefined();
+    const agents = pkg.contributes.chatAgents as { path: string }[];
+    expect(agents.length).toBeGreaterThan(0);
+    for (const agent of agents) expect(fs.existsSync(path.join(__dirname, "..", "..", agent.path))).toBe(true);
+    const tools = pkg.contributes.languageModelTools as { name: string }[];
+    expect(tools.some((t) => t.name === "builderforce_runAgent")).toBe(true);
   });
 });
 
