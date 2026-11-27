@@ -73,4 +73,28 @@ describe("the VS Code host labels its runs", () => {
     expect(execute).toHaveBeenCalledOnce();
     expect(onToolRun).toHaveBeenCalledWith(expect.objectContaining({ name, remote: true, ok: true }));
   });
+
+  it("advertises the scoped Memory name while retaining the editor's policy and dispatch identity", async () => {
+    const name = "recall_facts";
+    const wireName = "memory__recall";
+    const gateway = fakeGateway([{ toolCalls: [{ name: wireName, args: { query: "project notes" } }] }, { text: "Memory recalled." }]);
+    const execute = vi.fn(async () => '{"ok":true, "facts":[]}');
+    const onToolRun = vi.fn();
+    const host = createBrainRunHost({
+      tools: async () => [{ name, wireName, description: "Recall project facts", parameters: {}, mutating: false, execute }],
+      workspaceRoot: () => "/workspace",
+      stream: async () => gateway.stream,
+      persistence: transientRunPersistence(),
+      evermind: () => undefined,
+      labels: { blockedByPolicy: (reason) => `blocked: ${reason}` },
+      onToolRun,
+    });
+    await host.start({ chatId: 7102, systemPrompt: "You are the IDE agent.", userTurn: "recall project notes", autoApprove: true, evermind: true });
+
+    expect(seen.requests[0]?.wireToolNames).toEqual([{ name, wireName }]);
+    expect(gateway.requests[0]?.advertised).toContain(wireName);
+    expect(gateway.requests[0]?.advertised).not.toContain(name);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(onToolRun).toHaveBeenCalledWith(expect.objectContaining({ name, remote: false, mutating: false, ok: true }));
+  });
 });

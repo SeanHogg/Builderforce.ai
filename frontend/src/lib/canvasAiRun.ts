@@ -144,6 +144,8 @@ export interface CanvasRun {
   stream: ReturnType<typeof resolveBrainStream>;
   guestTurnId: string;
   actions: BrainAction[];
+  /** Provider names from the authenticated MCP relay catalog. */
+  relayWireToolNames?: readonly { name: string; wireName: string }[];
   byName: Map<string, BrainAction>;
   /** The user asked Canvas to create or update something (`requestsCanvasMutation`). */
   mutationRequested: boolean;

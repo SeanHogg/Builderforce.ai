@@ -104,9 +104,8 @@ function classifyStreamError(run: CanvasRun, error: unknown, askedModel: string 
  * the arc stage, the guest-turn metadata — and reports each completion for diagnostics.
  */
 export function canvasModelTransport(run: CanvasRun): ModelTransport {
-  const { options, stream, guestTurnId, actions } = run;
-  const wireToolNames = actions.flatMap(({ name, wireName }) => wireName ? [{ name, wireName }] : []);
-  const providerStream = wireToolNames.length ? modelToolNames({ stream, tools: specsFor(actions), wireToolNames }).stream : stream;
+  const { options, stream, guestTurnId, actions, relayWireToolNames: wireToolNames } = run;
+  const providerStream = wireToolNames?.length ? modelToolNames({ stream, tools: specsFor(actions), wireToolNames }).stream : stream;
   let completions = 0;
   return {
     // The window the page already knows (the gateway catalog's rows, the on-device runtime

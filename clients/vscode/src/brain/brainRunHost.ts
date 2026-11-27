@@ -46,6 +46,7 @@ import type { ShipPolicy } from "@builderforce/run-guards";
 import { approvalRequestFor, argsRecord, createNativeRunTool, nativeNeedsConfirm, nativeToolSpecs, toolLabel } from "../native/nativeRunTool";
 import { chatLedgerRequest } from "../run/runUsageLedgerPorts";
 import { RunKnowledgeRecorder, recordingOnly } from "@builderforce/agent-tools";
+import { resolveName } from "@seanhogg/builderforce-mcp";
 import { createChildRuns } from "../child/childRuns";
 import { createRunRelay } from "../run/runRelay";
 import { createLlmFailureLogger } from "../models/llmFailureLog";
@@ -317,7 +318,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         knowledge: recordingOnly(notesFor(key), (name) => !defs.find((d) => d.name === name)?.remote),
         tools: nativeToolSpecs(defs),
         // Local-domain substitutions keep their local names even when they started from a relay entry.
-        wireToolNames: defs.flatMap(({ name, remote, wireName }) => remote && wireName ? [{ name, wireName }] : []),
+        wireToolNames: defs.flatMap(({ name, remote, wireName }) =>
+          wireName && (remote || resolveName(wireName)?.source === "memory") ? [{ name, wireName }] : []),
         ...(pick.model ? { model: pick.model } : {}),
         ...(pick.modelStrict != null ? { modelStrict: pick.modelStrict } : {}),
         ...(pick.routingMode ? { routingMode: pick.routingMode } : {}),

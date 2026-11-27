@@ -9,7 +9,9 @@
  * (replace-on-write by stable key) is enforced server-side.
  */
 
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
+import { memoryRecallTool, memoryRememberTool, type Capability, type MemoryCapability, type MemoryRecallResult, type MemoryRememberResult } from "@builderforce/agent-tools";
+import { advertiseName } from "@seanhogg/builderforce-mcp";
 import { recallProjectFacts, rememberProjectFact } from "../bfApi";
 import type { ToolDef } from "../tools/fileTools";
 import { toolMutating } from "../tools/toolMutating";
@@ -18,6 +20,50 @@ import { staleNote, staleReferences } from "./memoryStaleness";
 /** Facts a single `recall_facts` call hands back by default. */
 const RECALL_DEFAULT_LIMIT = 5;
 const RECALL_MAX_LIMIT = 20;
+const MEMORY_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(["memory"]);
+const recallSchema = memoryRecallTool.schema.function.parameters;
+const rememberSchema = memoryRememberTool.schema.function.parameters;
+const rememberProperties = rememberSchema.properties ?? {};
+
+function projectFactsMemory(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+  root: string,
+  serverChatId?: () => Promise<number | undefined>,
+): MemoryCapability {
+  return {
+    async recall(query, requested): Promise<MemoryRecallResult> {
+      const limit = Math.min(RECALL_MAX_LIMIT, Math.max(1, Math.floor(requested ?? RECALL_DEFAULT_LIMIT)));
+      const facts = await recallProjectFacts(secrets, projectId, query || undefined, limit);
+      const missing = await staleReferences(root || undefined, facts.map((fact) => fact.content));
+      return {
+        ok: true,
+        query,
+        entries: facts.map(({ key, content }, index) => ({
+          key,
+          content,
+          ...(missing[index]?.length ? { possiblyStale: staleNote(missing[index]!) } : {}),
+        })),
+      };
+    },
+    async remember(key, content): Promise<MemoryRememberResult> {
+      let chatId: number | undefined;
+      try {
+        chatId = await serverChatId?.();
+      } catch {
+        return { ok: false, error: "Project memory is unavailable right now." };
+      }
+      const result = await rememberProjectFact(secrets, projectId, key, content, chatId != null ? { chatId } : undefined);
+      if (result.ok) return { ok: true, key };
+      return {
+        ok: false,
+        error: result.reason === "memory-off"
+          ? "memory-off: Memory is OFF for this chat — nothing was remembered."
+          : "Project memory is unavailable right now.",
+      };
+    },
+  };
+}
 
 /**
  * The agent's memory pair, routed through the SHARED project facts store — the editor
@@ -43,34 +89,27 @@ export function cognitionToolDefs(
   return [
     {
       name: "recall_facts",
+      wireName: advertiseName("memory", "recall"),
       description:
         "Recall durable facts previously remembered about this PROJECT — root causes, where a behaviour lives, conventions, decisions — from the shared project memory every agent (cloud/on-prem/editor) writes to. Call this BEFORE searching or re-reading files to rediscover something a prior run may already have learned: it costs no disk read and no re-reading. Pass a short `query` (a topic, symbol, file or question). Returns the best-matching facts with their stable keys; an empty result means this topic has not been recorded yet — remember_fact what you learn so the next run recalls it.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "What to recall — a topic, symbol, file or question." },
-          limit: { type: "number", description: `Max facts to return (default ${RECALL_DEFAULT_LIMIT}, max ${RECALL_MAX_LIMIT}).` },
-        },
-        required: ["query"],
-      },
-      mutating: toolMutating("recall_facts", { mutates: false }),
+      parameters: recallSchema,
+      mutating: toolMutating(memoryRecallTool.name),
       execute: async (args, root) => {
         if (!projectId) return JSON.stringify({ ok: false, error: "Select a project first — memory is scoped to the active project." });
         const query = String(args.query ?? "").trim();
-        const requested = typeof args.limit === "number" && Number.isFinite(args.limit) ? Math.floor(args.limit) : RECALL_DEFAULT_LIMIT;
-        const limit = Math.min(RECALL_MAX_LIMIT, Math.max(1, requested));
-        const facts = await recallProjectFacts(secrets, projectId, query || undefined, limit);
-        // A fact naming code the workspace no longer has is flagged, not obeyed.
-        const missing = await staleReferences(root || undefined, facts.map((f) => f.content));
+        const limit = typeof args.limit === "number" && Number.isFinite(args.limit) ? args.limit : undefined;
+        const memory = projectFactsMemory(secrets, projectId, root);
+        // Saved editor calls can use an empty query to list the most recent facts.
+        const result: MemoryRecallResult = query
+          ? (await memoryRecallTool.execute({ query, limit }, { caps: { capabilities: MEMORY_CAPABILITIES, memory } })).data as unknown as MemoryRecallResult
+          : await memory.recall(query, limit);
+        if (!result.ok) return JSON.stringify(result);
+        const facts = result.entries ?? [];
         return JSON.stringify({
           ok: true,
           query,
           total: facts.length,
-          facts: facts.map((f, i) => ({
-            key: f.key,
-            content: f.content,
-            ...(missing[i]?.length ? { possiblyStale: staleNote(missing[i]!) } : {}),
-          })),
+          facts,
           ...(facts.length === 0
             ? { note: "No remembered facts match this query — nothing has been recorded about it yet. Work it out from the code, then remember_fact the durable result under a stable key so the next run recalls it instead of re-deriving it." }
             : {}),
@@ -79,38 +118,22 @@ export function cognitionToolDefs(
     },
     {
       name: "remember_fact",
+      wireName: advertiseName("memory", "remember"),
       description:
         "Persist a durable fact about this PROJECT under a STABLE key (e.g. 'auth-flow', 'pkg:foo') to the shared project memory every agent (cloud/on-prem/editor) reads. A new fact for the same key supersedes the old one (write-through, replace-on-write). Use for decisions, conventions, and locations worth recalling across runs and surfaces.",
       parameters: {
-        type: "object",
-        properties: {
-          key: { type: "string", description: "Stable subject key identifying what the fact is about." },
-          content: { type: "string", description: "The fact to remember." },
-        },
-        required: ["key", "content"],
+        ...rememberSchema,
+        properties: { key: rememberProperties.key, content: rememberProperties.content },
       },
-      mutating: toolMutating("remember_fact", { mutates: true }),
-      execute: async (args) => {
+      mutating: toolMutating(memoryRememberTool.name),
+      execute: async (args, root) => {
         if (!projectId) return JSON.stringify({ ok: false, error: "Select a project first — memory is scoped to the active project." });
-        // The run's SERVER chat: its origin, and the chat's Memory gate (off ⇒ `memory-off`).
-        const chatId = await serverChatId?.().catch(() => undefined);
-        const result = await rememberProjectFact(
-          secrets,
-          projectId,
-          String(args.key ?? ""),
-          String(args.content ?? ""),
-          chatId != null ? { chatId } : undefined,
-        );
+        const key = String(args.key ?? "");
+        const content = String(args.content ?? "");
+        const memory = projectFactsMemory(secrets, projectId, root, serverChatId);
+        const { data } = await memoryRememberTool.execute({ key, content }, { caps: { capabilities: MEMORY_CAPABILITIES, memory } });
         // A JSON envelope, so a refusal reads as a failed call (`isFailedToolResult`), never as "saved".
-        if (result.ok) {
-          return JSON.stringify({ ok: true, key: String(args.key), note: `Remembered '${String(args.key)}' for this project (shared with all agents).` });
-        }
-        return JSON.stringify({
-          ok: false,
-          error: result.reason === "memory-off"
-            ? "memory-off: Memory is OFF for this chat — nothing was remembered."
-            : "Project memory is unavailable right now.",
-        });
+        return JSON.stringify(data.ok ? { ...data, note: `Remembered '${key}' for this project (shared with all agents).` } : data);
       },
     },
   ];

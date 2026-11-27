@@ -133,6 +133,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     stream,
     guestTurnId,
     actions,
+    relayWireToolNames: mcpActions.flatMap(({ name, wireName }) => wireName ? [{ name, wireName }] : []),
     byName,
     mutationRequested,
     requiredTools: promptNamedTools(messages),

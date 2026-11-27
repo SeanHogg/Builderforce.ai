@@ -8415,6 +8415,204 @@ function useMcpExtensions(options) {
   return { loading, toolCount: actions.length, error };
 }
 
+// src/toolRouter.ts
+var TOOL_ROUTER_FIND = "builtin_tools_find";
+var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
+var TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
+function isRouterTool(name) {
+  return name === TOOL_ROUTER_FIND || name === TOOL_ROUTER_DESCRIBE || name === TOOL_ROUTER_INVOKE;
+}
+var FIND_LIMIT = 25;
+function routerToolSpecs(catalogSize) {
+  const preamble = `This conversation has ${catalogSize} platform tools available in total, but only the most relevant ones are listed directly on each turn.`;
+  return [
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_FIND,
+        description: `${preamble} Search ALL of them by keyword and get back their names and descriptions. Use this FIRST whenever the tool you want is not in your visible list \u2014 do NOT assume a capability is missing, and never write a tool call as plain text.`,
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: 'Keywords, e.g. "tickets backlog status" or "pull request".' }
+          },
+          required: ["query"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_DESCRIBE,
+        description: `${preamble} Get the exact parameter schema for one tool by name, so you can build its arguments before calling it with ${TOOL_ROUTER_INVOKE}.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: `Exact tool name, e.g. "builtin_chats_list_tickets".` }
+          },
+          required: ["name"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: TOOL_ROUTER_INVOKE,
+        description: `${preamble} Call ANY of them by name, including ones not listed on this turn. This is a real call and it really executes \u2014 use it instead of describing what you would call.`,
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: 'Exact tool name to call; a catalog id such as "tasks.archive_many" is accepted too.' },
+            args: { type: "object", description: "Arguments object for that tool." }
+          },
+          required: ["name"]
+        }
+      }
+    }
+  ];
+}
+function words(text2) {
+  return text2.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+}
+var APP_MANIFEST_ALIAS_PHRASES = ["app manifest", "builderforce.json", "ai resource"];
+var APP_MANIFEST_TOOL_NAMES = /* @__PURE__ */ new Set([
+  advertisedToolName("app_manifest.schema"),
+  advertisedToolName("app_manifest.validate")
+]);
+function findTools(catalog, query, limit = FIND_LIMIT) {
+  const terms = words(query);
+  const lowered = query.toLowerCase();
+  const manifestAlias = APP_MANIFEST_ALIAS_PHRASES.some((p) => lowered.includes(p));
+  if (terms.length === 0 && !manifestAlias) return [];
+  const scored = [];
+  catalog.forEach((tool, index) => {
+    const name = tool.function?.name ?? "";
+    if (!name) return;
+    const description = tool.function?.description ?? "";
+    const haystackName = name.toLowerCase();
+    const haystackDesc = description.toLowerCase();
+    if (APP_MANIFEST_TOOL_NAMES.has(name)) {
+      const score2 = (manifestAlias ? 20 : 0) + (terms.includes("manifest") ? 10 : 0);
+      if (score2 > 0) scored.push({ m: { name, description }, score: score2, index });
+      return;
+    }
+    let score = 0;
+    for (const t of terms) {
+      if (haystackName.includes(t)) score += 10;
+      else if (haystackDesc.includes(t)) score += 1;
+    }
+    if (score > 0) scored.push({ m: { name, description }, score, index });
+  });
+  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
+}
+function describeTool(catalog, name) {
+  const resolved = resolveAdvertisedToolName(name, toolNameSet(catalog, (t) => t.function?.name));
+  return resolved === null ? null : catalog.find((t) => t.function?.name === resolved) ?? null;
+}
+function handleRouterCall(catalog, name, args) {
+  const a = args ?? {};
+  if (name === TOOL_ROUTER_FIND) {
+    const query = typeof a.query === "string" ? a.query : "";
+    const matches = findTools(catalog, query);
+    return {
+      result: matches.length ? { matches, note: `Call one with ${TOOL_ROUTER_INVOKE}, or ${TOOL_ROUTER_DESCRIBE} first for its arguments.` } : { matches: [], note: `No tool matches "${query}". Try broader keywords; ${catalog.length} tools exist.` }
+    };
+  }
+  if (name === TOOL_ROUTER_DESCRIBE) {
+    const target3 = typeof a.name === "string" ? a.name : "";
+    const spec2 = describeTool(catalog, target3);
+    return {
+      result: spec2 ? { name: spec2.function?.name ?? target3, description: spec2.function?.description ?? "", parameters: spec2.function?.parameters ?? {} } : { error: `Unknown tool "${target3}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
+    };
+  }
+  const target2 = typeof a.name === "string" ? a.name : "";
+  if (!target2) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
+  if (isRouterTool(target2)) {
+    return { result: { error: `${target2} cannot be invoked through the router.` } };
+  }
+  const spec = describeTool(catalog, target2);
+  const resolved = spec?.function?.name;
+  if (!resolved) {
+    return { result: { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
+  }
+  if (isRouterTool(resolved)) {
+    return { result: { error: `${target2} cannot be invoked through the router.` } };
+  }
+  return { dispatch: { name: resolved, args: asToolArgs(a.args) ?? {} } };
+}
+
+// src/run/modelToolNames.ts
+var TOOL_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+function counts(names) {
+  const result = /* @__PURE__ */ new Map();
+  for (const name of names) result.set(name, (result.get(name) ?? 0) + 1);
+  return result;
+}
+function mapRouterTarget(tool, args, mapName) {
+  const key = tool === TOOL_ROUTER_FIND ? "query" : tool === TOOL_ROUTER_DESCRIBE || tool === TOOL_ROUTER_INVOKE ? "name" : void 0;
+  if (!key) return args;
+  try {
+    const value = JSON.parse(args);
+    const target2 = value?.[key];
+    if (typeof target2 !== "string") return args;
+    const next = mapName(target2);
+    return next === target2 ? args : JSON.stringify({ ...value, [key]: next });
+  } catch {
+    return args;
+  }
+}
+function modelToolNames(req) {
+  const { stream, tools, wireToolNames } = req;
+  if (!wireToolNames?.length) return { stream };
+  const catalog = counts(tools?.map((tool) => tool.function.name) ?? []);
+  const candidates = wireToolNames.filter(({ name, wireName }) => TOOL_NAME.test(name) && TOOL_NAME.test(wireName) && catalog.get(name) === 1 && !catalog.has(wireName));
+  const names = counts(candidates.map(({ name }) => name));
+  const wireNames = counts(candidates.map(({ wireName }) => wireName));
+  const mappings = candidates.filter(({ name, wireName }) => names.get(name) === 1 && wireNames.get(wireName) === 1);
+  if (!mappings.length) return { stream };
+  const outgoing = new Map(mappings.map(({ name, wireName }) => [name, wireName]));
+  const incoming = new Map(mappings.map(({ name, wireName }) => [wireName, name]));
+  const mentioned = new RegExp(`(?<![A-Za-z0-9_-])(?:${[...outgoing.keys()].join("|")})(?![A-Za-z0-9_-])`, "g");
+  const toWire = (name) => outgoing.get(name) ?? name;
+  const fromWire = (name) => incoming.get(name) ?? name;
+  const mapPrompt = (text2) => text2.replace(mentioned, toWire);
+  const wired2 = async (options, handlers) => {
+    const onToolCallDelta = handlers?.onToolCallDelta;
+    const result = await stream({
+      ...options,
+      ...options.tools ? { tools: options.tools.map((tool) => {
+        const name = toWire(tool.function.name);
+        return name === tool.function.name ? tool : { ...tool, function: { ...tool.function, name } };
+      }) } : {},
+      messages: options.messages.map((message) => {
+        const content = message.role === "system" && typeof message.content === "string" ? mapPrompt(message.content) : message.content;
+        const calls = message.tool_calls?.map((call2) => {
+          const name = toWire(call2.function.name);
+          const args = mapRouterTarget(call2.function.name, call2.function.arguments, toWire);
+          return name === call2.function.name && args === call2.function.arguments ? call2 : {
+            ...call2,
+            function: { ...call2.function, name, arguments: args }
+          };
+        });
+        if (content === message.content && !calls?.some((call2, index) => call2 !== message.tool_calls?.[index])) return message;
+        return {
+          ...message,
+          content,
+          ...calls ? { tool_calls: calls } : {}
+        };
+      })
+    }, onToolCallDelta ? {
+      ...handlers,
+      onToolCallDelta: (index, delta) => onToolCallDelta(index, delta.name ? { ...delta, name: fromWire(delta.name) } : delta)
+    } : handlers);
+    return { ...result, toolCalls: result.toolCalls.map((call2) => {
+      const name = fromWire(call2.name);
+      return { ...call2, name, args: mapRouterTarget(name, call2.args, fromWire) };
+    }) };
+  };
+  return { stream: wired2, mapPrompt };
+}
+
 // src/BrainContext.tsx
 import { createContext as createContext3, useCallback as useCallback3, useContext as useContext3, useEffect as useEffect5, useMemo as useMemo4, useState as useState4 } from "react";
 import { jsx as jsx3 } from "react/jsx-runtime";
@@ -12066,132 +12264,6 @@ var PendingCalls = class {
     return latest;
   }
 };
-
-// src/toolRouter.ts
-var TOOL_ROUTER_FIND = "builtin_tools_find";
-var TOOL_ROUTER_DESCRIBE = "builtin_tools_describe";
-var TOOL_ROUTER_INVOKE = "builtin_tools_invoke";
-function isRouterTool(name) {
-  return name === TOOL_ROUTER_FIND || name === TOOL_ROUTER_DESCRIBE || name === TOOL_ROUTER_INVOKE;
-}
-var FIND_LIMIT = 25;
-function routerToolSpecs(catalogSize) {
-  const preamble = `This conversation has ${catalogSize} platform tools available in total, but only the most relevant ones are listed directly on each turn.`;
-  return [
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_FIND,
-        description: `${preamble} Search ALL of them by keyword and get back their names and descriptions. Use this FIRST whenever the tool you want is not in your visible list \u2014 do NOT assume a capability is missing, and never write a tool call as plain text.`,
-        parameters: {
-          type: "object",
-          properties: {
-            query: { type: "string", description: 'Keywords, e.g. "tickets backlog status" or "pull request".' }
-          },
-          required: ["query"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_DESCRIBE,
-        description: `${preamble} Get the exact parameter schema for one tool by name, so you can build its arguments before calling it with ${TOOL_ROUTER_INVOKE}.`,
-        parameters: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: `Exact tool name, e.g. "builtin_chats_list_tickets".` }
-          },
-          required: ["name"]
-        }
-      }
-    },
-    {
-      type: "function",
-      function: {
-        name: TOOL_ROUTER_INVOKE,
-        description: `${preamble} Call ANY of them by name, including ones not listed on this turn. This is a real call and it really executes \u2014 use it instead of describing what you would call.`,
-        parameters: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: 'Exact tool name to call; a catalog id such as "tasks.archive_many" is accepted too.' },
-            args: { type: "object", description: "Arguments object for that tool." }
-          },
-          required: ["name"]
-        }
-      }
-    }
-  ];
-}
-function words(text2) {
-  return text2.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 1);
-}
-var APP_MANIFEST_ALIAS_PHRASES = ["app manifest", "builderforce.json", "ai resource"];
-var APP_MANIFEST_TOOL_NAMES = /* @__PURE__ */ new Set([
-  advertisedToolName("app_manifest.schema"),
-  advertisedToolName("app_manifest.validate")
-]);
-function findTools(catalog, query, limit = FIND_LIMIT) {
-  const terms = words(query);
-  const lowered = query.toLowerCase();
-  const manifestAlias = APP_MANIFEST_ALIAS_PHRASES.some((p) => lowered.includes(p));
-  if (terms.length === 0 && !manifestAlias) return [];
-  const scored = [];
-  catalog.forEach((tool, index) => {
-    const name = tool.function?.name ?? "";
-    if (!name) return;
-    const description = tool.function?.description ?? "";
-    const haystackName = name.toLowerCase();
-    const haystackDesc = description.toLowerCase();
-    if (APP_MANIFEST_TOOL_NAMES.has(name)) {
-      const score2 = (manifestAlias ? 20 : 0) + (terms.includes("manifest") ? 10 : 0);
-      if (score2 > 0) scored.push({ m: { name, description }, score: score2, index });
-      return;
-    }
-    let score = 0;
-    for (const t of terms) {
-      if (haystackName.includes(t)) score += 10;
-      else if (haystackDesc.includes(t)) score += 1;
-    }
-    if (score > 0) scored.push({ m: { name, description }, score, index });
-  });
-  return scored.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, limit).map((e) => e.m);
-}
-function describeTool(catalog, name) {
-  const resolved = resolveAdvertisedToolName(name, toolNameSet(catalog, (t) => t.function?.name));
-  return resolved === null ? null : catalog.find((t) => t.function?.name === resolved) ?? null;
-}
-function handleRouterCall(catalog, name, args) {
-  const a = args ?? {};
-  if (name === TOOL_ROUTER_FIND) {
-    const query = typeof a.query === "string" ? a.query : "";
-    const matches = findTools(catalog, query);
-    return {
-      result: matches.length ? { matches, note: `Call one with ${TOOL_ROUTER_INVOKE}, or ${TOOL_ROUTER_DESCRIBE} first for its arguments.` } : { matches: [], note: `No tool matches "${query}". Try broader keywords; ${catalog.length} tools exist.` }
-    };
-  }
-  if (name === TOOL_ROUTER_DESCRIBE) {
-    const target3 = typeof a.name === "string" ? a.name : "";
-    const spec2 = describeTool(catalog, target3);
-    return {
-      result: spec2 ? { name: spec2.function?.name ?? target3, description: spec2.function?.description ?? "", parameters: spec2.function?.parameters ?? {} } : { error: `Unknown tool "${target3}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` }
-    };
-  }
-  const target2 = typeof a.name === "string" ? a.name : "";
-  if (!target2) return { result: { error: `${TOOL_ROUTER_INVOKE} requires a "name".` } };
-  if (isRouterTool(target2)) {
-    return { result: { error: `${target2} cannot be invoked through the router.` } };
-  }
-  const spec = describeTool(catalog, target2);
-  const resolved = spec?.function?.name;
-  if (!resolved) {
-    return { result: { error: `Unknown tool "${target2}". Use ${TOOL_ROUTER_FIND} to look up the exact name.` } };
-  }
-  if (isRouterTool(resolved)) {
-    return { result: { error: `${target2} cannot be invoked through the router.` } };
-  }
-  return { dispatch: { name: resolved, args: asToolArgs(a.args) ?? {} } };
-}
 
 // src/runStore/conversationPins.ts
 var CONVERSATION_PIN_WINDOW = 20;
@@ -15942,78 +16014,6 @@ function brainHumanChannel() {
       return { kind: "paused" };
     }
   };
-}
-
-// src/run/modelToolNames.ts
-var TOOL_NAME = /^[A-Za-z0-9_-]{1,64}$/;
-function counts(names) {
-  const result = /* @__PURE__ */ new Map();
-  for (const name of names) result.set(name, (result.get(name) ?? 0) + 1);
-  return result;
-}
-function mapRouterTarget(tool, args, mapName) {
-  const key = tool === TOOL_ROUTER_FIND ? "query" : tool === TOOL_ROUTER_DESCRIBE || tool === TOOL_ROUTER_INVOKE ? "name" : void 0;
-  if (!key) return args;
-  try {
-    const value = JSON.parse(args);
-    const target2 = value?.[key];
-    if (typeof target2 !== "string") return args;
-    const next = mapName(target2);
-    return next === target2 ? args : JSON.stringify({ ...value, [key]: next });
-  } catch {
-    return args;
-  }
-}
-function modelToolNames(req) {
-  const { stream, tools, wireToolNames } = req;
-  if (!wireToolNames?.length) return { stream };
-  const catalog = counts(tools?.map((tool) => tool.function.name) ?? []);
-  const candidates = wireToolNames.filter(({ name, wireName }) => TOOL_NAME.test(name) && TOOL_NAME.test(wireName) && catalog.get(name) === 1 && !catalog.has(wireName));
-  const names = counts(candidates.map(({ name }) => name));
-  const wireNames = counts(candidates.map(({ wireName }) => wireName));
-  const mappings = candidates.filter(({ name, wireName }) => names.get(name) === 1 && wireNames.get(wireName) === 1);
-  if (!mappings.length) return { stream };
-  const outgoing = new Map(mappings.map(({ name, wireName }) => [name, wireName]));
-  const incoming = new Map(mappings.map(({ name, wireName }) => [wireName, name]));
-  const mentioned = new RegExp(`(?<![A-Za-z0-9_-])(?:${[...outgoing.keys()].join("|")})(?![A-Za-z0-9_-])`, "g");
-  const toWire = (name) => outgoing.get(name) ?? name;
-  const fromWire = (name) => incoming.get(name) ?? name;
-  const mapPrompt = (text2) => text2.replace(mentioned, toWire);
-  const wired2 = async (options, handlers) => {
-    const onToolCallDelta = handlers?.onToolCallDelta;
-    const result = await stream({
-      ...options,
-      ...options.tools ? { tools: options.tools.map((tool) => {
-        const name = toWire(tool.function.name);
-        return name === tool.function.name ? tool : { ...tool, function: { ...tool.function, name } };
-      }) } : {},
-      messages: options.messages.map((message) => {
-        const content = message.role === "system" && typeof message.content === "string" ? mapPrompt(message.content) : message.content;
-        const calls = message.tool_calls?.map((call2) => {
-          const name = toWire(call2.function.name);
-          const args = mapRouterTarget(call2.function.name, call2.function.arguments, toWire);
-          return name === call2.function.name && args === call2.function.arguments ? call2 : {
-            ...call2,
-            function: { ...call2.function, name, arguments: args }
-          };
-        });
-        if (content === message.content && !calls?.some((call2, index) => call2 !== message.tool_calls?.[index])) return message;
-        return {
-          ...message,
-          content,
-          ...calls ? { tool_calls: calls } : {}
-        };
-      })
-    }, onToolCallDelta ? {
-      ...handlers,
-      onToolCallDelta: (index, delta) => onToolCallDelta(index, delta.name ? { ...delta, name: fromWire(delta.name) } : delta)
-    } : handlers);
-    return { ...result, toolCalls: result.toolCalls.map((call2) => {
-      const name = fromWire(call2.name);
-      return { ...call2, name, args: mapRouterTarget(name, call2.args, fromWire) };
-    }) };
-  };
-  return { stream: wired2, mapPrompt };
 }
 
 // src/run/webAdapter.ts
@@ -20368,6 +20368,7 @@ export {
   modelFallbackText,
   modelInUse,
   modelScorecard,
+  modelToolNames,
   modelTurnLog,
   modelsUsedInTrace,
   narratedUnadvertisedInTrace,
