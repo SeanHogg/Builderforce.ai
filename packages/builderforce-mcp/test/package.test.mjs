@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { advertiseName, relayModelText, toRelayModelTool } from "../dist/index.js";
+import { advertiseName, platformWireToolName, relayModelText, toRelayModelTool } from "../dist/index.js";
 import { readMcpConfig, readSynapseConnectors, writeMcpConfig } from "../dist/config.js";
 
 test("the native relay projection uses canonical tool shaping and approval", () => {
@@ -15,6 +15,9 @@ test("the native relay projection uses canonical tool shaping and approval", () 
   assert.equal(toRelayModelTool({ ...entry, mutates: false }).approvalRequired, false);
   assert.equal(relayModelText({ id: 3 }), '{"id":3}');
   assert.equal(advertiseName("platform", "tasks.list"), "platform__tasks_list");
+  assert.equal(platformWireToolName({ extensionId: "builtin", tool: "tasks.list" }), "platform__tasks_list");
+  assert.equal(platformWireToolName({ extensionId: "remote", tool: "tasks.list" }), undefined);
+  assert.equal(platformWireToolName({ extensionId: "builtin", tool: "tasks." + "a".repeat(64) }), undefined);
 });
 
 test("legacy Synapse launch settings round-trip through the VS Code config codec", () => {

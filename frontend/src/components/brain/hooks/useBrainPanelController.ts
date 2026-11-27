@@ -91,7 +91,7 @@ export function useBrainPanelController({
   const [dockedTab, setDockedTab] = useState<BrainDockedTab>('chat');
   const showChatTab = useCallback(() => setDockedTab('chat'), []);
 
-  const { toolSpecs, runTool, isMutating } = useBrainActions();
+  const { toolSpecs, wireToolNames, runTool, isMutating } = useBrainActions();
 
   // Human-in-the-loop gate: a mutating tool (create/update/delete/run/…) pauses
   // the agent loop for an explicit Approve/Cancel before it runs. The pause +
@@ -202,8 +202,8 @@ export function useBrainPanelController({
   // The run-time parts the web host adds: the PreFetch, the entry point it declares and the report port for the run's outcome record.
   const { prepareRun: prefetchRun } = knowledgePrefetch;
   const prepareRun = useCallback(
-    async () => ({ ...(await prefetchRun()), entryPoint: 'web' as const, reportRunRecord: reportWebRunOutcome }),
-    [prefetchRun],
+    async () => ({ ...(await prefetchRun()), entryPoint: 'web' as const, reportRunRecord: reportWebRunOutcome, wireToolNames }),
+    [prefetchRun, wireToolNames],
   );
   const conv = useBrainConversation({
     entryPoint: 'web',

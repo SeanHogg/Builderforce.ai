@@ -27,6 +27,7 @@ import { ROVR_DEFAULT_CHAT_MODE, type RovrRunOptions } from './runOptions';
 /** One run's tool catalog: the schemas the model sees and the dispatcher behind them. */
 export interface RunCatalog {
   specs: BrainToolSpec[];
+  wireToolNames?: readonly { name: string; wireName: string }[];
   run(name: string, args: unknown): Promise<unknown>;
   /** The gate: true pauses the loop on the person's confirmation. */
   needsConfirm(req: { name: string; args: unknown }): boolean;
@@ -60,7 +61,7 @@ export interface RovrRunHostPorts {
 
 export interface RovrRunHost {
   /** The conversation hook's `prepareRun`: Rovr's catalog, prompt and options for `chatId`. */
-  prepareRun(chatId: number): Promise<Partial<BrainRunRequest>>;
+  prepareRun(chatId: number): Promise<Partial<BrainRunRequest> & Pick<BrainRunRequest, 'entryPoint'>>;
   /** Answer the safety gate's pause; a decline is recorded on the ledger first. */
   confirm(chatId: number, ok: boolean): void;
 }
@@ -78,6 +79,7 @@ export function createRovrRunHost(ports: RovrRunHostPorts): RovrRunHost {
       return {
         resolvedSystemPrompt: options?.directives ? `${systemPrompt}\n\n${options.directives}` : systemPrompt,
         tools: catalog.specs,
+        wireToolNames: catalog.wireToolNames ?? [],
         runTool: catalog.run,
         needsConfirm: catalog.needsConfirm,
         // A personal assistant answers and acts on the person's explicit request; it

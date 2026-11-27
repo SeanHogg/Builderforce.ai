@@ -1,4 +1,4 @@
-import { createMcpRelay, createMcpCatalogCache, requiresWriteApproval, type RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
+import { createMcpRelay, createMcpCatalogCache, platformWireToolName, requiresWriteApproval, type RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
 import type * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "../gateway/gateway";
 import { GATEWAY_WORKSPACE_HEADER, gatewayAuthHeaders, gatewayWorkspaceHeaders, observeGatewayResponse } from "../auth/gatewayAuth";
@@ -151,21 +151,24 @@ export async function listPlatformTools(
     return [];
   }
 
-  const tools = entries.map((e): ToolDef => ({
-    name: e.name,
-    description: e.description,
-    parameters: e.parameters ?? { type: "object", properties: {} },
-    // Fail safe: only a tool that explicitly advertises mutates=false skips the
-    // write-confirm gate; anything else (incl. external tools that omit it) asks.
-    mutating: requiresWriteApproval(e),
-    remote: true,
-    execute: async (args) => {
-      const translated = await chatIdForServer(identity, args);
-      if ("error" in translated) return translated.error;
-      return callPlatformTool(secrets, e.extensionId, e.tool, translated.args);
-    },
-  }));
-  return tools;
+  return entries.map((entry): ToolDef => {
+    const wireName = platformWireToolName(entry);
+    return {
+      name: entry.name,
+      description: entry.description,
+      parameters: entry.parameters ?? { type: "object", properties: {} },
+      // Fail safe: only a tool that explicitly advertises mutates=false skips the
+      // write-confirm gate; anything else (incl. external tools that omit it) asks.
+      mutating: requiresWriteApproval(entry),
+      remote: true,
+      ...(wireName ? { wireName } : {}),
+      execute: async (args) => {
+        const translated = await chatIdForServer(identity, args);
+        if ("error" in translated) return translated.error;
+        return callPlatformTool(secrets, entry.extensionId, entry.tool, translated.args);
+      },
+    };
+  });
 }
 
 function platformRelay(baseUrl: string, key: string) {

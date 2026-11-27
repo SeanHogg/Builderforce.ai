@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import type { RunCatalog } from '../host/rovrRunHost';
 import { createPlatformCatalog, isPlatformTool, PLATFORM_CATALOG_TTL_MS, withPlatformTools } from './platformTools';
 import { ADD_TASK_TOOL, BROWSER_TOOL } from './toolNames';
+
+afterEach(() => vi.unstubAllGlobals());
 
 const action = (name: string, mutates: boolean, result: unknown = { ok: name }): BrainAction => ({
   name,
@@ -45,7 +47,7 @@ describe('withPlatformTools — the platform catalog beside the browser tools', 
   });
 
   it('asks for approval when a platform action has no declared effect', () => {
-    const external = { ...action('external_send', false), mutates: undefined };
+    const external = { ...action('external_send', false), mutates: undefined } as unknown as BrainAction;
     const merged = withPlatformTools(browserCatalog(), [external]);
     expect(merged.needsConfirm({ name: external.name, args: {} })).toBe(true);
   });
@@ -58,6 +60,18 @@ describe('withPlatformTools — the platform catalog beside the browser tools', 
 });
 
 describe('createPlatformCatalog', () => {
+  it('attaches canonical wire names only to first-party tools in the real relay catalog', async () => {
+    const builtin = { extensionId: 'builtin', tool: 'tasks.list', name: 'builtin_tasks_list', description: 'List tasks', parameters: { type: 'object' }, mutates: false };
+    const external = { ...builtin, extensionId: 'external', tool: 'tasks.create', name: 'external_tasks_create' };
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ tools: [builtin, external] })));
+    vi.stubGlobal('fetch', fetcher);
+    const catalog = createPlatformCatalog({ baseUrl: 'https://gw', key: async () => 'fixture' });
+    const result = withPlatformTools(browserCatalog(), await catalog.actions());
+    expect(result.specs.map((tool) => tool.function.name)).toContain('builtin_tasks_list');
+    expect(result.wireToolNames).toEqual([{ name: 'builtin_tasks_list', wireName: 'platform__tasks_list' }]);
+    expect(fetcher).toHaveBeenCalledWith('https://gw/llm/v1/mcp/tools', expect.anything());
+  });
+
   it('offers nothing signed out, and never reads the catalog', async () => {
     const load = vi.fn(async () => [action('builtin_tasks_list', false)]);
     const catalog = createPlatformCatalog({ baseUrl: 'https://gw', key: async () => null, load });

@@ -39,6 +39,8 @@ export interface ToolDef {
    * leave this falsy and require a root. The agent loop branches on it.
    */
   remote?: boolean;
+  /** Canonical model spelling supplied by the authenticated first-party Platform catalog. */
+  wireName?: string;
   execute: (args: Record<string, unknown>, root: string, run?: ToolRunOptions) => Promise<string>;
 }
 

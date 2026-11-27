@@ -33,6 +33,7 @@ import { brainContextSource } from './contextSource';
 import { brainHumanChannel } from './humanChannel';
 import { brainModelRules } from './brainModelRules';
 import { brainModelTransport, type TurnObserver } from './modelTransport';
+import { modelToolNames } from './modelToolNames';
 
 /** Everything an adapter needs to build the ports of ONE Brain run. */
 export interface BrainRunBinding {
@@ -69,9 +70,11 @@ export interface BrainRunBinding {
 /** The ports of one Brain run — built from the request, deciding nothing. */
 export function buildBrainRunPorts(b: BrainRunBinding): RunPorts {
   const { req } = b;
+  const names = modelToolNames(req);
   return {
     model: brainModelRules(brainModelTransport({
-      stream: req.stream,
+      stream: names.stream,
+      mapTailSection: names.mapPrompt,
       turn: b.turn,
       call: {
         ...(req.routingMode ? { routingMode: req.routingMode } : {}),

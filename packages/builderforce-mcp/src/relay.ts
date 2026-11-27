@@ -1,8 +1,19 @@
+import { advertiseName } from "./naming.js";
 import { requiresWriteApproval, toOpenAI, type RelayToolEntry } from "./tool.js";
 
 export const PLATFORM_EXTENSION_ID = "builtin";
 export const MCP_CATALOG_TTL_MS = 60_000;
 export const MCP_CALL_PATH = "/llm/v1/mcp/call";
+
+/** The canonical provider-facing name for a first-party platform relay entry. */
+export function platformWireToolName(entry: Pick<RelayToolEntry, "extensionId" | "tool">): string | undefined {
+  if (entry.extensionId !== PLATFORM_EXTENSION_ID) return undefined;
+  try {
+    return advertiseName("platform", entry.tool);
+  } catch {
+    return undefined;
+  }
+}
 
 export function mcpCatalogPath(surface?: string): string {
   return "/llm/v1/mcp/tools" + (surface ? `?surface=${encodeURIComponent(surface)}` : "");

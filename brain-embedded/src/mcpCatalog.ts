@@ -29,6 +29,7 @@ export type { RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp"
  * through the gateway as usual. Kept generic so the package stays portable.
  */
 export type LocalToolRouter = (entry: McpToolEntry) => ((args: unknown) => Promise<unknown>) | undefined;
+export type McpToolWireName = (entry: McpToolEntry) => string | undefined;
 
 /** What a tool call resolved to — handed to the caller's `onToolResult`. */
 export interface McpToolResultInfo {
@@ -99,9 +100,11 @@ export function mcpActionsFrom(
   transport: Pick<BrainTransport, 'baseUrl' | 'getToken'>,
   onToolResult?: (info: McpToolResultInfo) => void,
   localTools?: LocalToolRouter,
+  toolWireName?: McpToolWireName,
 ): BrainAction[] {
   return entries.map((entry) => ({
     name: entry.name,
+    wireName: toolWireName?.(entry),
     description: entry.description,
     parameters: entry.parameters,
     // Gate writes off the advertised flag; only an explicit mutates=false is

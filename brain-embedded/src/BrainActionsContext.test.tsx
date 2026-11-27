@@ -114,10 +114,10 @@ describe('BrainActionsContext — registration is loop-proof', () => {
    * actions were rebuilt because `useComponentLabel()` handed it a new function
    * identity each render, not because anything it told the model had changed.
    */
-  function Registrant({ value, onRender }: { value: string; onRender?: () => void }) {
+  function Registrant({ value, wireName, onRender }: { value: string; wireName?: string; onRender?: () => void }) {
     onRender?.();
     useRegisterBrainActions([
-      { name: 'live', description: 'live', parameters: { type: 'object', properties: {} }, mutates: false, run: () => value },
+      { name: 'live', wireName, description: 'live', parameters: { type: 'object', properties: {} }, mutates: false, run: () => value },
     ]);
     return null;
   }
@@ -190,6 +190,20 @@ describe('BrainActionsContext — registration is loop-proof', () => {
     await act(async () => { out = await read().runTool('live', {}); });
     // Skipping the re-registration must not mean running yesterday's closure.
     expect(out).toBe('v2');
+  });
+
+  it('tracks provider names independently of dispatch and clears them when a local action takes over', async () => {
+    const { Reader, read } = harness();
+    const { rerender } = render(
+      <BrainActionsProvider><Registrant value="remote" wireName="platform__live" /><Reader /></BrainActionsProvider>,
+    );
+    expect(read().toolSpecs.map((tool) => tool.function.name)).toEqual(['live']);
+    expect(read().wireToolNames).toEqual([{ name: 'live', wireName: 'platform__live' }]);
+
+    rerender(<BrainActionsProvider><Registrant value="local" /><Reader /></BrainActionsProvider>);
+    expect(read().wireToolNames).toEqual([]);
+    expect(read().isMutating('live', {})).toBe(false);
+    await expect(read().runTool('live', {})).resolves.toBe('local');
   });
 
   it('DOES re-register when the declared contract changes, so a data-driven enum cannot go stale', () => {

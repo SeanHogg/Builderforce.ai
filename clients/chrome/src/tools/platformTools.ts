@@ -18,7 +18,7 @@ import {
   type BrainAction,
   type BrainTransport,
 } from '@seanhogg/builderforce-brain-embedded';
-import { createMcpCatalogCache, MCP_CATALOG_TTL_MS, requiresWriteApproval } from '@seanhogg/builderforce-mcp';
+import { createMcpCatalogCache, MCP_CATALOG_TTL_MS, platformWireToolName, requiresWriteApproval } from '@seanhogg/builderforce-mcp';
 import type { RunCatalog } from '../host/rovrRunHost';
 import { ADD_TASK_TOOL, BROWSER_TOOL } from './toolNames';
 
@@ -47,7 +47,7 @@ export interface PlatformCatalog {
 }
 
 const sharedLoad = async (transport: CatalogTransport): Promise<BrainAction[]> =>
-  mcpActionsFrom(await fetchMcpToolEntries(transport), transport);
+  mcpActionsFrom(await fetchMcpToolEntries(transport), transport, undefined, undefined, platformWireToolName);
 
 export function createPlatformCatalog(deps: PlatformCatalogDeps): PlatformCatalog {
   const load = deps.load ?? sharedLoad;
@@ -87,6 +87,7 @@ export function withPlatformTools(browser: RunCatalog, platform: readonly BrainA
   const byName = new Map(platform.map((action) => [action.name, action]));
   return {
     specs: [...browser.specs, ...toolSpecsFor(platform)],
+    wireToolNames: platform.flatMap(({ name, wireName }) => wireName ? [{ name, wireName }] : []),
     async run(name, args) {
       const action = byName.get(name);
       return action ? action.run(args) : browser.run(name, args);

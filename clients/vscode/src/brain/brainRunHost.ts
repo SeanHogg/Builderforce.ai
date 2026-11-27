@@ -316,6 +316,8 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
         // elsewhere, and must not land in the workspace's note or code map.
         knowledge: recordingOnly(notesFor(key), (name) => !defs.find((d) => d.name === name)?.remote),
         tools: nativeToolSpecs(defs),
+        // Local-domain substitutions keep their local names even when they started from a relay entry.
+        wireToolNames: defs.flatMap(({ name, remote, wireName }) => remote && wireName ? [{ name, wireName }] : []),
         ...(pick.model ? { model: pick.model } : {}),
         ...(pick.modelStrict != null ? { modelStrict: pick.modelStrict } : {}),
         ...(pick.routingMode ? { routingMode: pick.routingMode } : {}),

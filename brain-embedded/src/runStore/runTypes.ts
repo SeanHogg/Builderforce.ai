@@ -145,6 +145,8 @@ export interface BrainRunRequest {
    */
   knowledge?: RunKnowledgeLog;
   tools?: BrainToolSpec[];
+  /** Stable catalog names with a different model-facing wire spelling. */
+  wireToolNames?: readonly { name: string; wireName: string }[];
   model?: string;
   /** Hard-pin a deliberate user-selected model. */
   modelStrict?: boolean;

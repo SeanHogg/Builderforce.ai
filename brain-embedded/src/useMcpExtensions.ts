@@ -22,7 +22,7 @@ import { useBrainConfig } from './config';
 import type { BrainTransport } from './streamChatCompletion';
 import { useRegisterBrainActions, type BrainAction } from './BrainActionsContext';
 import { setMcpToolStatus } from './mcpToolStatus';
-import { fetchMcpToolEntries, mcpActionsFrom, type LocalToolRouter, type McpToolEntry, type McpToolResultInfo } from './mcpCatalog';
+import { fetchMcpToolEntries, mcpActionsFrom, type LocalToolRouter, type McpToolEntry, type McpToolResultInfo, type McpToolWireName } from './mcpCatalog';
 
 export type { McpToolResultInfo };
 
@@ -62,6 +62,8 @@ export interface UseMcpExtensionsOptions {
    * the run loop's `runtime.*` tools for an app running in this browser.
    */
   localTools?: LocalToolRouter;
+  /** Opt in to provider-only names for selected catalog entries. */
+  toolWireName?: McpToolWireName;
 }
 
 export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: boolean; toolCount: number; error: string | null } {
@@ -77,6 +79,7 @@ export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: 
   onToolResultRef.current = options?.onToolResult;
   const localToolsRef = useRef(options?.localTools);
   localToolsRef.current = options?.localTools;
+  const toolWireName = options?.toolWireName;
 
   useEffect(() => {
     let cancelled = false;
@@ -100,8 +103,8 @@ export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: 
   }, [transport, skipKey]);
 
   const actions = useMemo<BrainAction[]>(
-    () => mcpActionsFrom(entries, transport, (info) => onToolResultRef.current?.(info), (entry) => localToolsRef.current?.(entry)),
-    [entries, transport],
+    () => mcpActionsFrom(entries, transport, (info) => onToolResultRef.current?.(info), (entry) => localToolsRef.current?.(entry), toolWireName),
+    [entries, transport, toolWireName],
   );
 
   useRegisterBrainActions(actions);

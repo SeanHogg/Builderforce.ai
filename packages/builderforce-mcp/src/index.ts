@@ -13,6 +13,7 @@ export {
   createMcpRelay,
   mcpCallRequest,
   mcpCatalogPath,
+  platformWireToolName,
   readMcpRelayCatalog,
   relayModelText,
   toRelayModelTool,

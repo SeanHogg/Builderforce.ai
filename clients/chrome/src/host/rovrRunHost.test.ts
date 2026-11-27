@@ -39,7 +39,7 @@ function scripted(turns: Turn[]): BrainStreamFn & { calls: number } {
   return fn;
 }
 
-function setup(turns: Turn[], gate: (name: string) => boolean = () => false) {
+function setup(turns: Turn[], gate: (name: string) => boolean = () => false, platformTool?: { name: string; wireName: string }) {
   const records = createMemoryRecords();
   const handed: Array<{ chatId: number; items: SyncItem[] }> = [];
   const persistence = createRovrBrainPersistence(records, createLocalFirstPersistence(records, { enqueue: (chatId, items) => handed.push({ chatId, items }) }));
@@ -50,7 +50,9 @@ function setup(turns: Turn[], gate: (name: string) => boolean = () => false) {
     specs: [
       { type: 'function', function: { name: BROWSER_TOOL.read, description: 'Read the page in the working tab.', parameters: { type: 'object', properties: {} } } },
       { type: 'function', function: { name: BROWSER_TOOL.click, description: 'Click an element by ref.', parameters: { type: 'object', properties: { ref: { type: 'string' } } } } },
+      ...(platformTool ? [{ type: 'function' as const, function: { name: platformTool.name, description: 'Create a task.', parameters: { type: 'object' } } }] : []),
     ],
+    ...(platformTool ? { wireToolNames: [platformTool] } : {}),
     run: async (name, args) => {
       ran.push({ name, args });
       return { ok: true, content: 'Welcome to the shop.' };
@@ -116,6 +118,21 @@ describe("Rovr's run-time parts on the shared run", () => {
 
     expect(ran).toEqual([]);
     expect(declined).toEqual([{ chatId: id, name: BROWSER_TOOL.click }]);
+  });
+
+  it('carries a catalog alias into the normal run and uses the original approval rule', async () => {
+    const id = nextChat();
+    const tool = { name: 'builtin_tasks_create', wireName: 'platform__tasks_create' };
+    const { host, send, ran, declined } = setup([
+      { call: { name: tool.wireName, args: { title: 'An approved task' } } }, { text: 'Understood, I left it alone.' },
+    ], (name) => name === tool.name, tool);
+    expect((await host.prepareRun(id)).wireToolNames).toEqual([tool]);
+    const running = send(id, 'create a task');
+    await vi.waitFor(() => expect(getRunSnapshot(id).pendingConfirm?.name).toBe(tool.name));
+    host.confirm(id, false);
+    await running;
+    expect(ran).toEqual([]);
+    expect(declined).toEqual([{ chatId: id, name: tool.name }]);
   });
 
   it("the conversation's persistence reads the device record and refuses what Rovr's conversation never does", async () => {

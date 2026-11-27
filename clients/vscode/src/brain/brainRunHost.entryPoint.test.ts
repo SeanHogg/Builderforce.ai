@@ -44,4 +44,33 @@ describe("the VS Code host labels its runs", () => {
     expect(seen.requests).toHaveLength(1);
     expect(seen.requests[0]).toMatchObject({ entryPoint: "vscode" });
   });
+
+  it("advertises canonical Platform names while dispatching by the original catalog name", async () => {
+    const name = "builtin_projects_list";
+    const wireName = "platform__projects_list";
+    const gateway = fakeGateway([{ toolCalls: [{ name: wireName, args: { limit: 3 } }] }, { text: "Projects listed." }]);
+    const execute = vi.fn(async () => '{"ok":true}');
+    const onToolRun = vi.fn();
+    const base = { description: "List projects", parameters: { type: "object" }, mutating: false, execute };
+    const host = createBrainRunHost({
+      tools: async () => [
+        { ...base, name, remote: true, wireName },
+        { ...base, name: "ticket-create", remote: false, wireName: "platform__tasks_create" },
+      ],
+      workspaceRoot: () => "/workspace",
+      stream: async () => gateway.stream,
+      persistence: transientRunPersistence(),
+      evermind: () => undefined,
+      labels: { blockedByPolicy: (reason) => `blocked: ${reason}` },
+      onToolRun,
+    });
+    await host.start({ chatId: 7101, systemPrompt: "You are the IDE agent.", userTurn: "list projects", autoApprove: true, evermind: false });
+
+    expect(seen.requests[0]?.wireToolNames).toEqual([{ name, wireName }]);
+    expect(gateway.requests[0]?.advertised).toEqual(expect.arrayContaining([wireName, "ticket-create"]));
+    expect(gateway.requests[0]?.advertised).not.toContain(name);
+    expect(gateway.requests[0]?.advertised).not.toContain("platform__tasks_create");
+    expect(execute).toHaveBeenCalledOnce();
+    expect(onToolRun).toHaveBeenCalledWith(expect.objectContaining({ name, remote: true, ok: true }));
+  });
 });

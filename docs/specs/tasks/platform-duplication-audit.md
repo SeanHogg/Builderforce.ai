@@ -149,6 +149,8 @@ Facts that shape the design:
 
 **Implementation status (2026-11-26).** Platform and Workspace run on `@seanhogg/builderforce-mcp`. Synapse’s Rust Workspace MCP and connector host are retired. Its private Evermind client uses the official Rust MCP SDK with launch data generated from Memory’s installer. VS Code uses the shared connector catalog and reads host configs, and the headless runtime routes both legacy code searches through the shared Workspace index. Native Platform relay clients request canonical tool names and accept saved legacy aliases. npm serves `0.1.1` with compiled exports. Memory pins the published package in its frozen lockfile, and all 76 Memory MCP tests passed. Existing Memory npm installations pick up the cutover in the next Memory release. See the [MCP gap register](../../roadmap/GAP-REGISTER.md#mcp-consolidation-platform-agents) and the [npm package](https://www.npmjs.com/package/@seanhogg/builderforce-mcp/v/0.1.1).
 
+Normal web, VS Code, and Chrome Brain runs send canonical names for first-party remote Platform tools at the model boundary. The same catalog maps calls back to stable names before the scheduler, review gates, approvals, and host dispatch run. Local tools keep the names of their host catalogs. The compatibility REST catalog keeps legacy names for consumers outside these Brain runs.
+
 Each step is a separate PR, and existing tests run unchanged as the parity oracle.
 
 1. **Create `@seanhogg/builderforce-mcp`** with `protocol`, `tool`, `naming` and `policy`. Move `McpToolEntry` and `toolNaming.ts` in, and re-point the 3 mirrors and 4 shapers. (MCP-G001–G006)

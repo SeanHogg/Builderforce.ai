@@ -23,6 +23,8 @@ import { isMutatingTool } from '@builderforce/agent-tools';
 export interface BrainAction<A = unknown, R = unknown> {
   /** Globally-unique, flat snake_case (no dots) so it round-trips through the gateway. */
   name: string;
+  /** Optional model-provider name. Dispatch and approval still use `name`. */
+  wireName?: string;
   description: string;
   /** JSON Schema for the action arguments (becomes the tool's `function.parameters`). */
   parameters: Record<string, unknown>;
@@ -39,8 +41,10 @@ export interface BrainAction<A = unknown, R = unknown> {
 }
 
 export interface BrainActionsContextValue {
-  /** Tool specs for every currently-registered action (for the model). */
+  /** Tool specs for every currently-registered action, keyed by its dispatch name. */
   toolSpecs: BrainToolSpec[];
+  /** Provider names for the active action owners that opt in. */
+  wireToolNames: readonly { name: string; wireName: string }[];
   /** Execute a registered action by name. Returns a recoverable error object for unknown tools. */
   runTool(name: string, args: unknown): Promise<unknown>;
   /** Whether the named action would mutate state for these args. Unknown or undeclared ⇒ classified by the shared `isMutatingTool` (unclassified ⇒ mutating, fail closed). */
@@ -118,15 +122,19 @@ export function BrainActionsProvider({ children }: { children: React.ReactNode }
     return entry ? isBrainActionMutating(entry.action, args) : isMutatingTool(name);
   }, []);
 
-  const toolSpecs = useMemo<BrainToolSpec[]>(() => {
-    return toolSpecsFor([...registry.current.values()].map((e) => e.action));
+  const { toolSpecs, wireToolNames } = useMemo(() => {
+    const actions = [...registry.current.values()].map(({ action }) => action);
+    return {
+      toolSpecs: toolSpecsFor(actions),
+      wireToolNames: actions.flatMap(({ name, wireName }) => wireName ? [{ name, wireName }] : []),
+    };
     // `version` is the intentional recompute trigger; the ref itself is stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version]);
 
   const value = useMemo<BrainActionsContextValue>(
-    () => ({ toolSpecs, runTool, isMutating, register }),
-    [toolSpecs, runTool, isMutating, register],
+    () => ({ toolSpecs, wireToolNames, runTool, isMutating, register }),
+    [toolSpecs, wireToolNames, runTool, isMutating, register],
   );
 
   return (
@@ -165,7 +173,7 @@ export function useBrainActions(): BrainActionsContextValue {
 function declarationSignature(actions: BrainAction[]): string {
   try {
     return JSON.stringify(
-      actions.map((a) => [a.name, a.description, a.parameters, typeof a.mutates === 'function' ? 'fn' : a.mutates ?? false]),
+      actions.map((a) => [a.name, a.wireName, a.description, a.parameters, typeof a.mutates === 'function' ? 'fn' : a.mutates ?? false]),
     );
   } catch {
     // A parameters object that will not serialise (a cycle, a BigInt) is not a
@@ -188,6 +196,7 @@ function liveAction(name: string, latest: { current: BrainAction[] }): BrainActi
   const current = () => latest.current.find((a) => a.name === name);
   return {
     name,
+    get wireName() { return current()?.wireName; },
     get description() { return current()?.description ?? ''; },
     get parameters() { return current()?.parameters ?? { type: 'object', properties: {} }; },
     get mutates() { return current()?.mutates ?? true; },

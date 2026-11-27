@@ -77,6 +77,8 @@ export interface BrainModelTransportDeps {
   turn: TurnObserver;
   /** The surface's streaming completion — gateway, local-first and XML lifting behind it. */
   stream: BrainStreamFn;
+  /** Model spellings for the run-generated, volatile tail. */
+  mapTailSection?: (section: string) => string;
   /** Per-call routing the request fixed for the whole run. */
   call?: BrainCallDefaults;
   /** What the host knows about model windows, SYNCHRONOUSLY — its gateway catalog and the local rows it holds
@@ -154,7 +156,7 @@ export function toCompletion(result: StreamChatResult, requested?: string): Mode
 
 /** Build the Brain's `ModelTransport` over its streaming function. */
 export function brainModelTransport(deps: BrainModelTransportDeps): ModelTransport {
-  const { turn, stream, call, windows } = deps;
+  const { turn, stream, call, windows, mapTailSection } = deps;
   return {
     async complete(request: ModelRequest, signal?: AbortSignal): Promise<ModelCompletion> {
       // A Stop that landed while the turn was being prepared (a fold) ends it before anything is opened.
@@ -163,7 +165,8 @@ export function brainModelTransport(deps: BrainModelTransportDeps): ModelTranspo
       const session = turn.open(request);
       /** One request to the stream: the window fit, then the stream, inside the live-turn window. */
       const attempt = async (req: ModelRequest): Promise<StreamChatResult> => {
-        const wire = withTail(req.messages.map(wireRowOf), session.tail);
+        const tail = mapTailSection ? session.tail?.map(mapTailSection) : session.tail;
+        const wire = withTail(req.messages.map(wireRowOf), tail);
         const messages = session.fit ? await session.fit(wire, req.model) : wire;
         const maxTokens = session.maxTokens;
         const ask = () => stream(

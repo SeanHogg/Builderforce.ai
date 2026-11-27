@@ -30,6 +30,17 @@ describe('mcpActionsFrom — host-routed tools', () => {
     expect(fetchSpy).toHaveBeenCalledWith('https://api.test/llm/v1/mcp/call', expect.objectContaining({ method: 'POST' }));
   });
 
+  it('attaches a provider name without changing catalog identity or relay coordinates', async () => {
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ result: { ok: true } })));
+    vi.stubGlobal('fetch', fetchSpy);
+    const [action] = mcpActionsFrom([entry('tasks.list')], transport, undefined, undefined, () => 'platform__tasks_list');
+    expect(action).toMatchObject({ name: 'builtin_tasks_list', wireName: 'platform__tasks_list', mutates: false });
+    expect(await action!.run({})).toEqual({ ok: true });
+    expect(fetchSpy).toHaveBeenCalledWith('https://api.test/llm/v1/mcp/call', expect.objectContaining({
+      body: JSON.stringify({ extensionId: 'builtin', tool: 'tasks.list', arguments: {} }),
+    }));
+  });
+
   it('collapses duplicate creates only inside the same authenticated relay scope', async () => {
     const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Response(JSON.stringify({
       result: { tenant: new Headers(init?.headers).get('Authorization')?.endsWith('fixture-a') ? 'a' : 'b' },
