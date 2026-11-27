@@ -1,13 +1,6 @@
+import { toolWireNameCodec } from '@seanhogg/builderforce-mcp';
 import type { BrainRunRequest, BrainStreamFn } from '../runStore/runTypes';
 import { TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE } from '../toolRouter';
-
-const TOOL_NAME = /^[A-Za-z0-9_-]{1,64}$/;
-
-function counts(names: Iterable<string>): Map<string, number> {
-  const result = new Map<string, number>();
-  for (const name of names) result.set(name, (result.get(name) ?? 0) + 1);
-  return result;
-}
 
 function mapRouterTarget(tool: string, args: string, mapName: (name: string) => string): string {
   const key = tool === TOOL_ROUTER_FIND ? 'query'
@@ -32,24 +25,9 @@ export function modelToolNames(req: Pick<BrainRunRequest, 'stream' | 'tools' | '
   mapPrompt?: (text: string) => string;
 } {
   const { stream, tools, wireToolNames } = req;
-  if (!wireToolNames?.length) return { stream };
-
-  const catalog = counts(tools?.map((tool) => tool.function.name) ?? []);
-  const candidates = wireToolNames.filter(({ name, wireName }) =>
-    TOOL_NAME.test(name) && TOOL_NAME.test(wireName)
-    && catalog.get(name) === 1 && !catalog.has(wireName));
-  const names = counts(candidates.map(({ name }) => name));
-  const wireNames = counts(candidates.map(({ wireName }) => wireName));
-  const mappings = candidates.filter(({ name, wireName }) =>
-    names.get(name) === 1 && wireNames.get(wireName) === 1);
-  if (!mappings.length) return { stream };
-
-  const outgoing = new Map(mappings.map(({ name, wireName }) => [name, wireName]));
-  const incoming = new Map(mappings.map(({ name, wireName }) => [wireName, name]));
-  const mentioned = new RegExp(`(?<![A-Za-z0-9_-])(?:${[...outgoing.keys()].join('|')})(?![A-Za-z0-9_-])`, 'g');
-  const toWire = (name: string) => outgoing.get(name) ?? name;
-  const fromWire = (name: string) => incoming.get(name) ?? name;
-  const mapPrompt = (text: string) => text.replace(mentioned, toWire);
+  const codec = toolWireNameCodec(tools?.map((tool) => tool.function.name) ?? [], wireToolNames);
+  if (!codec) return { stream };
+  const { toWire, fromWire, mapPrompt } = codec;
 
   const wired: BrainStreamFn = async (options, handlers) => {
     const onToolCallDelta = handlers?.onToolCallDelta;

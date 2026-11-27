@@ -1,4 +1,4 @@
-import type { RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
+import { legacyExtensionToolName, type RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Tenant MCP extension service — REGISTRATION of a tenant's external MCP servers.
@@ -209,13 +209,6 @@ export async function deleteMcpExtension(
   return rows.length > 0;
 }
 
-/** Flat, gateway-safe advertised name: `mcp_<8hex>_<tool>` (no dots). */
-function advertisedName(extensionId: string, tool: string): string {
-  const short = extensionId.replace(/-/g, '').slice(0, 8);
-  const safeTool = tool.replace(/[^a-zA-Z0-9_]/g, '_');
-  return `mcp_${short}_${safeTool}`;
-}
-
 /**
  * Fetch + merge the tools of every ENABLED extension for a tenant.
  *
@@ -272,7 +265,7 @@ export async function listToolsForTenant(
             all.push({
               extensionId: row.id,
               tool: tool.name,
-              name: advertisedName(row.id, tool.name),
+              name: legacyExtensionToolName(row.id, tool.name),
               description: tool.description,
               parameters: tool.parameters,
               // Only an explicit read-only hint may claim non-mutating; a server

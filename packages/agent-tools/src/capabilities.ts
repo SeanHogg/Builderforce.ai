@@ -115,6 +115,8 @@ export type Capability =
   | "prd.write"
   /** Persist / recall cross-run knowledge (memory, handoff, project knowledge). */
   | "memory"
+  /** Search workspace Markdown notes and read their line ranges. */
+  | "workspace.memory"
   /** Authoritatively DELETE a stored memory entry. Split from `memory` for the same
    *  reason `web.search` is split from `web`: a surface can back recall/remember
    *  without a real erase (the on-prem SSM store SUPERSEDES a belief rather than
@@ -514,6 +516,45 @@ export interface MemoryCapability {
   forget?(key: string): Promise<MemoryForgetResult>;
 }
 
+export type WorkspaceMemoryMatch = {
+  path: string;
+  startLine: number;
+  endLine: number;
+  score: number;
+  snippet: string;
+  source: "memory" | "sessions";
+  citation?: string;
+  /** Opaque reference issued within the active workspace-memory scope. */
+  ref?: string;
+};
+
+export type WorkspaceMemorySearchOptions = { maxResults?: number; minScore?: number };
+export type WorkspaceMemoryReadOptions = { from?: number; lines?: number };
+
+export type WorkspaceMemorySearchResult = {
+  results: WorkspaceMemoryMatch[];
+  provider?: string;
+  model?: string;
+  fallback?: { from: string; reason?: string };
+  citations?: "on" | "off" | "auto";
+  mode?: string;
+  disabled?: boolean;
+  error?: string;
+};
+
+export type WorkspaceMemoryReadResult = {
+  path: string;
+  text: string;
+  disabled?: boolean;
+  error?: string;
+};
+
+/** Recall by path and line range from the run's configured workspace notes. */
+export interface WorkspaceMemoryCapability {
+  search(query: string, options?: WorkspaceMemorySearchOptions): Promise<WorkspaceMemorySearchResult>;
+  read(ref: string): Promise<WorkspaceMemoryReadResult>;
+}
+
 /**
  * How WIDELY a remembered fact is visible. The narrower the scope, the smaller the
  * contamination blast radius: a `ticket` fact is invisible to the next ticket, a
@@ -597,6 +638,7 @@ export interface CapabilityProvider {
   readonly prd?: PrdWriteCapability;
   readonly web?: WebCapability;
   readonly memory?: MemoryCapability;
+  readonly workspaceMemory?: WorkspaceMemoryCapability;
   readonly coordination?: CoordinationCapability;
   readonly skillAuthor?: SkillAuthoringCapability;
   readonly orchestration?: OrchestrationCapability;

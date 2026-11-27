@@ -37,6 +37,30 @@ const READ_ONLY = providerWith(["repo.read"]);
 describe("ToolRegistry · capability gating", () => {
   const registry = buildCoreToolRegistry();
 
+  it("gates workspace memory independently of durable facts and requires references to read excerpts", async () => {
+    const names = ["workspace__memory_search", "workspace__memory_read"];
+    const factsOnly = providerWith(["memory"]);
+    for (const name of names) {
+      expect(registry.availableNames(factsOnly)).not.toContain(name);
+      const refused = await registry.dispatch(name, { query: "notes", path: "memory/notes.md" }, ctxFor(factsOnly));
+      expect(refused.data.error).toContain("missing capability: workspace.memory");
+    }
+
+    const workspace: CapabilityProvider = {
+      capabilities: new Set(["workspace.memory"]),
+      workspaceMemory: {
+        search: async () => ({ results: [] }),
+        read: async (ref) => ({ path: "memory/notes.md", text: ref }),
+      },
+    };
+    expect(registry.availableNames(workspace)).toEqual(expect.arrayContaining(names));
+    expect(registry.availableNames(workspace)).not.toContain("memory_recall");
+    const oldPath = await registry.dispatch("workspace__memory_read", { path: "memory/notes.md", from: 4, lines: 2 }, ctxFor(workspace));
+    expect(oldPath.data).toEqual({ ok: false, error: "ref required" });
+    const read = await registry.dispatch("workspace__memory_read", { ref: "wm_fixture" }, ctxFor(workspace));
+    expect(read.data).toEqual({ path: "memory/notes.md", text: "wm_fixture" });
+  });
+
   it("offers a read-only surface the read tools and NOTHING that mutates or shells out", () => {
     const names = registry.availableNames(READ_ONLY);
     expect(names).toContain("list_files");

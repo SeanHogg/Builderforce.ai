@@ -411,7 +411,7 @@ import {
   workFiledNotStaffedVerdict,
   workFinishPorts,
   workSupportsRoutingSample
-} from "./chunk-5TQ2GGKA.mjs";
+} from "./chunk-7YQH4VEH.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -8133,10 +8133,40 @@ function toOpenAI(tool) {
   };
 }
 
+// ../packages/builderforce-mcp/src/naming.ts
+function counts(names) {
+  const result = /* @__PURE__ */ new Map();
+  for (const name of names) result.set(name, (result.get(name) ?? 0) + 1);
+  return result;
+}
+function toolWireNameCodec(catalogNames, wireNames) {
+  if (!wireNames?.length) return void 0;
+  const valid = /^[A-Za-z0-9_-]{1,64}$/;
+  const catalog = counts(catalogNames);
+  const candidates = wireNames.filter(({ name, wireName }) => valid.test(name) && valid.test(wireName) && catalog.get(name) === 1 && !catalog.has(wireName));
+  const names = counts(candidates.map(({ name }) => name));
+  const aliases = counts(candidates.map(({ wireName }) => wireName));
+  const mappings = candidates.filter(({ name, wireName }) => names.get(name) === 1 && aliases.get(wireName) === 1);
+  if (!mappings.length) return void 0;
+  const outgoing = new Map(mappings.map(({ name, wireName }) => [name, wireName]));
+  const incoming = new Map(mappings.map(({ name, wireName }) => [wireName, name]));
+  const mentioned = new RegExp(`(?<![A-Za-z0-9_-])(?:${[...outgoing.keys()].join("|")})(?![A-Za-z0-9_-])`, "g");
+  const toWire = (name) => outgoing.get(name) ?? name;
+  return {
+    toWire,
+    fromWire: (name) => incoming.get(name) ?? name,
+    mapPrompt: (text2) => text2.replace(mentioned, toWire)
+  };
+}
+
 // ../packages/builderforce-mcp/src/relay.ts
 var MCP_CALL_PATH = "/llm/v1/mcp/call";
-function mcpCatalogPath(surface2) {
-  return "/llm/v1/mcp/tools" + (surface2 ? `?surface=${encodeURIComponent(surface2)}` : "");
+function mcpCatalogPath(surface2, names) {
+  const query = [
+    ...surface2 ? [`surface=${encodeURIComponent(surface2)}`] : [],
+    ...names ? [`names=${names}`] : []
+  ];
+  return "/llm/v1/mcp/tools" + (query.length ? `?${query.join("&")}` : "");
 }
 function mcpCallRequest(call2) {
   return {
@@ -8164,7 +8194,7 @@ function createMcpRelay(options) {
     return fetcher(baseUrl + path, { ...init, headers, ...signal ? { signal } : {} });
   }
   return {
-    list: async (surface2, failure) => readMcpRelayCatalog(await request(mcpCatalogPath(surface2)), failure),
+    list: async (surface2, failure) => readMcpRelayCatalog(await request(mcpCatalogPath(surface2, options.catalogNames)), failure),
     call: (call2) => request(MCP_CALL_PATH, mcpCallRequest(call2))
   };
 }
@@ -8316,9 +8346,13 @@ function isErrorResult(out) {
   return !!out && typeof out === "object" && typeof out.error === "string";
 }
 async function fetchMcpToolEntries(transport, skipExtensionIds = []) {
-  const tools = await createMcpRelay({ baseUrl: transport.baseUrl, token: transport.getToken() }).list();
+  const tools = await createMcpRelay({
+    baseUrl: transport.baseUrl,
+    token: transport.getToken(),
+    catalogNames: "canonical"
+  }).list();
   const skip = new Set(skipExtensionIds);
-  return tools.filter((t) => !skip.has(t.extensionId));
+  return tools.filter((tool) => !skip.has(tool.extensionId)).map((tool) => tool.legacyName ? { ...tool, name: tool.legacyName } : tool);
 }
 function mcpActionsFrom(entries, transport, onToolResult, localTools, toolWireName) {
   return entries.map((entry) => ({
@@ -8542,12 +8576,6 @@ function handleRouterCall(catalog, name, args) {
 }
 
 // src/run/modelToolNames.ts
-var TOOL_NAME = /^[A-Za-z0-9_-]{1,64}$/;
-function counts(names) {
-  const result = /* @__PURE__ */ new Map();
-  for (const name of names) result.set(name, (result.get(name) ?? 0) + 1);
-  return result;
-}
 function mapRouterTarget(tool, args, mapName) {
   const key = tool === TOOL_ROUTER_FIND ? "query" : tool === TOOL_ROUTER_DESCRIBE || tool === TOOL_ROUTER_INVOKE ? "name" : void 0;
   if (!key) return args;
@@ -8563,19 +8591,9 @@ function mapRouterTarget(tool, args, mapName) {
 }
 function modelToolNames(req) {
   const { stream, tools, wireToolNames } = req;
-  if (!wireToolNames?.length) return { stream };
-  const catalog = counts(tools?.map((tool) => tool.function.name) ?? []);
-  const candidates = wireToolNames.filter(({ name, wireName }) => TOOL_NAME.test(name) && TOOL_NAME.test(wireName) && catalog.get(name) === 1 && !catalog.has(wireName));
-  const names = counts(candidates.map(({ name }) => name));
-  const wireNames = counts(candidates.map(({ wireName }) => wireName));
-  const mappings = candidates.filter(({ name, wireName }) => names.get(name) === 1 && wireNames.get(wireName) === 1);
-  if (!mappings.length) return { stream };
-  const outgoing = new Map(mappings.map(({ name, wireName }) => [name, wireName]));
-  const incoming = new Map(mappings.map(({ name, wireName }) => [wireName, name]));
-  const mentioned = new RegExp(`(?<![A-Za-z0-9_-])(?:${[...outgoing.keys()].join("|")})(?![A-Za-z0-9_-])`, "g");
-  const toWire = (name) => outgoing.get(name) ?? name;
-  const fromWire = (name) => incoming.get(name) ?? name;
-  const mapPrompt = (text2) => text2.replace(mentioned, toWire);
+  const codec = toolWireNameCodec(tools?.map((tool) => tool.function.name) ?? [], wireToolNames);
+  if (!codec) return { stream };
+  const { toWire, fromWire, mapPrompt } = codec;
   const wired2 = async (options, handlers) => {
     const onToolCallDelta = handlers?.onToolCallDelta;
     const result = await stream({

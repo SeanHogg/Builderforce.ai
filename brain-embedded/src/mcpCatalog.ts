@@ -84,9 +84,13 @@ export async function fetchMcpToolEntries(
   transport: Pick<BrainTransport, 'baseUrl' | 'getToken'>,
   skipExtensionIds: readonly string[] = [],
 ): Promise<McpToolEntry[]> {
-  const tools = await createMcpRelay({ baseUrl: transport.baseUrl, token: transport.getToken() }).list();
+  const tools = await createMcpRelay({
+    baseUrl: transport.baseUrl, token: transport.getToken(), catalogNames: 'canonical',
+  }).list();
   const skip = new Set(skipExtensionIds);
-  return tools.filter((t) => !skip.has(t.extensionId));
+  // Catalog names are provider-facing. Brain actions and host callbacks keep their policy IDs.
+  return tools.filter((tool) => !skip.has(tool.extensionId)).map((tool) =>
+    tool.legacyName ? { ...tool, name: tool.legacyName } : tool);
 }
 
 /**

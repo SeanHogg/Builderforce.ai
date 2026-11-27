@@ -33,6 +33,7 @@ export * from "./gate-lowering.js";
 export { PATCH_MARKERS, gatePathCandidates, parsePatchHeader, patchHeaderPaths, type PatchHeaderKind } from "./gatePaths.js";
 export * from "./policyGateCallKey.js";
 export * from "./core-tools.js";
+export { workspaceMemoryReadTool, workspaceMemorySearchTool } from "./workspace-memory-tools.js";
 export * from "./writeOverwriteGuard.js";
 export * from "./psychometric-dims.js";
 export * from "./psychometrics.js";

@@ -89,11 +89,17 @@ const ANNOUNCE_GERUND =
   '(?:searching|fetching|retrieving|querying|loading|checking|looking|scanning|reading|listing|gathering|pulling|examining|inspecting|reviewing|analy[sz]ing)';
 
 /**
- * A tool identifier exactly as the catalog advertises it — `builtin_chats_list_tickets`,
- * `mcp__server__tool`. Nothing in ordinary prose looks like this: a model types it only
- * when transcribing a call from definitions it was handed.
+ * A tool identifier as it appears in a current MCP catalog or a previously saved
+ * run. Limit canonical matches to our catalog namespaces so ordinary identifiers
+ * containing a double underscore aren't treated as tool calls.
  */
-const TOOL_IDENT = '(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)';
+const TOOL_IDENT = [
+  'builtin_[a-z0-9]+(?:_[a-z0-9]+)+',
+  'mcp__[a-z0-9_]+',
+  'mcp_[a-f0-9]{8}_[a-z0-9_]+',
+  '(?:platform|workspace|memory|catalog|(?:ext|connector)-[a-z0-9-]+)__[a-z0-9]+(?:[_-][a-z0-9]+)*',
+].join('|');
+const TOOL_REFERENCE = `(?<![A-Za-z0-9_-])(?:${TOOL_IDENT})(?![A-Za-z0-9_-])`;
 
 /**
  * Every advertised tool identifier appearing in `text`, de-duplicated, in order.
@@ -106,7 +112,7 @@ const TOOL_IDENT = '(?:builtin_[a-z0-9]+(?:_[a-z0-9]+)+|mcp__[a-z0-9_]+)';
  * selector caused.
  */
 export function toolNamesMentionedIn(text: string): string[] {
-  return [...new Set(text.match(new RegExp(TOOL_IDENT, 'gi')) ?? [])];
+  return [...new Set(text.match(new RegExp(TOOL_REFERENCE, 'gi')) ?? [])];
 }
 
 /**
@@ -127,12 +133,12 @@ export function toolNamesMentionedIn(text: string): string[] {
  * is left alone.
  */
 const PSEUDO_CALL = [
-  // "call builtin_x", "run tool builtin_x", "invoke the function mcp__srv__x"
-  `(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool\\s+|function\\s+)?${TOOL_IDENT}`,
+  // "call platform__tasks_get", "invoke the function mcp__srv__x"
+  `(?:call|run|invoke|execute)\\s+(?:the\\s+)?(?:tool\\s+|function\\s+)?${TOOL_REFERENCE}`,
   // "builtin_x({…})" / "builtin_x(" — the call written as code
-  `${TOOL_IDENT}\\s*[({]`,
+  `${TOOL_REFERENCE}\\s*[({]`,
   // "builtin_x with chatId is 85" — the call written as an argument clause
-  `${TOOL_IDENT}\\s+(?:with|args|arguments)\\b`,
+  `${TOOL_REFERENCE}\\s+(?:with|args|arguments)\\b`,
 ];
 
 const ANNOUNCED_ACTION = new RegExp(
@@ -237,8 +243,8 @@ const UNCALLED_TOOL_CLAIM = new RegExp(
     // The same claim with the TOOL NAMED instead of the word "tool" — "no results from
     // manager.digest", "missing builtin_manager_policy results". The name IS the
     // discriminator here: prose does not carry tool identifiers by accident.
-    `\\bno\\s+(?:new\\s+)?(?:results?|data|outputs?|returns?)\\s+(?:from|for|on)\\s+(?:the\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`,
-    `\\b(?:missing|awaiting|pending|without)\\s+(?:the\\s+|those\\s+)?(?:results?\\s+(?:from|of|for)\\s+)?(?:${TOOL_IDENT}|${DOTTED_TOOL_IDENT})`,
+    `\\bno\\s+(?:new\\s+)?(?:results?|data|outputs?|returns?)\\s+(?:from|for|on)\\s+(?:the\\s+)?(?:${TOOL_REFERENCE}|${DOTTED_TOOL_IDENT})`,
+    `\\b(?:missing|awaiting|pending|without)\\s+(?:the\\s+|those\\s+)?(?:results?\\s+(?:from|of|for)\\s+)?(?:${TOOL_REFERENCE}|${DOTTED_TOOL_IDENT})`,
   ].join('|'),
   'i',
 );

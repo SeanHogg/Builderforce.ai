@@ -12,7 +12,7 @@ let searchImpl: () => Promise<unknown[]> = async () => [
     source: "memory" as const,
   },
 ];
-let readFileImpl: () => Promise<string> = async () => "";
+let readFileImpl: () => Promise<{ text: string; path: string }> = async () => ({ text: "", path: "" });
 
 const stubManager = {
   search: vi.fn(async () => await searchImpl()),
@@ -59,7 +59,7 @@ beforeEach(() => {
       source: "memory" as const,
     },
   ];
-  readFileImpl = async () => "";
+  readFileImpl = async () => ({ text: "", path: "" });
   vi.clearAllMocks();
 });
 
@@ -149,6 +149,57 @@ describe("memory search citations", () => {
 });
 
 describe("memory tools", () => {
+  it("advertises workspace names and preserves saved paths, line ranges, and result envelopes", async () => {
+    const cfg = { agents: { list: [{ id: "main", default: true }] } };
+    const options = { config: cfg, workspaceReferences: true };
+    const search = createMemorySearchTool(options);
+    const read = createMemoryGetTool(options)!;
+    expect(search).toMatchObject({ name: "memory_search", wireName: "workspace__memory_search", idempotent: true });
+    expect(read).toMatchObject({ name: "memory_get", wireName: "workspace__memory_read", idempotent: true });
+
+    const hit = { path: "memory/notes.md", text: "A note\nAnother note" };
+    readFileImpl = async () => hit;
+    const result = await read.execute("saved_call", { path: " memory/notes.md ", from: "8.7", lines: "2.9" });
+    expect(stubManager.readFile).toHaveBeenCalledWith({ relPath: "memory/notes.md", from: 8, lines: 2 });
+    expect(result.details).toEqual(hit);
+    await expect(read.execute("fact_key", { key: "recall-by-key" })).rejects.toThrow("path required");
+  });
+
+  it("issues stable opaque references and reads only their recorded range in the same scope", async () => {
+    const config = { agents: { list: [{ id: "main", default: true }] } };
+    const options = { config, agentSessionKey: "agent:main:discord:dm:u123", workspaceReferences: true };
+    const search = createMemorySearchTool(options)!;
+    const read = createMemoryGetTool(options)!;
+    const otherScope = createMemoryGetTool({ ...options, agentSessionKey: "agent:main:discord:dm:u456" })!;
+    expect(read.wireParameters).toMatchObject({ properties: { ref: { type: "string" } }, required: ["ref"] });
+    expect(read.wireParameters?.properties).not.toHaveProperty("path");
+
+    const first = (await search.execute("search", { query: "notes" })).details as {
+      results: Array<{ ref: string; path: string; startLine: number; endLine: number; citation?: string }>;
+    };
+    const hit = first.results[0]!;
+    expect(hit.ref).toMatch(/^wm_[A-Za-z0-9_-]+$/);
+    expect(hit).toMatchObject({ path: "MEMORY.md", startLine: 5, endLine: 7, citation: "MEMORY.md#L5-L7" });
+    expect((await search.execute("again", { query: "notes again" })).details).toEqual(first);
+
+    const excerpt = { path: "MEMORY.md", text: "Scoped note" };
+    readFileImpl = async () => excerpt;
+    expect((await read.execute("read", { ref: hit.ref, path: "other.md", from: 1, lines: 99 })).details).toEqual(excerpt);
+    expect(stubManager.readFile).toHaveBeenCalledExactlyOnceWith({ relPath: "MEMORY.md", from: 5, lines: 3 });
+
+    for (const [tool, ref] of [[read, `${hit.ref}x`], [otherScope, hit.ref]] as const) {
+      const outcome = await tool.execute("refused", { ref });
+      expect(outcome.details).toMatchObject({ disabled: true, error: expect.stringContaining("Unknown workspace memory reference") });
+    }
+    expect(stubManager.readFile).toHaveBeenCalledOnce();
+  });
+
+  it("omits both tools when workspace memory is disabled", () => {
+    const config = asBuilderForceAgentsConfig({ agents: { defaults: { memorySearch: { enabled: false } } } });
+    expect(createMemorySearchTool({ config })).toBeNull();
+    expect(createMemoryGetTool({ config })).toBeNull();
+  });
+
   it("does not throw when memory_search fails (e.g. embeddings 429)", async () => {
     searchImpl = async () => {
       throw new Error("openai embeddings failed: 429 insufficient_quota");

@@ -426,7 +426,15 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
   - Suspects: the `.223` shader changes (`1958de654..e56a790e6`):
     - the marks fragment shader gained palette lookups through `capOf`/`shaded`/`toneOf` and runs `sdPolygon` in two branches;
     - the hall fragment shader gained a dynamic `uDash` index, and the ball fragment shader a palette lookup.
-  - Fix (in progress, for `.227`): reproduce each stage program under Chromium ANGLE D3D11 on the affected machine. Then move uniform-indexed palette lookups out of the fragment shaders into CPU-resolved `vec3` uniforms through one resolver, and add a guard test.
+  - Reproduced: Playwright Chromium 148, ANGLE D3D11, the same AMD 0x1681 GPU.
+    - With the `.223` source, the **marks fragment program** loses the context for prism, box and slab.
+    - With the pre-`.223` source (`1958de654`), every stage program compiles. The repro is in the session scratchpad at `shader-repro/run.mjs`.
+  - Fix in `.227`:
+    - The new `stage/fixedColours.ts` resolves the theme colours on the CPU into `vec3` uniforms. `renderer.setPalette` fills them on each theme flip.
+    - The marks fragment no longer reads `uPalette`, and it runs `sdPolygon` once per fragment.
+    - The hall pulse ball reads the CPU-resolved `uBall` uniform. Halls and links resolve the dash pattern in their vertex shaders.
+    - The stage renderer test guards against palette and dash arrays in the fragment programs.
+  - Blocker: a live Visualizer load under `.227` on the affected VS Code instance.
   - The user paused Visualizer work after `.227`. If `.227` still crashes, the remaining blocker is the user's go-ahead to resume. The diagnosis steps are in the `vscode-host-crash-diagnosis-minidumps` memory.
 - `AE-G067` **A bounded hired.video load still stalls the extension host for 8.3 s** (knowledge log, 2026-11-27T00:58Z: `build=23614ms … payload~8583KB lagMax=8284ms`).
   - The 2,763-node / 12,000-edge result is still about 8.6 MB of JSON. It is posted to the webview and written as a 6.7 MB `lastSeen`, and something on the host thread runs for seconds.
@@ -589,7 +597,7 @@ The target is one `@seanhogg/builderforce-mcp` package with three servers for Pl
 |---|---|
 | MCP-G001–G002 | **Resolved.** Platform, Workspace, outbound HTTP, and the marketplace probe use the official TypeScript SDK. Synapse’s private Evermind stdio client uses the official Rust SDK for framing and protocol negotiation. |
 | MCP-G003 | **Resolved.** The TypeScript relay consumers share the package's tool contract. |
-| MCP-G004–G006 | **First-party Brain and Canvas cutover implemented.** OpenAI and Anthropic share the tool converters. Native clients, normal web, VS Code and Chrome Brain runs, and direct Creation Canvas use canonical model-facing names for first-party Platform tools. Stable policy IDs still drive routing, review gates, and approval. Headless and older REST callers and host-specific consent flows remain. |
+| MCP-G004–G006 | **First-party naming cutover implemented.** OpenAI and Anthropic share the tool converters. First-party Brain, Canvas, and headless runs use the shared provider name codec. Builderforce's raw REST consumer opts into canonical names. Stable tool IDs still drive dispatch, saved calls, review, and approval. The versioned raw REST shape and host-specific consent flows remain available. |
 | MCP-G007 | **Resolved.** Platform, Workspace, and Memory apply shared output limits and redaction. Memory MCP `2026.10.86` pins the published `0.1.1` and is available on npm and the MCP Registry. |
 | MCP-G008–G012 | **Resolved for the implemented transports.** Memory reports its package version and binds to loopback. Agent-runtime uses the SDK and no longer advertises duplicate Platform write tools. Standard MCP calls use `arguments`. The legacy REST compatibility route still accepts its original payload. |
 | MCP-G013 | **Resolved for Platform.** The authenticated interactive profile exposes catalog-change notifications, a catalog guide resource, and a discovery prompt. Registry clients use the stateless default profile. |
@@ -599,7 +607,7 @@ The target is one `@seanhogg/builderforce-mcp` package with three servers for Pl
 | MCP-G019 | **Resolved.** VS Code discovers VS Code, Claude Code, and Cursor configs, including the active Claude project, and imports legacy Synapse settings through native review. Local credentials stay in their host config. The released Memory installer uses the shared codec. |
 | MCP-G020 | **Resolved.** Memory’s installer and Claude plugin define the launch spec. Synapse consumes generated Windows and POSIX launch data and retains the explicit executable override. |
 | MCP-G021 | **Workspace MCP cutover implemented.** VS Code and headless runtime share the persisted TypeScript index. Both legacy `codebase_*` calls use it, and the old runtime keyword ranker and `search-index.json` writer were removed. Broader index migration and the native retirement benchmark remain tracked in Area 2. |
-| MCP-G022 | **Partial.** Memory’s default runtime uses the public shared package. Editor fact recall and writes use the shared `MemoryCapability` and canonical provider names with the original dispatch aliases. The active headless Markdown tools still return path-and-line snippets through their own contract. |
+| MCP-G022 | **Headless Markdown cutover implemented.** Hosted fact recall and writes use `MemoryCapability`. Headless Markdown uses the shared `WorkspaceMemoryCapability`. Canonical search returns run-scoped chunk references for `workspace__memory_read`, with path and line citations preserved in results. Saved `memory_search` and `memory_get` calls keep their existing dispatch IDs and inputs. |
 | MCP-G023 | **Closed for Builderforce catalogs.** The combined Synapse catalog was retired. Platform and the native editor advertise independently. Combining tools from both in another client would require verified server and account identity. |
 | MCP-G024 | **Resolved.** Workflow execution uses data-provider handlers, with compatibility for saved `mcp` nodes. |
 

@@ -9,6 +9,8 @@
  * were deleted with the `builderforce-local` engine — PRD 11 §5.5(a).)
  */
 
+import { createHash } from "node:crypto";
+import type { Capability, CapabilityProvider, WorkspaceMemoryReadOptions, WorkspaceMemoryReadResult, WorkspaceMemorySearchOptions, WorkspaceMemorySearchResult } from "@builderforce/agent-tools";
 import { loadConfig, type BuilderForceAgentsConfig } from "../../config/config.js";
 import { resolveConfigSnapshotHash } from "../../config/io.js";
 import { extractDeliveryInfo } from "../../config/sessions.js";
@@ -64,6 +66,8 @@ interface MemoryToolContext {
   agentSessionKey?: string;
 }
 
+const WORKSPACE_MEMORY_CAPS: ReadonlySet<Capability> = new Set<Capability>(["workspace.memory"]);
+
 /** Resolve the memory backing for these deps, or null when memory is unavailable
  *  (no config, or memory search disabled for this agent) — the tool is then omitted. */
 export function resolveMemoryToolContext(deps: NodeServiceToolDeps): MemoryToolContext | null {
@@ -74,13 +78,53 @@ export function resolveMemoryToolContext(deps: NodeServiceToolDeps): MemoryToolC
   return { cfg, agentId, agentSessionKey: deps.agentSessionKey };
 }
 
-export interface MemorySearchOpts {
-  query: string;
-  maxResults?: number;
-  minScore?: number;
+export interface NodeWorkspaceMemoryProvider extends CapabilityProvider {
+  /** Compatibility entry point for saved calls using a path and line window. */
+  readPath(path: string, options?: WorkspaceMemoryReadOptions): Promise<WorkspaceMemoryReadResult>;
 }
 
-export async function runMemorySearch(ctx: MemoryToolContext, opts: MemorySearchOpts): Promise<Record<string, unknown>> {
+const MAX_MEMORY_REFS = 2048;
+
+export function buildWorkspaceMemoryProvider(deps: NodeServiceToolDeps, issueRefs = true): NodeWorkspaceMemoryProvider | null {
+  const context = resolveMemoryToolContext(deps);
+  if (!context) return null;
+  const refs = new Map<string, MemoryGetOpts>();
+  const readPath = (path: string, options?: WorkspaceMemoryReadOptions) => runMemoryGet(context, { ...options, path });
+  return {
+    capabilities: WORKSPACE_MEMORY_CAPS,
+    readPath,
+    workspaceMemory: {
+      async search(query, options) {
+        const outcome = await runMemorySearch(context, { ...options, query });
+        if (!issueRefs) return outcome;
+        return { ...outcome, results: outcome.results.map((hit, index) => {
+          const { path, startLine, endLine, source } = hit;
+          if (index >= MAX_MEMORY_REFS || !path.endsWith(".md") || !Number.isSafeInteger(startLine) || !Number.isSafeInteger(endLine)
+            || startLine < 1 || endLine < startLine) return hit;
+          const ref = `wm_${createHash("sha256").update(JSON.stringify([
+            context.agentId, context.agentSessionKey, source, path, startLine, endLine,
+          ])).digest("base64url")}`;
+          refs.delete(ref);
+          refs.set(ref, { path, from: startLine, lines: endLine - startLine + 1 });
+          if (refs.size > MAX_MEMORY_REFS) refs.delete(refs.keys().next().value!);
+          return { ...hit, ref };
+        }) };
+      },
+      async read(ref) {
+        const range = refs.get(ref);
+        return range
+          ? runMemoryGet(context, range)
+          : { path: "", text: "", disabled: true, error: "Unknown workspace memory reference. Search workspace memory again." };
+      },
+    },
+  };
+}
+
+export interface MemorySearchOpts extends WorkspaceMemorySearchOptions {
+  query: string;
+}
+
+export async function runMemorySearch(ctx: MemoryToolContext, opts: MemorySearchOpts): Promise<WorkspaceMemorySearchResult> {
   const { manager, error } = await getMemorySearchManager({ cfg: ctx.cfg, agentId: ctx.agentId });
   if (!manager) return { results: [], disabled: true, error };
   try {
@@ -112,18 +156,15 @@ export async function runMemorySearch(ctx: MemoryToolContext, opts: MemorySearch
   }
 }
 
-export interface MemoryGetOpts {
+export interface MemoryGetOpts extends WorkspaceMemoryReadOptions {
   path: string;
-  from?: number;
-  lines?: number;
 }
 
-export async function runMemoryGet(ctx: MemoryToolContext, opts: MemoryGetOpts): Promise<Record<string, unknown>> {
+export async function runMemoryGet(ctx: MemoryToolContext, opts: MemoryGetOpts): Promise<WorkspaceMemoryReadResult> {
   const { manager, error } = await getMemorySearchManager({ cfg: ctx.cfg, agentId: ctx.agentId });
   if (!manager) return { path: opts.path, text: "", disabled: true, error };
   try {
-    const result = await manager.readFile({ relPath: opts.path, from: opts.from ?? undefined, lines: opts.lines ?? undefined });
-    return result as unknown as Record<string, unknown>;
+    return await manager.readFile({ relPath: opts.path, from: opts.from ?? undefined, lines: opts.lines ?? undefined });
   } catch (err) {
     return { path: opts.path, text: "", disabled: true, error: err instanceof Error ? err.message : String(err) };
   }

@@ -15,12 +15,13 @@
 import { ModelTransportError } from "@builderforce/agent-run";
 import type { ModelCompletion, ModelRequest, ModelTransport, RunMessage } from "@builderforce/agent-run";
 import { isVolatileTail } from "@seanhogg/builderforce-memory/handoff";
+import { toolWireNameCodec } from "@seanhogg/builderforce-mcp";
 import { resolveContextWindowTokens } from "../agents/context-window.js";
 import type { AgentLoopConfig } from "../builderforce/agent-loop/agent-loop-config.js";
 import { modelRef } from "../builderforce/agent-loop/stall-recovery.js";
 import type { StreamFn } from "../builderforce/agent-loop/stream.js";
 import type { AgentMessage, AgentTool } from "../builderforce/model/agent-types.js";
-import type { AssistantMessage, Context, Message, Model, Tool } from "../builderforce/model/types.js";
+import type { AssistantMessage, Context, Message, Model, Tool, ToolCall } from "../builderforce/model/types.js";
 import type { AgentEventBridge } from "./agentEventBridge.js";
 import { modelUsageOf, toAgentMessage, toRunRow } from "./channelMessages.js";
 
@@ -66,22 +67,36 @@ function advertised(request: ModelRequest, tools: readonly AnyTool[]): Tool[] | 
 }
 
 /** The transcript as the runner's messages: the leading system rows are the system prompt, a later system row is a note the model reads as the user's. */
-function transcriptOf(rows: readonly RunMessage[], model: Model): { systemPrompt: string; messages: AgentMessage[] } {
+function transcriptOf(
+  rows: readonly RunMessage[],
+  model: Model,
+  mapPrompt: (text: string) => string,
+): { systemPrompt: string; messages: AgentMessage[] } {
   const toolNames = new Map<string, string>();
   const system: string[] = [];
   const messages: AgentMessage[] = [];
   let lead = true;
   for (const row of rows) {
     if (row.role === "system" && lead) {
-      system.push(row.content);
+      system.push(mapPrompt(row.content));
       continue;
     }
     lead = false;
-    const message = row.role === "system" ? toRunRow({ role: "user", content: row.content, timestamp: Date.now() }) : row;
+    const message = row.role === "system" ? toRunRow({ role: "user", content: mapPrompt(row.content), timestamp: Date.now() }) : row;
     const converted = toAgentMessage(message, { model, toolNames, forModel: true });
     if (converted) messages.push(converted);
   }
   return { systemPrompt: system.join("\n\n"), messages };
+}
+
+function mapToolCall(call: ToolCall, mapName: (name: string) => string): ToolCall {
+  const name = mapName(call.name);
+  return name === call.name ? call : { ...call, name };
+}
+
+function mapAssistant(message: AssistantMessage, mapName: (name: string) => string): AssistantMessage {
+  const content = message.content.map((block) => block.type === "toolCall" ? mapToolCall(block, mapName) : block);
+  return content.some((block, index) => block !== message.content[index]) ? { ...message, content } : message;
 }
 
 /**
@@ -95,20 +110,33 @@ export function replyBound(asked: number, model: Model): number {
 
 export function channelModelTransport(options: ChannelModelOptions): ModelTransport {
   const { models, streamFn, config, bridge } = options;
+  const codec = toolWireNameCodec(options.tools.map(({ name }) => name), options.tools.flatMap(({ name, wireName }) =>
+    wireName ? [{ name, wireName }] : []));
+  const mapPrompt = codec?.mapPrompt ?? ((text: string) => text);
 
   /** One provider turn; the surface hears the answer as it is written. */
   async function ask(request: ModelRequest, signal: AbortSignal | undefined): Promise<ModelCompletion> {
     const model = models.resolve(request.model);
     const tailRow = request.messages.at(-1);
     const hasTail = tailRow !== undefined && tailRow.role === "user" && isVolatileTail(tailRow);
-    const { systemPrompt, messages: history } = transcriptOf(hasTail ? request.messages.slice(0, -1) : request.messages, model);
+    const { systemPrompt, messages: history } = transcriptOf(hasTail ? request.messages.slice(0, -1) : request.messages, model, mapPrompt);
     const prepared = config.transformContext ? await config.transformContext(history, signal) : history;
     const converted: Message[] = await config.convertToLlm(prepared);
+    const advertisedTools = advertised(request, options.tools);
+    const messages = codec ? converted.map((message) => {
+      if (message.role === "assistant") return mapAssistant(message, codec.toWire);
+      if (message.role !== "toolResult") return message;
+      const toolName = codec.toWire(message.toolName);
+      return toolName === message.toolName ? message : { ...message, toolName };
+    }) : converted;
     const context: Context = {
       systemPrompt,
       // The run's volatile tail rides LAST, built per request and never part of the conversation.
-      messages: hasTail ? [...converted, { role: "user", content: tailRow.content, timestamp: Date.now() }] : converted,
-      tools: advertised(request, options.tools),
+      messages: hasTail ? [...messages, { role: "user", content: mapPrompt(tailRow.content), timestamp: Date.now() }] : messages,
+      tools: codec ? advertisedTools?.map((tool) => {
+        const name = codec.toWire(tool.name);
+        return name === tool.name ? tool : { ...tool, name, parameters: tool.wireParameters ?? tool.parameters };
+      }) : advertisedTools,
     };
     const apiKey = (config.getApiKey ? await config.getApiKey(model.provider) : undefined) || config.apiKey;
     const response = await streamFn(model, context, { apiKey, temperature: config.temperature, maxTokens: request.maxTokens !== undefined ? replyBound(request.maxTokens, model) : config.maxTokens, signal });
@@ -118,9 +146,17 @@ export function channelModelTransport(options: ChannelModelOptions): ModelTransp
         final = await response.result();
         break;
       }
-      bridge.modelEvent(event);
+      if (!codec) {
+        bridge.modelEvent(event);
+      } else {
+        const partial = mapAssistant(event.partial, codec.fromWire);
+        bridge.modelEvent(event.type === "toolcall_end"
+          ? { ...event, partial, toolCall: mapToolCall(event.toolCall, codec.fromWire) }
+          : { ...event, partial });
+      }
     }
     final ??= await response.result();
+    if (codec) final = mapAssistant(final, codec.fromWire);
     bridge.modelEnd(final);
     // An errored or aborted turn is the run's end, never a turn that acted: the agent is told it failed, and the message stays
     // in the run's record (`AgentEventBridge.modelEnd`).

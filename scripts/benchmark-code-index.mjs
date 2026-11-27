@@ -3,7 +3,8 @@
  * node --import tsx ../scripts/benchmark-code-index.mjs --repo <checkout> --inventory
  * node --import tsx ../scripts/benchmark-code-index.mjs --repo <checkout>
  *   --native <bf-context built with --no-default-features> --files 400 --query <term> --query <term>
- * Omit --files to require the whole common corpus. The harness fails on any coverage mismatch.
+ * Use --full-comparison to evaluate the entire common corpus with a larger in-memory TypeScript index.
+ * The harness fails on any coverage mismatch.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
@@ -38,11 +39,16 @@ async function measure(search, queries, started) {
 }
 
 async function typescriptWorker(manifestPath) {
-  const { root, paths, queries } = JSON.parse(await readFile(manifestPath, 'utf8'));
-  const { searchWorkspaceCodeIndex } = await import(source('../packages/code-index/src/index.ts'));
+  const { root, paths, queries, fullComparison } = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const { benchmarkWorkspaceCodeIndex, searchWorkspaceCodeIndex } = await import(source('../packages/code-index/src/index.ts'));
   const { codeIndexStorage } = await import(source('../packages/code-index/src/storage.ts'));
   const files = { async listFiles() { return { ok: true, paths }; } };
   const start = performance.now();
+  if (fullComparison) {
+    const index = await benchmarkWorkspaceCodeIndex({ root, files, lexicalOnly: true });
+    const results = await measure((query) => index.search(query, 8), queries, start);
+    return { ...results, rssMiB: round(process.memoryUsage().rss / mib), paths: index.paths, chunks: index.chunks };
+  }
   const results = await measure(async (query) => {
     const result = await searchWorkspaceCodeIndex({ root, files, query, limit: 8, lexicalOnly: true });
     if (!result.ok || result.indexing) throw new Error('TypeScript index did not commit');
@@ -118,6 +124,7 @@ async function main() {
   const { values } = parseArgs({ options: {
     repo: { type: 'string' }, commit: { type: 'string', default: 'HEAD' }, inventory: { type: 'boolean' },
     native: { type: 'string' }, files: { type: 'string' }, query: { type: 'string', multiple: true },
+    'full-comparison': { type: 'boolean' },
   } });
   if (!values.repo) throw new Error('--repo is required');
   const { DEFAULT_REPO_MAP_LIMITS: limits, isMapCandidate } = await import(source('../packages/repo-map/src/filePolicy.ts'));
@@ -156,18 +163,29 @@ async function main() {
   if (!values.native || !values.query?.length || values.query.some((query) => !query.trim())) {
     throw new Error('--native and at least one nonempty --query are required');
   }
+  const fullComparison = values['full-comparison'];
+  if (fullComparison && values.files) throw new Error('--full-comparison requires the whole common corpus');
   const fileCount = values.files ? Number(values.files) : common.length;
   if (!Number.isSafeInteger(fileCount) || fileCount < 1 || fileCount > common.length) throw new Error('Invalid --files count');
   // Sample evenly from the Git tree order rather than measuring only the first package.
   const selected = Array.from({ length: fileCount }, (_, i) => common[Math.floor(i * common.length / fileCount)]);
-  if (fileCount > limits.maxFiles || bytes(selected) > limits.maxTotalBytes) {
-    throw new Error('The corpus exceeds the shipped TypeScript file or byte limit. Pass an explicit --files sample size.');
+  const budget = fullComparison
+    ? (await import(source('../packages/code-index/src/index.ts'))).codeIndexBenchmarkBudget
+    : limits;
+  if (fileCount > budget.maxFiles || bytes(selected) > budget.maxTotalBytes) {
+    throw new Error(fullComparison ? 'The corpus exceeds the full comparison budget.'
+      : 'The corpus exceeds the shipped TypeScript limit. Use --full-comparison or an explicit --files sample size.');
   }
   const scratch = await mkdtemp(join(tmpdir(), 'bf-code-index-benchmark-'));
   const root = join(scratch, 'files');
   console.log(`Scratch corpus ${scratch}`);
-  const blobs = git(['cat-file', '--batch'], { input: selected.map(({ object }) => `${object}\n`).join('') });
+  const blobs = git(['cat-file', '--batch'], {
+    input: selected.map(({ object }) => `${object}\n`).join(''),
+    maxBuffer: bytes(selected) + selected.length * 128,
+  });
   const paths = [];
+  const directories = new Map();
+  const writes = [];
   const decoder = new TextDecoder('utf8', { fatal: true });
   let offset = 0;
   for (const { object, path, size } of selected) {
@@ -183,14 +201,19 @@ async function main() {
     }
     const destination = resolve(root, path);
     if (!destination.startsWith(root + sep)) throw new Error('Git path left the scratch root');
-    await mkdir(dirname(destination), { recursive: true });
-    await writeFile(destination, body, { flag: 'wx' });
+    const directory = dirname(destination);
+    if (!directories.has(directory)) directories.set(directory, mkdir(directory, { recursive: true }));
+    writes.push(directories.get(directory).then(() => writeFile(destination, body, { flag: 'wx' })));
+    if (writes.length === 16) await Promise.all(writes.splice(0));
     paths.push(path);
   }
+  await Promise.all(writes);
+  if (!paths.length) throw new Error('The selected corpus has no readable source files');
   const manifest = join(scratch, 'manifest.json');
-  await writeFile(manifest, JSON.stringify({ root, paths, queries: values.query }));
-  const typescript = JSON.parse(execFileSync(process.execPath, ['--import', 'tsx', fileURLToPath(import.meta.url), '--ts-worker', manifest], {
-    encoding: 'utf8', timeout, windowsHide: true,
+  await writeFile(manifest, JSON.stringify({ root, paths, queries: values.query, fullComparison }));
+  const nodeFlags = fullComparison ? ['--max-old-space-size=12288'] : [];
+  const typescript = JSON.parse(execFileSync(process.execPath, [...nodeFlags, '--import', 'tsx', fileURLToPath(import.meta.url), '--ts-worker', manifest], {
+    encoding: 'utf8', maxBuffer: 16 * mib, timeout, windowsHide: true,
   }));
   const native = await nativeRun(resolve(values.native), scratch, root, values.query);
   const expected = new Set(paths);
@@ -199,10 +222,14 @@ async function main() {
     const missing = paths.filter((path) => !unique.has(path));
     const unexpected = indexed.filter((path) => !expected.has(path));
     const coverageMatches = !missing.length && !unexpected.length;
-    return { ...results, indexedFiles: unique.size, coverageMatches, missing: missing.slice(0, 10), unexpected: unexpected.slice(0, 10) };
+    return {
+      ...results, indexedFiles: unique.size, coverageMatches, missingFiles: missing.length, unexpectedFiles: unexpected.length,
+      missing: missing.slice(0, 10), unexpected: unexpected.slice(0, 10),
+    };
   }
   const result = {
     revision, corpusFiles: paths.length, requestedFiles: fileCount, warmRuns, engineOrder: ['typescript', 'native'],
+    typescriptMode: fullComparison ? 'in-memory benchmark budget' : 'shared workspace snapshot',
     typescript: summarize(typescript), native: summarize(native),
   };
   await writeFile(join(scratch, 'result.json'), JSON.stringify(result, null, 2));

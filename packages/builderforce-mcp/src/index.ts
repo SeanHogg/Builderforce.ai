@@ -7,7 +7,7 @@ export {
   toOpenAI,
 } from "./tool.js";
 export type { McpToolEntry, RelayToolEntry, ToolEffect, ToolInputSchema } from "./tool.js";
-export { advertiseName, resolveName } from "./naming.js";
+export { advertiseName, legacyExtensionToolName, resolveName, toolWireNameCodec } from "./naming.js";
 export {
   createMcpCatalogCache,
   createMcpRelay,

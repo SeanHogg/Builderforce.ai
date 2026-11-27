@@ -1,14 +1,7 @@
-export type MemorySource = "memory" | "sessions";
+import type { WorkspaceMemoryMatch } from "@builderforce/agent-tools";
 
-export type MemorySearchResult = {
-  path: string;
-  startLine: number;
-  endLine: number;
-  score: number;
-  snippet: string;
-  source: MemorySource;
-  citation?: string;
-};
+export type MemorySearchResult = WorkspaceMemoryMatch;
+export type MemorySource = MemorySearchResult["source"];
 
 export type MemoryEmbeddingProbeResult = {
   ok: boolean;

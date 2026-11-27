@@ -9,19 +9,20 @@
 
 import {
     BoxGeometry, DoubleSide, DynamicDrawUsage, GLSL3, Group, InstancedBufferAttribute, InstancedBufferGeometry, InstancedMesh,
-    ShaderMaterial, SphereGeometry, Vector2, type IUniform, type Vector3,
+    ShaderMaterial, SphereGeometry, type IUniform, type Vector3,
 } from 'three';
 import { capacityFor } from '../slots';
 import { LIGHT_GLSL } from '../lighting';
 import { uploadRange, type StageStats } from '../stats';
 import { PALETTE_SIZE, toneIndex } from '../tones';
-import { DASH_PATTERNS, FLAG, type LinkBatch } from '../types';
+import { FLAG, type LinkBatch } from '../types';
 import { HALL_STYLE } from './families';
 import { fillSegments, segmentsOf } from './pack';
+import { DASH_VERTEX_GLSL, dashUniform } from './shader';
 
 export interface HallUniforms {
     uPalette: IUniform<Vector3[]>;
-    uBg: IUniform<Vector3>;
+    uBall: IUniform<Vector3>;
     uTime: IUniform<number>;
     uMotion: IUniform<number>;
 }
@@ -42,8 +43,9 @@ mat3 basis(vec3 f) {
 
 const VERTEX = /* glsl */ `
 ${BASIS}
+${DASH_VERTEX_GLSL}
 uniform float uLitTone;
-out vec3 vColor; out float vRun; out float vDash;
+out vec3 vColor; out float vRun;
 ${LIGHT_GLSL}
 void main() {
     vec3 d = aB.xyz - aA.xyz;
@@ -51,7 +53,7 @@ void main() {
     mat3 m = basis(dirOf());
     vec3 local = vec3(position.x * len, position.y * thick + thick * 0.5, position.z * width);
     // Running length along the polyline (the box spans -0.5..0.5 along x): an untested / cycle hall dashes, never colour alone.
-    vRun = aA.w + (position.x + 0.5) * len; vDash = aStyle.y;
+    vRun = aA.w + (position.x + 0.5) * len; vDash = uDash[int(aStyle.y + 0.5)];
     vec3 p = (aA.xyz + aB.xyz) * 0.5 + m * local;
     vec3 n = normalize(m * normal);
     bool lit = mod(floor(aStyle.z / ${FLAG.PULSE.toFixed(1)}), 2.0) > 0.5;
@@ -76,22 +78,19 @@ void main() {
 
 const FRAGMENT = /* glsl */ `
 precision highp float;
-uniform vec2 uDash[${DASH_PATTERNS.length}];
-in vec3 vColor; in float vRun; in float vDash;
+flat in vec2 vDash;
+in vec3 vColor; in float vRun;
 out vec4 fragColor;
 void main() {
-    int pattern = int(vDash + 0.5);
-    if (pattern > 0) { vec2 pat = uDash[pattern]; if (mod(vRun, pat.x + pat.y) > pat.x) discard; }
+    if (vDash.y > 0.0 && mod(vRun, vDash.x + vDash.y) > vDash.x) discard;
     fragColor = vec4(vColor, 1.0);
 }`;
 
-// The ball's colour is read from the live palette by tone (never a held Vector3), so a theme flip reaches it.
 const BALL_FRAGMENT = /* glsl */ `
 precision highp float;
-uniform vec3 uPalette[${PALETTE_SIZE}];
-uniform float uBallTone;
+uniform vec3 uBall;
 out vec4 fragColor;
-void main() { fragColor = vec4(uPalette[int(uBallTone + 0.5)], 1.0); }`;
+void main() { fragColor = vec4(uBall, 1.0); }`;
 
 interface Hall { bars: InstancedMesh; balls: InstancedMesh; a: InstancedBufferAttribute; b: InstancedBufferAttribute; style: InstancedBufferAttribute; capacity: number }
 
@@ -139,17 +138,17 @@ export class HallLayer {
             g.setAttribute('aA', a); g.setAttribute('aB', b); g.setAttribute('aStyle', style);
             return g;
         };
-        const { uPalette, uBg, uTime, uMotion } = this.uniforms;
+        const { uPalette, uBall, uTime, uMotion } = this.uniforms;
         const bars = new InstancedMesh(instanced(new BoxGeometry(1, 1, 1), true), new ShaderMaterial({
             glslVersion: GLSL3, vertexShader: VERTEX, fragmentShader: FRAGMENT, side: DoubleSide,
             uniforms: {
-                uPalette, uBg, uThick: { value: HALL_STYLE.thickness }, uLitTone: { value: toneIndex('lit') },
-                uDash: { value: DASH_PATTERNS.map(([on, off]) => new Vector2(on, off)) },
+                uPalette, uThick: { value: HALL_STYLE.thickness }, uLitTone: { value: toneIndex('lit') },
+                uDash: dashUniform(),
             },
         }), capacity);
         const balls = new InstancedMesh(instanced(new SphereGeometry(0.5, 10, 8), false), new ShaderMaterial({
             glslVersion: GLSL3, vertexShader: PULSE_VERTEX, fragmentShader: BALL_FRAGMENT,
-            uniforms: { uPalette, uTime, uMotion, uPulseWidth: { value: 0.6 }, uBallTone: { value: toneIndex('sel') } },
+            uniforms: { uBall, uTime, uMotion, uPulseWidth: { value: 0.6 } },
         }), capacity);
         for (const [mesh, name, order] of [[bars, 'halls', 1], [balls, 'halls:pulse', 2]] as const) {
             mesh.count = 0; mesh.frustumCulled = false; mesh.renderOrder = order; mesh.name = name;

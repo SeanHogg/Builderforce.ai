@@ -21,6 +21,7 @@ import { troikaTextPort } from './labels/troika';
 import { HallLayer } from './links/HallLayer';
 import { LinkLayer } from './links/LinkLayer';
 import { MarkLayer } from './marks/MarkLayer';
+import { resolveFixedColours } from './fixedColours';
 import { sharedMarkUniforms } from './marks/shader';
 import { PlaneLayer } from './planes/PlaneLayer';
 import { createStats, type StageStats } from './stats';
@@ -121,7 +122,7 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
     const uniforms = sharedMarkUniforms();
     const marksLayer = new MarkLayer(stats, uniforms);
     const links = new LinkLayer(stats, { uPxPerWorld: uniforms.uPxPerWorld, uDpr: uniforms.uDpr, uPalette: uniforms.uPalette, uBg: uniforms.uBg });
-    const halls = new HallLayer(stats, { uPalette: uniforms.uPalette, uBg: uniforms.uBg, uTime: uniforms.uTime, uMotion: uniforms.uMotion });
+    const halls = new HallLayer(stats, { uPalette: uniforms.uPalette, uBall: uniforms.uBall, uTime: uniforms.uTime, uMotion: uniforms.uMotion });
     const planes = new PlaneLayer(stats, uniforms.uPalette);
     const redraw = new Set<() => void>();
     const notify = (): void => { options.onChange?.(); for (const cb of redraw) cb(); };
@@ -130,7 +131,7 @@ export function createWebGLStage(options: WebGLStageOptions = {}): StageRenderer
     const root = new Group();
     root.add(planes.group, links.group, halls.group, marksLayer.group);
     if (labels.object) root.add(labels.object);
-    const overlay = new OverlayLayer(stats, { uPxPerWorld: uniforms.uPxPerWorld, uDpr: uniforms.uDpr, uPalette: uniforms.uPalette, uBg: uniforms.uBg, uTime: uniforms.uTime, uMotion: uniforms.uMotion });
+    const overlay = new OverlayLayer(stats, { uPxPerWorld: uniforms.uPxPerWorld, uDpr: uniforms.uDpr, uPalette: uniforms.uPalette, uBg: uniforms.uBg, uBall: uniforms.uBall, uTime: uniforms.uTime, uMotion: uniforms.uMotion });
     root.add(overlay.group);
     const appended = new AppendedSlots();
     const live = new LiveKeys();

@@ -161,7 +161,7 @@ export class OverlayLayer {
         if (this.placement?.minMarkPx) this.placeRings();
     }
 
-    constructor(stats: StageStats, uniforms: LinkUniforms & Pick<HallUniforms, 'uTime' | 'uMotion'>) {
+    constructor(stats: StageStats, uniforms: LinkUniforms & HallUniforms) {
         // Only the `edge` family: the overlay's lines are one px batch (LinkLayer preallocates what it is told to).
         this.lines = new LinkLayer(stats, uniforms, ['edge']);
         this.halls = new HallLayer(stats, uniforms);

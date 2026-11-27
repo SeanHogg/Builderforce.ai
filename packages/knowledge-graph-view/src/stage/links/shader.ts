@@ -16,12 +16,19 @@ import { DoubleSide, GLSL3, ShaderMaterial, Vector2, Vector3, type IUniform } fr
 import { DASH_PATTERNS } from '../types';
 import { PALETTE_SIZE } from '../tones';
 
+export const DASH_VERTEX_GLSL = /* glsl */ `
+uniform vec2 uDash[${DASH_PATTERNS.length}];
+flat out vec2 vDash;`;
+
+export const dashUniform = () => ({ value: DASH_PATTERNS.map(([on, off]) => new Vector2(on, off)) });
+
 const VERTEX = /* glsl */ `
 in vec4 aA; in vec4 aB; in vec4 aStyle;
 uniform float uPxPerWorld; uniform float uDpr; uniform float uWorldWidth; uniform float uCasing;
 uniform vec3 uPalette[${PALETTE_SIZE}]; uniform float uCasingTone;
+${DASH_VERTEX_GLSL}
 out vec2 vLocal; out float vLen; out float vHalf; out float vCase; out float vRun;
-out vec3 vColor; out vec3 vCaseColor; out float vDash; out float vFlags; out float vGroup; out float vUnit;
+out vec3 vColor; out vec3 vCaseColor; out float vFlags; out float vGroup;
 void main() {
     vec2 d = aB.xz - aA.xz;
     float len = length(d);
@@ -34,18 +41,18 @@ void main() {
     float along = position.x * len + (position.x * 2.0 - 1.0) * pad;
     float across = position.y * pad;
     vec2 xz = aA.xz + dir * along + nrm * across;
-    vLocal = vec2(along, across); vLen = len; vHalf = halfW; vCase = cas; vRun = aA.w; vUnit = unit;
+    vLocal = vec2(along, across); vLen = len; vHalf = halfW; vCase = cas; vRun = aA.w;
     vColor = uPalette[int(aStyle.x + 0.5)]; vCaseColor = uPalette[int(uCasingTone + 0.5)];
-    vDash = aStyle.y; vFlags = aStyle.z; vGroup = aStyle.w;
+    vDash = uDash[int(aStyle.y + 0.5)] * unit; vFlags = aStyle.z; vGroup = aStyle.w;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(xz.x, aA.y, xz.y, 1.0);
 }`;
 
 const FRAGMENT = /* glsl */ `
 precision highp float;
-uniform vec2 uDash[${DASH_PATTERNS.length}];
 uniform vec3 uBg; uniform float uDepthStep;
+flat in vec2 vDash;
 in vec2 vLocal; in float vLen; in float vHalf; in float vCase; in float vRun;
-in vec3 vColor; in vec3 vCaseColor; in float vDash; in float vFlags; in float vGroup; in float vUnit;
+in vec3 vColor; in vec3 vCaseColor; in float vFlags; in float vGroup;
 out vec4 fragColor;
 void main() {
     float t = clamp(vLocal.x, 0.0, vLen);
@@ -55,13 +62,10 @@ void main() {
     float casingA = 1.0 - smoothstep(vCase - aa, vCase + aa, dist);
     if (casingA <= 0.002) discard;
     float coreDist = dist;
-    int pattern = int(vDash + 0.5);
-    if (pattern > 0) {
-        // A pattern is in the family's width unit: world units, or CSS px turned into world units at this zoom.
-        vec2 pat = uDash[pattern] * vUnit;
-        float period = pat.x + pat.y;
+    if (vDash.y > 0.0) {
+        float period = vDash.x + vDash.y;
         float q = mod(vRun + t, period);
-        float off = q < pat.x ? 0.0 : min(q - pat.x, period - q);
+        float off = q < vDash.x ? 0.0 : min(q - vDash.x, period - q);
         coreDist = length(vec2(max(off, beyond), vLocal.y));
     }
     float coreA = 1.0 - smoothstep(vHalf - aa, vHalf + aa, coreDist);
@@ -96,7 +100,7 @@ export function linkMaterial(shared: LinkUniforms, widthUnit: 'world' | 'px', ca
             uWorldWidth: { value: widthUnit === 'world' ? 1 : 0 },
             uCasing: { value: casing?.extra ?? 0 },
             uCasingTone: { value: casing?.tone ?? 0 },
-            uDash: { value: DASH_PATTERNS.map(([on, off]) => new Vector2(on, off)) },
+            uDash: dashUniform(),
             uDepthStep: { value: 1e-5 },
         },
         transparent: true,

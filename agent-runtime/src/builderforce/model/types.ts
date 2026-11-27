@@ -165,6 +165,10 @@ export type AssistantMessageEvent =
 
 export interface Tool<TParameters extends TSchema = TSchema> {
   name: string;
+  /** Optional provider-facing MCP name. Authorization and dispatch use `name`. */
+  wireName?: string;
+  /** Schema advertised with the MCP name. Execution validates the original schema. */
+  wireParameters?: TSchema;
   description: string;
   parameters: TParameters;
 }

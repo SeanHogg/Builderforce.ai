@@ -30,6 +30,13 @@ export function advertiseName(source: string, tool: string): string {
   return name;
 }
 
+/** The original REST alias for a third-party MCP tool. */
+export function legacyExtensionToolName(extensionId: string, tool: string): string {
+  const short = extensionId.replace(/-/g, "").slice(0, 8);
+  const safeTool = tool.replace(/[^a-zA-Z0-9_]/g, "_");
+  return `mcp_${short}_${safeTool}`;
+}
+
 export function resolveName(name: string): { source: string; tool: string } | null {
   const [source, tool, extra] = name.split("__");
   if (!source || !tool || extra !== undefined || name.length > MAX_NAME_LENGTH) return null;
@@ -44,5 +51,37 @@ export function resolveName(name: string): { source: string; tool: string } | nu
   } catch {
     return null;
   }
+}
+
+function counts(names: Iterable<string>): Map<string, number> {
+  const result = new Map<string, number>();
+  for (const name of names) result.set(name, (result.get(name) ?? 0) + 1);
+  return result;
+}
+
+/** Build a reversible, catalog-scoped map for provider-facing names. */
+export function toolWireNameCodec(
+  catalogNames: Iterable<string>,
+  wireNames: readonly { name: string; wireName: string }[] | undefined,
+) {
+  if (!wireNames?.length) return undefined;
+  const valid = /^[A-Za-z0-9_-]{1,64}$/;
+  const catalog = counts(catalogNames);
+  const candidates = wireNames.filter(({ name, wireName }) =>
+    valid.test(name) && valid.test(wireName) && catalog.get(name) === 1 && !catalog.has(wireName));
+  const names = counts(candidates.map(({ name }) => name));
+  const aliases = counts(candidates.map(({ wireName }) => wireName));
+  const mappings = candidates.filter(({ name, wireName }) => names.get(name) === 1 && aliases.get(wireName) === 1);
+  if (!mappings.length) return undefined;
+
+  const outgoing = new Map(mappings.map(({ name, wireName }) => [name, wireName]));
+  const incoming = new Map(mappings.map(({ name, wireName }) => [wireName, name]));
+  const mentioned = new RegExp(`(?<![A-Za-z0-9_-])(?:${[...outgoing.keys()].join("|")})(?![A-Za-z0-9_-])`, "g");
+  const toWire = (name: string) => outgoing.get(name) ?? name;
+  return {
+    toWire,
+    fromWire: (name: string) => incoming.get(name) ?? name,
+    mapPrompt: (text: string) => text.replace(mentioned, toWire),
+  };
 }
 

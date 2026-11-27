@@ -108,6 +108,8 @@ export function toToolDefinitions(tools: AnyAgentTool[]): ToolDefinition[] {
     const idempotent = isRetryableTool(tool);
     return {
       name,
+      ...(tool.wireName ? { wireName: tool.wireName } : {}),
+      ...(tool.wireParameters ? { wireParameters: tool.wireParameters } : {}),
       label: tool.label ?? name,
       description: tool.description ?? "",
       parameters: tool.parameters,

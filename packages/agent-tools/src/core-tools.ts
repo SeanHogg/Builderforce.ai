@@ -34,6 +34,7 @@ import type {
 } from "./capabilities.js";
 import { ToolRegistry } from "./registry.js";
 import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
+import { workspaceMemoryReadTool, workspaceMemorySearchTool } from "./workspace-memory-tools.js";
 // `read_file`'s per-file body (window, JSON `key`, large-Markdown outline) and `paths[]`.
 import { READ_FILE_MAX_PATHS, readManyFiles, readOneFile } from "./fileRead.js";
 export { MARKDOWN_OUTLINE_MIN_CHARS, READ_FILE_MAX_PATHS } from "./fileRead.js";
@@ -735,6 +736,8 @@ export const CORE_TOOLS: readonly ToolDefinition[] = [
   memoryRecallTool,
   memoryRememberTool,
   memoryForgetTool,
+  workspaceMemorySearchTool,
+  workspaceMemoryReadTool,
   claimResourceTool,
   releaseResourceTool,
   workspaceNoteTool,

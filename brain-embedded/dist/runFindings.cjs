@@ -1058,6 +1058,8 @@ var TOOL_SIDE_EFFECT = {
   memory_recall: "read",
   memory_remember: "mutate",
   memory_forget: "mutate",
+  workspace__memory_search: "read",
+  workspace__memory_read: "read",
   claim_resource: "mutate",
   release_resource: "mutate",
   workspace_note: "mutate",
@@ -1103,6 +1105,44 @@ function stableStringify(value) {
   const keys = Object.keys(record4).filter((k) => record4[k] !== void 0).sort();
   return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record4[k])}`).join(",")}}`;
 }
+
+// ../packages/agent-tools/src/workspace-memory-tools.ts
+function number(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : void 0;
+}
+var workspaceMemorySearchTool = defineTool({
+  name: "workspace__memory_search",
+  description: "Search this agent's Markdown workspace notes (.builderforce/MEMORY.md, .builderforce/memory/*.md and any configured session sources) for earlier work, decisions, preferences, or todos. Returns snippets with file paths and line ranges.",
+  parameters: {
+    type: "object",
+    properties: { query: { type: "string" }, maxResults: { type: "number" }, minScore: { type: "number" } },
+    required: ["query"]
+  },
+  requires: ["workspace.memory"],
+  async execute(args, { caps }) {
+    const query = typeof args.query === "string" ? args.query.trim() : "";
+    if (!query) return { data: { ok: false, error: "query required" } };
+    return { data: await caps.workspaceMemory.search(query, {
+      maxResults: number(args.maxResults),
+      minScore: number(args.minScore)
+    }) };
+  }
+});
+var workspaceMemoryReadTool = defineTool({
+  name: "workspace__memory_read",
+  description: "Read the Markdown excerpt identified by a ref returned from workspace memory search. Results keep the original path for citations. Search again if the reference is unavailable.",
+  parameters: {
+    type: "object",
+    properties: { ref: { type: "string" } },
+    required: ["ref"]
+  },
+  requires: ["workspace.memory"],
+  async execute(args, { caps }) {
+    const ref = typeof args.ref === "string" ? args.ref.trim() : "";
+    if (!ref) return { data: { ok: false, error: "ref required" } };
+    return { data: await caps.workspaceMemory.read(ref) };
+  }
+});
 
 // ../packages/agent-tools/src/fileWindow.ts
 var READ_DEFAULT_LINE_LIMIT = 2e3;
@@ -4539,6 +4579,8 @@ var CORE_TOOLS = [
   memoryRecallTool,
   memoryRememberTool,
   memoryForgetTool,
+  workspaceMemorySearchTool,
+  workspaceMemoryReadTool,
   claimResourceTool,
   releaseResourceTool,
   workspaceNoteTool,

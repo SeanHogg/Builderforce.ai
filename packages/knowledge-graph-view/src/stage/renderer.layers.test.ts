@@ -110,7 +110,10 @@ describe('the stage layers (PRD 43 B3)', () => {
         expect(attr.getX(0)).toBe(p.tone[slot]);
         const frag = (mesh!.material as ShaderMaterial).fragmentShader;
         for (const name of ['F_DIM', 'F_SHELL', 'F_DOC', 'F_INTERCHANGE', 'F_OUTLINE', 'F_PULSE']) expect(frag).toContain(`bit(vFlags, ${name})`);
-        for (const u of ['uTime', 'uMotion', 'uDepth', 'uViolationTone', 'uChangedTone', 'uTextTone']) expect(uniform(mesh!, u)).toBeDefined();
+        for (const u of ['uTime', 'uMotion', 'uDepth', 'uViolation', 'uChanged', 'uText']) expect(uniform(mesh!, u)).toBeDefined();
+        for (const candidate of [mesh!, ...meshes(stage.object!, 'links:'), ...meshes(stage.object!, 'halls')]) {
+            expect((candidate.material as ShaderMaterial).fragmentShader).not.toMatch(/\b(?:uPalette|uDash)\s*\[/);
+        }
     });
 
     it('fades every mark outside the lit set with the DIM flag on top of its own, and puts the paint back with null; a restore keeps it', () => {

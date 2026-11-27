@@ -73,6 +73,8 @@ export const TOOL_SIDE_EFFECT = {
   memory_recall: "read",
   memory_remember: "mutate",
   memory_forget: "mutate",
+  workspace__memory_search: "read",
+  workspace__memory_read: "read",
   claim_resource: "mutate",
   release_resource: "mutate",
   workspace_note: "mutate",

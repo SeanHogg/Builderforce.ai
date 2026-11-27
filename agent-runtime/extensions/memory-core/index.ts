@@ -10,14 +10,13 @@ const memoryCorePlugin = {
   register(api: BuilderForceAgentsPluginApi) {
     api.registerTool(
       (ctx) => {
-        const memorySearchTool = api.runtime.tools.createMemorySearchTool({
+        const options = {
           config: ctx.config,
           agentSessionKey: ctx.sessionKey,
-        });
-        const memoryGetTool = api.runtime.tools.createMemoryGetTool({
-          config: ctx.config,
-          agentSessionKey: ctx.sessionKey,
-        });
+          workspaceReferences: true,
+        };
+        const memorySearchTool = api.runtime.tools.createMemorySearchTool(options);
+        const memoryGetTool = api.runtime.tools.createMemoryGetTool(options);
         if (!memorySearchTool || !memoryGetTool) {
           return null;
         }

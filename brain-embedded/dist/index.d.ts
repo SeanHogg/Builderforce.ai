@@ -5254,6 +5254,8 @@ interface RelayToolEntry {
     extensionId: string;
     tool: string;
     name: string;
+    /** Previous REST spelling when a caller requests canonical catalog names. */
+    legacyName?: string;
     description: string;
     parameters: Record<string, unknown>;
     mutates?: boolean;

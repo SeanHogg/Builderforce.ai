@@ -34,10 +34,11 @@ interface SearchInput {
 }
 
 const MAX_SNIPPET_CHARS = 4_000;
-const MAX_CODE_CHUNKS = 20_000;
 const MAX_WARM_ROOTS = 4;
 const WATCH_REFRESH_MS = 60_000;
 const limits = DEFAULT_REPO_MAP_LIMITS;
+const workspaceBudget = { ...limits, maxChunks: 20_000 };
+export const codeIndexBenchmarkBudget = { ...limits, maxFiles: 25_000, maxTotalBytes: 192 * 1024 ** 2, maxChunks: 200_000 };
 const parsers = new Map<string | undefined, ReturnType<typeof treeSitterSymbolExtractor>>();
 const pending = new Map<string, Promise<CodeSnapshot | undefined | null>>();
 const warm = new Map<string, WarmCodeSnapshot>();
@@ -108,7 +109,7 @@ function load(snapshot: StoredCodeIndex | undefined, embedder: EmbedderPort | un
   }
 }
 
-async function refresh(input: SearchInput, root: string, old?: StoredCodeIndex) {
+async function refresh(input: Omit<SearchInput, "query" | "limit">, root: string, old?: StoredCodeIndex, budget = workspaceBudget) {
   const fingerprint = embedderId(input.embedder);
   const stored = load(old, undefined);
   const index = stored ?? createKnowledgeIndex();
@@ -134,12 +135,12 @@ async function refresh(input: SearchInput, root: string, old?: StoredCodeIndex) 
   const newDocs: IndexDoc[] = [];
   let bytes = 0;
   let chunkCount = 0;
-  let partial = "truncated" in listing && listing.truncated === true || paths.length > limits.maxFiles;
+  let partial = "truncated" in listing && listing.truncated === true || paths.length > budget.maxFiles;
   let changed = !stored;
-  for (const path of paths.slice(0, limits.maxFiles)) {
+  for (const path of paths.slice(0, budget.maxFiles)) {
     const source = await sourceFile(root, path).catch(() => undefined);
     if (!source) { partial = true; continue; }
-    if (bytes + source.size > limits.maxTotalBytes) { partial = true; break; }
+    if (bytes + source.size > budget.maxTotalBytes) { partial = true; break; }
     bytes += source.size;
     const previous = before.get(path);
     let record = previous;
@@ -156,7 +157,7 @@ async function refresh(input: SearchInput, root: string, old?: StoredCodeIndex) 
         record = { path, stamp: source.stamp, hash, chunks };
       }
     }
-    if (chunkCount + record.chunks.length > MAX_CODE_CHUNKS) { partial = true; break; }
+    if (chunkCount + record.chunks.length > budget.maxChunks) { partial = true; break; }
     chunkCount += record.chunks.length;
     if (lines) {
       if (previous) index.remove(previous.chunks.map((chunk) => chunkId(previous, chunk)));
@@ -284,7 +285,26 @@ export async function searchWorkspaceCodeIndex(input: SearchInput): Promise<Sema
   if (stored === null) return { ok: true, query: input.query, results: [], total: 0, indexing: true };
   // A scoped search builds its candidate set from the scope before ranking, so
   // global matches cannot crowd out an in-scope hit. It never replaces the root snapshot.
-  const { snapshot, active: prepared } = stored ?? await refresh(input, root);
+  return searchSnapshot(input, root, stored ?? await refresh(input, root));
+}
+
+/** Build a larger in-memory snapshot for matched-corpus comparisons. Never use the shared workspace cache. */
+export async function benchmarkWorkspaceCodeIndex(input: Omit<SearchInput, "query" | "limit">) {
+  const root = await realpath(input.root);
+  const prepared = await refresh(input, root, undefined, codeIndexBenchmarkBudget);
+  return {
+    paths: prepared.snapshot.records.map((record) => record.path),
+    chunks: prepared.snapshot.records.reduce((sum, record) => sum + record.chunks.length, 0),
+    partial: prepared.snapshot.partial,
+    search(query: string, limit: number) {
+      return searchSnapshot({ ...input, query, limit }, root, prepared);
+    },
+  };
+}
+
+async function searchSnapshot(
+  input: SearchInput, root: string, { snapshot, active: prepared }: CodeSnapshot,
+): Promise<SemanticSearchResult & { indexedFiles?: number }> {
   const active = prepared ?? load(snapshot, snapshot.fingerprint === embedderId(input.embedder) ? input.embedder : undefined);
   if (!active) throw new Error("The workspace code index could not be read");
   const hits = await active.search(input.query, {
