@@ -23,6 +23,7 @@
  */
 import type { Context } from 'hono';
 import type { Env, HonoEnv } from '../../../env';
+import { getClientIp } from '../../middleware/requestClaims';
 import { RequestValidationError } from '../../../domain/shared/errors';
 import { sha256Hex } from '../../../domain/shared/hash';
 import { GUEST_CHAT_LIMITS } from '../../../domain/tenant/PlanLimits';
@@ -76,7 +77,7 @@ export async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   }
   const body: ChatCompletionRequest = { ...parsed, messages: parsed.messages };
 
-  const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
+  const ip = getClientIp(c);
   const guest = new GuestChatService(requestDb(c));
   const metadata = (body as unknown as { metadata?: Record<string, unknown> }).metadata;
   const suppliedTurnId = typeof metadata?.guestTurnId === 'string' && /^[A-Za-z0-9:_-]{1,128}$/.test(metadata.guestTurnId)

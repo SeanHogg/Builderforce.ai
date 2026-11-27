@@ -12,7 +12,8 @@
  * a hidden directory is out except `.github`). ripgrep therefore runs with `--hidden` plus the
  * matching exclude globs, and every match is post-filtered through `isIndexedDirName` on each
  * directory segment below the search target. Both backends use the shared size cap and directory
- * policy, including for files that a Git ignore file would hide.
+ * policy, and both honour Git ignore files (ripgrep natively, the scan via `gitIgnoredMatcher`), so
+ * a gitignored file is never returned.
  *
  * Every path returned is repo-relative, POSIX-separated, and the same shape whichever backend
  * produced it. Host-neutral: Node `child_process` plus a root path. Locating the ripgrep binary,
@@ -232,7 +233,8 @@ function spawnRipgrepSearch(root: string, start: string, query: string, ripgrep:
     // the neutral scan always agree on what a query matches.
     "--json", smartCaseSensitive(query) ? "--case-sensitive" : "--ignore-case", "--max-columns", "400", "--max-filesize", String(SCAN_MAX_FILE_BYTES),
     // ONE file policy with the scan: hidden entries are walked (a `.github` tree and dotfiles are source), then the policy excludes.
-    "--hidden", "--no-ignore",
+    // Ignore files stay honoured (no `--no-ignore`): a gitignored `.env` or `*.local.md` must never reach the model.
+    "--hidden",
     ...policyGlobs(target),
     // The JS engine's escaping rule, expressed as ripgrep's own flag: a query that is not
     // a regex is a literal, never a refused search.

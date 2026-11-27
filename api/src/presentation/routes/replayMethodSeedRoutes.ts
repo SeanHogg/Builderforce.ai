@@ -15,6 +15,7 @@ import { seedMethodFunnel } from '../../application/replay/replayMethodFunnel';
 import { isReplaySiteId } from '../../domain/replay/replayScope';
 import { ValidationError } from '../../domain/shared/errors';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
+import { getClientIp } from '../middleware/requestClaims';
 
 export function createReplayMethodSeedRoutes(db: DbHandle): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -26,7 +27,7 @@ export function createReplayMethodSeedRoutes(db: DbHandle): Hono<HonoEnv> {
     const result = await seedMethodFunnel(db, c.env as Env, {
       siteId,
       actorId: c.get('userId') as string,
-      ipAddress: c.req.header('cf-connecting-ip') ?? null,
+      ipAddress: getClientIp(c),
     });
     return c.json(result, result.createdFunnel || result.createdSmartEvents.length > 0 ? 201 : 200);
   });

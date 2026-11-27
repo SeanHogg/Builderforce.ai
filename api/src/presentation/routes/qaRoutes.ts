@@ -1,4 +1,5 @@
 import { statusResponse } from '../middleware/errorResponse';
+import { getClientIp } from '../middleware/requestClaims';
 import { integrationCredentialSecret } from '../../application/integrations/integrationCredentialSecret';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 /**
@@ -827,7 +828,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     await writeAdminAudit(db, 'QA_CREDENTIAL_SECRET_VIEWED', userId ?? null, {
       tenantId,
       metadata:  { credentialId: cred.id },
-      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+      ipAddress: getClientIp(c),
     });
     return c.json({
       id: cred.id,

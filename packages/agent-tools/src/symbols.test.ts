@@ -148,6 +148,12 @@ describe("container: the type a member belongs to", () => {
     expect(owner("x.ts", src)).toEqual({ "A@1": null, "run@2": "A", "B@5": null, "run@6": "B" });
   });
 
+  it("regression: an interface's members are found by the first member's indent, not by a nested literal's", () => {
+    const src = "interface Foo {\n  opts: {\n    bar: string;\n  };\n  baz: number;\n}\n";
+    const members = extractSymbols("x.ts", src).filter((s) => s.container === "Foo").map((s) => s.name);
+    expect(members).toEqual(["opts", "baz"]);
+  });
+
   // regression: hired.video (2026-11-10) — a method whose parameter list breaks after `(` was no method at all, so the
   // method band and the sequence diagram lost it (one in four repository methods there).
   it("maps a JS method whose parameters sit on the lines below its name, and not a call statement shaped like one", () => {

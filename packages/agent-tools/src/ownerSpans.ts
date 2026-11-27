@@ -56,7 +56,7 @@ export function ownerSpans(code: readonly string[], symbols: readonly CodeSymbol
       const startDepth = depth;
       const line = code[l]!;
       if (method < 0 && startDepth === 1) {
-        const m = (symbolAtLine.get(l) ?? []).find((i) => symbols[i]!.container === s.name);
+        const m = (symbolAtLine.get(l) ?? []).find((i) => symbols[i]!.container === s.name && symbols[i]!.kind !== "field");
         if (m !== undefined) { method = m; opened = false; paren = 0; } else if (l !== s.line - 1 && paren <= 0) fields.push(l);
       }
       if (startDepth === 1) paren += parens(line);

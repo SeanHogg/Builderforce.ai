@@ -38,6 +38,7 @@
 import { Hono, type Context, type Next } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { optionalTenantId } from '../middleware/tenantContext';
+import { getClientIp } from '../middleware/requestClaims';
 import type { Env, HonoEnv } from '../../env';
 import { consumeGuestAllowance } from '../../application/guest/guestDailyCounter';
 import { guestIdentityFromRequest } from '../../application/guest/guestToken';
@@ -176,7 +177,7 @@ function fileResponse(bytes: Uint8Array, filename: string, contentType: string):
 async function exportAccess(c: Context<HonoEnv>, next: Next): Promise<Response | void> {
   const guest = await guestIdentityFromRequest(c.req.raw, c.env.JWT_SECRET);
   if (!guest) return authMiddleware(c, next);
-  const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
+  const ip = getClientIp(c);
   const allowance = await consumeGuestAllowance(c.env as Env, 'guestexport', guest.visitorId, ip, {
     visitorDailyLimit: GUEST_EXPORT_LIMITS.exportsDailyLimit,
     ipDailyLimit: GUEST_EXPORT_LIMITS.ipExportsDailyLimit,

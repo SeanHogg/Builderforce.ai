@@ -3,6 +3,7 @@ import { isTenantRole } from '../../domain/shared/types';
 import { resolveImpersonationRole } from '../../application/admin/impersonationRole';
 import { IMPERSONATION_TTL_SECONDS, startImpersonation } from '../../application/admin/impersonationStart';
 import { legacyAliasNotice } from '../middleware/legacyAlias';
+import { getClientIp, getUserAgent } from '../middleware/requestClaims';
 import { invalidateEmulationSession } from '../../application/admin/emulationSessions';
 import { failResponse, statusResponse } from '../middleware/errorResponse';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
@@ -371,9 +372,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         instruction: body.instruction,
         title: body.title,
         userId: actorUserId,
-        requestIp: c.req.header('cf-connecting-ip') ?? null,
+        requestIp: getClientIp(c),
         origin: c.req.header('Origin') ?? null,
-        userAgent: c.req.header('User-Agent') ?? null,
+        userAgent: getUserAgent(c),
       });
       return c.json({ content });
     } catch (e) {
@@ -1321,7 +1322,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await writeAudit(db, 'TOKEN_LIMIT_OVERRIDE_CHANGED', c.get('userId') as string, {
       tenantId,
       metadata: { from: before?.prev ?? null, to: updated.tokenDailyLimitOverride },
-      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+      ipAddress: getClientIp(c),
     }).catch((error) => {
       reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
     });
@@ -1368,7 +1369,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await writeAudit(db, 'PAID_OVERFLOW_CAP_CHANGED', c.get('userId') as string, {
       tenantId,
       metadata: { from: before?.prev ?? null, to: updated.paidOverflowDailyCap },
-      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+      ipAddress: getClientIp(c),
     }).catch((error) => {
       reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
     });
@@ -1417,7 +1418,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await writeAudit(db, 'PREMIUM_CAP_CHANGED', c.get('userId') as string, {
       tenantId,
       metadata: { from: before?.prev ?? null, to: updated.premiumDailyCap },
-      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+      ipAddress: getClientIp(c),
     }).catch((error) => {
       reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
     });
@@ -1462,7 +1463,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await writeAudit(db, 'IMAGE_CREDITS_LIMIT_CHANGED', c.get('userId') as string, {
       tenantId,
       metadata: { from: before?.prev ?? null, to: updated.imageCreditsDailyLimit },
-      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+      ipAddress: getClientIp(c),
     }).catch((error) => {
       reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
     });
@@ -1500,7 +1501,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await writeAudit(db, 'PREMIUM_OVERRIDE_CHANGED', c.get('userId') as string, {
       tenantId,
       metadata: { from: before?.prev ?? null, to: updated.premiumOverride },
-      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+      ipAddress: getClientIp(c),
     }).catch((error) => {
       reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
     });
@@ -1573,7 +1574,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (body.action === 'purge_expired') {
       await runRetentionPurge(c.env as Env);
       await writeAdminAudit(requestDb(c), 'SYSTEM_HEALTH_PURGE_EXPIRED', actorId ?? null, {
-        metadata: { target: 'both', retentionPolicy: true }, ipAddress: c.req.header('cf-connecting-ip') ?? null,
+        metadata: { target: 'both', retentionPolicy: true }, ipAddress: getClientIp(c),
       });
       return c.json({ ok: true, action: body.action });
     }
@@ -1592,7 +1593,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       return failResponse(c, new InternalError('VACUUM failed', { cause: error }), { source: 'presentation/routes/adminRoutes.ts', operation: 'vacuumAnalyze' });
     }
     await writeAdminAudit(requestDb(c), 'SYSTEM_HEALTH_VACUUM_ANALYZE', actorId ?? null, {
-      metadata: { target: body.target, table: body.table ?? null }, ipAddress: c.req.header('cf-connecting-ip') ?? null,
+      metadata: { target: body.target, table: body.table ?? null }, ipAddress: getClientIp(c),
     });
     return c.json({ ok: true, action: body.action, target: body.target, table: body.table ?? null });
   });
@@ -1684,7 +1685,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     }
     await writeAdminAudit(requestDb(c), 'CRON_CONTROL_CHANGED', (c.get('userId') as string | undefined) ?? null, {
       metadata: { sweep: target, enabled: body.enabled },
-      ipAddress: c.req.header('cf-connecting-ip') ?? null,
+      ipAddress: getClientIp(c),
     });
     return c.json({ key: target, enabled: body.enabled });
   });
@@ -1705,7 +1706,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await signalPendingWork(env);
     const gate = await evaluateCronGate(env, Date.now());
     await writeAdminAudit(requestDb(c), 'CRON_SIGNAL_WORK', (c.get('userId') as string | undefined) ?? null, {
-      ipAddress: c.req.header('cf-connecting-ip') ?? null,
+      ipAddress: getClientIp(c),
     });
     return c.json({ ok: true, gate: { wouldRun: gate.run, reason: gate.reason } });
   });
@@ -1762,7 +1763,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         failed: results.filter((r) => !r.ok).map((r) => r.key),
         timedOut: results.filter((r) => r.timedOut).map((r) => r.key),
       },
-      ipAddress: c.req.header('cf-connecting-ip') ?? null,
+      ipAddress: getClientIp(c),
     });
     return c.json({
       target,
@@ -1891,8 +1892,8 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       tenantId:  body.tenantId ?? 0,
       role:      body.role,
       reason:    body.reason?.trim() || 'Legacy POST /api/admin/impersonate (no reason supplied)',
-      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
-      userAgent: c.req.header('User-Agent') ?? null,
+      ipAddress: getClientIp(c),
+      userAgent: getUserAgent(c),
     });
     if (!result.ok) {
       return c.json({ error: result.error, ...(result.sessionId ? { sessionId: result.sessionId } : {}) }, result.status);
@@ -2002,7 +2003,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await writeAudit(db, 'LLM_TRACE_VIEWED', c.get('userId') as string, {
       tenantId:  row.tenantId ?? null,
       metadata:  { traceId },
-      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+      ipAddress: getClientIp(c),
     });
 
     const parse = (v: string | null): unknown => {
@@ -2178,8 +2179,8 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       role:           body.role,
       reason:         body.reason ?? '',
       enableDebugger: body.enableDebugger ?? false,
-      ipAddress:      c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
-      userAgent:      c.req.header('User-Agent') ?? null,
+      ipAddress:      getClientIp(c),
+      userAgent:      getUserAgent(c),
     });
     if (!result.ok) {
       return c.json({ error: result.error, ...(result.sessionId ? { sessionId: result.sessionId } : {}) }, result.status);
@@ -2481,7 +2482,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
     await writeAudit(db, 'ROLE_PERMISSION_CHANGED', actorId, {
       metadata: { role, overrides: body.overrides },
-      ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+      ipAddress: getClientIp(c),
     });
 
     // The gate resolves this set from cache on every request — a matrix edit
@@ -2623,7 +2624,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await writeAudit(db, 'USER_SESSIONS_REVOKED', actorId, {
       targetUserId: targetId,
       metadata: { method: 'force_logout' },
-      ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+      ipAddress: getClientIp(c),
     });
     return c.json({ ok: true });
   });
@@ -2666,7 +2667,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await writeAudit(db, 'USER_PASSWORD_RESET_FORCED', actorId, {
       targetUserId: targetId,
       metadata: { email: user.email },
-      ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+      ipAddress: getClientIp(c),
     });
     return c.json({ ok: true, email: user.email });
   });
@@ -2688,7 +2689,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await writeAudit(db, 'USER_STATUS_CHANGED', actorId, {
       targetUserId: targetId,
       metadata: { suspended: body.suspended },
-      ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+      ipAddress: getClientIp(c),
     });
     return c.json({ ok: true });
   });
@@ -2723,7 +2724,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       targetUserId: targetId,
       tenantId,
       metadata: { overrides },
-      ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+      ipAddress: getClientIp(c),
     });
     return c.json({ ok: true });
   });
@@ -2739,7 +2740,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!isTenantRole(nextRole)) return c.json({ error: 'Invalid role' }, 400);
     // Same use case as the workspace manager's role change, in the platform-admin
     // scope: a cross-tenant override past the member rules, audited.
-    const result = await changeMemberRole(db, c.env as Env, { kind: 'platform_admin', ipAddress: c.req.header('CF-Connecting-IP') ?? null }, {
+    const result = await changeMemberRole(db, c.env as Env, { kind: 'platform_admin', ipAddress: getClientIp(c) }, {
       tenantId, actorUserId: actorId, targetUserId: userId, role: nextRole,
     });
     if (!result.ok) return c.json({ error: 'Member not found in tenant' }, 404);

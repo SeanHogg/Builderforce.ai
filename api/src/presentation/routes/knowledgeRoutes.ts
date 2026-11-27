@@ -16,6 +16,7 @@ import type { Context } from 'hono';
 import { and, eq, desc, inArray, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole, isManager } from '../middleware/authMiddleware';
 import { legacyAliasNotice } from '../middleware/legacyAlias';
+import { getClientIp, getUserAgent } from '../middleware/requestClaims';
 import { KNOWLEDGE_LISTINGS_PATH, browseListingsHandler } from './knowledgeMarketRoutes';
 import { TenantRole } from '../../domain/shared/types';
 import {
@@ -956,9 +957,9 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       userId,
       result,
       streamed: true,
-      requestIp: c.req.header('cf-connecting-ip') ?? null,
+      requestIp: getClientIp(c),
       origin: c.req.header('Origin') ?? null,
-      userAgent: c.req.header('User-Agent') ?? null,
+      userAgent: getUserAgent(c),
       requestBody: requestBody as unknown as Record<string, unknown>,
       responseBody: null,
       errorMessage: null,
@@ -1018,9 +1019,9 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       userId,
       result,
       streamed: false,
-      requestIp: c.req.header('cf-connecting-ip') ?? null,
+      requestIp: getClientIp(c),
       origin: c.req.header('Origin') ?? null,
-      userAgent: c.req.header('User-Agent') ?? null,
+      userAgent: getUserAgent(c),
       requestBody: analysisRequest,
       // The parsed envelope is already in hand — a non-streamed trace has no reason
       // to record a null body.

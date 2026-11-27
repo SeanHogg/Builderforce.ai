@@ -20,6 +20,7 @@ import { normalizeFeedback, FEEDBACK_KINDS } from '../../application/feedback/fe
 import { submitFeedback } from '../../application/feedback/feedbackEngine';
 import { collectorOriginAllowed, resolveCollectorByKey } from '../../application/feedback/feedbackCollectors';
 import { respondToFeedbackSubmit } from './feedbackHttp';
+import { getUserAgent } from '../middleware/requestClaims';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { parseBody, zJsonObject } from './requestBody';
@@ -64,7 +65,7 @@ export function createFeedbackIngestRoutes(db: Db): Hono<HonoEnv> {
     if (!normalized.ok) return c.json({ error: normalized.error }, 400);
 
     // The submitter's UA is more trustworthy from the header than the payload.
-    const value = { ...normalized.value, userAgent: c.req.header('User-Agent')?.slice(0, 1000) ?? normalized.value.userAgent };
+    const value = { ...normalized.value, userAgent: getUserAgent(c, 1000) ?? normalized.value.userAgent };
 
     // One shared renderer for every refusal: the collector's rolling-24h ceiling
     // and the tenant's monthly plan quota must read the same on every door.

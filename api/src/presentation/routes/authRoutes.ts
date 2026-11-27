@@ -241,8 +241,8 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
     // The evidence comes from the REQUEST, not the body: an IP and a user agent
     // the client can set are not evidence of anything.
     await recordAcceptance(db, c.env, userId, 'terms', terms.version, {
-      ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
-      userAgent: (c.req.header('user-agent') ?? '').slice(0, 500) || null,
+      ipAddress: getClientIp(c),
+      userAgent: getUserAgent(c, 500),
     });
 
     return c.json({

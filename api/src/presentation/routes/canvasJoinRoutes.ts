@@ -34,6 +34,7 @@
 
 import { Hono, type Context } from 'hono';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
+import { getUserAgent } from '../middleware/requestClaims';
 import { parseBody, z } from './requestBody';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
@@ -112,7 +113,7 @@ export function createCanvasJoinRoutes(db: Db): Hono<HonoEnv> {
     const guest = outcome.result.guest;
     if (!guest) return dead(c);
     const token = await issueGuestSession(db, (c.env as Env).JWT_SECRET, guest, {
-      userAgent: c.req.header('user-agent') ?? null,
+      userAgent: getUserAgent(c),
     });
     return c.json({
       ...claimResponse(outcome.result),

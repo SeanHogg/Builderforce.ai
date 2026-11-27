@@ -89,8 +89,8 @@ describe('the gate row and the evidence row are written together', () => {
   it('takes evidence from the request, never from the request body', () => {
     const at = authRoutes.indexOf("router.post('/legal/terms/accept'");
     const endpoint = authRoutes.slice(at, at + 2000);
-    expect(endpoint).toContain("c.req.header('cf-connecting-ip')");
-    expect(endpoint).toContain("c.req.header('user-agent')");
+    expect(endpoint).toContain('getClientIp(c)');
+    expect(endpoint).toContain('getUserAgent(c, 500)');
   });
 });
 

@@ -54,9 +54,11 @@ export async function writeFrameFile(path: string, frames: AsyncIterable<Uint8Ar
  * Replace `target` with `text` atomically: a unique sibling temp is written, fsynced, renamed over
  * (`renameDurably`) and removed again on any failure, so a reader never sees half a file. For a
  * plain whole-file write; lock files and exclusive creates have their own semantics.
+ * `temporaryBase` names the file the temp is a sibling of (default `target`): a caller whose
+ * target is not matched by orphan cleanup passes the journal path so a crashed temp is swept.
  */
-export async function writeFileAtomically(target: string, text: string): Promise<void> {
-  const temporary = temporaryPathFor(target);
+export async function writeFileAtomically(target: string, text: string, temporaryBase: string = target): Promise<void> {
+  const temporary = temporaryPathFor(temporaryBase);
   try {
     const handle = await fs.open(temporary, "wx");
     try {

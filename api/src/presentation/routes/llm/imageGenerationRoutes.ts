@@ -6,6 +6,7 @@
  */
 import type { Hono } from 'hono';
 import type { HonoEnv } from '../../../env';
+import { getClientIp, getUserAgent } from '../../middleware/requestClaims';
 import { RequestValidationError } from '../../../domain/shared/errors';
 import { ImageGenerationBody, gatewayRefusalBody, parseGatewayBody } from '../llmRoutes.schemas';
 import { newTraceId } from '../../../application/llm/LlmProxyService';
@@ -116,9 +117,9 @@ export function mountImageGenerationRoutes(router: Hono<HonoEnv>): void {
       usage: { promptTokens: 0, completionTokens: 0, totalTokens: billedTokens },
       streamed: false, useCase: callerUseCase, idempotencyKey,
       consumerRequestId: c.req.header('x-request-id') ?? c.req.header('x-correlation-id') ?? null,
-      requestIp: c.req.header('cf-connecting-ip') ?? null,
+      requestIp: getClientIp(c),
       origin: c.req.header('Origin') ?? null,
-      userAgent: c.req.header('User-Agent') ?? null,
+      userAgent: getUserAgent(c),
       requestBody: body as unknown as Record<string, unknown>,
       callerMetadata,
       // The image DATA urls/base64 are deliberately NOT stored: they are megabytes

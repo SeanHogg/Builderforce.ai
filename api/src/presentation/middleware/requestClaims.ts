@@ -13,10 +13,10 @@ export function getClientIp(c: Context<HonoEnv>): string | null {
   return xff.split(',')[0]?.trim() ?? null;
 }
 
-/** The request's User-Agent, capped at the column width. */
-export function getUserAgent(c: Context<HonoEnv>): string | null {
+/** The request's User-Agent, capped at `max` (default 1024; pass a table's own column width when narrower). */
+export function getUserAgent(c: Context<HonoEnv>, max = 1024): string | null {
   const ua = c.req.header('User-Agent');
-  return ua ? ua.slice(0, 1024) : null;
+  return ua ? ua.slice(0, max) : null;
 }
 
 /**

@@ -32,10 +32,10 @@ const NOTHING_IGNORED: GitIgnoredMatcher = () => false;
 const GIT_TIMEOUT_MS = 15_000;
 
 /** Run git in `cwd`; resolves stdout on exit 0, or null on any failure (not a repo, no git, timeout). */
-function runGit(cwd: string, args: readonly string[], input?: string, okCodes: readonly number[] = [0]): Promise<string | null> {
+function runGit(cwd: string, args: readonly string[], input?: string, okCodes: readonly number[] = [0], signal?: AbortSignal): Promise<string | null> {
   return new Promise((resolve) => {
-    // A missing `git` binary or cwd arrives as the 'error' event, not a throw.
-    const child = spawn("git", args, { cwd, windowsHide: true, timeout: GIT_TIMEOUT_MS });
+    // A missing `git` binary or cwd arrives as the 'error' event, not a throw (so does an abort via `signal`).
+    const child = spawn("git", args, { cwd, windowsHide: true, timeout: GIT_TIMEOUT_MS, ...(signal ? { signal } : {}) });
     const chunks: Buffer[] = [];
     child.stdout.on("data", (c: Buffer) => chunks.push(c));
     child.stderr.resume();
@@ -55,8 +55,8 @@ function splitNul(out: string): string[] {
  * paths. Wholly-ignored directories come back collapsed (`dist/`), so a path is ignored
  * when it, or any ancestor directory, is in the set.
  */
-export async function gitIgnoredMatcher(root: string): Promise<GitIgnoredMatcher> {
-  const out = await runGit(root, ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"]);
+export async function gitIgnoredMatcher(root: string, signal?: AbortSignal): Promise<GitIgnoredMatcher> {
+  const out = await runGit(root, ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"], undefined, [0], signal);
   if (out === null) return NOTHING_IGNORED;
   const ignored = new Set(splitNul(out));
   if (ignored.size === 0) return NOTHING_IGNORED;

@@ -141,6 +141,13 @@ export function runWorkspaceConformance(
         expect(await repoRead.readFile("/etc/passwd")).toMatchObject({ ok: false, code: "not_found" });
         expect(await repoRead.readFile("/src/a.ts")).toMatchObject({ ok: true, content: "const a = 1;\n" });
       });
+
+      it("refuses a drive-letter path and a leading-slash traversal with code outside_root", async () => {
+        const { repoRead } = caps();
+        for (const p of ["C:/x", "C:x", "/../etc/passwd"]) {
+          expect(await repoRead.readFile(p), p).toMatchObject({ ok: false, code: "outside_root" });
+        }
+      });
     }
 
     it("a not_found read and edit name the relative path", async () => {

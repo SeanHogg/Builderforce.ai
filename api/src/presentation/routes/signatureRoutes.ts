@@ -16,6 +16,7 @@
 import { Hono, type Context } from 'hono';
 import { downloadResponse } from '../../application/export/exportDownload';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { getClientIp, getUserAgent } from '../middleware/requestClaims';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { sha256Hex } from '../../domain/shared/hash';
@@ -170,9 +171,9 @@ export function createPublicSignatureRoutes(db: Db): Hono<HonoEnv> {
       ...(typeof body.signedName === 'string' ? { signedName: body.signedName } : {}),
       ...(typeof body.declineReason === 'string' ? { declineReason: body.declineReason } : {}),
       evidence: {
-        userAgent: (c.req.header('user-agent') ?? '').slice(0, 300),
+        userAgent: getUserAgent(c, 300) ?? '',
         // Hashed, never stored. See the module note.
-        addressHash: await sha256Hex(c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? 'unknown'),
+        addressHash: await sha256Hex(getClientIp(c) ?? 'unknown'),
       },
     });
     return Response.json(result);

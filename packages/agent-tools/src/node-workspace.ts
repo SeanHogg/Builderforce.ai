@@ -78,7 +78,8 @@ export async function searchWorkspace(opts: WorkspaceSearchOptions): Promise<Rep
   // A file scope searches that file (the old directory walk threw on it and reported "not referenced").
   const fs = nodeWorkspaceFs(resolve(root));
   // ripgrep honours .gitignore; the scan must too (one matcher per search, not per file).
-  const isIgnored = await gitIgnoredMatcher(resolve(root));
+  // A single-file target never consults it, so the `git ls-files` run is skipped; Stop cancels it otherwise.
+  const isIgnored = info.isFile() ? () => false : await gitIgnoredMatcher(resolve(root), opts.signal);
   const scanned = await scanFiles({
     ...fs,
     async read(path, readOptions) {

@@ -123,7 +123,8 @@ export function createDemoRoutes(): Hono<HonoEnv> {
       await mintTenantSessionToken(db, c.env.JWT_SECRET, {
         userId: target.userId,
         tenantId: target.tenantId,
-        ...claims,
+        userAgent: claims.userAgent,
+        ipAddress: claims.ipAddress,
         expiresIn: DEMO_SESSION_TTL_SECONDS,
       }),
     ];

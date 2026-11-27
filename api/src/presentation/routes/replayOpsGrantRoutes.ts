@@ -29,6 +29,7 @@ import {
   updateReplayTenantSettings,
 } from '../../application/replay/replayTenantSettings';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
+import { getClientIp } from '../middleware/requestClaims';
 import { parseBody, z } from './requestBody';
 import { positiveIntParam } from './queryParams';
 
@@ -63,7 +64,7 @@ export function createReplayOpsGrantRoutes(db: DbHandle): Hono<HonoEnv> {
       tenantId: body.tenantId,
       units: body.units,
       reason: body.reason,
-      ipAddress: c.req.header('cf-connecting-ip') ?? null,
+      ipAddress: getClientIp(c),
     });
     return c.json(result, 201);
   });
@@ -79,7 +80,7 @@ export function createReplayOpsGrantRoutes(db: DbHandle): Hono<HonoEnv> {
       actorId: c.get('userId') as string,
       tenantId,
       patch,
-      ipAddress: c.req.header('cf-connecting-ip') ?? null,
+      ipAddress: getClientIp(c),
     });
     return c.json(settings);
   });

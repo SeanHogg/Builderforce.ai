@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { Env, HonoEnv } from '../../env';
+import { getClientIp } from '../middleware/requestClaims';
 import type { Db } from '../../infrastructure/database/connection';
 import { recordVisitorEvents } from '../../application/marketing/VisitorEventService';
 import { RequestValidationError } from '../../domain/shared/errors';
@@ -60,7 +61,7 @@ export function createVisitorRoutes(db: Db): Hono<HonoEnv> {
 
     const result = await recordVisitorEvents(db, c.env as Env, {
       visitorId: body.visitorId,
-      ip: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+      ip: getClientIp(c),
       events: body.events,
     });
 

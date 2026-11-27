@@ -142,10 +142,10 @@ const JS_METHOD = new RegExp(
 const JS_ABSTRACT_METHOD = new RegExp(
   `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`,
 );
-/** Interface members are signatures; their lines have no body brace. */
+/** Interface members are signatures; their lines have no body brace. A field typed by a multi-line literal (`opts: {`) opens a brace and is still a field. */
 const JS_INTERFACE_METHOD = new RegExp(`^(?:\\t|  |    )(${ID})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`);
 const JS_FIELD = new RegExp(
-  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|declare)\\s+)*(#?${ID})[!?]?\\s*(?::|=(?!=))[^;]*;\\s*$`,
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|declare)\\s+)*(#?${ID})[!?]?\\s*(?:(?::|=(?!=))[^;]*;|:[^;{]*\\{)\\s*$`,
 );
 /** A member whose parameter list opens a multi-line signature: `  async find(` with the parameters on the lines below. */
 const JS_METHOD_OPEN = new RegExp(
@@ -197,19 +197,20 @@ function extractJs(lines: string[], out: CodeSymbol[], path = ""): void {
       if (owner) out.push(owner);
       return;
     }
+    if (/^\s*$/.test(line)) return;
     const indent = /^\s*/.exec(line)?.[0] ?? "";
-    if (memberIndent !== undefined && indent !== memberIndent) return;
+    // The body's member indent is the first non-blank line after the opener (a nested type literal's members sit deeper).
+    memberIndent ??= indent;
+    if (indent !== memberIndent) return;
     const open = JS_METHOD_OPEN.exec(line);
     const method = isInterface ? JS_INTERFACE_METHOD.exec(line)
       : JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line) ?? (open && closesWithBody(lines, lineNo - 1) ? open : null);
     const name = method ? group(method, 1) : "";
     if (name && !JS_KEYWORDS.has(name)) {
-      memberIndent ??= indent;
       out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
     } else {
       const field = JS_FIELD.exec(line);
       if (field && !JS_KEYWORDS.has(group(field, 1))) {
-        memberIndent ??= indent;
         out.push({ name: group(field, 1), kind: "field", line: lineNo, exported: false, container: cls });
       }
     }

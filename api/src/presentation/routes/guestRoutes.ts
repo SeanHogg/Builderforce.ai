@@ -1,6 +1,7 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { Hono, type Context } from 'hono';
 import type { Env, HonoEnv } from '../../env';
+import { getClientIp } from '../middleware/requestClaims';
 import { isValidVisitorId, type MarketingTouch } from '../../application/marketing/MarketingService';
 import { GuestChatService } from '../../application/guest/GuestChatService';
 import {
@@ -151,7 +152,7 @@ export function createGuestRoutes(
     }));
 
     const token = await signGuestToken(visitorId, c.env.JWT_SECRET, GUEST_TOKEN_TTL_SECONDS);
-    const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
+    const ip = getClientIp(c);
     const cap = await guest.checkCap(c.env as Env, visitorId, ip);
 
     return c.json({
@@ -168,7 +169,7 @@ export function createGuestRoutes(
   router.get('/usage/:visitorId', async (c) => {
     const visitorId = c.req.param('visitorId');
     if (!isValidVisitorId(visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
-    const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
+    const ip = getClientIp(c);
     const cap = await guest.checkCap(c.env as Env, visitorId, ip);
     return c.json({
       remaining: cap.remaining,
@@ -210,7 +211,7 @@ export function createGuestRoutes(
       sessionRef: body.sessionRef,
       visitId: body.visitId,
       mode: body.mode,
-      ip: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+      ip: getClientIp(c),
     });
 
     // 202 for every outcome including the refusals: this is telemetry riding
@@ -279,7 +280,7 @@ export function createGuestRoutes(
     }
     const auth = await authenticate(c);
     if (!auth) return c.json({ error: 'A guest session is required.', code: 'guest_forbidden' }, 401);
-    const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
+    const ip = getClientIp(c);
     const cap = await consumeGuestResearchCall(c.env as Env, auth.visitorId, ip);
     if (!cap.allowed) {
       // 429, and `terminal` so the canvas stops retrying: like the chat cap, a guest

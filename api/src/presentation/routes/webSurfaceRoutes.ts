@@ -43,6 +43,7 @@
 import { Hono } from 'hono';
 import { reportedFallback } from '../../application/observability/caughtErrorReporter';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { getClientIp } from '../middleware/requestClaims';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -401,7 +402,7 @@ export function createPublicWebSurfaceRoutes(db: Db): Hono<HonoEnv> {
     // `text/plain` sendBeacon body (no CORS preflight) parses the same as application/json.
     const body = await parseOptionalBody(c, SeoImpressionBody);
     if (!body.path) return new Response(null, { status: 204 }); // nothing to count: spend no limiter call
-    const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? 'unknown';
+    const ip = getClientIp(c) ?? 'unknown';
     const verdict = await checkSlidingWindow(
       c.env as Env, `seo-impression:${ip}`, SEO_IMPRESSION_RPM,
     ).catch(reportedFallback(null, { source: 'presentation/routes/webSurfaceRoutes.ts', operation: 'seoImpressionLimiter' })); // fail open, like every other caller of the limiter

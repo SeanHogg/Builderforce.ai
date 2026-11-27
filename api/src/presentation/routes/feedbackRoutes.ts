@@ -23,6 +23,7 @@
 
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { getUserAgent } from '../middleware/requestClaims';
 import { normalizeFeedback } from '../../application/feedback/feedbackSpec';
 import { listFeedbackProviders } from '../../application/feedback/feedbackProviders';
 import { submitFeedback, reviewFeedbackSubmission } from '../../application/feedback/feedbackEngine';
@@ -200,7 +201,7 @@ export function createFeedbackRoutes(db: Db): Hono<HonoEnv> {
       db,
       c.env as Env,
       await inAppTarget(db, tenantId, body.projectId),
-      { ...normalized.value, userAgent: c.req.header('User-Agent')?.slice(0, 1000) ?? null },
+      { ...normalized.value, userAgent: getUserAgent(c, 1000) },
       { userId },
     );
     return respondToFeedbackSubmit(c, result, 201);

@@ -8,6 +8,7 @@
  */
 import type { Hono } from 'hono';
 import type { HonoEnv } from '../../../env';
+import { getClientIp, getUserAgent } from '../../middleware/requestClaims';
 import { RequestValidationError } from '../../../domain/shared/errors';
 import { getLimits } from '../../../domain/tenant/PlanLimits';
 import { reportCaughtError } from '../../../application/observability/caughtErrorReporter';
@@ -176,9 +177,9 @@ export function mountChatCompletionsRoutes(router: Hono<HonoEnv>): void {
 
     const traceId = newTraceId();
     const consumerRequestId = c.req.header('x-request-id') ?? c.req.header('x-correlation-id') ?? null;
-    const requestIp = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
+    const requestIp = getClientIp(c);
     const reqOrigin = c.req.header('Origin') ?? null;
-    const reqUserAgent = c.req.header('User-Agent') ?? null;
+    const reqUserAgent = getUserAgent(c);
 
     // Close the funded overflow path once the tenant has hit its daily overflow
     // $ cap — the primary pool still runs, only the paid fallback/backstop is

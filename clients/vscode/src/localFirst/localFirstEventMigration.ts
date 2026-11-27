@@ -27,7 +27,7 @@ import {
   type LocalFirstDelta,
   type LocalFirstSnapshot,
 } from "@builderforce/local-first";
-import { renameDurably, temporaryPathFor, writeWhole } from "./localFirstAtomicFile";
+import { renameDurably, temporaryPathFor, writeFileAtomically } from "./localFirstAtomicFile";
 import { yieldToEventLoop } from "./localFirstJournalIo";
 
 const fs = nodeFs.promises;
@@ -160,18 +160,5 @@ async function copyDurably(journalFile: string, from: string, to: string): Promi
 
 /** Write `text` to `to` the same way: temp, fsync, durable rename. */
 async function writeDurably(journalFile: string, to: string, text: string): Promise<void> {
-  const temporary = temporaryPathFor(journalFile);
-  try {
-    const handle = await fs.open(temporary, "wx");
-    try {
-      await writeWhole(handle, new TextEncoder().encode(text), 0);
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-    await renameDurably(temporary, to);
-  } catch (error) {
-    await fs.rm(temporary, { force: true });
-    throw error;
-  }
+  await writeFileAtomically(to, text, journalFile);
 }

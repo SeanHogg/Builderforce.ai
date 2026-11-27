@@ -148,7 +148,9 @@ export function createRepoCapabilities(fs: WorkspaceFs, opts: RepoCapabilityOpti
   /**
    * The path the adapter sees (root-relative POSIX, no leading "./"), or the refusal. The path is
    * normalised ONCE; the containment check runs on exactly the string handed to the adapter.
-   * Absolute paths are only accepted if the adapter maps them inside its root.
+   * Absolute paths: an adapter WITH `toRelative` (a host disk) treats them as host paths and maps
+   * them, refusing any that land outside its root. An adapter WITHOUT `toRelative` treats a leading
+   * "/" as repo-rooted ("/src/a.ts" is "src/a.ts"); a drive-letter path is outside the root.
    * `unconfined` skips containment.
    */
   const resolvePath = (raw: string | undefined, asDir = false): Resolved => {
@@ -156,9 +158,16 @@ export function createRepoCapabilities(fs: WorkspaceFs, opts: RepoCapabilityOpti
     const refuse = (): Resolved => ({ bad: { ok: false, error: `'${raw ?? ""}' is outside the workspace`, code: "outside_root" } });
     if (!opts.unconfined) {
       if (isAbsolutePath(p)) {
-        const inside = fs.toRelative?.(p);
-        if (inside === undefined) return refuse();
-        p = normalisePath(inside);
+        if (fs.toRelative) {
+          const inside = fs.toRelative(p);
+          if (inside === undefined) return refuse();
+          p = normalisePath(inside);
+        } else {
+          // Deliberate, pinned by the conformance suite: cloud agents routinely send "/src/x" and the
+          // old cloud providers stripped the slash. Drive-letter paths are never repo-rooted.
+          if (/^[a-zA-Z]:/.test(p)) return refuse();
+          p = normalisePath(p.replace(/^\/+/, ""));
+        }
       }
       if (escapesRoot(p)) return refuse();
     }

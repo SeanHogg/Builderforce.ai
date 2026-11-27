@@ -19,6 +19,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { optionalTenantId } from '../middleware/tenantContext';
+import { getClientIp, getUserAgent } from '../middleware/requestClaims';
 import { TenantRole } from '../../domain/shared/types';
 import { mayWriteProjectFiles } from '../../application/ide/projectWriteAuthority';
 import { invalidateCached, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
@@ -986,9 +987,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
               tenantId: optionalTenantId(c),
               userId: c.get('userId') ?? null,
               result: traced, streamed: false,
-              requestIp: c.req.header('cf-connecting-ip') ?? null,
+              requestIp: getClientIp(c),
               origin: c.req.header('Origin') ?? null,
-              userAgent: c.req.header('User-Agent') ?? null,
+              userAgent: getUserAgent(c),
               requestBody: { system: systemPrompt, user: userPrompt, max_tokens: 4096 },
               responseBody: null, errorMessage: null,
             });
@@ -1477,9 +1478,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         tenantId: optionalTenantId(c),
         userId: c.get('userId') ?? null,
         result, streamed,
-        requestIp: c.req.header('cf-connecting-ip') ?? null,
+        requestIp: getClientIp(c),
         origin: c.req.header('Origin') ?? null,
-        userAgent: c.req.header('User-Agent') ?? null,
+        userAgent: getUserAgent(c),
         requestBody: { agentId, messages, stream: streamed } as unknown as Record<string, unknown>,
         responseBody: null, errorMessage: null,
       }, streamed ? result.response.body : null);

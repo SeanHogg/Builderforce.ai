@@ -9,6 +9,7 @@ import type { HonoEnv } from '../../env';
 import type { ProjectService } from '../../application/project/ProjectService';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { optionalTenantId } from '../middleware/tenantContext';
+import { getClientIp, getUserAgent } from '../middleware/requestClaims';
 import { ideProxy, newTraceId } from '../../application/llm/LlmProxyService';
 import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import { logStreamedTrace } from '../../application/llm/traceLogger';
@@ -133,9 +134,9 @@ export function createIdeAiRoutes(projectService: ProjectService): Hono<HonoEnv>
       tenantId: optionalTenantId(c),
       userId: c.get('userId') ?? null,
       result, streamed: true,
-      requestIp: c.req.header('cf-connecting-ip') ?? null,
+      requestIp: getClientIp(c),
       origin: c.req.header('Origin') ?? null,
-      userAgent: c.req.header('User-Agent') ?? null,
+      userAgent: getUserAgent(c),
       requestBody: requestBody as unknown as Record<string, unknown>,
       responseBody: null, errorMessage: null,
     }, result.response.body);

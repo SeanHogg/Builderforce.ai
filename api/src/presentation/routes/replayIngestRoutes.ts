@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { REPLAY_LIMITS } from '@builderforce/interaction-contract';
 import type { HonoEnv } from '../../env';
+import { getClientIp } from '../middleware/requestClaims';
 import type { DbHandle } from '../../application/shared/dbHandle';
 import { ReplayConfigService } from '../../application/replay/ReplayConfigService';
 import { ReplayIngestService } from '../../application/replay/ReplayIngestService';
@@ -54,7 +55,7 @@ export function createReplayIngestRoutes(db: DbHandle): Hono<HonoEnv> {
     await new ReplayIngestService(c.env, db).ingest({
       siteToken: c.req.query('site') ?? null,
       origin: c.req.header('Origin') ?? null,
-      ip: c.req.header('cf-connecting-ip') ?? null,
+      ip: getClientIp(c),
       country: countryOf(c.req.raw),
       contentEncoding: c.req.header('Content-Encoding') ?? null,
       body,
