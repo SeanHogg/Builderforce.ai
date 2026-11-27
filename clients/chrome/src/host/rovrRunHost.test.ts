@@ -39,7 +39,11 @@ function scripted(turns: Turn[]): BrainStreamFn & { calls: number } {
   return fn;
 }
 
-function setup(turns: Turn[], gate: (name: string) => boolean = () => false, platformTool?: { name: string; wireName: string }) {
+function setup(turns: Turn[], gate: (name: string) => boolean = () => false) {
+  return setupWithPlatform(turns, gate);
+}
+
+function setupWithPlatform(turns: Turn[], gate: (name: string) => boolean, platformTool?: { name: string; wireName: string }) {
   const records = createMemoryRecords();
   const handed: Array<{ chatId: number; items: SyncItem[] }> = [];
   const persistence = createRovrBrainPersistence(records, createLocalFirstPersistence(records, { enqueue: (chatId, items) => handed.push({ chatId, items }) }));
@@ -123,7 +127,7 @@ describe("Rovr's run-time parts on the shared run", () => {
   it('carries a catalog alias into the normal run and uses the original approval rule', async () => {
     const id = nextChat();
     const tool = { name: 'builtin_tasks_create', wireName: 'platform__tasks_create' };
-    const { host, send, ran, declined } = setup([
+    const { host, send, ran, declined } = setupWithPlatform([
       { call: { name: tool.wireName, args: { title: 'An approved task' } } }, { text: 'Understood, I left it alone.' },
     ], (name) => name === tool.name, tool);
     expect((await host.prepareRun(id)).wireToolNames).toEqual([tool]);
