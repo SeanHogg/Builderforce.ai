@@ -86,6 +86,39 @@ const agentToolsTsResolve = {
 };
 
 /**
+ * `jsonc-parser` must bundle from its ESM build (`lib/esm/main.js`). With `platform: "node"` esbuild
+ * reads `main` first, which is a UMD wrapper that does `require("./impl/format")` etc. at RUNTIME; esbuild
+ * leaves those relative requires unbundled, so the bundle throws `Cannot find module './impl/format'` at
+ * load and the extension fails to activate (2026.11.225). A narrow resolve plugin, rather than a global
+ * `mainFields: ["module", "main"]`, so no other package's resolution changes. The package root is found from
+ * the importer, so either `node_modules` copy works.
+ */
+const jsoncParserEsmResolve = {
+  name: "jsonc-parser-esm",
+  setup(build) {
+    build.onResolve({ filter: /^jsonc-parser$/ }, (args) => {
+      const pkg = createRequire(path.join(args.resolveDir, "noop.js")).resolve("jsonc-parser/package.json");
+      return { path: path.join(path.dirname(pkg), "lib", "esm", "main.js") };
+    });
+  },
+};
+
+/**
+ * Post-build guard: a bundle containing an unbundled UMD factory (`define(["require","exports","./x"]`
+ * or `require("./impl/…")`) loads fine in the build but throws `Cannot find module` in the host.
+ * Cheap string search over every extension/worker bundle; fails the build naming the file.
+ */
+function assertNoUmdRelativeRequires(files) {
+  const patterns = [/define\(\["require",\s*"exports",\s*"\.\//, /require\("\.\/impl\//];
+  for (const file of files) {
+    if (!fs.existsSync(file)) continue;
+    const text = fs.readFileSync(file, "utf8");
+    const hit = patterns.find((p) => p.test(text));
+    if (hit) throw new Error(`[esbuild] ${file} contains an unbundled UMD module (${hit}) that requires relative files at runtime and would throw "Cannot find module" on load. A dependency resolved its UMD \`main\` build: alias it to its ESM build (see jsoncParserEsmResolve).`);
+  }
+}
+
+/**
  * A REAL `import.meta.url` inside the CommonJS bundle.
  *
  * esbuild has to shim `import.meta` when it emits CJS, and its shim is an empty object
@@ -151,7 +184,7 @@ const options = integration
       external: ["vscode", "react", "react-dom"],
       alias: sharedPackageAliases,
       nodePaths: peerNodePaths,
-      plugins: [agentToolsTsResolve, pinnedMemoryResolve],
+      plugins: [agentToolsTsResolve, pinnedMemoryResolve, jsoncParserEsmResolve],
       ...importMetaUrlShim,
       define: { ...importMetaUrlShim.define, ...buildIdentity.define },
       sourcemap: true,

@@ -111,3 +111,15 @@ describe('recordRuntimeShieldEvent', () => {
     expect(openKindIncident).not.toHaveBeenCalled();
   });
 });
+
+describe('recordRuntimeShieldEvent — client ruleId', () => {
+  it('masks a credential-shaped client ruleId before it can reach the description or evidence.clientReported', async () => {
+    ownership.loadProjectInTenant.mockResolvedValue({ segmentId: 'seg' });
+    const secret = `sk-live-${'a1b2c3d4'.repeat(4)}`;
+    await recordRuntimeShieldEvent(undefined, fakeDb(0).db, actor, { tenantId: 7, segmentId: 'seg' }, { ...event, ruleId: secret });
+    const stored = openKindIncident.mock.calls.at(-1)![4] as RuntimeShieldEvent;
+    expect(stored.ruleId).not.toContain(secret);
+    const refs = openKindIncident.mock.calls.at(-1)![6] as { ruleId: string };
+    expect(refs.ruleId).not.toContain(secret);
+  });
+});

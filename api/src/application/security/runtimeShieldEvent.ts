@@ -191,3 +191,16 @@ export function redactShieldEvidence(evidence: Record<string, unknown>): Record<
 export function evidenceByteLength(evidence: unknown): number {
   return new TextEncoder().encode(JSON.stringify(evidence)).length;
 }
+
+/**
+ * The event as it is STORED: the client-attested free-text fields (`evidence` values and the client's `ruleId`,
+ * which lands in the incident description and `evidence.clientReported`) all pass {@link redactShieldEvidence}.
+ * PURE.
+ */
+export function redactShieldEvent(event: RuntimeShieldEvent): RuntimeShieldEvent {
+  return {
+    ...event,
+    ruleId: redactShieldEvidence({ ruleId: event.ruleId }).ruleId as string,
+    evidence: redactShieldEvidence(event.evidence),
+  };
+}

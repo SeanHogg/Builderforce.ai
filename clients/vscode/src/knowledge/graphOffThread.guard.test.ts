@@ -116,7 +116,7 @@ describe("a loaded pack's graph", () => {
     expect(await indexPack({ rootId: "vscode:f-pack" }, "/packs/lease.bfpack")).toBe(0);
     expect(mocks.inThread).not.toHaveBeenCalled();
     expect(requests).toEqual([
-      { kind: "pack", file: "/packs/lease.bfpack", focus: ["src:vscode:f-pack::a.md"], maxNodes: 40 },
+      { kind: "pack", file: "/packs/lease.bfpack", focus: ["src:vscode:f-pack::a.md"], maxNodes: 40, view: true },
       { kind: "pack", file: "/packs/lease.bfpack" },
     ]);
   });

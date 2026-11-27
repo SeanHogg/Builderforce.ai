@@ -51,10 +51,11 @@ vi.mock("./rootLoads", () => ({ beginRootLoad: vi.fn() }));
 vi.mock("../localFirst/localFirstStore", () => ({ localBrainApplication: vi.fn() }));
 vi.mock("../shared/messageOf", () => ({ messageOf: (e: unknown) => String(e) }));
 
+import { tmpdir } from "node:os";
 import { KnowledgeBridge } from "./knowledgeBridge";
 
 const bridge = (): KnowledgeBridge =>
-  new KnowledgeBridge({ ctx: { secrets: {}, extension: { packageJSON: { version: "0" } } } as never, post: vi.fn() });
+  new KnowledgeBridge({ ctx: { secrets: {}, globalStorageUri: { fsPath: tmpdir() }, extension: { packageJSON: { version: "0" } } } as never, post: vi.fn() });
 
 beforeEach(() => { vi.clearAllMocks(); });
 

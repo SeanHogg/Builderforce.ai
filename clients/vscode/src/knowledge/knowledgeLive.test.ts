@@ -53,14 +53,14 @@ async function refreshOnce(queryOf?: (rootId: string) => { focus?: string[]; max
 describe("the editor's Live refresh of a running root", () => {
   it("re-reads the graph by the query the view last loaded the root with", async () => {
     await refreshOnce(() => ({ focus: ["src:r::a.md"], maxNodes: 50 }));
-    expect(mocks.loadGraph).toHaveBeenCalledWith(secrets, "r", { focus: ["src:r::a.md"], maxNodes: 50 }, undefined, undefined, { signal: expect.any(AbortSignal) });
+    expect(mocks.loadGraph).toHaveBeenCalledWith(secrets, "r", { focus: ["src:r::a.md"], maxNodes: 50 }, undefined, undefined, { signal: expect.any(AbortSignal), view: true });
   });
 
   it("asks that of the root it watches, and falls back to an unfocused read when the view recorded none", async () => {
     const queryOf = vi.fn(() => undefined);
     await refreshOnce(queryOf);
     expect(queryOf).toHaveBeenCalledWith("r");
-    expect(mocks.loadGraph).toHaveBeenCalledWith(secrets, "r", undefined, undefined, undefined, { signal: expect.any(AbortSignal) });
+    expect(mocks.loadGraph).toHaveBeenCalledWith(secrets, "r", undefined, undefined, undefined, { signal: expect.any(AbortSignal), view: true });
   });
 
   it("aborts the build in flight on unlive, and an aborted build is a quiet return (not an error, no push)", async () => {

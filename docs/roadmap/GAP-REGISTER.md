@@ -420,6 +420,9 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
   - The journey then starts at `frontend/lib/data-manager.ts` and lists it twice.
   - Fix: extend the one manifest seam (HTML module script, wrangler main, literal Vite input), ignore config-file targets, de-duplicate path stops, and add a regression test per case.
   - Fixing this makes every line start where the app really starts. [make.md › PRD 43](../../docs/specs/make.md)
+- `AE-G065` **VSIX 2026.11.225 fails to activate: `Cannot find module './impl/format'`** (user, 2026-11-26).
+  - Cause: `packages/builderforce-mcp/src/config.ts` imports `jsonc-parser`, and esbuild bundles its UMD `main`, which `require`s `./impl/*` at runtime.
+  - Fix (in progress, `.226`): resolve `jsonc-parser` to its ESM build, plus a post-build guard that fails the build when a bundle keeps a runtime relative `require`. The typecheck and the content check that `.225` passed could not catch this.
 - `AE-G064` **7 knowledge-view tests are stale after the Visualizer header change** (`1958de654`, 2026-11-26).
   - `KnowledgeGraphView.header.test.tsx` (2 tests) expects the synced status chip to open the Review tab. It now opens Runs (`syncPill` `upToDate` → `'runs'`), and that stays.
   - `KnowledgeGraphView.run.test.tsx` (5 tests) uses `testing.ts` `openList`/`pickCamera`, which look for a "List" radio the camera bar no longer renders.
