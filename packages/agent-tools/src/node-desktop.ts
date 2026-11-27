@@ -242,7 +242,7 @@ export async function catalogDesktopSemantic(root: string, opts?: { adaptive?: b
  * The run's local tools with the semantic ones kept only while the desktop service
  * answers — decided per run, so starting or quitting the app takes effect next turn.
  * `read_compressed` additionally needs the service's compressor. `localRepoMap`: the
- * surface serves `repo_map` from its own definition index (`symbolIndexSemantic`), so
+ * surface serves `repo_map` from its own repo map (`workspaceSemantic`), so
  * that one tool stays when the service is down.
  */
 export async function desktopBackedTools<T extends { name: string }>(

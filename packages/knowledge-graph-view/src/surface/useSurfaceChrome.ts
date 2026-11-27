@@ -133,7 +133,7 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
     // The scale sentence: the stage draws it under its Colour-by legend (`StageHost`'s `scale`).
     const scaleProps: ScaleLineProps = {
         labels, stats: graph.stats, truncated, compact: layout.compact, showAll: i.showAll, drawn: i.visibleNodes, total: graph.nodes.length, onShowAll: () => i.setShowAll(true), capped: mapCap,
-        stations: surface.stations.stations.length, files: graph.stats.sources,
+        stations: surface.stations.stations.length, files: surface.stations.stations.reduce((total, station) => total + station.files, 0),
     };
     return { layout, out, spineItems, onSpinePick, scopeName, pathTitle, truncated, overlayProps, scaleProps, askName: surface.station?.name ?? surface.line?.name ?? i.titleOf(graph.scope.rootId) };
 }

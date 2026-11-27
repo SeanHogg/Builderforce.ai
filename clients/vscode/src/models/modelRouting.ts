@@ -111,7 +111,7 @@ export async function resolveModelRoute(secrets: vscode.SecretStorage, request: 
 
 /**
  * The runtimes an UNPINNED turn may try on this machine — and, for a real turn the first
- * time it finds no Bonsai cached, Synapse's engine in the editor starts provisioning one
+ * time it finds no Bonsai cached, the native `bfi` engine in the editor starts provisioning one
  * for the turns after it (`hostBfi/provision.ts`; a no-op without the native engine or
  * after the session's one attempt). Gated exactly like the probe: local models on,
  * local-first on.

@@ -36,7 +36,7 @@ export function useSurfaceActions(kg: KnowledgeGraphState, surface: SurfaceModel
         onSelected();
         kg.select(ref);
         const station = stationOfRef(surface.stations, ref);
-        if (station) surface.selectStation(station);
+        surface.selectStation(station ?? null);
     };
     return {
         select,

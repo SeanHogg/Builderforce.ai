@@ -6,6 +6,8 @@ import type { KnowledgeGraphSource } from '../types';
 import { useKnowledgeGraph } from '../useKnowledgeGraph';
 import { buildLines } from './lines';
 import { outlineView } from './outlineGraph';
+import { buildCodeHierarchy } from './codeHierarchy';
+import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as labels } from '../labels';
 import { ref, truncatedFixture } from './outlineFixture';
 import { buildStations, stationOfRef } from './stations';
 import { MAX_STATIONS } from './areaRollup';
@@ -31,6 +33,27 @@ describe('parity: a cut graph with its outline reads like the whole graph', () =
         }));
         expect(names(cut, b)).toEqual(names(whole, a));
     });
+});
+
+it('keeps static art in the filesystem when the full or compact graph also contains code', () => {
+    const fixture = surfaceFixture();
+    const art: KNode = {
+        ref: ref('hired.video/frontend/public/comics/retro80s/bg-grid-sunset.svg'),
+        area: ref('hired.video/frontend/public/comics/retro80s'), system: 'hired.video', app: 'hired.video/frontend',
+        label: 'bg-grid-sunset.svg', kind: 'file', pack: 'docs', importance: 1, origin: 'extracted',
+    };
+    const whole: KnowledgeGraph = { ...fixture, nodes: [...fixture.nodes, art] };
+    const cut: KnowledgeGraph = {
+        ...whole, nodes: whole.nodes.filter((node) => node.kind !== 'file'), edges: [],
+        stats: { ...whole.stats, truncated: true }, outline: buildOutline(whole),
+    };
+    for (const graph of [whole, cut]) {
+        expect(buildStations(graph).stations).toEqual(buildStations(fixture).stations);
+        expect(buildCodeHierarchy(graph, 'hired', labels.surface.layers).get(art.ref)).toMatchObject({
+            isCode: false, architecture: [],
+            filesystem: expect.arrayContaining([expect.objectContaining({ name: 'retro80s' })]),
+        });
+    }
 });
 
 describe('verdict majority', () => {

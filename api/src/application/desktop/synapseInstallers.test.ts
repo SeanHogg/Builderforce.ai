@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pickSpawnInstallers } from './spawnDownloads';
+import { pickDesktopInstallers } from './synapseInstallers';
 import type { PublicRelease } from '../../infrastructure/github/publicReleases';
 
 const release = (tag: string, names: string[], extra: Partial<PublicRelease> = {}): PublicRelease => ({
@@ -13,7 +13,7 @@ const release = (tag: string, names: string[], extra: Partial<PublicRelease> = {
 
 describe('the Spawn installers', () => {
   it('picks the newest v* release and skips tags that are not versions', () => {
-    const picked = pickSpawnInstallers([
+    const picked = pickDesktopInstallers([
       release('nightly', ['Spawn_nightly_x64-setup.exe']),
       release('v2026.10.2', ['Spawn_2026.10.2_x64-setup.exe', 'Spawn_2026.10.2_x64_en-US.msi', 'Spawn_2026.10.2_aarch64.dmg', 'Spawn_2026.10.2_x64.dmg']),
       release('v2026.10.1', ['Spawn_2026.10.1_x64-setup.exe']),
@@ -25,11 +25,11 @@ describe('the Spawn installers', () => {
   });
 
   it('falls back to the .msi when there is no setup .exe', () => {
-    expect(pickSpawnInstallers([release('v1', ['Spawn_1_x64_en-US.msi'])]).windows).toBe('https://dl/v1/Spawn_1_x64_en-US.msi');
+    expect(pickDesktopInstallers([release('v1', ['Spawn_1_x64_en-US.msi'])]).windows).toBe('https://dl/v1/Spawn_1_x64_en-US.msi');
   });
 
   it('ignores drafts and pre-releases', () => {
-    const picked = pickSpawnInstallers([
+    const picked = pickDesktopInstallers([
       release('v3', ['Spawn_3_x64-setup.exe'], { draft: true }),
       release('v2', ['Spawn_2_x64-setup.exe'], { prerelease: true }),
     ]);
@@ -37,8 +37,17 @@ describe('the Spawn installers', () => {
   });
 
   it('reports a missing platform as null, not a wrong file', () => {
-    const picked = pickSpawnInstallers([release('v1', ['Spawn_1_x64-setup.exe'])]);
+    const picked = pickDesktopInstallers([release('v1', ['Spawn_1_x64-setup.exe'])]);
     expect(picked.macArm).toBeNull();
     expect(picked.macIntel).toBeNull();
+  });
+
+  it('skips a newer release with only headless binaries for an older one that has an installer', () => {
+    const picked = pickDesktopInstallers([
+      release('v2026.11.2', ['bfi-x86_64-pc-windows-msvc.exe', 'bf-context-x86_64-pc-windows-msvc.exe']),
+      release('v2026.11.1', ['Synapse_2026.11.1_x64-setup.exe']),
+    ]);
+    expect(picked.version).toBe('2026.11.1');
+    expect(picked.windows).toBe('https://dl/v2026.11.1/Synapse_2026.11.1_x64-setup.exe');
   });
 });

@@ -1,5 +1,5 @@
 /**
- * The editor's ONE `OnDeviceTasks` port (PRD 42 · B2): Synapse and the other local engines
+ * The editor's ONE `OnDeviceTasks` port (PRD 42 · B2): the native `bfi` engine and the other local engines
  * behind a single on-device completion. The completion itself is a transport, so it lives
  * in `modelRouting.ts` (the one router) and is handed in; this module owns the port's
  * shape — what is available on this machine and the window a chunk must fit.

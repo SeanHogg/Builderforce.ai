@@ -95,6 +95,8 @@ describe('buildLines', () => {
         const { model, lines } = build({ ...g, nodes: [...g.nodes, boot] });
         const web = lines.lines.find((l) => l.stops.includes(model.stations.find((s) => s.name === 'Web app')!.id))!;
         const stopNames = names(web.stops, model);
+        expect(lines.lines.some((line) => names(line.stops, model)[0] === 'boot.ts')).toBe(true);
+        expect(model.stations.filter((station) => station.entry).every((station) => station.refs.length === 1)).toBe(true);
         expect(stopNames[0]).toBe('main.tsx');
         expect(new Set(stopNames).size).toBe(stopNames.length);
         expect(new Set(web.stops).size).toBe(web.stops.length);

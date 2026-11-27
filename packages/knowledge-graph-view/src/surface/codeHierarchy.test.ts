@@ -29,7 +29,7 @@ describe('code hierarchy', () => {
         expect(buildCodeHierarchy(truncated, 'workspace', labels.surface.layers)).toEqual(files);
     });
 
-    it('keeps the declared area ancestry when the area has no resident node', () => {
+    it('uses the declared component as one group when the area has no resident node', () => {
         const graph = surfaceFixture();
         const node = graph.nodes.find(({ kind }) => kind === 'file')!;
         const paths = ['hired.video/api/src/services/seo/sitemapEntries.ts', 'hired.video/api/src/services/distribution/__tests__/schedule-publish-jobs.test.ts'];
@@ -39,7 +39,7 @@ describe('code hierarchy', () => {
         }));
         const files = buildCodeHierarchy({ ...graph, nodes }, 'hired', labels.surface.layers);
         const groups = (path: string) => files.get(`src:sys::${path}`)?.architecture.map(({ name }) => name);
-        expect(groups(paths[0]!)).toEqual(['hired.video', 'api', 'src', 'services', 'seo']);
-        expect(groups(paths[1]!)).toEqual(['hired.video', 'api', 'src', 'services', 'distribution', '__tests__']);
+        expect(groups(paths[0]!)).toEqual(['hired.video', 'api', 'src/services/seo']);
+        expect(groups(paths[1]!)).toEqual(['hired.video', 'api', 'src/services/distribution/__tests__']);
     });
 });

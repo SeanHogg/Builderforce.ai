@@ -141,6 +141,21 @@ describe("applyStringEdit — the file keeps ONE line-ending style", () => {
   });
 });
 
+describe("applyStringEdit — a leading BOM neither blocks a match nor is lost", () => {
+  const BOM = String.fromCharCode(0xfeff);
+
+  it("matches the first line of a BOM file and writes the BOM back", () => {
+    const r = applyStringEdit(`${BOM}alpha\r\nbeta\r\n`, "alpha", "gamma");
+    expect(r.ok).toBe(true);
+    expect(r.content).toBe(`${BOM}gamma\r\nbeta\r\n`);
+  });
+
+  it("keeps the BOM when the edit is further down, and reports a miss without it", () => {
+    expect(applyStringEdit(`${BOM}a\nb\n`, "b", "c").content).toBe(`${BOM}a\nc\n`);
+    expect(applyStringEdit(`${BOM}a\nb\n`, "zzz", "c").ok).toBe(false);
+  });
+});
+
 describe("dominantEol / conformToExistingEol — the whole-file write keeps the file's EOL", () => {
   it("picks the style most lines use, CRLF on a tie, null for no newline", () => {
     expect(dominantEol(CRLF)).toBe("\r\n");

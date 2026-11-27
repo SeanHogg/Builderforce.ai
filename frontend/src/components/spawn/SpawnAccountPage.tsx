@@ -9,6 +9,7 @@ import { SpawnAgeGate } from './SpawnAgeGate';
 import { SpawnTrialPanel } from './SpawnTrialPanel';
 import { SpawnMembershipPanel } from './SpawnMembershipPanel';
 import { SpawnTokensPanel } from './SpawnTokensPanel';
+import { SpawnDesktopPanel } from './SpawnDesktopPanel';
 import styles from './spawn.module.css';
 
 /**
@@ -60,6 +61,7 @@ export function SpawnAccountPage() {
           <SpawnTrialPanel trial={account.trial} busy={busy === 'trial'} onStart={startTrial} />
           <SpawnMembershipPanel status={account.membership} monthlyCents={account.monthlyCents} busy={busy === 'join'} onJoin={join} />
           <SpawnTokensPanel account={account} busyPackId={busy} onBuy={buy} />
+          <SpawnDesktopPanel ready={account.canBuild} />
         </>
       )}
     </main>

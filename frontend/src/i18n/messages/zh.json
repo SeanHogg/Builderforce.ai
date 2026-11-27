@@ -8368,7 +8368,7 @@
       },
       {
         "question": "我的 Evermind 能在我自己的电脑上运行吗？",
-        "answer": "可以——Builderforce VS Code 扩展运行在你自己的电脑上，你自己的 Evermind 也留在那里：你的 AI 工具学到的事实、演示和技能都在本地存储并训练，保存在你拥有的模型中，只有你选择发布时才会离开。原生 bfi 引擎会运行与你内存相匹配的本地模型，bf-context 服务则为电脑上的 AI 工具提供共享的代码索引。"
+        "answer": "可以——Synapse，即基于 VS Code 构建的 Builderforce 桌面编辑器，运行在你自己的电脑上，你自己的 Evermind 也留在那里：你的 AI 工具学到的事实、演示和技能都在本地存储并训练，保存在你拥有的模型中，只有你选择发布时才会离开。原生 bfi 引擎会运行与你内存相匹配的本地模型，bf-context 服务则为电脑上的 AI 工具提供共享的代码索引。Synapse 尚未发布。"
       },
       {
         "question": "什么是写穿认知（Write-Through Cognition）？",
@@ -32721,7 +32721,7 @@
       },
       {
         "q": "有桌面应用吗？",
-        "a": "Builderforce 的桌面入口是安装了 Builderforce 扩展的 VS Code。它能与 Brain 对话、运行你的智能体，并在你自己的电脑上使用你的私有 Evermind 和本地模型——记忆和学习都留在本地，除非你选择发布。"
+        "a": "Builderforce 的桌面入口是 Synapse，即基于 VS Code 构建的 Builderforce 桌面编辑器。它运行 Builderforce 扩展（智能体运行时和代码可视化），内置面向 Roblox 的 Spawn 扩展，并在你自己的电脑上使用你的私有 Evermind 和本地模型——记忆和学习都留在本地，除非你选择发布。Synapse 尚未发布。"
       }
     ],
     "closeTitle": "准备好替换整套工具了吗？",
@@ -37303,7 +37303,7 @@
       "badge": "🎮 适合 13 岁以上的 Roblox 创作者",
       "titleLead": "说出来，",
       "titleAccent": "就生成。",
-      "lede": "输入你想要的游戏。Roblox 制作功能即将作为一种项目类型加入 Builderforce 编辑器。",
+      "lede": "输入你想要的游戏，Spawn 通过随 Synapse 提供的 VS Code 扩展，在 Roblox Studio 里把它做出来。",
       "start": "开始免费一周",
       "fine": "7 天免费 · 之后每月 1.99 美元 · 开始时无需银行卡"
     },
@@ -37355,7 +37355,7 @@
       "items": [
         {
           "icon": "⬇️",
-          "label": "打开编辑器"
+          "label": "获取扩展"
         },
         {
           "icon": "💬",
@@ -37388,7 +37388,7 @@
         }
       ],
       "parentsTitle": "给家长",
-      "parents": "致家长：会员和代币包都在本网站通过 Stripe 安全结账购买，每次充值都由您决定。应用内不会产生任何扣费，除了每月 1.99 美元、可随时取消的会员外，没有任何意外续费。"
+      "parents": "致家长：会员和代币包都在本网站通过 Stripe 安全结账购买，每次充值都由您决定。Synapse 内不会产生任何扣费，除了每月 1.99 美元、可随时取消的会员外，没有任何意外续费。"
     },
     "pricing": {
       "title": "选择你的代币包",
@@ -37422,17 +37422,17 @@
         },
         {
           "q": "Spawn 是 Roblox 官方做的吗？",
-          "a": "不是。Spawn 由 Builderforce.ai 打造，与 Roblox Corporation 无关联，亦未获其认可。它通过普通的 Studio 插件与 Roblox Studio 配合使用。"
+          "a": "不是。Spawn 由 Builderforce.ai 制作，与 Roblox Corporation 没有关联，也未获其认可。它通过 Spawn 扩展设置的普通 Studio 插件与 Roblox Studio 配合使用。"
         }
       ]
     },
     "cta": {
-      "title": "Roblox 制作功能即将作为一种项目类型加入 Builderforce 编辑器。"
+      "title": "Spawn 正成为一个 VS Code 扩展，随 Synapse 一同提供。"
     },
     "account": {
       "eyebrow": "Spawn",
       "title": "你的账户",
-      "signInBody": "登录后即可加入 Spawn 并获取代币。",
+      "signInBody": "登录后即可加入 Spawn、获取代币，并在 Synapse 中连接 Spawn 扩展。",
       "signIn": "登录",
       "loading": "正在加载你的账户…",
       "tooYoungTitle": "Spawn 面向 13 岁及以上的玩家",
@@ -37441,7 +37441,7 @@
         "joined": "欢迎加入 Spawn！你的会员已生效。",
         "tokensAdded": "代币已到账，尽情创作吧！",
         "cancelled": "结账已取消，没有产生任何费用。",
-        "trialStarted": "你的免费一周开始了！祝你创作愉快。"
+        "trialStarted": "你的免费一周开始了！在 Synapse 中添加 Spawn 扩展，开始制作吧。"
       },
       "errors": {
         "generic": "出了点问题，请重试。",
@@ -37479,7 +37479,7 @@
           "trial": "免费试用",
           "trial_ended": "试用已结束"
         },
-        "activeBody": "你是会员（每月 {price}）。制作器已开启。",
+        "activeBody": "你是会员（每月 {price}）。制作器和 Spawn 扩展已开启。",
         "body": {
           "none": "每月 {price} 加入，即可开启制作器。",
           "past_due": "你上一次付款没有成功。以每月 {price} 重新加入即可继续创作。",
@@ -38655,7 +38655,7 @@
         "usage": "它是 Builderforce 的记忆子系统。画布借助引擎在浏览器中训练 Evermind，云端和本地部署的智能体在工作中通过运行时库调取和保存记忆，而 Builderforce 的 VS Code 扩展与 MCP 服务器使用同一个磁盘存储。"
       },
       "inference": {
-        "tagline": "bfi，用 Rust 编写、可在你自己电脑上运行 LLM 的原生引擎，以及代码上下文服务 bf-context。",
+        "tagline": "bfi，用 Rust 编写、可在你自己电脑上运行 LLM 的原生引擎，以及代码上下文服务 bf-context。原来的桌面应用将迁移到基于 VS Code 构建的 Synapse。",
         "summary": "下载适合你硬件规格的 GGUF 模型，并通过兼容 OpenAI、Anthropic 和 Ollama 的 API 提供服务，你现有的客户端无需修改即可使用。无需另外安装 Ollama。",
         "problem": "在本地运行模型通常意味着安装别家的运行时、指望它在 PATH 中、猜测模型能否装进内存，并只能接受那个运行时支持的 GGUF 类型。标准的 llama.cpp 不支持 PrismML 的 Ternary Bonsai 模型所采用的 2 位 PQ2_0 和 PTQ1_0 格式。",
         "gets": [
@@ -38667,20 +38667,20 @@
         ],
         "status": "CPU 路径已发布。GPU 后端（CUDA、ROCm、Metal、Vulkan）可以编译，但尚未测量与 llama-bench 相比的 GPU 吞吐量，发布的二进制文件也尚未签名。",
         "quickStartNote": "用 Cargo 从源码安装 CLI，检查模型是否适合这台电脑，下载模型并启动服务器。",
-        "usage": "bfi 为 Claude Code、你的脚本以及 Builderforce VS Code 扩展提供本地模型，扩展通过 ~/.builderforce/desktop.json 找到它们，bf-context 也为扩展提供代码索引。曾经封装它们的桌面应用已停用；VS Code 加 Builderforce 扩展就是桌面入口。"
+        "usage": "bfi 为 Claude Code、你的脚本以及 Builderforce VS Code 扩展提供本地模型，扩展通过 ~/.builderforce/desktop.json 找到它们，bf-context 也为扩展提供代码索引。原来的 Synapse 桌面应用正迁移为基于 VS Code 的 Synapse，即 Builderforce 桌面编辑器；本仓库现在提供 bfi 和 bf-context。"
       },
       "spawn": {
-        "tagline": "已停用：Spawn 桌面应用和 Roblox Studio 桥接组件。Roblox 制作功能即将作为一种项目类型加入 Builderforce 编辑器。",
-        "summary": "Spawn 不再发布新版本。该仓库继续开源，作为 Studio 桥接组件的参考；Roblox 制作功能正在作为项目类型迁入 Builderforce 编辑器。",
-        "problem": "面向 Roblox 的 AI 工具要求年轻的创作者在输入第一个提示之前，先下载一个应用、安装 Studio 插件、启动本地服务器、连接同步工具，并让这四样东西一直保持运行。",
+        "tagline": "用对话构建 Roblox 游戏。Spawn 正成为一个 VS Code 扩展，随 Builderforce 桌面编辑器 Synapse 一同提供。",
+        "summary": "描述你的游戏，Spawn 就在 Roblox Studio 里构建零件、Luau 脚本和界面。Spawn 正成为一个 VS Code 扩展，随基于 VS Code 构建的 Builderforce 桌面编辑器 Synapse 一同提供。",
+        "problem": "面向 Roblox 的 AI 工具要求年轻的创作者在输入第一个提示之前，先下载一个应用、安装 Studio 插件、启动本地服务器、连接同步工具，并让这四样东西一直保持运行。Spawn 将成为 Synapse 里的一个 VS Code 扩展。",
         "gets": [
-          "与 Roblox Studio 并排运行的 Tauri 桌面应用（已停用，不再发布）。",
+          "一个随 Builderforce 桌面编辑器 Synapse 一同提供的 VS Code 扩展，取代此前的 Tauri 桌面应用。",
           "bf-roblox 桥接组件：它安装 Spawn 的 Studio 插件，并提供插件轮询构建结果所用的本地回环桥接，因此机器外部无法访问任何内容。",
           "通过 bf-cloud 登录 Builderforce 并访问 API。"
         ],
-        "status": "已停用：不再发布桌面应用的新版本。",
+        "status": "过渡中：桌面应用不再发布，由 VS Code 扩展取而代之。Synapse 尚未发布。",
         "quickStartNote": "克隆仓库，并用 Cargo 构建整个工作区。",
-        "usage": "Spawn 是 Builderforce 面向 13 岁及以上创作者的 Roblox 构建工具，其桌面应用已停用。开源仓库保留桌面应用和 Studio 桥接组件，仅供参考。"
+        "usage": "Spawn 是 Builderforce 面向 13 岁及以上创作者的 Roblox 构建工具，作为独立产品提供。开源仓库包含 Studio 桥接组件和 Spawn 扩展的源码；登录和模型调用都通过 Builderforce 完成。"
       }
     }
   },

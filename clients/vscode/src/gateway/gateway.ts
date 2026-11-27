@@ -92,7 +92,7 @@ export function invalidateKimiInstallMemo(): void {
  * both name the same server: a user who typed the URL should not also have to copy a
  * key out of a file. A machine with neither contributes no endpoint.
  */
-function resolveSynapseEndpoint(configuredUrl: string): LocalEndpoint | null {
+function resolveBfiServeEndpoint(configuredUrl: string): LocalEndpoint | null {
   const discovered = readBfiDiscovery();
   const configured = configuredUrl.trim();
   if (!configured) return discovered;
@@ -131,7 +131,7 @@ export function getLocalModelsConfig(): LocalModelsConfig {
   //     (endpoint + the tenant's chosen model order; the token is resolved per request).
   // A machine with neither contributes no endpoint and no rows.
   const kimi = kimiSource();
-  const synapse = resolveSynapseEndpoint(cfg.get<string>("localModels.synapseUrl") ?? "");
+  const synapse = resolveBfiServeEndpoint(cfg.get<string>("localModels.synapseUrl") ?? "");
   return {
     enabled: cfg.get<boolean>("localModels.enabled") === true,
     // Default ON once local inference is enabled: "local first, failover to cloud" is

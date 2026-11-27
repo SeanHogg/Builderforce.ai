@@ -108,7 +108,7 @@
     "message": "Ninguna página web"
   },
   "needModelOrSignIn": {
-    "message": "No hay ningún modelo disponible. Inicia sesión en Builderforce o inicia un modelo en este dispositivo (Synapse, Ollama o FreeToken)."
+    "message": "No hay ningún modelo disponible. Inicia sesión en Builderforce o inicia un modelo en este dispositivo (bfi serve, Ollama o FreeToken)."
   },
   "runFailed": {
     "message": "Algo salió mal: $1"
@@ -412,7 +412,7 @@
     "message": "No está en ejecución"
   },
   "synapseAddress": {
-    "message": "Dirección de Synapse"
+    "message": "Dirección de bfi serve"
   },
   "tasksHeading": {
     "message": "Tareas"

@@ -1,21 +1,27 @@
 /**
- * Where the Spawn installers are — so every download button on spawn.builderforce.ai
- * is one click to the file for the visitor's computer, not a trip through a list of
- * releases.
+ * Where the Synapse desktop installers are. Spawn ships inside Synapse, so every
+ * desktop download button (Synapse and Spawn alike) links to these: one click to the
+ * file for the visitor's computer, not a trip through a list of releases.
  *
- * Spawn ships from its own repository (SeanHogg/builderforce-spawn) with `v*` tags;
- * this picks the newest published, non-prerelease `v*` release and its installers
- * (drafts and pre-releases never reach a visitor). Cached for ten minutes:
- * a release is published a few times a month, and the GitHub read is rate-limited.
+ * They come from SeanHogg/builderforce-inference with `v*` tags. That repo's releases
+ * may carry only headless binaries (`bfi-*`, `bf-context-*`), so this picks the newest
+ * published, non-prerelease `v*` release that actually contains an installer (drafts
+ * and pre-releases never reach a visitor). Cached for ten minutes: a release is
+ * published a few times a month, and the GitHub read is rate-limited.
  */
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { fetchPublicReleases, type PublicRelease } from '../../infrastructure/github/publicReleases';
 
-const SPAWN_REPO = 'SeanHogg/builderforce-spawn';
-const SPAWN_TAG_PREFIX = 'v';
+const SYNAPSE_REPO = 'SeanHogg/builderforce-inference';
+const SYNAPSE_TAG_PREFIX = 'v';
 
-export interface SpawnInstallers {
+const WINDOWS_SUFFIXES = ['_x64-setup.exe', '_x64_en-US.msi'];
+const MAC_ARM_SUFFIXES = ['_aarch64.dmg'];
+const MAC_INTEL_SUFFIXES = ['_x64.dmg'];
+const INSTALLER_SUFFIXES = [...WINDOWS_SUFFIXES, ...MAC_ARM_SUFFIXES, ...MAC_INTEL_SUFFIXES];
+
+export interface DesktopInstallers {
   /** `2026.10.1`, or null before the first release. */
   version: string | null;
   /** The release page — the fallback when an installer is missing. */
@@ -35,24 +41,30 @@ function assetEndingWith(release: PublicRelease, suffixes: string[]): string | n
 }
 
 /**
- * The newest published Spawn release's installers. Tauri names them
- * `Spawn_<v>_x64-setup.exe` / `_x64_en-US.msi` and `Spawn_<v>_aarch64.dmg` /
+ * The newest published release that carries installers. Tauri names them
+ * `Synapse_<v>_x64-setup.exe` / `_x64_en-US.msi` and `Synapse_<v>_aarch64.dmg` /
  * `_x64.dmg`; the setup .exe is preferred because it installs per user, no admin.
  */
-export function pickSpawnInstallers(releases: PublicRelease[]): SpawnInstallers {
-  const release = releases.find((r) => r.tag.startsWith(SPAWN_TAG_PREFIX) && !r.draft && !r.prerelease);
+export function pickDesktopInstallers(releases: PublicRelease[]): DesktopInstallers {
+  const release = releases.find(
+    (r) =>
+      r.tag.startsWith(SYNAPSE_TAG_PREFIX) &&
+      !r.draft &&
+      !r.prerelease &&
+      assetEndingWith(r, INSTALLER_SUFFIXES) !== null,
+  );
   if (!release) return { version: null, releaseUrl: null, windows: null, macArm: null, macIntel: null };
   return {
-    version: release.tag.slice(SPAWN_TAG_PREFIX.length),
+    version: release.tag.slice(SYNAPSE_TAG_PREFIX.length),
     releaseUrl: release.url,
-    windows: assetEndingWith(release, ['_x64-setup.exe', '_x64_en-US.msi']),
-    macArm: assetEndingWith(release, ['_aarch64.dmg']),
-    macIntel: assetEndingWith(release, ['_x64.dmg']),
+    windows: assetEndingWith(release, WINDOWS_SUFFIXES),
+    macArm: assetEndingWith(release, MAC_ARM_SUFFIXES),
+    macIntel: assetEndingWith(release, MAC_INTEL_SUFFIXES),
   };
 }
 
-export async function spawnInstallers(env: Env, fetchFn: typeof fetch = fetch): Promise<SpawnInstallers> {
-  return getOrSetCached(env, 'spawn:installers', async () => pickSpawnInstallers(await fetchPublicReleases(SPAWN_REPO, fetchFn)), {
+export async function synapseInstallers(env: Env, fetchFn: typeof fetch = fetch): Promise<DesktopInstallers> {
+  return getOrSetCached(env, 'desktop:installers', async () => pickDesktopInstallers(await fetchPublicReleases(SYNAPSE_REPO, fetchFn)), {
     kvTtlSeconds: 600,
     l1TtlMs: 60_000,
   });

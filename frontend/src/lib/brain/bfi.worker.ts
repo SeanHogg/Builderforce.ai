@@ -1,5 +1,5 @@
 /**
- * The web app's `bfi` Web Worker: the native bfi engine (the vendored `@seanhogg/bfi-web`)
+ * The web app's `bfi` Web Worker: Synapse's engine (the vendored `@seanhogg/bfi-web`)
  * on WebGPU or, without it, on the CPU — off the page's main thread. Started by
  * `browserPageEngines()` (`localFirst.ts`); everything it does is brain-embedded's
  * `runBfiWorker`.

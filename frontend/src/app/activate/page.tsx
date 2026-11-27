@@ -25,7 +25,7 @@ function ActivateInner() {
   const t = useTranslations('activate');
   const code = (searchParams.get('code') ?? '').trim();
   const mode: Mode = code ? 'device' : 'key';
-  // Which app asked (VS Code) — named in the copy so the person checks the right window.
+  // Which app asked (VS Code, Synapse) — named in the copy so the person checks the right window.
   const client = searchParams.get('client');
   const app = deviceClientName(client);
 

@@ -4,7 +4,7 @@
  * unpinned turn that runs local-first with no Bonsai cached starts ONE background
  * download of the Bonsai row this machine's engine serves best. That turn goes to the
  * cloud as it would have; once the file lands the host worker attaches and later turns
- * run on Bonsai — Synapse's engine, inside the editor.
+ * run on Bonsai — the native `bfi` engine, inside the editor.
  *
  * Which row: the largest recommended `bfi` row the engine's device record fits (its
  * GPU, else its CPU and RAM), up to {@link AUTO_PROVISION_MAX_BYTES} — a larger model is

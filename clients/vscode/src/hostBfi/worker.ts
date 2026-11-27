@@ -1,6 +1,6 @@
 /**
  * The extension host's `bfi` worker (a `worker_threads` entry, `out/bfiHostWorker.js`):
- * Synapse's engine behind the SAME `bfi` page-engine adapter a page runs, over the host's
+ * The native `bfi` engine behind the SAME `bfi` page-engine adapter a page runs, over the host's
  * file cache — served with brain-embedded's ONE engine-worker half (`serveEngineWorker`):
  * the page-engine frames, the INVALIDATE frame, and a FATAL frame when the engine traps —
  * reported by the engine or surfacing as an unhandled rejection (the host then starts a

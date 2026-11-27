@@ -5,6 +5,7 @@ import {
   searchCodeTool,
   semanticSearchTool,
   type CapabilityProvider,
+  type RepoSemanticCapability,
   type ToolDefinition,
 } from "@builderforce/agent-tools";
 import {
@@ -85,14 +86,27 @@ export async function searchWorkspaceMcpIndex(
   return searchWorkspaceCodeIndex({ ...input, embedder, waitForIndexMs: INDEX_WAIT_MS });
 }
 
-async function findWorkspaceCode({ root, caps }: Workspace, args: Record<string, unknown>, options: WorkspaceMcpOptions) {
-  const semantic = {
-    search: (query: string, { scope, limit }: { scope?: string; limit?: number } = {}) => searchWorkspaceMcpIndex({
+/**
+ * The local `repo.semantic` backing over a workspace: `search` is the shared code index
+ * ({@link searchWorkspaceMcpIndex}), `repoMap` the reference-ranked repo map
+ * ({@link workspaceRepoMap}). The editor and the on-prem runtime serve `semantic_search` /
+ * `repo_map` through this when Builderforce Desktop is not answering.
+ */
+export function workspaceSemantic(
+  { root, caps }: Workspace,
+  options: Pick<WorkspaceMcpOptions, "grammar" | "embedder"> = {},
+): RepoSemanticCapability {
+  return {
+    search: (query, { scope, limit } = {}) => searchWorkspaceMcpIndex({
       root, files: caps.repoRead!, query, limit: limit ?? 8, scope, ...options.grammar?.(),
     }, options.embedder),
-    repoMap: (args: Record<string, unknown>) => workspaceRepoMap({ caps }, args),
+    repoMap: (args = {}) => workspaceRepoMap({ caps }, args),
   };
-  return fromDefinition(semanticSearchTool)({ root, caps: { ...caps, semantic } }, args);
+}
+
+async function findWorkspaceCode(workspace: Workspace, args: Record<string, unknown>, options: WorkspaceMcpOptions) {
+  const { root, caps } = workspace;
+  return fromDefinition(semanticSearchTool)({ root, caps: { ...caps, semantic: workspaceSemantic(workspace, options) } }, args);
 }
 
 async function compressWorkspaceProse(_workspace: Workspace, args: Record<string, unknown>) {

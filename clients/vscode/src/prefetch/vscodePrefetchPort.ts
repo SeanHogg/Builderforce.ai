@@ -55,7 +55,7 @@ const logprobPorts = new Map<string, LabelLogprobPort>();
 
 /**
  * Tier 3 on this machine: a warm Ollama (the only engine the editor host reaches whose API
- * returns label logprobs — Synapse/bfi returns none, WebLLM lives in the webview). None
+ * returns label logprobs — `bfi serve` returns none, WebLLM lives in the webview). None
  * while local models are off: the gate then never consults tier 3.
  */
 export function editorLogprobPort(config: LocalModelsConfig | undefined): LabelLogprobPort | undefined {

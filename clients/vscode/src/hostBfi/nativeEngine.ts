@@ -1,5 +1,5 @@
 /**
- * Synapse's engine running INSIDE the editor: `@seanhogg/bfi-node`, the native addon of
+ * The native `bfi` engine running INSIDE the editor: `@seanhogg/bfi-node`, the native addon of
  * `bfi-engine` — the same `BfiEngine` contract as the vendored wasm, on native wgpu
  * (Vulkan; Metal on macOS) or every CPU core, with the native KV budget. The host's `bfi`
  * worker runs it when the addon for this platform ships in `out/` and loads; otherwise

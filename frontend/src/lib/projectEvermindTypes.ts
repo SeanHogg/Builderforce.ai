@@ -1,11 +1,11 @@
 /**
  * Project Evermind payload types — the shapes `/api/projects/:id/evermind/*` returns,
  * with no transport attached. Split from `projectEvermindApi.ts` so a pure reader of
- * these shapes (the brain-region derivation, which other hosts compile
+ * these shapes (the brain-region derivation, which the Synapse desktop bundle compiles
  * too) does not drag the web API client into every program that type-checks it.
  *
  * The console's payloads are the `@seanhogg/builderforce-brain-ui` Evermind contract —
- * the SAME types the VS Code host reads — so they are aliased here, never
+ * the SAME types the VS Code and Synapse hosts read — so they are aliased here, never
  * restated. Only what the web alone renders (the head, limbic affect, training
  * telemetry) is declared in this file.
  */

@@ -24,7 +24,7 @@ export const GROUPING_LABEL_KEY: Record<CostGrouping, string> = {
 export const ROUTE_LABEL_KEY: Readonly<Record<string, string>> = { full: 'route.full', quick: 'route.quick' };
 
 /** Engines that are product names, spelled the same in every language. */
-const ENGINE_BRAND: Readonly<Record<string, string>> = { synapse: 'bfi serve', bfi: 'BFI', webllm: 'WebLLM' };
+const ENGINE_BRAND: Readonly<Record<string, string>> = { synapse: 'Synapse', bfi: 'BFI', webllm: 'WebLLM' };
 
 /** The wire's "no attribution" bucket — the one group key the UI names itself. */
 const UNATTRIBUTED = 'unattributed';

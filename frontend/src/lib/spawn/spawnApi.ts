@@ -70,8 +70,16 @@ export interface SpawnParentView extends SpawnPrices {
 /** The refusals a Spawn call may answer with — every one is a sentence in `spawn.errors`. */
 const EXPECTED = [400, 402, 403, 404, 409];
 
+/** Where the newest installers are; a null platform has no installer yet. */
+export interface SpawnInstallers {
+  version: string | null;
+  releaseUrl: string | null;
+  windows: string | null;
+  macArm: string | null;
+  macIntel: string | null;
+}
 
-/** A public read made once per page load (every consumer shares it) and retried after a failure. */
+/** A public read made once per page load (every button shares it) and retried after a failure. */
 function oncePerPage<T>(path: string): () => Promise<T> {
   let pending: Promise<T> | null = null;
   return () => {
@@ -81,6 +89,7 @@ function oncePerPage<T>(path: string): () => Promise<T> {
 }
 
 export const fetchSpawnPrices = oncePerPage<SpawnPrices>('/api/spawn/prices');
+export const fetchSpawnInstallers = oncePerPage<SpawnInstallers>('/api/spawn/downloads');
 
 export function fetchSpawnAccount(): Promise<SpawnAccount> {
   return apiRequest<SpawnAccount>('/api/spawn/account', { auth: 'tenant', expectedErrors: EXPECTED });

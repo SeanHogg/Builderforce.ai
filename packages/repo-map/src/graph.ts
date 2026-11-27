@@ -191,6 +191,51 @@ export class FileGraph {
     return this.out[from]?.find((e) => e[0] === to)?.[1] ?? 0;
   }
 
+  /** The files `file` depends on (edge `file`→x), in file-index order. */
+  dependencies(file: number): number[] {
+    return (this.out[file] ?? []).map((e) => e[0]);
+  }
+
+  /** The files that depend on `file` (edge x→`file`), in file-index order. */
+  dependents(file: number): number[] {
+    return this.reverse()[file] ?? [];
+  }
+
+  /**
+   * The files a change to `file` can reach: `file` plus every file that transitively
+   * depends on it, nearest first. `maxDepth` (≥ 0) bounds the walk; omitted = the whole closure.
+   */
+  impactRadius(file: number, maxDepth = Number.POSITIVE_INFINITY): number[] {
+    if (file < 0 || file >= this.pathList.length) return [];
+    const seen = new Set<number>([file]);
+    let frontier = [file];
+    for (let depth = 0; depth < maxDepth && frontier.length > 0; depth += 1) {
+      const next: number[] = [];
+      for (const f of frontier) {
+        for (const d of this.dependents(f)) {
+          if (seen.has(d)) continue;
+          seen.add(d);
+          next.push(d);
+        }
+      }
+      frontier = next;
+    }
+    return [...seen];
+  }
+
+  private reverseEdges: number[][] | undefined;
+
+  private reverse(): number[][] {
+    if (!this.reverseEdges) {
+      const rev: number[][] = this.pathList.map(() => []);
+      for (let from = 0; from < this.out.length; from += 1) {
+        for (const [to] of this.out[from]!) rev[to]!.push(from);
+      }
+      this.reverseEdges = rev;
+    }
+    return this.reverseEdges;
+  }
+
   /** Resolved references from other files into symbol `name` of file `file`. */
   symbolInDegree(file: number, name: string): number {
     return this.symbolIn.get(symbolKey(file, name)) ?? 0;

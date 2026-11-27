@@ -118,7 +118,7 @@ async function refresh(input: Omit<SearchInput, "query" | "limit">, root: string
   const lexicalScope = input.scope ? await resolveInsideRootReal(root, input.scope, { mustExist: true }) : undefined;
   if (input.scope && !lexicalScope) throw new Error("Search path is unavailable in the workspace");
   const scope = lexicalScope ? await realpath(lexicalScope) : undefined;
-  const selected = scope ? relativePath(root, scope) : undefined;
+  const selected = scope ? toPosixRel(root, scope) : undefined;
   const fileScope = scope ? (await lstat(scope)).isFile() : false;
   const listing = fileScope
     ? { ok: true, paths: [selected!] }
@@ -127,7 +127,7 @@ async function refresh(input: Omit<SearchInput, "query" | "limit">, root: string
 
   const ignored = await gitIgnoredMatcher(root);
   const extension = input.extension?.replace(/^\./, "").toLowerCase();
-  const paths = [...new Set((listing.paths ?? []).map((path) => path.replace(/\\/g, "/")))]
+  const paths = [...new Set((listing.paths ?? []).map(toPosixPath))]
     .filter((path) => (!selected || path === selected || path.startsWith(`${selected}/`))
       && (!extension || extname(path).slice(1).toLowerCase() === extension)
       && isMapCandidate(path, 0) && !ignored(path)).sort();

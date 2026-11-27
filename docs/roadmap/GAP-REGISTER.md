@@ -602,7 +602,14 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
 - `UP-G016` **Consistency debt across the repos.**
   - Package scope stays `@seanhogg/*` (user, 2026-11-26), so no rename is planned.
   - The Builderforce.ai root holds stray logs and probe files (`_tsc_*.log`, `tsgo-*.log`, `_probe_sqlite.cjs`, a file named `-p`).
-- `UP-G017` **Roblox is not yet a project type in the editor.** The Spawn app was retired on 2026-11-27. The `bf-roblox` bridge in `builderforce-spawn/crates/bf-roblox` is the reference for a Roblox starter kit and runtime adapter in the starter-kit registry (`UP-G002`). *Blocker: the starter-kit registry (`UP-G002`) does not exist yet.*
+- `UP-G015` **Synapse as a VS Code fork does not exist yet.** The Tauri Synapse app was removed on 2026-11-27. Its replacement is a Code-OSS fork that:
+  - runs the unchanged Builderforce VSIX (agent runtime and code visualizer), with the proposed API `chatSessionsProvider` enabled for it;
+  - ships the Spawn extension (`UP-G017`);
+  - offers three AI-model project types: Scratch, Existing model and Knowledge pack (as starter kits, `UP-G002`);
+  - takes extensions from Open VSX and from manually installed VSIX files (the Microsoft marketplace is not licensed for forks).
+  - The download buttons (the Synapse sections and Spawn's, through `/api/spawn/downloads`) resolve the newest `builderforce-inference` release that has installers. Point that resolver at the fork's releases when the fork ships. The product name and copy stay "Synapse".
+  - *Blocker: a design pass for the fork (repo, branding, build and update channel, project-type contract).*
+- `UP-G017` **Spawn is still a Tauri desktop app.** The `builderforce-spawn` repo stays. Spawn becomes a VS Code extension shipped in the Synapse fork (`UP-G015`), with `bf-roblox` as the Roblox Studio bridge. Spawn's download button already serves the Synapse installers.
 - `UP-G018` **Features that existed only in Synapse have no host since its retirement (2026-11-27).** They are Teach-once desktop automation (`bf-teach`), Self-Directed Agents with their scheduler and run history, and phone approvals for self-owned `synapse.step` steps. The API keeps the existing `synapse.step` rows private. The memory-mcp `experience_*` tools remain. *Blocker: a product decision on whether to rebuild them in the VS Code extension (desktop UI automation needs a native helper).*
 
 ### MCP consolidation `[platform]` `[agents]`

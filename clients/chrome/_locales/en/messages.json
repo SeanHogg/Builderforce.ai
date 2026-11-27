@@ -144,7 +144,7 @@
     "description": "Composer site chip when the tab is not a web page"
   },
   "needModelOrSignIn": {
-    "message": "No model is available. Sign in to Builderforce, or start a model on this device (Synapse, Ollama or FreeToken).",
+    "message": "No model is available. Sign in to Builderforce, or start a model on this device (bfi serve, Ollama or FreeToken).",
     "description": "No model available"
   },
   "runFailed": {
@@ -532,7 +532,7 @@
     "description": "Runtime state"
   },
   "synapseAddress": {
-    "message": "Synapse address",
+    "message": "bfi serve address",
     "description": "Field label"
   },
   "tasksHeading": {

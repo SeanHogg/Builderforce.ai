@@ -1,7 +1,7 @@
 /**
  * The Evermind console's REST adapter — ONE implementation of the gateway calls behind
  * {@link EvermindConsoleAdapter}, for every host that talks to `/api/projects/:id/evermind/*`
- * with an authenticated `request` (the VS Code sidebar's bearer fetch, the web console's signed-in
+ * with an authenticated `request` (the VS Code sidebar's bearer fetch, a signed-in web
  * session). Before this, the VS Code webview held the only copy inline, and a second host
  * would have had to restate every path, method and response unwrap beside it.
  *

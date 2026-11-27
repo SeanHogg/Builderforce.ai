@@ -8382,7 +8382,7 @@
       },
       {
         "question": "Kann mein Evermind auf meinem eigenen Computer laufen?",
-        "answer": "Ja – die Builderforce-Erweiterung für VS Code läuft auf Ihrem eigenen Rechner, und Ihr Evermind bleibt dort: Die Fakten, Demonstrationen und Fähigkeiten, die Ihre KI-Tools lernen, werden lokal gespeichert und trainiert, in einem Modell, das Ihnen gehört, und verlassen den Rechner nur, wenn Sie sie veröffentlichen. Die native bfi-Engine betreibt lokale Modelle passend zu Ihrem Speicher, und der Dienst bf-context gibt den KI-Tools auf dem Rechner einen gemeinsamen Code-Index."
+        "answer": "Ja – Synapse, der Builderforce-Desktop-Editor auf Basis von VS Code, läuft auf Ihrem eigenen Rechner, und Ihr Evermind bleibt dort: Die Fakten, Demonstrationen und Fähigkeiten, die Ihre KI-Tools lernen, werden lokal gespeichert und trainiert, in einem Modell, das Ihnen gehört, und verlassen den Rechner nur, wenn Sie sie veröffentlichen. Die native bfi-Engine betreibt lokale Modelle passend zu Ihrem Speicher, und der Dienst bf-context gibt den KI-Tools auf dem Rechner einen gemeinsamen Code-Index. Synapse ist noch nicht veröffentlicht."
       },
       {
         "question": "Was ist Write-Through Cognition?",
@@ -32721,7 +32721,7 @@
       },
       {
         "q": "Gibt es eine Desktop-App?",
-        "a": "Die Desktop-Oberfläche von Builderforce ist VS Code mit der Builderforce-Erweiterung. Sie chattet mit dem Brain, führt Ihre Agenten aus und arbeitet mit Ihrem privaten Evermind und lokalen Modellen auf Ihrem eigenen Rechner – Gedächtnis und Lernen, die dort bleiben, solange Sie sie nicht veröffentlichen."
+        "a": "Die Desktop-Oberfläche von Builderforce ist Synapse, der Builderforce-Desktop-Editor auf Basis von VS Code. Er führt die Builderforce-Erweiterung aus (Agenten-Laufzeit und Code-Visualisierer), liefert die Spawn-Erweiterung für Roblox mit und arbeitet mit Ihrem privaten Evermind und lokalen Modellen auf Ihrem eigenen Rechner – Gedächtnis und Lernen, die dort bleiben, solange Sie sie nicht veröffentlichen. Synapse ist noch nicht veröffentlicht."
       }
     ],
     "closeTitle": "Bereit, den Stack zu ersetzen?",
@@ -37303,7 +37303,7 @@
       "badge": "🎮 Für Roblox-Creator ab 13",
       "titleLead": "Sag es.",
       "titleAccent": "Spawn es.",
-      "lede": "Schreib das Spiel, das du willst. Roblox-Bauen kommt als Projekttyp in den Builderforce-Editor.",
+      "lede": "Schreib das Spiel, das du willst. Spawn baut es in Roblox Studio, über eine VS-Code-Erweiterung, die in Synapse mitgeliefert wird.",
       "start": "Starte deine Gratis-Woche",
       "fine": "7 Tage gratis · dann 1,99 $/Monat · ohne Karte starten"
     },
@@ -37355,7 +37355,7 @@
       "items": [
         {
           "icon": "⬇️",
-          "label": "Editor öffnen"
+          "label": "Erweiterung holen"
         },
         {
           "icon": "💬",
@@ -37388,7 +37388,7 @@
         }
       ],
       "parentsTitle": "Für Eltern",
-      "parents": "Für Eltern: Mitgliedschaft und Token-Pakete werden auf dieser Website über den sicheren Stripe-Checkout gekauft, und Sie entscheiden über jede Aufladung. In der App wird nichts abgebucht, und außer der monatlichen Mitgliedschaft für 1,99 $, die jederzeit kündbar ist, gibt es keine überraschenden Verlängerungen."
+      "parents": "Für Eltern: Mitgliedschaft und Token-Pakete werden auf dieser Website über den sicheren Stripe-Checkout gekauft, und Sie entscheiden über jede Aufladung. In Synapse wird nichts abgebucht, und außer der monatlichen Mitgliedschaft für 1,99 $, die jederzeit kündbar ist, gibt es keine überraschenden Verlängerungen."
     },
     "pricing": {
       "title": "Wähl dein Paket",
@@ -37422,17 +37422,17 @@
         },
         {
           "q": "Ist Spawn von Roblox?",
-          "a": "Nein. Spawn wird von Builderforce.ai entwickelt und ist weder mit der Roblox Corporation verbunden noch von ihr unterstützt. Es arbeitet über ein normales Studio-Plugin mit Roblox Studio."
+          "a": "Nein. Spawn wird von Builderforce.ai entwickelt und steht in keiner Verbindung zu Roblox Corporation und wird auch nicht von ihr unterstützt. Es arbeitet mit Roblox Studio über ein normales Studio-Plugin, das die Spawn-Erweiterung einrichtet."
         }
       ]
     },
     "cta": {
-      "title": "Roblox-Bauen kommt als Projekttyp in den Builderforce-Editor."
+      "title": "Spawn wird zu einer VS-Code-Erweiterung, die in Synapse mitgeliefert wird."
     },
     "account": {
       "eyebrow": "Spawn",
       "title": "Dein Konto",
-      "signInBody": "Melde dich an, um Spawn beizutreten und Tokens zu holen.",
+      "signInBody": "Melde dich an, um Spawn beizutreten, Tokens zu holen und die Spawn-Erweiterung in Synapse zu verbinden.",
       "signIn": "Anmelden",
       "loading": "Dein Konto wird geladen…",
       "tooYoungTitle": "Spawn ist für Spieler ab 13",
@@ -37441,7 +37441,7 @@
         "joined": "Willkommen bei Spawn! Deine Mitgliedschaft ist aktiv.",
         "tokensAdded": "Tokens hinzugefügt. Viel Spaß beim Bauen!",
         "cancelled": "Der Checkout wurde abgebrochen. Es wurde nichts berechnet.",
-        "trialStarted": "Deine Gratis-Woche hat begonnen! Viel Spaß beim Bauen."
+        "trialStarted": "Deine Gratis-Woche hat begonnen! Füge die Spawn-Erweiterung in Synapse hinzu und leg los."
       },
       "errors": {
         "generic": "Etwas ist schiefgelaufen. Bitte versuch es erneut.",
@@ -37479,7 +37479,7 @@
           "trial": "Gratis-Test",
           "trial_ended": "Test beendet"
         },
-        "activeBody": "Du bist Mitglied ({price} im Monat). Der Baukasten ist freigeschaltet.",
+        "activeBody": "Du bist Mitglied ({price} im Monat). Baukasten und Spawn-Erweiterung sind freigeschaltet.",
         "body": {
           "none": "Tritt für {price} im Monat bei, um den Baukasten freizuschalten.",
           "past_due": "Deine letzte Zahlung ist nicht durchgegangen. Tritt für {price} im Monat erneut bei, um weiterzubauen.",
@@ -38655,7 +38655,7 @@
         "usage": "Es ist das Gedächtnis-Subsystem von Builderforce. Die Canvas trainiert Evermind im Browser auf der Engine, Cloud- und On-Prem-Agenten rufen über die Laufzeit während der Arbeit ab und speichern, und die Builderforce-Erweiterung für VS Code arbeitet mit demselben Speicher auf der Festplatte wie der MCP-Server."
       },
       "inference": {
-        "tagline": "bfi, die native Rust-Engine zum Ausführen von LLMs auf Ihrem eigenen Rechner, und bf-context, der Code-Kontext-Dienst.",
+        "tagline": "bfi, die native Rust-Engine zum Ausführen von LLMs auf Ihrem eigenen Rechner, und bf-context, der Code-Kontext-Dienst. Die alte Desktop-App zieht zu Synapse um, das auf VS Code basiert.",
         "summary": "Laden Sie ein GGUF-Modell in der passenden Größe für Ihre Hardware und stellen Sie es über OpenAI-, Anthropic- und Ollama-kompatible APIs bereit, damit Ihre vorhandenen Clients unverändert funktionieren. Keine separate Ollama-Installation.",
         "problem": "Modelle lokal auszuführen hieß meist, die Laufzeit eines anderen Anbieters zu installieren, zu hoffen, dass sie im PATH liegt, zu raten, ob ein Modell in den Speicher passt, und mit den GGUF-Typen zu leben, die diese Laufzeit akzeptiert. Das Standard-llama.cpp lehnt die 2-Bit-Formate PQ2_0 und PTQ1_0 ab, in denen die Ternary-Bonsai-Modelle von PrismML erscheinen.",
         "gets": [
@@ -38667,20 +38667,20 @@
         ],
         "status": "Der CPU-Pfad ist ausgeliefert. Die GPU-Backends (CUDA, ROCm, Metal, Vulkan) kompilieren, aber der GPU-Durchsatz im Vergleich zu llama-bench wurde nicht gemessen, und die Release-Binärdateien sind noch nicht signiert.",
         "quickStartNote": "Installieren Sie die CLI mit Cargo aus dem Quellcode, prüfen Sie, ob ein Modell auf diesen Rechner passt, laden Sie es und starten Sie den Server.",
-        "usage": "bfi stellt lokale Modelle für Claude Code, Ihre Skripte und die Builderforce-Erweiterung für VS Code bereit, die sie über ~/.builderforce/desktop.json findet, und bf-context liefert der Erweiterung ebenfalls einen Code-Index. Die Desktop-App, die beides umhüllte, ist eingestellt; VS Code mit der Builderforce-Erweiterung ist die Desktop-Oberfläche."
+        "usage": "bfi stellt lokale Modelle für Claude Code, Ihre Skripte und die Builderforce-Erweiterung für VS Code bereit, die sie über ~/.builderforce/desktop.json findet, und bf-context liefert der Erweiterung ebenfalls einen Code-Index. Die alte Synapse-Desktop-App wird zu einem Synapse auf Basis von VS Code, dem Builderforce-Desktop-Editor; dieses Repository liefert jetzt bfi und bf-context."
       },
       "spawn": {
-        "tagline": "Eingestellt: die Spawn-Desktop-App und die Roblox-Studio-Brücke. Roblox-Bauen kommt als Projekttyp in den Builderforce-Editor.",
-        "summary": "Spawn wird nicht mehr veröffentlicht. Das Repository bleibt als Referenz für die Studio-Brücke offen; Roblox-Bauen zieht als Projekttyp in den Builderforce-Editor um.",
-        "problem": "KI-Werkzeuge für Roblox verlangen von jungen Creators, eine App herunterzuladen, ein Studio-Plugin zu installieren, einen lokalen Server zu starten und ein Sync-Werkzeug zu verbinden und alle vier am Laufen zu halten, bevor der erste Prompt möglich ist.",
+        "tagline": "Roblox-Spiele per Sprache bauen. Spawn wird zu einer VS-Code-Erweiterung, die in Synapse, dem Builderforce-Desktop-Editor, mitgeliefert wird.",
+        "summary": "Beschreiben Sie das Spiel, und Spawn baut die Teile, das Luau und die Oberfläche in Roblox Studio. Spawn wird zu einer VS-Code-Erweiterung, die in Synapse, dem Builderforce-Desktop-Editor auf Basis von VS Code, mitgeliefert wird.",
+        "problem": "KI-Werkzeuge für Roblox verlangen von jungen Creators, eine App herunterzuladen, ein Studio-Plugin zu installieren, einen lokalen Server zu starten und ein Sync-Werkzeug zu verbinden und alle vier am Laufen zu halten, bevor der erste Prompt möglich ist. Spawn wird zu einer einzigen VS-Code-Erweiterung in Synapse.",
         "gets": [
-          "Eine Tauri-Desktop-App, die neben Roblox Studio lief (eingestellt, nicht mehr veröffentlicht).",
+          "Eine VS-Code-Erweiterung, die in Synapse, dem Builderforce-Desktop-Editor, mitgeliefert wird und die frühere Tauri-Desktop-App ersetzt.",
           "bf-roblox, die Brücke: Sie installiert das Spawn-Plugin für Studio und stellt die Loopback-Brücke bereit, die das Plugin nach Builds abfragt, sodass von außerhalb des Rechners nichts erreichbar ist.",
           "Builderforce-Anmeldung und API-Zugriff über bf-cloud."
         ],
-        "status": "Eingestellt: Es werden keine neuen Versionen der Desktop-App mehr veröffentlicht.",
+        "status": "Im Wandel: Die Desktop-App wird nicht mehr veröffentlicht, die VS-Code-Erweiterung ersetzt sie. Synapse ist noch nicht veröffentlicht.",
         "quickStartNote": "Klonen Sie das Repository und bauen Sie den Workspace mit Cargo.",
-        "usage": "Spawn, der Roblox-Builder von Builderforce für Creators ab 13 Jahren, ist als Desktop-App eingestellt. Das offene Repository enthält die Desktop-App und die Studio-Brücke weiterhin als Referenz."
+        "usage": "Spawn ist der Roblox-Builder von Builderforce für Creators ab 13 Jahren und wird als eigenes Produkt angeboten. Das offene Repository enthält die Studio-Brücke und den Quellcode der Spawn-Erweiterung; Anmeldung und Modellaufrufe laufen über Builderforce."
       }
     }
   },

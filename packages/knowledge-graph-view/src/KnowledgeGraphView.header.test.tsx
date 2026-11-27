@@ -58,7 +58,7 @@ const strip = () => within(screen.getByTestId('kg-status-strip'));
 /** The ask input: the search icon button expands it (where the header does not wrap). */
 const askBox = () => openSearch({ fireEvent }, L);
 const toolbar = (over: Partial<Parameters<typeof Toolbar>[0]> = {}) => (
-    <Toolbar labels={L} wrapped={false} onSearch={vi.fn()} question="where" askName="Web" drawerOpen={false} onToggleDrawer={vi.fn()} {...over} />
+    <Toolbar labels={L} wrapped={false} onSearch={vi.fn()} question="where" askName="Web" {...over} />
 );
 
 describe('the status chip and the action button', () => {
@@ -201,23 +201,29 @@ describe('the spine root crumb', () => {
     });
 });
 
-describe('the Panels button and the drawer', () => {
-    it('opens ONE drawer on Act, with Coverage, Patterns and API after it; a second press closes it', async () => {
+describe('the right edge chevrons and the drawer', () => {
+    it('opens the drawer from the right edge and closes it from the drawer header', async () => {
         await mount(sourceOf({ syncStatus: async () => sync() }));
         expect(screen.queryByTestId('kg-drawer')).toBeNull();
         const button = screen.getByTestId('kg-panels-button');
         expect(button.getAttribute('aria-expanded')).toBe('false');
+        expect(button.textContent).toBe('‹');
+        expect(button.style.insetInlineEnd).toBe('0px');
         fireEvent.click(button);
         const drawer = within(screen.getByTestId('kg-drawer'));
-        expect(button.getAttribute('aria-expanded')).toBe('true');
+        expect(screen.queryByTestId('kg-panels-button')).toBeNull();
+        const close = drawer.getByTestId('kg-drawer-close');
+        expect(close.textContent).toBe('›');
+        expect(close.getAttribute('aria-expanded')).toBe('true');
         expect(drawer.getAllByRole('tab').map((t) => t.getAttribute('aria-label')).slice(0, 4)).toEqual([h.drawerTabAct, L.panelCoverage, L.panelPatterns, L.panelApi]);
         expect(drawer.getByRole('tab', { name: h.drawerTabAct }).getAttribute('aria-selected')).toBe('true');
         expect(screen.queryByTestId('kg-act-title')).not.toBeNull();
         fireEvent.click(drawer.getByRole('tab', { name: L.panelCoverage }));
         expect(drawer.getByRole('tab', { name: L.panelCoverage }).getAttribute('aria-selected')).toBe('true');
         expect(screen.queryByTestId('kg-act-title')).toBeNull();
-        fireEvent.click(button);
+        fireEvent.click(close);
         expect(screen.queryByTestId('kg-drawer')).toBeNull();
+        expect(screen.getByTestId('kg-panels-button')).toBeTruthy();
     });
 
     it('has Simulate as a tab, not a toolbar toggle', async () => {

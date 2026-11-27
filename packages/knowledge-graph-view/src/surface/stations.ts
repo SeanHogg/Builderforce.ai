@@ -380,4 +380,13 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
 }
 
 /** File refs whose source differs from the baseline's (or that the baseline lacks). */
-export function changedRefs(current: Pick<KnowledgeGraph, 'nodes'>, baseline: Pick<KnowledgeGraph, 'nodes'> | null | undefined): Set<str
+export function changedRefs(current: Pick<KnowledgeGraph, 'nodes'>, baseline: Pick<KnowledgeGraph, 'nodes'> | null | undefined): Set<string> {
+    const out = new Set<string>();
+    if (!baseline) return out;
+    const before = new Map(baseline.nodes.filter((n) => n.kind === 'file').map((n) => [n.ref, n.sourceHash] as const));
+    for (const n of current.nodes) {
+        if (n.kind !== 'file') continue;
+        if (!before.has(n.ref) || before.get(n.ref) !== n.sourceHash) out.add(n.ref);
+    }
+    return out;
+}

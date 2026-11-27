@@ -20,8 +20,7 @@ export * from "./writeScope.js";
 export * from "./methodology.js";
 export * from "./gzipText.js";
 export * from "./jsonKeyRead.js";
-export * from "./glob.js";
-export * from "./tool.js";
+export * from "./glob.js";export * from "./tool.js";
 export * from "./registry.js";
 export * from "./toolAliases.js";
 // THE catalog id ⇄ advertised name translation (`tasks.archive_many` ⇄ `builtin_tasks_archive_many`).
@@ -86,7 +85,6 @@ export * from "./focusPaths.js";
 export * from "./researchCache.js";
 export * from "./local-research-tool.js";
 // `repo_map` from the local definition index when Builderforce Desktop is absent.
-export * from "./symbolRepoMap.js";
 // The run delta's L3 analyzer adapters (PRD 41 §B7): one tool per file, over a host process port.
 export * from "./delta/adapters/index.js";
 // The run delta's optional dynamic tier (PRD 41 C6.2, C8.4): benchmarks, related tests with coverage, StrykerJS.

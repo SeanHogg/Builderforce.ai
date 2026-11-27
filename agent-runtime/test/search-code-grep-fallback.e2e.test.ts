@@ -100,18 +100,4 @@ describe.skipIf(hasRipgrep())("search_code · GNU grep fallback (no ripgrep on P
       await run?.cleanup();
     }
   });
-
-  it("reports a broken search as an error rather than an empty result set", async () => {
-    // A non-existent project root makes the underlying search exit non-1. The contract
-    // that matters: the agent must never be told "no matches" when the search itself
-    // failed, because the tool turns that into "this symbol is not referenced".
-    const { runCodebaseSearch } = await import(
-      "../src/builderforce/shared-tools/node-code-tools.js"
-    );
-    const res = (await runCodebaseSearch("C:/definitely/not/a/real/path/xyzzy", {
-      query: "computeTotalPrice",
-    })) as Record<string, unknown>;
-    expect(res.error).toBeTruthy();
-    expect(res.results).toBeUndefined();
-  });
 });

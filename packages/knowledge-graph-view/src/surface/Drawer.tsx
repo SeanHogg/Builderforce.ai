@@ -63,7 +63,7 @@ export function Drawer(p: DrawerProps) {
     const { labels, drawer, graph, env } = p;
     if (!drawer.open) return (
         <PanelChevron testId="kg-panels-button" open={false} side="right" label={labels.surface.panelsLabel} onClick={drawer.toggle}
-            style={{ position: 'absolute', insetInlineEnd: 4, top: '50%', transform: 'translateY(-50%)', zIndex: 5 }} />
+            style={{ position: 'absolute', insetInlineEnd: 0, insetBlockStart: '50%', transform: 'translateY(-50%)', borderRadius: '4px 0 0 4px', zIndex: 5 }} />
     );
     const tabs = drawerTabs(graph, env, p.panels);
     const open = tabs.find((t) => t.id === drawer.tab) ?? null;

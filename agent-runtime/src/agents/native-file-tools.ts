@@ -15,6 +15,7 @@ import {
   writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { dirname, extname, isAbsolute, resolve as resolvePath } from "node:path";
+import { applyStringEdit } from "@builderforce/agent-tools";
 import { Type } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "../builderforce/model/agent-types.js";
 import { getStagedEdit, isStagingActive, stageEdit } from "../builderforce/staged-edits.js";
@@ -284,24 +285,16 @@ export function createEditTool(
           }
           raw = (await ops.readFile(abs)).toString("utf-8");
         }
-        // BOM/CRLF tolerant exact match.
-        const stripBom = (s: string) => (s.charCodeAt(0) === 0xfeff ? s.slice(1) : s);
-        const lf = (s: string) => s.replace(/\r\n/g, "\n");
-        const content = lf(stripBom(raw));
-        const needle = lf(oldText);
-        const first = content.indexOf(needle);
-        if (first === -1) {
+        // The shared matcher: BOM/CRLF tolerant, keeps the file's own EOL and BOM.
+        const result = applyStringEdit(raw, oldText, newText);
+        if (!result.ok || result.content === undefined) {
           throw new Error(
-            `Could not find the exact text in ${path}. It must match exactly including whitespace and newlines.`,
+            result.error?.includes("not unique")
+              ? `The text to replace is not unique in ${path}. Include more surrounding context so it matches exactly once.`
+              : `Could not find the exact text in ${path}. It must match exactly including whitespace and newlines.`,
           );
         }
-        if (content.indexOf(needle, first + needle.length) !== -1) {
-          throw new Error(
-            `The text to replace is not unique in ${path}. Include more surrounding context so it matches exactly once.`,
-          );
-        }
-        const updated =
-          content.slice(0, first) + lf(newText) + content.slice(first + needle.length);
+        const updated = result.content;
         if (isStagingActive()) {
           const staged = stageEdit({
             filePath: abs,

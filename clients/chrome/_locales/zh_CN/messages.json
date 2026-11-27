@@ -108,7 +108,7 @@
     "message": "没有网页"
   },
   "needModelOrSignIn": {
-    "message": "当前没有可用的模型。请登录 Builderforce，或在本设备上启动一个模型（Synapse、Ollama 或 FreeToken）。"
+    "message": "当前没有可用的模型。请登录 Builderforce，或在本设备上启动一个模型（bfi serve、Ollama 或 FreeToken）。"
   },
   "runFailed": {
     "message": "出现问题：$1"
@@ -412,7 +412,7 @@
     "message": "未运行"
   },
   "synapseAddress": {
-    "message": "Synapse 地址"
+    "message": "bfi serve 地址"
   },
   "tasksHeading": {
     "message": "任务"

@@ -1,5 +1,5 @@
 /**
- * Our transformer — Synapse's `bfi` compiled to WebAssembly over WebGPU, or over the CPU
+ * Our transformer — the native `bfi` engine compiled to WebAssembly over WebGPU, or over the CPU
  * where there is no GPU (`bfi-web`, PRD 34 §3.1) — as a page engine answering the `bfi`
  * runtime's chat route. The backend is the fit's: `localModelFit` offers a Bonsai row on
  * WebGPU when the adapter fits it, else on the engine's CPU backend when the device has

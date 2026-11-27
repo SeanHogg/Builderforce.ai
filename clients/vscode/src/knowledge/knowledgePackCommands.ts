@@ -9,12 +9,12 @@
  *     one) to a path the person picks;
  *   - `builderforce.loadKnowledgePack` — open a `.bfpack` and make it queryable: its graph is
  *     indexed under its own root (`packs/packIndexing.ts`) and the pack remembered
- *     (`packs/loadedPackRegistry.ts`), so chat, Synapse and the knowledge view see it;
+ *     (`packs/loadedPackRegistry.ts`), so chat and the knowledge view see it;
  *   - `builderforce.updateKnowledgePack` — re-review a loaded pack's source folder, merge
  *     fresh knowledge onto the pack (`mergePacksWithCards`, mirroring the folder), rewrite the file and re-index.
  *
  * A pack is LLM-agnostic: it carries the reviewed facts/relations plus the retrieval
- * cards (`toCards`), so any consumer — Synapse, Canvas, another editor — queries it and
+ * cards (`toCards`), so any consumer — Canvas, another editor — queries it and
  * injects top cards as context with nothing installed. The pure halves are in
  * `@builderforce/agent-tools/knowledge` (`packFromStore`, `packGraph`, `rebasePackRoot`).
  */

@@ -2,7 +2,7 @@
  * EvermindScreen — the VS Code sidebar host of the shared <EvermindConsole> (the
  * SAME component the web app embeds in the IDE: one inspect-and-train surface, two
  * hosts). The gateway calls are the shared `createEvermindRestAdapter` over the webview's
- * bearer fetch (CORS allows the `vscode-webview://` origin) — the same adapter Synapse
+ * bearer fetch (CORS allows the `vscode-webview://` origin) — the same adapter any other host
  * uses — and the host's localized bundle maps onto the labels through the shared
  * `evermindLabelsFromBundle`. What is this host's own: the clipboard and the memory
  * files, which only the extension host can touch.

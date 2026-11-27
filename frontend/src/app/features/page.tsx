@@ -13,6 +13,7 @@ import {
 import { isSeat, seatHueVar } from '@/lib/seats';
 import type { BurnrateDomainCopy } from '@/components/marketing/BurnrateDomainPage';
 import MarketingFaq from '@/components/marketing/MarketingFaq';
+import DesktopAppDownload from '@/components/marketing/DesktopAppDownload';
 import MethodologySection from '@/components/marketing/MethodologySection';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import { Icon } from '@/components/ui/Icon';
@@ -187,6 +188,13 @@ export default async function FeaturesPage() {
           <div className="mk-grid mk-grid--wide">{REFERENCE_FOUNDATIONS.map((entry) => renderCard(entry, true))}</div>
         </div>
       </section>
+
+      {/* ── Band 4b · raised — Synapse, the desktop app: the same platform's private
+          Evermind on the person's own machine. The section brings its own copy and
+          layout, so this page only gives it a band. ─────────────────────────────── */}
+      <div className="mk-band">
+        <DesktopAppDownload />
+      </div>
 
       {/* ── Band 5 · raised — the arc, straight off the registry ────────────── */}
       <section className="mk-band">

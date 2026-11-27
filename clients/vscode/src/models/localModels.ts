@@ -1,6 +1,6 @@
 /**
  * On-device model support for the editor surface — a chat turn served by a runtime on
- * the DEVELOPER'S OWN MACHINE (Synapse, Ollama, FreeToken — or Kimi Code, called from
+ * the DEVELOPER'S OWN MACHINE (`bfi serve`, Ollama, FreeToken — or Kimi Code, called from
  * this machine) instead of the BuilderForce gateway.
  *
  * The runtime registry, the `local/<runtime>/<model>` ref grammar, the probe, the
@@ -42,7 +42,7 @@ import { hostPageEngines } from "../panels/pageEngineBridge";
 import type { KimiCodeModel } from "../auth/kimiCodeInstall";
 
 // Re-exported for the editor modules that already reach the local path through this
-// file (the panel's proxy fence, the Synapse catalog, the model-state pin check, the
+// file (the panel's proxy fence, the model-state pin check, the
 // model picker). One import site per concern; the definitions are the package's.
 export { isLocalModelRef, normalizeLocalBaseUrl } from "@builderforce/local-inference";
 export type { LocalEndpoint, LocalModel } from "@builderforce/local-inference";

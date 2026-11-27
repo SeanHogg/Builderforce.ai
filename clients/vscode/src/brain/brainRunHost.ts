@@ -331,7 +331,7 @@ export function createBrainRunHost(ports: BrainRunHostPorts): BrainRunHost {
           ...(ports.localProbes ? { probes: ports.localProbes } : {}),
           ...(ports.localModels ? { models: ports.localModels } : {}),
         },
-        // Summaries (the fold, the hand-off note) try Synapse / the local engines first (PRD 42 · C2).
+        // Summaries (the fold, the hand-off note) try `bfi serve` / the local engines first (PRD 42 · C2).
         ...(onDeviceTasks ? { onDeviceTasks } : {}),
         ...(p.maxTokens ? { maxTokens: p.maxTokens } : {}),
         ...(p.reasoning ? { reasoning: p.reasoning } : {}),

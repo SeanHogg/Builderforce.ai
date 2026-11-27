@@ -2,7 +2,7 @@
  * THE `bfi-web` loader — the one way a `bfi` worker (`runBfiWorker`, the editor host's
  * `hostBfi/worker.ts`) loads the wasm.
  *
- * `@seanhogg/bfi-web` is the vendored wasm-pack build of Synapse's engine (PRD 34 §3.1,
+ * `@seanhogg/bfi-web` is the vendored wasm-pack build of the native `bfi` engine (PRD 34 §3.1,
  * `packages/bfi-web`). This module dynamic-imports it, runs its wasm-bindgen initializer
  * with the wasm URL the HOST's bundler emitted — once, however many engines or calls ask
  * — and hands back the `BfiEngine` class in the shape `bfiEngine.ts` takes. Only the URL

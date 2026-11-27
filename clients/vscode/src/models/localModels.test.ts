@@ -110,7 +110,7 @@ describe("catalog discovery", () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it("skips Synapse when no desktop endpoint was discovered", async () => {
+  it("skips the bfi serve runtime when no endpoint was discovered", async () => {
     const spy = vi.fn(async () => new Response(JSON.stringify({ data: [{ id: "m" }] }), { status: 200 }));
     globalThis.fetch = spy as unknown as typeof fetch;
     const models = await listLocalModels({
@@ -121,7 +121,7 @@ describe("catalog discovery", () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it("lists Synapse models when desktop.json published an endpoint", async () => {
+  it("lists bfi serve models when an endpoint was discovered", async () => {
     globalThis.fetch = vi.fn(async (url: string) => {
       if (String(url).includes("11435")) {
         return new Response(JSON.stringify({ data: [{ id: "qwen3:8b" }] }), { status: 200 });
@@ -153,7 +153,7 @@ describe("rows for the shared model-list builder", () => {
     ).toEqual([
       { id: "local/freetoken/gpt-oss-20b", label: "gpt-oss-20b", runtime: "FreeToken" },
       { id: "local/ollama/qwen3:8b", label: "qwen3:8b", runtime: "Ollama" },
-      { id: "local/synapse/llama-3.1-8b", label: "llama-3.1-8b", runtime: "Synapse" },
+      { id: "local/synapse/llama-3.1-8b", label: "llama-3.1-8b", runtime: "bfi serve" },
     ]);
   });
 

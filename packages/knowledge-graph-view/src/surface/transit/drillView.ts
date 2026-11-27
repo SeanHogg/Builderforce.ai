@@ -11,6 +11,8 @@
 
 import type { KEdge, KNode, KnowledgeGraph, NodeRef } from '@seanhogg/builderforce-memory/knowledge';
 import { cmp } from '../../order';
+import { callIndex, isExternal } from '../../compute/tasks/placement/callIndex';
+import type { SymbolRecord } from '../../types';
 import { LAYER_ORDER } from '../layers';
 import { buildLines, type LinesModel } from '../lines';
 import { fileNodesOf, mapEdges, tailOf } from '../outlineGraph';
@@ -49,7 +51,7 @@ export function hasSymbols(graph: Pick<KnowledgeGraph, 'nodes'>): boolean {
 
 interface Member { node: KNode; role: string }
 
-function membersOf(graph: KnowledgeGraph, world: StationModel, frame: DrillFrame): { members: Member[]; order: string[]; filesOnly: boolean; extra: KEdge[]; anchors: string[] } {
+function membersOf(graph: KnowledgeGraph, world: StationModel, frame: DrillFrame, edges: readonly KEdge[]): { members: Member[]; order: string[]; filesOnly: boolean; extra: KEdge[]; anchors: string[] } {
     const files = new Map(fileNodesOf(graph).map((n) => [n.ref as string, n] as const));
     const asFiles = (refs: readonly string[]): Member[] => refs.flatMap((r) => files.get(r) ?? []).map((node) => ({ node, role: node.partition ?? 'other' }));
     const symbols = symbolsOf(graph);
@@ -73,14 +75,33 @@ function membersOf(graph: KnowledgeGraph, world: StationModel, frame: DrillFrame
     }
     const focus = byRef.get(frame.ref);
     if (!focus) return { members: [], order: ['body', 'callees'], filesOnly: false, extra: [], anchors: [] };
+    const children = isClassLike(symbolSort(focus)) ? membersOfClass(symbols, focus) : [];
+    if (children.length) {
+        const members = [{ node: focus, role: 'symbol' }, ...children.map((node) => ({ node, role: 'methods' }))];
+        const extra = children.map((node): KEdge => ({ from: focus.ref, to: node.ref, kind: 'references', weight: 1, origin: 'extracted' }));
+        return { members, order: ['symbol', 'methods'], filesOnly: false, extra, anchors: [fileRefOf(frame.ref)] };
+    }
     const called = new Set<string>();
-    for (const e of graph.edges) if (e.kind === 'references' && e.from === frame.ref && byRef.get(e.to)?.kind === 'symbol') called.add(e.to);
+    for (const e of edges) if (e.from === focus.ref && e.to !== focus.ref && byRef.get(e.to)?.kind === 'symbol') called.add(e.to);
     const members: Member[] = [{ node: focus, role: 'body' }, ...[...called].sort(cmp).flatMap((r) => byRef.get(r) ?? []).map((node) => ({ node, role: 'callees' }))];
     return { members, order: ['body', 'callees'], filesOnly: false, extra: [], anchors: [fileRefOf(frame.ref)] };
 }
 
-export function buildDrillView(graph: KnowledgeGraph, world: StationModel, frame: DrillFrame): DrillView {
-    const picked = membersOf(graph, world, frame);
+function drillEdges(graph: KnowledgeGraph, records: readonly SymbolRecord[]): KEdge[] {
+    const edges = graph.edges.filter((e) => e.kind === 'references');
+    const seen = new Set(edges.map((edge) => `${edge.from}\0${edge.to}`));
+    for (const [from, calls] of callIndex(graph, records).calls) for (const { to } of calls) {
+        const pair = `${from}\0${to}`;
+        if (isExternal(to) || seen.has(pair)) continue;
+        seen.add(pair);
+        edges.push({ from: from as NodeRef, to: to as NodeRef, kind: 'references', weight: 1, origin: 'extracted' });
+    }
+    return edges;
+}
+
+export function buildDrillView(graph: KnowledgeGraph, world: StationModel, frame: DrillFrame, records: readonly SymbolRecord[] = []): DrillView {
+    const edges = frame.level === 'package' ? mapEdges(graph) : drillEdges(graph, records);
+    const picked = membersOf(graph, world, frame, edges);
     const members = [...picked.members].sort((a, b) => b.node.importance - a.node.importance || cmp(a.node.ref, b.node.ref)).slice(0, MAX_MEMBERS);
     const inside = new Set<string>(members.map((m) => m.node.ref));
     const top = members[0]?.node.ref;
@@ -88,7 +109,7 @@ export function buildDrillView(graph: KnowledgeGraph, world: StationModel, frame
     const anchor = new Set(picked.anchors);
     const endOf = (ref: NodeRef): NodeRef | undefined => (inside.has(ref) ? ref : anchor.has(ref) ? top : undefined);
 
-    const all: readonly KEdge[] = frame.level === 'package' ? mapEdges(graph) : [...graph.edges.filter((e) => e.kind === 'references'), ...picked.extra];
+    const all = picked.extra.length ? [...edges, ...picked.extra] : edges;
     const memberEdges: KEdge[] = [];
     const touching = new Map<string, number>();
     const own = new Set(frame.level === 'package' ? [frame.ref] : [stationOfRef(world, frame.ref) ?? '']);

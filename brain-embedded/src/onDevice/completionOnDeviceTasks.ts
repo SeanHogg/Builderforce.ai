@@ -1,6 +1,6 @@
 /**
  * `OnDeviceTasks` over ANY on-device chat completion (PRD 42 · B2): VS Code binds it to
- * Synapse (`completeOnDevice`), and the web / Rovr port uses it as the tail behind the
+ * the on-device engine (`completeOnDevice`), and the web / Rovr port uses it as the tail behind the
  * built-in APIs (bfi / WebLLM through the page fetch shim). The host injects the one
  * completion; this file owns the prompts, the chunking and the validation.
  *

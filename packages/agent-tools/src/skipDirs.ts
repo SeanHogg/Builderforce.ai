@@ -56,9 +56,9 @@ export function isSkippedDirName(name: string, skipDirs: ReadonlySet<string> = W
   return skipDirs.has(name) || skippedDirReason(name) !== undefined;
 }
 
-/** Whether an INDEX / SEARCH / ANALYSIS walk enters a directory called `name`: not skipped, and not a hidden directory other than `.github`. */
-export function isIndexedDirName(name: string): boolean {
-  return !isSkippedDirName(name) && (!name.startsWith(".") || name === INDEXED_DOT_DIR);
+/** Whether an INDEX / SEARCH / ANALYSIS walk enters a directory called `name`: not skipped (by `skipDirs`, default {@link WORKSPACE_SKIP_DIRS}), and not a hidden directory other than `.github`. */
+export function isIndexedDirName(name: string, skipDirs: ReadonlySet<string> = WORKSPACE_SKIP_DIRS): boolean {
+  return !isSkippedDirName(name, skipDirs) && (!name.startsWith(".") || name === INDEXED_DOT_DIR);
 }
 
 /** Whether a FILE LISTING (`list_files`) enters a directory called `name`: not skipped, and not a hidden directory outside {@link LIST_CONFIG_DOT_DIRS}. */

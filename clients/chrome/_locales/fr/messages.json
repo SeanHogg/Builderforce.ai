@@ -108,7 +108,7 @@
     "message": "Aucune page web"
   },
   "needModelOrSignIn": {
-    "message": "Aucun modèle n'est disponible. Connectez-vous à Builderforce ou lancez un modèle sur cet appareil (Synapse, Ollama ou FreeToken)."
+    "message": "Aucun modèle n'est disponible. Connectez-vous à Builderforce ou lancez un modèle sur cet appareil (bfi serve, Ollama ou FreeToken)."
   },
   "runFailed": {
     "message": "Une erreur s'est produite : $1"
@@ -412,7 +412,7 @@
     "message": "Non démarré"
   },
   "synapseAddress": {
-    "message": "Adresse de Synapse"
+    "message": "Adresse de bfi serve"
   },
   "tasksHeading": {
     "message": "Tâches"

@@ -113,12 +113,12 @@ npx -y -p @seanhogg/builderforce-memory-mcp builderforce-memory-install --host=a
   {
     key: 'inference',
     slug: 'builderforce-inference',
-    displayName: 'bfi',
+    displayName: 'Synapse · bfi',
     repoUrl: 'https://github.com/SeanHogg/builderforce-inference',
     license: 'MIT',
     language: 'Rust',
     distribution: 'git',
-    packages: ['bfi', 'bfi-server', 'bfi-runtime', 'bfi-gguf', 'bf-context'],
+    packages: ['bfi', 'bfi-server', 'bfi-runtime', 'bfi-gguf'],
     install: 'cargo install --git https://github.com/SeanHogg/builderforce-inference bfi',
     quickStartLanguage: 'sh',
     quickStart: `cargo install --git https://github.com/SeanHogg/builderforce-inference bfi

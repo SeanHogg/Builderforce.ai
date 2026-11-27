@@ -57,6 +57,9 @@ export function conformToExistingEol(existing: string | null | undefined, next: 
   return existing == null ? next : withEol(next, dominantEol(existing));
 }
 
+/** U+FEFF — the byte-order mark some editors put at the start of a file. */
+const BOM_CHAR_CODE = 0xfeff;
+
 /** Shortest needle the "contains" fallback of {@link findNearest} will try — shorter
  *  text (`}`, `return;`) matches everywhere and would point at noise. */
 const MIN_CONTAINS_NEEDLE = 8;
@@ -139,6 +142,12 @@ export function applyStringEdit(
 ): StringEditResult {
   if (typeof oldString !== "string" || oldString.length === 0) {
     return { ok: false, error: "oldString is required" };
+  }
+  // A leading BOM is not text the agent can see or quote: match on the body, write the BOM back untouched.
+  const bom = content.charCodeAt(0) === BOM_CHAR_CODE ? String.fromCharCode(BOM_CHAR_CODE) : "";
+  if (bom) {
+    const inner = applyStringEdit(content.slice(1), oldString, newString, replaceAll);
+    return inner.ok && inner.content !== undefined ? { ...inner, content: bom + inner.content } : inner;
   }
   const match = matchEdit(content, oldString, newString, replaceAll, dominantEol(content));
   if (match && "ambiguous" in match) {

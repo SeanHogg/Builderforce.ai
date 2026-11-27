@@ -41,7 +41,6 @@ import {
   buildNodeCapabilityProvider,
   catalogNodeCapabilityProvider,
 } from "./node-capability-provider.js";
-import { withoutUnbackedSemanticTools } from "./on-prem-semantic.js";
 
 /** Shared definitions converged on-prem this pass (read/exec/process/search stay native —
  *  see the module note). One source of truth: the cloud loop runs these exact objects.
@@ -97,8 +96,7 @@ export function buildConvergedFileTools(params: {
   requestHuman?: Parameters<typeof buildNodeCapabilityProvider>[0]["requestHuman"];
   /**
    * Catalog-time backing for `repo.semantic` (`on-prem-semantic.ts`): Desktop, or the
-   * definition index serving `repo_map` alone (`semantic_search` is then withheld).
-   * When omitted, both stay withheld. Never always-on.
+   * local code index and repo map. When omitted, both tools stay withheld. Never always-on.
    */
   semantic?: RepoSemanticCapability;
   /** Catalog-time `local.research` backing; omitted ⇒ no `local_research`. */
@@ -114,7 +112,6 @@ export function buildConvergedFileTools(params: {
   return buildConvergedFileToolsFromProvider({
     provider,
     workspaceRoot: params.workspaceRoot,
-    semantic: params.semantic,
   });
 }
 
@@ -128,22 +125,18 @@ export function buildConvergedFileTools(params: {
 export function buildConvergedFileToolsFromProvider(params: {
   provider: CapabilityProvider;
   workspaceRoot: string;
-  semantic?: RepoSemanticCapability;
 }): AnyAgentTool[] {
-  return withoutUnbackedSemanticTools(
-    registryToAgentTools(
-      CONVERGED_REGISTRY,
-      params.provider,
-      params.workspaceRoot,
-      NATIVE_NAME_ALIASES,
-    ),
-    params.semantic,
+  return registryToAgentTools(
+    CONVERGED_REGISTRY,
+    params.provider,
+    params.workspaceRoot,
+    NATIVE_NAME_ALIASES,
   );
 }
 
 /**
- * Catalog-time converged tools: `repo_map` always (Desktop, else the definition index),
- * `semantic_search` only when the Desktop health probe succeeds.
+ * Catalog-time converged tools: `repo_map` and `semantic_search` always (Desktop, else the
+ * local code index and repo map).
  */
 export async function catalogConvergedFileTools(
   params: Omit<Parameters<typeof buildConvergedFileTools>[0], "semantic">,
@@ -154,8 +147,5 @@ export async function catalogConvergedFileTools(
     requestHuman: params.requestHuman,
     research: params.research,
   });
-  return withoutUnbackedSemanticTools(
-    registryToAgentTools(CONVERGED_REGISTRY, provider, params.workspaceRoot, NATIVE_NAME_ALIASES),
-    provider.semantic,
-  );
+  return buildConvergedFileToolsFromProvider({ provider, workspaceRoot: params.workspaceRoot });
 }

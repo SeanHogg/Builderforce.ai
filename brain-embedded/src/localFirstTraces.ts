@@ -5,7 +5,7 @@
  *
  * The served model already reaches the provenance chip as the turn's `resolvedModel`
  * (`local/<runtime>/<model>` for a local answer). What would otherwise be invisible is
- * the fallback itself: "why did this turn go to the cloud when I have Synapse running?"
+ * the fallback itself: "why did this turn go to the cloud when I have `bfi serve` running?"
  * must have an answer in a copied diagnostics report and a reopened chat. Same shape and
  * category as the other `llm.*` self-reports (see `runPolicyTraces.ts`). Pure: the
  * caller stamps `ts`.

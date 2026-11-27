@@ -32,7 +32,7 @@ export interface OutlineView {
 
 interface Decoded { files: KNode[]; edges: KEdge[] }
 
-const decodedBy = new WeakMap<GraphOutline, Decoded>();
+const decodedBy = new WeakMap<GraphOutline, { hasCode: boolean; data: Decoded }>();
 const viewBy = new WeakMap<KnowledgeGraph, OutlineView>();
 
 /** The last segment of a path (the whole thing when it has no slash): the ONE tail the map uses for file names. */
@@ -59,7 +59,7 @@ function addTags(node: Mutable<KNode>, outline: GraphOutline, f: object): void {
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
-function decode(outline: GraphOutline): Decoded {
+function decode(outline: GraphOutline, hasCode: boolean): Decoded {
     const files: KNode[] = outline.files.map((f) => {
         const badges = badgesOf(f.badges);
         // The outline's 12-character hash is not a sourceHash (it never equals a real one), so it is not carried.
@@ -72,7 +72,7 @@ function decode(outline: GraphOutline): Decoded {
         if (badges) node.badges = badges;
         // Legacy compact outlines omit the pack. Use the code analyzer's placement badge
         // when available, then recognize source extensions even when the path is a test or config.
-        if (badges?.asset !== 1 && (badges?.layerRule !== undefined || badges?.entry !== undefined
+        if (hasCode && badges?.asset !== 1 && (badges?.layerRule !== undefined || badges?.entry !== undefined
             || (extensionCategory(f.path) === 'source' && fileCategory(node) !== 'other'))) node.pack = 'code';
         addTags(node, outline, f);
         return node;
@@ -96,8 +96,13 @@ export function outlineView(graph: KnowledgeGraph): OutlineView | null {
     const cached = viewBy.get(graph);
     if (cached) return cached;
     const outline = outlineOf(graph);
-    let decoded = decodedBy.get(outline);
-    if (!decoded) { decoded = decode(outline); decodedBy.set(outline, decoded); }
+    const hasCode = graph.scope.packs.includes('code');
+    let entry = decodedBy.get(outline);
+    if (!entry || entry.hasCode !== hasCode) {
+        entry = { hasCode, data: decode(outline, hasCode) };
+        decodedBy.set(outline, entry);
+    }
+    const decoded = entry.data;
     const real = new Map<string, KNode>();
     for (const n of graph.nodes) if (n.kind === 'file') real.set(n.ref, n);
     const inOutline = new Set<string>();

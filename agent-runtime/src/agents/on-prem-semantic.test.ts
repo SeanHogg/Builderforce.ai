@@ -8,12 +8,7 @@ import { setDesktopFetchForTests } from "@builderforce/agent-tools/node-desktop.
 import { CORE_PACKAGE_NAME } from "../infra/package-names.js";
 import { catalogConvergedFileTools } from "./converged-coding-tools.js";
 import { catalogNodeCapabilityProvider } from "./node-capability-provider.js";
-import {
-  isLocalIndexSemantic,
-  localIndexSemantic,
-  resolveOnPremSemantic,
-  withoutUnbackedSemanticTools,
-} from "./on-prem-semantic.js";
+import { isLocalIndexSemantic, resolveOnPremSemantic } from "./on-prem-semantic.js";
 import { onPremTreeSitterDir } from "./on-prem-symbol-index.js";
 import { TREE_SITTER_DIST_DIR } from "./tree-sitter-dist.js";
 
@@ -72,24 +67,6 @@ describe("on-prem repo_map without Builderforce Desktop", () => {
     const data = JSON.parse(text.text) as { ok: boolean; map: string };
     expect(data.ok).toBe(true);
     expect(data.map).toContain("chargeInvoice");
-  });
-});
-
-describe("withoutUnbackedSemanticTools", () => {
-  const tools = [{ name: "semantic_search" }, { name: "repo_map" }, { name: "write" }];
-
-  it("drops semantic_search only for the definition-index backing", () => {
-    expect(withoutUnbackedSemanticTools(tools, localIndexSemantic(tmpdir())).map((t) => t.name)).toEqual([
-      "repo_map",
-      "write",
-    ]);
-    const desktopLike = { search: async () => ({ ok: true }), repoMap: async () => ({ ok: true }) };
-    expect(withoutUnbackedSemanticTools(tools, desktopLike).map((t) => t.name)).toEqual([
-      "semantic_search",
-      "repo_map",
-      "write",
-    ]);
-    expect(withoutUnbackedSemanticTools(tools, undefined)).toHaveLength(3);
   });
 });
 

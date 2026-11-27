@@ -6,6 +6,7 @@ import QuickStart from '@/components/QuickStart';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import MarketingFaq from '@/components/marketing/MarketingFaq';
+import DesktopAppDownload from '@/components/marketing/DesktopAppDownload';
 import { renderInlineCode } from '@/components/marketing/inlineCode';
 import FeatureCard from './FeatureCard';
 import NewsletterForm from './NewsletterForm';
@@ -66,6 +67,8 @@ export default async function AgentsHome() {
         </header>
 
         <QuickStart />
+
+        <DesktopAppDownload />
 
         <section className="cc-section">
           <h2 className="cc-h2"><span className="cc-agentHost-accent">⟩</span> {t('agents.whatItDoes')}</h2>

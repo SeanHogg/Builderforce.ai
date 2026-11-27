@@ -686,6 +686,7 @@ export interface RepoReadResult {
   /** Set when `read_file` inflated a `.gz` body before returning it. */
   decompressed?: boolean;
   error?: string;
+  code?: WorkspaceErrorCode;
 }
 export interface RepoSearchResult {
   ok: boolean;
@@ -694,6 +695,7 @@ export interface RepoSearchResult {
   truncated?: boolean;
   matches?: Array<{ path: string } & Record<string, unknown>>;
   error?: string;
+  code?: WorkspaceErrorCode;
 }
 /** One definition a {@link RepoSymbolsCapability} found. */
 export interface SymbolMatch {
@@ -727,6 +729,7 @@ export interface RepoWriteResult {
    *  applied (rehearsal). Present on a SUCCESSFUL result — `error` is for failures. */
   note?: string;
   error?: string;
+  code?: WorkspaceErrorCode;
 }
 export interface RepoDeleteResult {
   ok: boolean;
@@ -734,7 +737,7 @@ export interface RepoDeleteResult {
   branch?: string;
   commitUrl?: string | null;
   note?: string;
-  code?: "not_found" | "error";
+  code?: WorkspaceErrorCode | "error";
   error?: string;
 }
 export interface RepoEditResult {
@@ -747,6 +750,7 @@ export interface RepoEditResult {
   /** Model-facing guidance on a SUCCESSFUL edit (see {@link RepoWriteResult.note}). */
   note?: string;
   error?: string;
+  code?: WorkspaceErrorCode;
   /** On a "not found" failure: the most similar line and its ±3 neighbourhood (see `StringEditResult.nearest`). */
   nearest?: { line: number; excerpt: string };
   /** On success: the 1-based line span of the first replacement (see `StringEditResult.region`). */

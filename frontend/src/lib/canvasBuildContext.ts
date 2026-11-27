@@ -4,6 +4,7 @@
  * the workspace helpers a committed change reports through. Split out of `canvasBuildTools.ts`.
  */
 
+import { applyStringEdit } from '@builderforce/agent-tools/edit';
 import { exportedSymbols } from '@builderforce/agent-tools/symbols';
 import { MODALITIES, type ProjectModality } from '@/lib/modality';
 import { type WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
@@ -147,24 +148,17 @@ export function applySearchReplace(
   replaceAll: boolean,
 ): { ok: true; next: string; replacements: number } | { ok: false; reason: string } {
   if (!find) return { ok: false, reason: 'find must not be empty. To replace a whole file use canvas_write_build_file.' };
-  const occurrences = source.split(find).length - 1;
-  if (occurrences === 0) {
-    return { ok: false, reason: 'find did not match. Read the file with canvas_read_build_file and copy the exact text, including indentation and line breaks.' };
+  // The shared matcher (EOL/escape/whitespace tolerant, literal splices — a `$&` in the
+  // replacement is never a capture reference). Only the model-facing wording is ours.
+  const edit = applyStringEdit(source, find, replace, replaceAll);
+  if (edit.ok && edit.content !== undefined) {
+    return { ok: true, next: edit.content, replacements: edit.replaced ?? 1 };
   }
-  if (occurrences > 1 && !replaceAll) {
+  if (edit.error?.includes('not unique')) {
+    const occurrences = applyStringEdit(source, find, replace, true).replaced ?? 2;
     return { ok: false, reason: `find matched ${occurrences} times. Include more surrounding lines so it matches once, or pass replaceAll: true to change every occurrence.` };
   }
-  // Index arithmetic, NOT `String.replace`: `replace` interprets `$&`, `$1` and
-  // `$'` in the REPLACEMENT as capture references, so a model writing a price
-  // string, a regex literal or a template would get silently mangled text back.
-  // Both branches are literal.
-  const next = replaceAll
-    ? source.split(find).join(replace)
-    : (() => {
-      const at = source.indexOf(find);
-      return source.slice(0, at) + replace + source.slice(at + find.length);
-    })();
-  return { ok: true, next, replacements: replaceAll ? occurrences : 1 };
+  return { ok: false, reason: 'find did not match. Read the file with canvas_read_build_file and copy the exact text, including indentation and line breaks.' };
 }
 
 /**

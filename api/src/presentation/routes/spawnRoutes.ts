@@ -22,7 +22,7 @@ import { recordBirthMonth } from '../../application/spawn/spawnAge';
 import { completeSpawnMembership, startSpawnMembership } from '../../application/spawn/spawnMembership';
 import { completeSpawnTopUp, startSpawnTopUp } from '../../application/spawn/spawnTopUp';
 import { runSpawnBuild } from '../../application/spawn/spawnBuild';
-import { spawnInstallers } from '../../application/spawn/spawnDownloads';
+import { synapseInstallers } from '../../application/desktop/synapseInstallers';
 import { startSpawnTrial } from '../../application/spawn/spawnTrial';
 import {
   completeParentMembership, completeParentTopUp, spawnParentView, startParentMembership, startParentTopUp,
@@ -52,8 +52,8 @@ export function createSpawnRoutes(db: Db): Hono<HonoEnv> {
 
   // Public: the landing page shows the prices before anyone signs in. Static data.
   router.get('/prices', (c) => c.json(spawnPriceList()));
-  // Public: every download button links straight to the installer. Cached (spawnDownloads).
-  router.get('/downloads', async (c) => c.json(await spawnInstallers(c.env as Env)));
+  // Public: every download button links straight to the installer. Cached (synapseInstallers).
+  router.get('/downloads', async (c) => c.json(await synapseInstallers(c.env as Env)));
 
   const appUrl = (c: { env: unknown; req: { url: string } }) => (c.env as Env).APP_URL ?? new URL(c.req.url).origin;
 

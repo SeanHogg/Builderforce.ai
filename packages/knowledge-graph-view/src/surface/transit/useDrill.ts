@@ -114,8 +114,8 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
     }, [world, full, stack, requestSymbols]);
     const view = useMemo(() => {
         const top = stack[stack.length - 1];
-        return full && top ? buildDrillView(full, world, top) : null;
-    }, [full, world, stack]);
+        return full && top ? buildDrillView(full, world, top, records) : null;
+    }, [full, world, stack, records]);
 
     const canEnter = useCallback((id: string): EnterCheck => {
         // An empty stack IS the world level. Branch on length, not `top?.level ?? 'world'`: without

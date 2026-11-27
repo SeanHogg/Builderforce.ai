@@ -2,7 +2,7 @@
 /**
  * The vendored `bfi-web` build — `packages/bfi-web/`.
  *
- * Synapse's engine (`builderforce-inference`, crate `crates/bfi-web`) compiled by
+ * The native `bfi` engine (`builderforce-inference`, crate `crates/bfi-web`) compiled by
  * wasm-pack for the browser: a ~50 KB JS glue, its `.d.ts` and a ~3.7 MB `.wasm` (WebGPU
  * + single-threaded CPU, stable toolchain) — and, optionally, under `threads/` the
  * THREADED CPU artifact (`crates/bfi-web/build-threads.mjs`: pinned nightly, atomics,

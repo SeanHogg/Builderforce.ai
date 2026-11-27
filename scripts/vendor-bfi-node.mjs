@@ -2,7 +2,7 @@
 /**
  * The vendored `bfi-node` build — `packages/bfi-node/`.
  *
- * Synapse's engine as a native Node addon (`builderforce-inference`, crate
+ * The native `bfi` engine as a native Node addon (`builderforce-inference`, crate
  * `crates/bfi-node`, napi-rs over `bfi-engine`): the JS face (`index.js` + `index.d.ts`)
  * and one prebuilt `bfi_node.<platform>-<arch>.node` per platform. The editor's
  * extension host runs it (`clients/vscode/src/hostBfi/nativeEngine.ts`) — native wgpu on

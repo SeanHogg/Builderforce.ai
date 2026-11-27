@@ -406,4 +406,9 @@ function KnowledgeGraphSurface({
                 graph={graph} index={index} selected={selected} tracing={tracing} labels={labels} source={source} confirm={confirm} renderPanel={renderPanel}
                 compact={layout.compact} onClose={() => { setTracing(false); kg.select(null); }} onTrace={() => setTracing((v) => !v)} onSelect={select} onChanged={kg.reload} onShow={show}
                 onResolve={surface.resolve}
-                onSh
+                onShowInTower={showInTower}
+            />
+        </SurfaceFrame>
+        </RetryUploadContext.Provider></RestructureContext.Provider></FlatViewContext.Provider>
+    );
+}

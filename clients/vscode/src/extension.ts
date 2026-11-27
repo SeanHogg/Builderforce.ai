@@ -189,7 +189,7 @@ export function activate(context: vscode.ExtensionContext): void {
     bridge: hostPageEngines,
   });
   context.subscriptions.push({ dispose: () => hostBfi.dispose() });
-  // Where Synapse's engine runs natively, Hybrid's first local-first turn with nothing
+  // Where the native `bfi` engine runs, Hybrid's first local-first turn with nothing
   // cached provisions a Bonsai it can serve (`hostBfi/provision.ts`) — whether it does is
   // read on that turn, so the addon is not loaded at activation.
   context.subscriptions.push({

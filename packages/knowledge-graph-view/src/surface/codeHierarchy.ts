@@ -47,7 +47,7 @@ export function buildCodeHierarchy(graph: KnowledgeGraph, rootTitle: string, lay
             const area = pathOf(file.area)?.replaceAll('\\', '/');
             if (area && containsPath(area, path)) {
                 const base = [app, system].find((folder) => containsPath(folder, area)) ?? '';
-                const component = declared || area.slice(base ? base.length + 1 : 0);
+                const component = declared && declared !== area ? declared : area.slice(base ? base.length + 1 : 0);
                 if (component && component !== architecture.at(-1)?.name) architecture.push({ id: `area:${area}`, name: component });
             } else if (declared || area) {
                 const name = declared || tailOf(area!);

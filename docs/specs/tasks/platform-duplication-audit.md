@@ -13,13 +13,18 @@ Part of the [unified platform review](unified-platform-gap-review.md). Areas are
 | 7 | Auth / device sign-in / cloud client | audited (§7) |
 | 8 | Security policy (code-shield vs Shield) | audited (§8) |
 
-### Synapse and Spawn retirement (user decision, 2026-11-27)
+### Synapse moves from Tauri to a VS Code fork (user decision, 2026-11-27)
 
-The Synapse desktop app is retired. VS Code with the Builderforce extension is the IDE, and the extension is the reusable host. Spawn is retired as a separate app; Roblox returns later as a project type in the editor (`UP-G017`). The OpenVSCode-in-Tauri shell is not being built.
+The Tauri Synapse app is removed. Synapse returns as a fork of VS Code (Code-OSS) (`UP-G015`):
+- it runs the unchanged Builderforce extension (agent runtime and code visualizer);
+- it ships the Spawn extension (`UP-G017`; the `builderforce-spawn` repo stays);
+- it adds project types for three AI-model scenarios: Scratch, Existing model and Knowledge pack.
+
+The OpenVSCode-in-Tauri shell is not being built. Until the fork ships, the editor is VS Code with the Builderforce extension.
 
 **Kept in `builderforce-inference`:** the `bfi-*` engine (`bfi serve` announces itself in `~/.builderforce/bfi.json`; the extension also runs it in-process through `@seanhogg/bfi-node`), plus `bf-index`, `bf-context` and `bf-compress` (`bf-context serve` still writes `~/.builderforce/desktop.json`). `bf-index` stays behind the benchmark gate in §2.5. The release workflow now publishes only the `bfi` and `bf-context` binaries.
 
-**Deleted:** `app/` (vanilla-JS UI, Tauri shell, console) and the crates `bf-local`, `bf-cloud`, `bf-teach`, `bf-memory` and `bf-vault`. In Builderforce.ai, these were removed: the never-served "Install Synapse model" flow, the `desktop.json` `models` reader, the unused Synapse embedder slot, and the Synapse and Spawn download surfaces.
+**Deleted:** `app/` (vanilla-JS UI, Tauri shell, console) and the crates `bf-local`, `bf-cloud`, `bf-teach`, `bf-memory` and `bf-vault`. In Builderforce.ai, these were removed: the never-served "Install Synapse model" flow, the `desktop.json` `models` reader, the unused Synapse embedder slot. End-user copy, labels and download sections are unchanged: users still get the Synapse desktop app and Spawn. `/api/spawn/downloads` now returns the Synapse installers, because Spawn ships inside Synapse.
 
 | Finding | Status after retirement |
 |---|---|
@@ -34,7 +39,7 @@ The Synapse desktop app is retired. VS Code with the Builderforce extension is t
 | AUTH-G001 | Closed. The Rust device flow is deleted. |
 | AUTH-G002, AUTH-G008, AUTH-G009, AUTH-G013 | The Rust copies are gone. The VS Code and Chrome parts remain open. |
 | CIX-G012 | The never-offered Synapse embedder slot is removed. The fingerprint policy remains open. |
-| UP-G015 | Closed by this decision. |
+| UP-G015 | Redefined: build Synapse as a VS Code fork. |
 
 **Kept on purpose:** API compatibility for existing data (`DEVICE_CLIENTS` `synapse`/`spawn`, the private `synapse.step` approvals, `CLIENT_RESULT_ENGINES` `synapse`), the one-time import of Synapse connector settings in VS Code, and the dated Synapse blog posts.
 
@@ -52,7 +57,7 @@ The original audit counted 11 server, client, catalog and host integrations. The
 | Workspace MCP | VS Code and agent-runtime use `packages/workspace-mcp` for the SDK server and catalog. The hosts supply workspace selection and HTTP authentication. Shared code provides text and indexed search, symbols, outlines, repo maps, references, git history and optional compression. |
 | Memory MCP | `builderforce-memory/packages/memory-mcp` uses the shared SDK server with stdio and loopback HTTP, and exposes the same tool catalog to the in-process Agent SDK. It reports its package version. |
 | Registered remote MCP | `mcpWireClient.ts` adapts the shared SDK-backed HTTP transport to the gateway's destination checks, session cache and legacy REST fallback. The marketplace discovery probe uses the same transport and pagination. |
-| Editor MCP | VS Code is the editor and carries Workspace MCP and connector setup. Synapse was retired on 2026-11-27, together with its private Evermind stdio client. Spawn moves into a Roblox project type (`UP-G017`). |
+| Editor MCP | The Builderforce VS Code extension carries Workspace MCP and connector setup, in VS Code today and in the Synapse VS Code fork later (`UP-G015`). The Tauri Synapse app and its private Evermind stdio client were removed on 2026-11-27. Spawn becomes an extension in the fork (`UP-G017`). |
 | Agent-runtime MCP | The docs command searches the published sitemap through the shared in-process MCP transport. The interactive ACP client forwards a specifically selected VS Code config to ACP peers that support its transports. The Gateway-backed bridge uses Gateway-managed tools. |
 | WebContainer MCP | Browser preview execution and the environment agent host use the shared SDK with an in-process transport. Tool execution stays bound to the owning tab or the agent's environment port. Native inference receives tool definitions as model function schemas. |
 | Platform REST relay | Web, VS Code, Chrome and agent-runtime use the shared TypeScript relay. The headless connector runner uses the shared connector action codec for its fixed discovery and dispatch tools. Rust, Android and iOS use native HTTP clients with the gateway's canonical model projection and legacy response compatibility. |

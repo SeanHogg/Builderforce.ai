@@ -19,7 +19,7 @@ export function stationTypes(graph: Pick<KnowledgeGraph, 'nodes'> | null, model:
     index ??= nodeIndex(graph);
     for (const s of model.stations) {
         const types: MarkType[] = [];
-        for (const ref of s.refs) { const n = index.get(ref); if (n) types.push(markTypeOf(n)); }
+        for (const ref of s.refs) types.push(markTypeOf(index.get(ref) ?? { kind: 'file', ref: ref as KNode['ref'], label: '' }));
         out.set(s.id, dominantType(types));
     }
     return out;

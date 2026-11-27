@@ -1,5 +1,5 @@
 /**
- * Rovr's `bfi` Web Worker (`BFI_WORKER_FILE`, an entry of `build.mjs`): Synapse's engine
+ * Rovr's `bfi` Web Worker (`BFI_WORKER_FILE`, an entry of `build.mjs`): the native `bfi` engine
  * on WebGPU or, without it, on the CPU — off the side panel's thread. The panel starts
  * it (`panelServices.ts`); everything it does is brain-embedded's `runBfiWorker`.
  */

@@ -47,24 +47,25 @@ So the work is mostly *unify and extract*, not *build*. The pasted roadmap's pha
 3. **Build coupling.**
    - Spawn depends on `bf-cloud` from git `main`, unpinned.
    - The relative-path console link went with the Synapse app (retired 2026-11-27).
-4. **Duplicated shells.** Resolved by retiring both Tauri apps (Synapse and Spawn) on 2026-11-27.
+4. **Duplicated shells.** The Tauri Synapse app was removed on 2026-11-27. Spawn's Tauri shell goes when its extension ships in the Synapse fork (`UP-G017`).
 5. **The UI reuse seam is aliasing, not adapters.**
    - VS Code compiles `frontend/src/components/creation-canvas/**` with Next shims.
    - Any new Next or `window` import in that closure breaks the extension build, which is also why the VSIX package takes 9.5 minutes (`AE-G061`).
 6. **Repo hygiene.** The Builderforce.ai root holds `_tsc_*.log`, `tsgo-*.log`, `_probe_sqlite.cjs` and a stray file named `-p`.
 
-## 3. Synapse retired: VS Code is the IDE (decision, 2026-11-27)
+## 3. Synapse becomes a VS Code fork (decision, 2026-11-27)
 
-> **User, 2026-11-27:** Synapse is replaced by VS Code, and Spawn is consolidated into it as a project type, so the VSIX is the reusable host.
+> **User, 2026-11-27:** The Builderforce VSIX stays the same: an agent runtime plus the code visualizer. The Synapse desktop app is replaced by a fork of Visual Studio Code. The fork runs the VSIX and has project types for three AI-model scenarios: Scratch, Existing and Knowledge pack. The Spawn repo stays; Spawn becomes an extension packaged with the fork.
 
-- **Superseded:** the earlier recommendation to embed an OpenVSCode Server sidecar in the Synapse Tauri shell. It is not being built, and `UP-G015` is closed by this decision.
+- **Superseded:** the earlier recommendation to embed an OpenVSCode Server sidecar in the Synapse Tauri shell. It is not being built. A Code-OSS fork replaces it (`UP-G015`), and the earlier "why not a fork" concern (a second Electron shell) no longer applies, because the Tauri shell is gone.
 - **Deleted:**
   - the Synapse app (`builderforce-inference/app`: vanilla-JS UI, Tauri shell, console);
   - its service crates (`bf-local`, `bf-cloud`, `bf-teach`, `bf-memory`, `bf-vault`).
 - **Kept** (each serves the extension):
   - the native engine `bfi` (`bfi serve`, plus `@seanhogg/bfi-node` in-process);
   - the `bf-context` loopback service and the `bf-index`/`bf-compress` crates behind the benchmark gate.
-- **Spawn** is retired as an app. The `bf-roblox` bridge stays in its repo as the reference for the Roblox project type (`UP-G017`).
+- **Spawn** keeps its repo. It moves from its own Tauri shell to a VS Code extension shipped in the Synapse fork, and `bf-roblox` stays the Roblox Studio bridge (`UP-G017`).
+- **Project types** in the fork cover three AI-model scenarios: Scratch (train a new model), Existing (start from an existing model) and Knowledge pack (build on a portable knowledge pack). They are starter kits (`UP-G002`).
 - **Features that existed only in Synapse** have no host now: Teach-once desktop automation, Self-Directed Agents and their scheduler, and phone approvals for self-owned steps. Rebuilding them in the extension is a product decision (`UP-G018`).
 - Per-finding status: [duplication audit, retirement record](platform-duplication-audit.md#synapse-and-spawn-retirement-user-decision-2026-11-27).
 
