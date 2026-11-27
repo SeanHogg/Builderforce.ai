@@ -1,8 +1,6 @@
 import * as vscode from "vscode";
 import { renderWebviewHtml } from "./webviewShared";
 import { handleSharedHostMessage } from "./webviewHostBridge";
-import { reportExtensionError } from "../diagnostics/errorReporter";
-import { workspaceCanvasSession } from "../workspace/workspaceSession";
 import { WorkspaceSurface, type BrainInbound, type BrainIntent } from "../workspace/workspaceSurface";
 
 /** The chat view in the SECONDARY sidebar — the agent chat area, beside Chat / Claude
@@ -28,20 +26,16 @@ function supportsSecondarySidebar(version: string): boolean {
  * other — this is a second place to hold the conversation, not a second chat.
  */
 class BuilderForceChatViewProvider implements vscode.WebviewViewProvider {
-  /** The surface of the resolved view; undefined until VS Code first shows it. Resolves
-   *  undefined when the view closed before the board lookup finished. */
-  private surface?: Promise<WorkspaceSurface | undefined>;
+  private surface?: WorkspaceSurface;
   /** An intent that arrived before the view resolved — handed to the surface it creates. */
   private pendingIntent?: BrainIntent;
 
   constructor(private readonly ctx: vscode.ExtensionContext) {}
 
-  /** Deliver an intent: to the live surface, or to the one the view is about to create.
-   *  A lookup that ends with no surface (view closed, lookup failed) has already dropped
-   *  itself from {@link surface}, so the re-delivery goes to the next view. */
+  /** Deliver an intent to the current or next surface. */
   deliver(intent: BrainIntent | undefined): void {
     if (!intent) return;
-    if (this.surface) void this.surface.then((s) => (s ? s.sendIntent(intent) : this.deliver(intent)));
+    if (this.surface) this.surface.sendIntent(intent);
     else this.pendingIntent = intent;
   }
 
@@ -55,77 +49,43 @@ class BuilderForceChatViewProvider implements vscode.WebviewViewProvider {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(this.ctx.extensionUri, "media")],
     };
-    // The board lookup can be a network round trip; the shell boots meanwhile and its
-    // messages wait on the surface rather than the view waiting on the lookup. A view
-    // closed before it answers, or a lookup that fails, gets no surface: the promise
-    // resolves undefined (never rejects) and any pending intent waits for the next view.
-    const surface: Promise<WorkspaceSurface | undefined> = workspaceCanvasSession(this.ctx)
-      .then((session) => {
-        if (disposed) return undefined;
-        const intent = this.takePendingIntent();
-        try {
-          return new WorkspaceSurface(
-            this.ctx,
-            {
-              webview,
-              owner: view,
-              // A sidebar has no room for a board above the conversation: the board and the
-              // run's changes open in the visualization panel, in the editor area beside it.
-              boardBeside: true,
-              // The view's title is the product; the conversation it holds goes beside it.
-              onSessionMeta: (_chatId, title) => {
-                if (disposed || title === undefined) return;
-                view.description = title.trim() || undefined;
-              },
-            },
-            session,
-            "chat",
-            intent,
-          );
-        } catch (error) {
-          this.pendingIntent ??= intent;
-          throw error;
-        }
-      })
-      .catch((error: unknown) => {
-        // Dropped from `this.surface` BEFORE anything chained on it runs, so `deliver`
-        // re-routes to `pendingIntent` instead of looping on this dead lookup.
-        if (this.surface === surface) this.surface = undefined;
-        void reportExtensionError(error, { operation: "chatView.resolveSession" });
-        if (!disposed) {
-          void vscode.window.showWarningMessage(
-            vscode.l10n.t("BuilderForce could not open the chat. Close and reopen the view to try again."),
-          );
-        }
-        return undefined;
-      });
+    // The Visualization panel resolves the board when opened. Chat can handle ready immediately.
+    const surface = new WorkspaceSurface(
+      this.ctx,
+      {
+        webview,
+        owner: view,
+        boardBeside: true,
+        onSessionMeta: (_chatId, title) => {
+          if (disposed || title === undefined) return;
+          view.description = title.trim() || undefined;
+        },
+      },
+      undefined,
+      "chat",
+      this.pendingIntent,
+    );
+    this.pendingIntent = undefined;
     this.surface = surface;
     // Listener BEFORE html: the bundled app posts `ready` at module load, and a dropped
     // `ready` leaves the view on the sign-in wall (see EvermindViewProvider).
     const listener = webview.onDidReceiveMessage(async (m: BrainInbound) => {
       if (disposed) return;
       if (await handleSharedHostMessage(this.ctx, webview, m, view)) return;
-      const live = await surface;
-      if (live && !disposed) await live.handle(m);
+      if (!disposed) await surface.handle(m);
     });
     webview.html = renderWebviewHtml(webview, this.ctx, { title: "BuilderForce" });
     // The visualization does NOT open with the chat view: it opens only on the header's
     // Visualize lever or the `builderforce.openVisualization` command — never on its own.
     // A token may have refreshed while the view was hidden.
-    const visibility = view.onDidChangeVisibility(() => { if (view.visible) void surface.then((s) => s?.refresh()); });
+    const visibility = view.onDidChangeVisibility(() => { if (view.visible) surface.refresh(); });
     view.onDidDispose(() => {
       disposed = true;
       listener.dispose();
       visibility.dispose();
       if (this.surface === surface) this.surface = undefined;
-      void surface.then((s) => s?.dispose());
+      surface.dispose();
     });
-  }
-
-  private takePendingIntent(): BrainIntent | undefined {
-    const intent = this.pendingIntent;
-    this.pendingIntent = undefined;
-    return intent;
   }
 }
 

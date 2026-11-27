@@ -155,7 +155,7 @@ export interface InitData {
   /** The installed extension's version, so a copied diagnostics report pins the exact
    *  client build it came from (a stale VSIX is a routine cause of "already fixed" bugs). */
   extensionVersion?: string;
-  /** The public web origin, for views that hand a link to the external browser (voice checkout). */
+  /** The public web origin for external links and hosted canvas assets. */
   webOrigin?: string;
   /** Short SOURCE HASH of the installed artifact. A version names a release, not a
    *  build: two VSIXes can carry the same version and different code, so this is the

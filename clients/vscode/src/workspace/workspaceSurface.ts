@@ -200,8 +200,9 @@ export function notifyComposerCommands(composerCommands: ComposerCommandsInit): 
 export class WorkspaceSurface implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private readonly localFetch: LocalFetchProxy;
-  /** Intent captured at construction, flushed once the webview signals `ready`. */
-  private pendingIntent?: BrainIntent;
+  /** Intents received before the webview can receive them. */
+  private readonly pendingIntents: BrainIntent[] = [];
+  private ready = false;
   /** Stops relaying the host's runs to this surface (set while the webview is attached). */
   private detachRuns?: () => void;
   /** Detaches this webview's page engines (WebGPU models) from the host's routes. */
@@ -210,13 +211,13 @@ export class WorkspaceSurface implements vscode.Disposable {
   constructor(
     private readonly ctx: vscode.ExtensionContext,
     private readonly host: WorkspaceSurfaceHost,
-    /** The board this surface is working in, resolved before construction. */
-    private session: WorkspaceCanvasSession,
+    /** The board for a canvas surface. Sidebar chat opens its board separately. */
+    private session: WorkspaceCanvasSession | undefined,
     /** Which surface the LAST entry asked for. */
     private surfaceRequest: "chat" | "graph",
     intent?: BrainIntent,
   ) {
-    this.pendingIntent = intent;
+    if (intent) this.pendingIntents.push(intent);
     this.localFetch = new LocalFetchProxy(ctx.secrets, host.webview);
     live.add(this);
     this.disposables.push(
@@ -257,6 +258,10 @@ export class WorkspaceSurface implements vscode.Disposable {
 
   /** Post a host-driven intent to the React app (new / focus / task / seed). */
   sendIntent(intent: BrainIntent): void {
+    if (!this.ready) {
+      this.pendingIntents.push(intent);
+      return;
+    }
     this.post({ type: "intent", intent });
   }
 
@@ -274,6 +279,7 @@ export class WorkspaceSurface implements vscode.Disposable {
   async handle(msg: BrainInbound): Promise<void> {
     switch (msg.type) {
       case "ready":
+        this.ready = false;
         // Watch the host-owned runs from this surface: a reopened one is brought up to
         // date on every live run the moment it asks. Re-attached on each `ready` (a
         // webview reload is a fresh mirror), never twice at once.
@@ -289,10 +295,9 @@ export class WorkspaceSurface implements vscode.Disposable {
         hooks.modelFiles?.release(this);
         this.lateRepush.reset();
         await this.sendInit();
-        if (this.pendingIntent) {
-          this.sendIntent(this.pendingIntent);
-          this.pendingIntent = undefined;
-        }
+        if (!live.has(this)) break;
+        this.ready = true;
+        for (const intent of this.pendingIntents.splice(0)) this.sendIntent(intent);
         break;
       // The run verbs, forwarded to the host-owned loop. `run.start` is fire-and-forget
       // here: the host answers with `run.settled` / `run.failed` when the loop ends,

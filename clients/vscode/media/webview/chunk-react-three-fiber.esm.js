@@ -1,4 +1,4 @@
-import{hl as rb,c6 as ab,ec as on,r as Et,j as ei}from"./index.js";/**
+import{hm as rb,c6 as ab,ed as on,r as Et,j as ei}from"./index.js";/**
  * @license
  * Copyright 2010-2026 Three.js Authors
  * SPDX-License-Identifier: MIT

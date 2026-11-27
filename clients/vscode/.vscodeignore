@@ -28,6 +28,8 @@ out/harness.cjs
 # (code-analysis cache, manifests): nothing at runtime reads it from the extension's own folder.
 .builderforce/**
 pnpm-lock.yaml
+# The root analyzer directory is a build input. The extension runs the copy under out.
+analyzers/**
 # The bundled analyzers (PRD 41 A3) ship whole: typescript needs its lib.*.d.ts at runtime, and the
 # rules above (**/*.ts, **/*.map, **/tsconfig.json) must not strip any package under out/analyzers.
 !out/analyzers/**

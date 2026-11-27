@@ -1,22 +1,21 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Meta = (chatId: number | undefined, title: string | undefined) => void;
 type FakeSurface = {
   host: { onSessionMeta?: Meta };
   intent: unknown;
+  session: unknown;
   handle: ReturnType<typeof vi.fn>;
   sendIntent: ReturnType<typeof vi.fn>;
+  dispose: ReturnType<typeof vi.fn>;
 };
 
 const registry = vi.hoisted(() => ({
   provider: undefined as undefined | { resolveWebviewView(view: unknown): void },
   surfaces: [] as FakeSurface[],
-  /** One pending board lookup per resolved view, settled by the test. */
-  lookups: [] as Array<{ resolve: (value: unknown) => void; reject: (error: unknown) => void }>,
+  lookup: vi.fn(() => new Promise(() => {})),
   shared: { calls: 0 },
 }));
-const notices = vi.hoisted(() => ({ warn: vi.fn(async () => undefined) }));
-const reporter = vi.hoisted(() => ({ reportExtensionError: vi.fn(async () => undefined), logLine: vi.fn() }));
 
 vi.mock("vscode", () => ({
   version: "1.110.0",
@@ -26,12 +25,10 @@ vi.mock("vscode", () => ({
       registry.provider = provider;
       return { dispose: () => undefined };
     },
-    showWarningMessage: notices.warn,
   },
   Uri: { joinPath: (...parts: unknown[]) => parts.join("/") },
   l10n: { t: (message: string) => message },
 }));
-vi.mock("../diagnostics/errorReporter", () => reporter);
 vi.mock("./webviewShared", () => ({ renderWebviewHtml: () => "<html></html>" }));
 vi.mock("./webviewHostBridge", () => ({
   handleSharedHostMessage: async () => {
@@ -40,18 +37,18 @@ vi.mock("./webviewHostBridge", () => ({
   },
 }));
 vi.mock("../workspace/workspaceSession", () => ({
-  workspaceCanvasSession: () => new Promise((resolve, reject) => { registry.lookups.push({ resolve, reject }); }),
+  workspaceCanvasSession: registry.lookup,
 }));
 vi.mock("../workspace/workspaceSurface", () => ({
   WorkspaceSurface: class {
     handle = vi.fn(async () => undefined);
     sendIntent = vi.fn();
     refresh = () => undefined;
-    dispose = () => undefined;
+    dispose = vi.fn();
     constructor(
       _ctx: unknown,
       readonly host: { onSessionMeta?: Meta },
-      _session: unknown,
+      readonly session: unknown,
       _surface: unknown,
       readonly intent: unknown,
     ) {
@@ -105,34 +102,28 @@ function fakeView() {
 }
 
 const ctx = { extensionUri: "ext", subscriptions: [] as unknown[] } as never;
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-const lastLookup = () => registry.lookups[registry.lookups.length - 1]!;
 const intent = { kind: "seed", text: "hello" } as never;
 
-describe("chat view after its view is disposed", () => {
-  const unhandled: unknown[] = [];
-  const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
-
+describe("sidebar chat view", () => {
   beforeEach(() => {
     registry.surfaces.length = 0;
-    registry.lookups.length = 0;
+    registry.lookup.mockClear();
     registry.shared.calls = 0;
-    unhandled.length = 0;
-    notices.warn.mockClear();
-    reporter.reportExtensionError.mockClear();
-    process.on("unhandledRejection", onUnhandled);
     registerChatView(ctx);
   });
 
-  afterEach(() => {
-    process.off("unhandledRejection", onUnhandled);
-  });
-
-  it("regression: a session-meta update after dispose does not write the dead view's description", async () => {
+  it("handles ready without looking up or creating a board", async () => {
     const view = fakeView();
     registry.provider?.resolveWebviewView(view);
-    lastLookup().resolve({});
-    await flush();
+    expect(registry.lookup).not.toHaveBeenCalled();
+    expect(registry.surfaces[0]?.session).toBeUndefined();
+    await view.send({ type: "ready" });
+    expect(registry.surfaces[0]?.handle).toHaveBeenCalledWith({ type: "ready" });
+  });
+
+  it("ignores session-meta updates after disposal", () => {
+    const view = fakeView();
+    registry.provider?.resolveWebviewView(view);
     const meta = registry.surfaces[0]?.host.onSessionMeta;
     expect(meta).toBeTypeOf("function");
     meta?.(1, "Live chat");
@@ -143,61 +134,27 @@ describe("chat view after its view is disposed", () => {
     expect(view.description).toBe("Live chat");
   });
 
-  it("regression: a view closed before the board lookup answers never builds a surface", async () => {
+  it("disposes the surface and ignores messages after disposal", async () => {
     const view = fakeView();
     registry.provider?.resolveWebviewView(view);
     view.dispose();
-    lastLookup().resolve({});
-    await flush();
-    expect(registry.surfaces).toHaveLength(0);
-  });
-
-  it("regression: a message that arrives after dispose reaches neither the bridge nor the surface", async () => {
-    const view = fakeView();
-    registry.provider?.resolveWebviewView(view);
-    lastLookup().resolve({});
-    await flush();
-    view.dispose();
+    expect(registry.surfaces[0]?.dispose).toHaveBeenCalledOnce();
     await view.send({ type: "ready" });
     expect(registry.shared.calls).toBe(0);
     expect(registry.surfaces[0]?.handle).not.toHaveBeenCalled();
   });
 
-  it("regression: a failed board lookup is reported, rejects nothing, and keeps the pending intent", async () => {
+  it("passes a pending intent to the next view and sends later intents to the live view", async () => {
     await revealChatView(intent);
     const view = fakeView();
     registry.provider?.resolveWebviewView(view);
-    const message = view.send({ type: "ready" });
-    lastLookup().reject(new Error("network denied"));
-    await message;
-    await flush();
-    expect(unhandled).toEqual([]);
-    expect(registry.surfaces).toHaveLength(0);
-    expect(reporter.reportExtensionError).toHaveBeenCalledWith(expect.any(Error), { operation: "chatView.resolveSession" });
-    expect(notices.warn).toHaveBeenCalledTimes(1);
-
-    // The intent was not spent on the failed lookup: the next view's surface opens with it.
-    view.dispose();
-    registry.provider?.resolveWebviewView(fakeView());
-    lastLookup().resolve({});
-    await flush();
     expect(registry.surfaces[0]?.intent).toBe(intent);
-  });
-
-  it("regression: an intent delivered while the lookup is in flight survives that view closing", async () => {
-    const first = fakeView();
-    registry.provider?.resolveWebviewView(first);
     await revealChatView(intent);
-    first.dispose();
-    lastLookup().resolve({});
-    await flush();
-    expect(registry.surfaces).toHaveLength(0);
+    expect(registry.surfaces[0]?.sendIntent).toHaveBeenCalledWith(intent);
 
+    view.dispose();
+    await revealChatView(intent);
     registry.provider?.resolveWebviewView(fakeView());
-    lastLookup().resolve({});
-    await flush();
-    expect(registry.surfaces).toHaveLength(1);
-    expect(registry.surfaces[0]?.intent).toBe(intent);
-    expect(unhandled).toEqual([]);
+    expect(registry.surfaces[1]?.intent).toBe(intent);
   });
 });

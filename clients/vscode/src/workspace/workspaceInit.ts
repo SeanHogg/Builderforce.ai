@@ -50,7 +50,7 @@ import type { WorkspaceCanvasSession } from "./workspaceSession";
 export async function buildWorkspaceInit(
   ctx: vscode.ExtensionContext,
   opts: {
-    session: WorkspaceCanvasSession;
+    session?: WorkspaceCanvasSession;
     surface: "chat" | "graph";
     boardBeside?: boolean;
     /** A step (the definition index, the token, the model route…) was still pending at its
@@ -65,6 +65,7 @@ export async function buildWorkspaceInit(
   // (token, project names, personality, route catalogue) is attempted; timing out is not the degrade.
   const online = !networkDenied(currentCapabilityInputs());
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const webOrigin = getWebBaseUrl();
   // The panel shows "Connecting…" until this frame is posted, so NOTHING here may wait on
   // the network: the slow steps run together, each under a short budget, and a late one
   // degrades to a safe value and re-pushes init when it lands (`onLate`).
@@ -181,7 +182,8 @@ export async function buildWorkspaceInit(
     modelLabels: modelChoiceLabels(),
     // The board this surface is working in, and which of its surfaces the entry asked
     // for. Together these are what used to be the difference between two panels.
-    session: { id: opts.session.id, title: opts.session.title, webOrigin: getWebBaseUrl(), durable: opts.session.durable },
+    webOrigin,
+    ...(opts.session ? { session: { ...opts.session, webOrigin } } : {}),
     surface: opts.surface,
     // The sidebar chat view draws the conversation only; its board opens beside it.
     ...(opts.boardBeside ? { boardBeside: true } : {}),

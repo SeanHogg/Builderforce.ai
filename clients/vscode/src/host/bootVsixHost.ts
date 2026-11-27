@@ -66,7 +66,7 @@ export function bootVsixHost(options: BootVsixHostOptions): VsixHostBoot {
     network: options.network,
     policy: createPlatformPolicy(LOCAL_FIRST_POLICY),
     open: async () => {
-      await store.export();
+      await store.read(async () => undefined);
     },
     ...localFirstStoreReplayPorts(store, { kind: VSIX_REPLAY_KIND, deviceId: DEVICE_ID }),
     errors: { notDenied: "vsix_boot_requires_denied_network", stopped: "vsix_boot_stopped" },
