@@ -16,6 +16,7 @@ const npmPackages = [
     dir: 'packages/builderforce-mcp',
     package: '@seanhogg/builderforce-mcp',
     'pack-with-pnpm': true,
+    'stage-on-oidc-denial': true,
     sources: ['packages/secret-redaction', 'packages/tool-output-policy'],
   },
 ];

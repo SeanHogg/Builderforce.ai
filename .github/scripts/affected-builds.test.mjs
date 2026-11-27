@@ -47,5 +47,6 @@ test('changes to the MCP package or its bundled policy select its packed npm rel
     const [job] = affectedBuilds([path]).npm.include;
     assert.equal(job.package, '@seanhogg/builderforce-mcp');
     assert.equal(job['pack-with-pnpm'], true);
+    assert.equal(job['stage-on-oidc-denial'], true);
   }
 });

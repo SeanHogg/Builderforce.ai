@@ -36,6 +36,13 @@ if npm publish --provenance --access public ${publish_tag[@]+"${publish_tag[@]}"
   exit 0
 fi
 
+if [ "${STAGE_ON_OIDC_DENIAL:-false}" = true ] && grep -q 'OIDC permission denied for this action' "$log"; then
+  if npm stage publish --provenance --access public ${publish_tag[@]+"${publish_tag[@]}"} "$@" 2>&1 | tee "$log"; then
+    echo "::notice::$package_name@$version is staged on npm. A maintainer must approve it before it is public."
+    exit 0
+  fi
+fi
+
 # A run interrupted after npm accepted its PUT (a job that was killed or timed out) leaves the version
 # STAGED — invisible to `npm view` until npm finishes it, but already owned — so the next run's publish
 # answers E409. The version is in flight, not lost.

@@ -208,6 +208,7 @@ jobs:
         env:
           PACKAGE_NAME: ${{ matrix.package }}
           PACK_WITH_PNPM: ${{ matrix.pack-with-pnpm }}
+          STAGE_ON_OIDC_DENIAL: ${{ matrix.stage-on-oidc-denial }}
         run: |
           args=()
           if [ "$PACK_WITH_PNPM" = "true" ]; then
