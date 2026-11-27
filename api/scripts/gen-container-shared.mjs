@@ -40,7 +40,7 @@ const BUNDLES = [
     exports: [
       'SHELL_CAPTURE_CHARS', 'TOOL_OUTPUT_CAPS', 'toolOutputCap', 'keepTail', 'cutHead', 'cutHeadTail',
       'summarizeShellOutput', 'detectRunner', 'projectJson', 'windowReadFile', 'fitToolText', 'shapeToolResult',
-      'modelToolResultPolicy',
+      'modelToolResultPolicy', 'LIST_MAX_FILES', 'LIST_RETURN_MAX', 'READ_MAX_BYTES', 'SEARCH_MAX_MATCHES',
     ],
   },
 ];

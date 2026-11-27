@@ -6,18 +6,19 @@
  * only when a runtime tool is actually called (`runtimeToolRouter`).
  */
 import { RUNTIME_TOOL_IDS, type RuntimeToolId } from '@builderforce/creation-canvas-contract';
-import { platformWireToolName } from '@seanhogg/builderforce-mcp';
+import { PLATFORM_EXTENSION_ID as BUILTIN_EXTENSION_ID, type RelayDispatchToolEntry } from '@seanhogg/builderforce-mcp';
 
 /** The gateway extension id the server's built-in tools answer under. */
-export const BUILTIN_EXTENSION_ID = 'builtin';
+export { BUILTIN_EXTENSION_ID };
 
 export function isRuntimeTool(tool: string): tool is RuntimeToolId {
   return (RUNTIME_TOOL_IDS as readonly string[]).includes(tool);
 }
 
 /** The provider name for a relayed platform tool. Runtime tools retain their local contract. */
-export const webPlatformWireToolName: typeof platformWireToolName = (entry) =>
-  isRuntimeTool(entry.tool) ? undefined : platformWireToolName(entry);
+export function webPlatformWireToolName(entry: RelayDispatchToolEntry): string | undefined {
+  return entry.extensionId === BUILTIN_EXTENSION_ID && isRuntimeTool(entry.tool) ? undefined : entry.wireName;
+}
 
 /**
  * The Brain's host hook (`brain-embedded` `LocalToolRouter`): the catalog's built-in

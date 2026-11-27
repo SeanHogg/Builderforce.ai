@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { RUNTIME_TOOL_IDS, runtimeToolFunctionName } from '@builderforce/creation-canvas-contract';
 import type { PreviewRuntime } from '@seanhogg/builderforce-webcontainers';
 import { runBrowserRuntimeTool, type BrowserToolDeps } from './browserRuntimeTools';
+import { callBrowserRuntimeMcp } from './browserRuntimeMcp';
 import { readLogTail } from './logTail';
 import { executeRuntimeTool, localRuntimeToolRouter, type RuntimeToolRoutes } from './runtimeToolRouter';
 import { createRuntimeToolHost } from './runtimeToolHost';
@@ -111,6 +112,17 @@ describe('browser executor', () => {
     const failing = deps({ capture: vi.fn(async () => { throw new Error('not supported in this browser'); }) });
     expect(await runBrowserRuntimeTool(browserRun(), 'runtime.preview_screenshot', { projectId: 7 }, failing))
       .toMatchObject({ ok: false, reason: 'not supported in this browser' });
+  });
+
+  it('uses MCP for a browser call while keeping screenshot attachments intact', async () => {
+    const run = browserRun();
+    const screenshot = 'data:image/jpeg;base64,' + 'A'.repeat(40_000);
+    const d = deps({ capture: vi.fn(async () => ({ imageDataUrl: screenshot, width: 800, height: 600, url: 'https://p/web' })) });
+    expect(await callBrowserRuntimeMcp(run, 'runtime.preview_screenshot', { projectId: 7 }, d))
+      .toMatchObject({ ok: true, target: 'browser', width: 800, imageDataUrl: screenshot });
+    expect(await callBrowserRuntimeMcp(run, 'runtime.preview_restart', { projectId: 7, serviceId: 'web' }, d))
+      .toMatchObject({ ok: true, restarted: true });
+    expect(run.session.restart).toHaveBeenCalledExactlyOnceWith('web');
   });
 
   it('runs the declared verify command in its service root', async () => {

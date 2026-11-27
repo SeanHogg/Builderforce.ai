@@ -12,7 +12,8 @@
       "@builderforce/code-shield": ["../code-shield/src/index.ts"],
       "@builderforce/secret-redaction": ["../secret-redaction/src/index.ts"],
       "@builderforce/sarif": ["../sarif/src/index.ts"],
-      "@builderforce/agent-tools/symbols": ["../agent-tools/src/symbols.ts"]
+      "@builderforce/agent-tools/symbols": ["../agent-tools/src/symbols.ts"],
+      "@builderforce/agent-tools/skip-dirs": ["../agent-tools/src/skipDirs.ts"]
     }
   },
   "include": ["src/**/*.ts"],

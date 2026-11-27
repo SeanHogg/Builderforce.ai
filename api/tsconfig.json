@@ -22,6 +22,7 @@
       "@seanhogg/builderforce-mcp/policy": ["../packages/builderforce-mcp/src/policy.ts"],
       "@builderforce/agent-tools": ["../packages/agent-tools/src/index.ts"],
       "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"],
+      "@builderforce/agent-tools/skip-dirs": ["../packages/agent-tools/src/skipDirs.ts"],
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-run": ["../packages/agent-run/src/index.ts"],
       "@seanhogg/builderforce-memory/*": ["./node_modules/@seanhogg/builderforce-memory/dist/*/index.d.ts", "./node_modules/@seanhogg/builderforce-memory/dist/*/index.js"],

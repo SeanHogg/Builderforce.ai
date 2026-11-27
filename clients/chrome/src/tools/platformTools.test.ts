@@ -60,16 +60,19 @@ describe('withPlatformTools — the platform catalog beside the browser tools', 
 });
 
 describe('createPlatformCatalog', () => {
-  it('attaches canonical wire names only to first-party tools in the real relay catalog', async () => {
+  it('keeps the canonical provider names and stable dispatch names from the relay', async () => {
     const builtin = { extensionId: 'builtin', tool: 'tasks.list', name: 'builtin_tasks_list', description: 'List tasks', parameters: { type: 'object' }, mutates: false };
-    const external = { ...builtin, extensionId: 'external', tool: 'tasks.create', name: 'external_tasks_create' };
+    const external = { ...builtin, extensionId: 'external', tool: 'create', name: 'ext-external__create', legacyName: 'external_tasks_create' };
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ tools: [builtin, external] })));
     vi.stubGlobal('fetch', fetcher);
     const catalog = createPlatformCatalog({ baseUrl: 'https://gw', key: async () => 'fixture' });
     const result = withPlatformTools(browserCatalog(), await catalog.actions());
     expect(result.specs.map((tool) => tool.function.name)).toContain('builtin_tasks_list');
-    expect(result.wireToolNames).toEqual([{ name: 'builtin_tasks_list', wireName: 'platform__tasks_list' }]);
-    expect(fetcher).toHaveBeenCalledWith('https://gw/llm/v1/mcp/tools', expect.anything());
+    expect(result.wireToolNames).toEqual([
+      { name: 'builtin_tasks_list', wireName: 'platform__tasks_list' },
+      { name: 'external_tasks_create', wireName: 'ext-external__create' },
+    ]);
+    expect(fetcher).toHaveBeenCalledWith('https://gw/llm/v1/mcp/tools?names=canonical', expect.anything());
   });
 
   it('offers nothing signed out, and never reads the catalog', async () => {

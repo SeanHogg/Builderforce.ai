@@ -4,7 +4,7 @@ Part of the [unified platform review](unified-platform-gap-review.md). Areas are
 
 | # | Area | Status |
 |---|---|---|
-| 1 | MCP | **reverified 2026-11-27** (§1) |
+| 1 | MCP | **consolidation complete 2026-11-27** (§1) |
 | 2 | Code index / search / context | **audited 2026-11-26** (below) |
 | 3 | Local inference + model catalog + routing | **audited 2026-11-26** (below) |
 | 4 | Memory (Evermind), skills, episodes, runs | **audited 2026-11-26** (below) |
@@ -27,17 +27,19 @@ The original audit counted 11 server, client, catalog and host integrations. The
 | Workspace MCP | VS Code and agent-runtime use `packages/workspace-mcp` for the SDK server and catalog. The hosts supply workspace selection and HTTP authentication. Shared code provides text and indexed search, symbols, outlines, repo maps, references, git history and optional compression. |
 | Memory MCP | `builderforce-memory/packages/memory-mcp` uses the shared SDK server with stdio and loopback HTTP, and exposes the same tool catalog to the in-process Agent SDK. It reports its package version. |
 | Registered remote MCP | `mcpWireClient.ts` adapts the shared SDK-backed HTTP transport to the gateway's destination checks, session cache and legacy REST fallback. The marketplace discovery probe uses the same transport and pagination. |
-| Editor MCP | VS Code reads native host config and consumes the shared Platform connector catalog for HTTP and stdio setup. The former Synapse Rust Workspace MCP server and connector host were retired. Synapse's private Evermind stdio client uses the Rust MCP SDK and generated launch data. |
-| Platform REST relay | Web, VS Code, Chrome and agent-runtime use the shared TypeScript relay. Rust, Android and iOS use their native HTTP clients with the gateway's canonical model projection and legacy response compatibility. |
+| Editor MCP | VS Code replaces Synapse as the editor and carries Workspace MCP and connector setup. The product direction moves Spawn into a Roblox project type. Legacy Synapse builds keep their private Evermind stdio client. |
+| Agent-runtime MCP | The docs command searches the published sitemap through the shared in-process MCP transport. The interactive ACP client forwards a specifically selected VS Code config to ACP peers that support its transports. The Gateway-backed bridge uses Gateway-managed tools. |
+| WebContainer MCP | Browser preview execution and the environment agent host use the shared SDK with an in-process transport. Tool execution stays bound to the owning tab or the agent's environment port. Native inference receives tool definitions as model function schemas. |
+| Platform REST relay | Web, VS Code, Chrome and agent-runtime use the shared TypeScript relay. The headless connector runner uses the shared connector action codec for its fixed discovery and dispatch tools. Rust, Android and iOS use native HTTP clients with the gateway's canonical model projection and legacy response compatibility. |
 
 ### 1.2 Duplicate responsibilities and compatibility
 
 | Finding | Current behavior |
 |---|---|
 | Protocol framing, version negotiation and SSE parsing | MCP servers use the SDK. The shared outbound client uses SDK transport and message helpers. Marketplace discovery and tenant calls share that implementation. |
-| Tool schema, names and read/write metadata | `packages/builderforce-mcp` owns the TypeScript tool and relay contracts, OpenAI and Anthropic conversion, the canonical name codec and the write-approval default. First-party model integrations use canonical names and translate back to stable dispatch IDs. The older REST spelling remains supported for existing clients and saved calls. Tenant consent controls which remote tools are available. Host confirmations govern individual writes. |
+| Tool schema, names and read/write metadata | `packages/builderforce-mcp` owns the TypeScript tool and relay contracts, OpenAI and Anthropic conversion, the canonical name and connector action codecs, and the write-approval default. Web Brain, Canvas, Chrome, and VS Code pass canonical gateway names to the model for the entire remote catalog. Unambiguous legacy aliases still identify tools in dispatch, policy, and saved calls. Entries that share an alias keep distinct canonical IDs. Tenant consent controls tool availability. Host confirmations govern individual writes. |
 | Platform write tools | The agent-runtime Workspace catalog advertises Workspace tools. Platform ticket creation, review recording and security finding tools come from the Platform catalog. |
-| Code search and git history | `workspace__search` provides text search using the shared `search_code` implementation. `workspace__find` provides indexed search. The callable `codebase_search` and `codebase_semantic_search` aliases retain their filters and response shape on the same Workspace index. Canonical and legacy git history now share one Git reader and parser. Platform `knowledge.search` queries tenant knowledge. Area 2 tracks index engine migration. |
+| Code search and git history | `workspace__search` provides text search using the shared `search_code` implementation. `workspace__find` and the callable `codebase_*` aliases use the same Workspace index and embedder policy. The aliases retain their filters and response format. MCP and REST share Workspace tool resolution. Canonical and legacy git history share one Git reader and parser. Platform `knowledge.search` queries tenant knowledge. |
 | Memory | Evermind hosted facts use `MemoryCapability`. Workspace Markdown uses `WorkspaceMemoryCapability`, including saved `memory_search` and `memory_get` calls. Memory MCP serves Evermind's memory and experience tools. |
 | Connector registration and config | Tenant HTTP registrations live in the tenant store. Native stdio installations use host config. The VS Code chooser uses the shared connector catalog, and web and VS Code now share the remote URL-shape check. The API validates public destinations. Memory's installer provides the launch data consumed by Synapse. |
 | Workflow naming | The API and runtime use data-provider handlers. The unused API `mcpNode.ts` shim was removed. Saved workflow nodes with kind `mcp` still dispatch through the data-provider handler. |
@@ -46,7 +48,7 @@ The remaining compatibility surfaces include agent-runtime's legacy GET manifest
 
 ### 1.3 Gap status
 
-The [MCP gap register](../../roadmap/GAP-REGISTER.md#mcp-consolidation-platform-agents) records the disposition of MCP-G001 through MCP-G024. The original inventory and migration plan are available in this document's Git history.
+MCP consolidation closed on 2026-11-27 with all 24 findings accounted for. The original inventory and migration plan are available in this document's Git history. [MCP gap register](../../roadmap/GAP-REGISTER.md#mcp-consolidation-platform-agents)
 
 ---
 
@@ -119,21 +121,176 @@ That is three walks, three parsers, two symbol snapshots and two embedders. None
 
 Following decision 4 (interface first; Rust only where a benchmark proves a gain), there is one TypeScript engine assembled from parts that already exist, so it runs in the VS Code extension host / rebuilt Synapse IDE, agent-runtime, the Cloudflare Worker and the browser.
 
-**Package `@seanhogg/builderforce-code-index`** (new), composed from:
-- `parse`: agent-tools `node-tree-sitter.ts`, extended to bf-index's 11 languages from the same `tree-sitter-wasms`. `symbols.ts` regex stays the per-file fallback. `ast-parser.ts` and `symbolRelations.ts` regex are deleted, and the TS API call graph moves to a tree-sitter `calls` query.
-- `chunk`: a port of bf-index `chunk.rs` rules (definition chunks ≤150 lines, header + members, 60/10 fallback). The memory `chunk.ts` stays for prose only.
-- `graph` + `map`: **packages/repo-map, unchanged**, fed tree-sitter facts instead of regex. `symbolRepoMap.ts` is deleted.
-- `store` + `search`: the **memory knowledge-index** (exact → lexical → dense), extended with body-chunk records beside cards, so one `.idx` per root replaces `.db`, `symbols.json`, `search-index.json` and the `.idx` cards. `bm25.ts` stays as its lexical primitive; FTS5 and the node-code-tools BM25 are deleted.
-- `walk`: ONE ignore policy (merge the 7 lists; repo-map `filePolicy.ts` is the base) and one path normaliser (repo-relative POSIX, canonical root).
-- `refresh`: content-hash incremental (port of blake3 → a webcrypto/sha-1 per file) plus a host watcher port. VS Code supplies `FileSystemWatcher`, Node supplies `fs.watch`, and the Worker refreshes per commit sha (as `cloudRepoMap.ts` does).
-- `refs`: a port of `check_references`.
-- `embed`: one `EmbedderPort` chain with ONE fingerprint per index.
-  - Default: the platform's chosen local model.
-  - In the cloud, bge-m3. Cloud and local indexes stay separate stores, but they share a format.
+**End-state design: option D, approved 2026-11-27.** This supersedes the earlier sketch. It is built from three read-only inventories of the code as it is today. Option D removes the duplicates in the hosts first, using the homes the shared code already has. The runtime-neutral algorithms move into one package only at the end, once they are converged. Three alternatives were considered and rejected:
+- **(A)** move everything into code-index first: the first step removed no duplicates, and the provider types created a cycle;
+- **(B)** move the algorithms into builderforce-memory: a cross-repo release would be needed for every change;
+- **(C)** never move packages: no reusable code package would result.
 
-**One location:** `<ws>/.builderforce/index/<rootId>.idx`. `.builderForceAgents/` is retired. The VS Code extension, the Synapse IDE (the same extension) and agent-runtime on one machine share the file through a single-writer lock, and the second process reads it.
+#### 2.5.1 Corrections to §2.1–§2.3 found by the inventories
 
-**One tool vocabulary on Workspace MCP** (§1.1):
+- agent-runtime's BM25 engine, `ssTokenise`, `runCodebaseSearch` and `.builderForceAgents/search-index.json` are already deleted. `codebase_search` and `codebase_semantic_search` both route to code-index (`agent-runtime/src/builderforce/tools/workspace-search.ts`). One stale test still imports `runCodebaseSearch` (`agent-runtime/test/search-code-grep-fallback.e2e.test.ts:108`).
+- Exact search is already shared. `clients/vscode/src/workspace/workspaceSearch.ts` is a 28-line re-export of `@builderforce/agent-tools/node-text-search`, which on-prem uses too.
+- The cloud RRF (`cloudRepoMap.ts fuseDefinitionHits`) calls memory `reciprocalRankFusion`; it is not a copy.
+- No 5-minute staleness window exists in agent-runtime. CIX-G013's third scheme is the 10-minute symbol-index backstop plus code-index's 60 s watch deadline.
+- Remaining real duplicates:
+  - two symbol snapshots (`.builderforce/symbols.json`, `.builderForceAgents/symbols.json`; one class, non-atomic write);
+  - two BFKI indexes per root (`.builderforce/knowledge/<stem>.idx` cards, `.builderforce/index/<hash>.idx` chunks) under two root-id schemes;
+  - two local semantic paths (`resolveLocalSemantic` and `on-prem-semantic.ts` never reach code-index);
+  - about 10 ignore lists, about 15 path normalisers, two `statManifest` copies (agent-tools and memory);
+  - six file-tool hosts with their own walkers, caps, containment and error wording (§2.5.4).
+- **Layering constraint.** code-index imports `agent-tools` (`node-tree-sitter`, `node-git-ignore`, `node-path`, `acquireReplicaLock`, and the `RepoReadCapability` type), and repo-map imports `agent-tools/symbols`. The repo capability types live in agent-tools `capabilities.ts`, so a coding provider cannot live in a package below agent-tools.
+
+#### 2.5.2 The rule
+
+**Steps 1–4 (remove the duplicates).** Shared code stays in its current home, and every host converges on it:
+- algorithms: agent-tools subpaths (`symbols`, `edit`, `glob`, `skipDirs`, `node-path`, `node-text-search`);
+- graph and map: `packages/repo-map`;
+- chunk index: `packages/code-index`.
+
+The one coding provider is new in agent-tools, beside `CapabilityProvider`. Host side effects stay in the hosts as decorators: commits, leases, secret inspection, R2 history, symbol `markDirty` and run bookkeeping.
+
+**Step 5 (the reusable package).** The runtime-neutral algorithms and the tree-sitter loader move into `packages/code` (`@seanhogg/builderforce-code`, the renamed code-index), which sits **below** agent-tools:
+
+```
+hosts (vscode, agent-runtime, api, frontend)
+   ▼
+workspace-mcp ──► agent-tools (capabilities, tools, coding provider, node-* host pieces, node-code-index)
+                     ▼
+                  code (/parse, /parse/node, /graph, /edit, /walk, /scan, /chunk)
+                     ▼
+                  @seanhogg/builderforce-memory (/knowledge, /retrieval)
+```
+
+`code` imports nothing from agent-tools, workspace-mcp or a host. The pieces that touch the host move the other way, into agent-tools `node-*`:
+- containment (`node-path`);
+- the Node walker;
+- ripgrep search (`node-text-search`);
+- `node-git-ignore`;
+- code-index's current orchestrator (`index`, `storage`, `embedder`), which takes `RepoReadCapability`, a lock and `local-inference`.
+
+Each concern in `code` is its own subpath, so it does not become a god package. Every subpath except `/parse/node` is Worker- and browser-safe and is listed in `worker-safety.test.ts`.
+
+#### 2.5.3 Codemap, steps 1–4: where each duplicate dies
+
+| Concern | Survivor (home) | Fold in | Delete |
+|---|---|---|---|
+| Ignore policy | agent-tools `skipDirs.ts` (§2.5.5) | repo-map `filePolicy` uses it; `.nuxt` | `IGNORED_DIRS` (node-code-tools), `ON_PREM_INDEX_SKIP_DIRS`, `LIST_IGNORED_DIRS` ×2, `node-text-search SKIP_DIRS`, `codebaseScan SKIP_DIRS`, `workingTree SKIPPED_DIRECTORIES`, the governance-audit, coding-dispatch and builderforcellm-rag lists; the `SYMBOL_INDEX_SKIP_DIRS` / `KNOWLEDGE_SKIP_DIRS` aliases |
+| Tool caps | `tool-output-policy caps.ts`: `LIST_MAX_FILES` 5,000, `LIST_RETURN_MAX` 400, `READ_MAX_BYTES` 2 MiB, `SEARCH_MAX_MATCHES` 100 | the container receives them through `gen-container-shared.mjs` | the per-host constants |
+| Path normaliser | agent-tools `toPosixPath(p)` (`glob.ts`, beside `normalizeScopeDir`) and `toPosixRel(root, abs)` (`node-path.ts`) | — | named copies with identical semantics (`relPosix`, code-index `relativePath`, sandbox `toPosix`, …); `normalizeRepoPath` keeps its own `..` resolution |
+| Stat manifest | memory `knowledge/statManifest` | any behaviour only the agent-tools copy has | agent-tools `knowledge/statManifest.ts` |
+| Exact search shim | agent-tools `node-text-search` | — | VS Code `workspace/workspaceSearch.ts` re-export; importers use the package directly |
+| Coding provider | agent-tools `workspace.ts` (`WorkspaceFs`, `createRepoCapabilities`, error codes; neutral) + `node-workspace.ts` (`nodeWorkspaceFs`: the walker from `localCapabilities.walkFiles`, containment, ripgrep) | the VS Code bodies are the base (most complete); `unbounded`; EOL conformance on write | the list/read/search/write/edit/delete bodies in `localCapabilities.ts`, `node-capability-provider.ts`, `sandbox-capability-provider.ts`, `workspace-mcp/workspaceFiles.ts`, `ideWorkspaceCoding.ts`, `cloudProvider.ts` |
+| Line scanner | agent-tools `text-scan.ts` (neutral; extracted from `node-text-search walkSearch`: smart case, regex or literal, binary skip, byte cap) | — | `searchIdeWorkspace` substring scan, `ide/searchWorkspace.ts` matcher, canvas `searchFileLines` |
+| String edit | agent-tools `edit.ts` `applyStringEdit` | BOM tolerance from the native `edit` | the native-file-tools matcher (`:288-311`), frontend `applySearchReplace` |
+| Container glob | agent-tools `glob.ts`, generated into the container | — | the hand mirrors in `workspaceAgent.mjs:327-420` |
+| Repo map | repo-map `renderRepoMap` via `repoMapPort` | — | agent-tools `symbolRepoMap.ts` (`symbolIndexSemantic`) |
+| TS dependency graph | repo-map `RepoGraph` | any `runCodeAnalysis` output it lacks (dependents, impact radius) | agent-runtime `ast-parser.ts`, `code-map.ts` |
+
+Moved files keep their tests, which run unchanged; only their imports are retargeted. Importers move in the same pass, and nothing keeps a re-export shim.
+
+The about 30 `knowledge/code*` analyzers (§2.1 row 12) are out of this program. They are a separate audit item and stay in agent-tools until it runs.
+
+#### 2.5.4 One coding provider, one adapter per host
+
+`WorkspaceFs` (agent-tools `workspace.ts`) is the only thing a host writes:
+
+```ts
+interface WorkspaceFs {
+  list(dir: string, opts: { signal?: AbortSignal }): AsyncIterable<{ path: string; kind: 'file' | 'dir'; size?: number }>;
+  read(path: string, opts: { maxBytes: number }): Promise<WorkspaceRead>;   // not_found | is_directory | ok(content, truncated)
+  write(path: string, content: string): Promise<void>;
+  remove(path: string): Promise<'deleted' | 'missing'>;
+  search?(query: string, scope: string, opts: { signal?: AbortSignal }): Promise<SearchMatch[]>;  // optional native searcher
+}
+```
+
+| Host | Adapter (all that stays) | Decorators kept in the host |
+|---|---|---|
+| VS Code | `nodeWorkspaceFs(root, {ripgrep})` from agent-tools `node-workspace` | `symbols.markDirty` |
+| On-prem agent | the same `nodeWorkspaceFs`, with `scope: 'workspace' \| 'unconfined'` | `symbols.markDirty` |
+| Workspace MCP | the same `nodeWorkspaceFs`; `workspaceRepoRead` becomes the 1 MB read-cap option | — |
+| Sandbox agent | `sandboxWorkspaceFs(bridge)` in agent-runtime | — |
+| Cloud IDE (R2) | `r2WorkspaceFs(bucket, projectId)` in api over `workspaceStore` (paged list) | lease, written paths and hashes, history |
+| Cloud repos (GitHub/GitLab/Bitbucket) | `gitRemoteFs(ctx)` in api over `readRepoContents`; `search` = provider code search | lease, credential gate, secret inspection, commit records, read memo |
+| Cloud sandbox (`withSandbox`) | decorates the remote adapter, as today | mirror into the clone |
+| Container (`workspaceAgent.mjs`) | stays an NDJSON op server; `gen-container-shared.mjs` generates agent-tools `glob.ts` and the ignore policy into it in place of the hand mirrors (`:327-420`) | — |
+| Browser canvas | `memoryWorkspaceFs(files)` over the canvas file map | `validateFileContentForPath`, history |
+
+Every host returns one result and error contract: `{ ok: false, error, code }` with `code ∈ not_found | is_directory | outside_root | too_large | no_match | ambiguous | unsupported | io`.
+- Deleting a missing file is `{ ok: true, deleted: false }` everywhere; VS Code's `ok: false` is the outlier.
+- There is one `SearchMatch {path, line?, text}`. Remote code search maps fragments to `text` with no `line`. This is a documented weaker contract, because provider search cannot match exact regex.
+- Caps come from `tool-output-policy` (`LIST_MAX_FILES` 5,000, `LIST_RETURN_MAX` 400, `READ_MAX_BYTES` 2 MiB, `SEARCH_MAX_MATCHES` 100), which the container already receives through its generator.
+
+agent-runtime's native `read` and `edit` (`native-file-tools.ts`) run on the shared provider; their parameter names (`oldText`/`newText`) stay at the tool layer only. `apply_patch` keeps its own hunk locator (`seekSequence`), because patch syntax is a different contract (SHELL-G007).
+
+#### 2.5.5 One ignore policy
+
+- **The list:** agent-tools `WORKSPACE_SKIP_DIRS`, which already contains repo-map's `SKIP_DIRS` plus `.hg`, `.svn` and `.vercel`, with `.nuxt` added.
+- **Name rules:** the `skipDirs` rules (`.worktrees`, `*.local`, `_*_src`), plus `SKIP_FILES` and the `.min.js` and `.map` suffixes.
+- **Not skipped:** `media`, because it can hold source.
+- **Dot-directories:** indexing skips every dot-directory except `.github`. File tools (`list_files`) use the same list but also show a fixed set of config dot-directories (`.github`, `.vscode`, `.devcontainer`, `.husky`, `.changeset`, `.claude`, `.cursor`), so agents can edit workflows and settings.
+- **`.gitignore` filtering:** `gitIgnoredMatcher` on Node, memory `ignoreMatcher` elsewhere.
+
+#### 2.5.6 One index per root
+
+- **One root id.** code-index names its files with agent-tools `rootFileStem(rootId)` (`knowledge/index/persistence.ts`), the same stem the knowledge-card index uses. It stops hashing the realpath on its own; the old file is read once as a fallback and never written again.
+- **One location per kind, all under the same lock.**
+  - `.builderforce/index/<stem>.idx`: code chunks.
+  - `.builderforce/index/<stem>.symbols.json`: the symbol snapshot, now written atomically.
+  - `.builderforce/knowledge/<stem>.idx`: knowledge cards, unchanged.
+  - `.builderForceAgents/symbols.json` is read once as a fallback and never written again; the on-prem host writes the new location.
+- **Cards and chunks stay separate files.** They are rebuilt by different triggers (review vs content change), they differ in size (chunks reach 160 MB), and they may carry different embedder fingerprints. `workspace__find` fuses the two with memory `reciprocalRankFusion`. No storage format changes.
+- **One change feed.** A `WatchPort` replaces code-index's own `fs.watch` and the separate `markSymbolFileChanged` path.
+  - VS Code fills it from `FileSystemWatcher`; Node fills it from `fs.watch`.
+  - The symbol index and the code index both consume it.
+- **One local semantic path.** `resolveLocalSemantic` (VS Code) and `on-prem-semantic.ts` call `/index` search. The Desktop (native) capability stays preferred while the benchmark gate below is open.
+
+#### 2.5.7 Order (each batch ≤ 3 implementers on disjoint files)
+
+1. **Policy (one implementer).** The ignore policy, the tool caps, the path normaliser, the stat manifest and the exact-search shim (§2.5.3, first five rows). Files the step-2 provider rewrite will replace get only their ignore-set line changed now.
+2. **Providers (three in parallel, disjoint files).**
+   - (a) agent-tools `workspace.ts` + `node-workspace.ts`; VS Code, on-prem and Workspace MCP adopt them.
+   - (b) the api adapters (R2, git remote, sandbox decorator), `text-scan.ts` for R2 agent search and the IDE file panel, and the container generator.
+   - (c) the sandbox adapter, native read/edit, canvas edit/search, the stale e2e test, `symbolRepoMap` → repo-map, and `ast-parser`/`code-map` → `RepoGraph`.
+3. **Index (one implementer).** Everything in §2.5.6, plus `WatchPort` and the local semantic routing.
+4. **Review and ship steps 1–3.** One review over the combined diff (Opus, because it is cross-package), one verify, then commit.
+5. **The reusable package (one implementer).**
+   - Move the neutral algorithms into `packages/code`: `symbols`, `callScan`, `callShape`, `ownerSpans`, `symbolImports`, `symbolRelations`, `callbackOwners`, `codeMask`, `testPaths`, `escapeRegex`, `edit`, `edit-match`, `editBalance`, `exportRemoval`, `importRewrite`, `glob`, `skipDirs`, `text-scan` and `chunk`; fold in all of repo-map; add `node-tree-sitter` + `retryingLoad` as `/parse/node`.
+   - code-index's orchestrator moves to agent-tools `node-code-index`.
+   - Rename the package to `@seanhogg/builderforce-code`, retarget every importer and tsconfig `paths`, and delete the `repo-map` package.
+   - Then a review (Opus), a verify and a commit.
+
+#### 2.5.8 Done-checks
+
+- **Zero hits after step 4** for:
+  - `IGNORED_DIRS`, `LIST_IGNORED_DIRS`, `ON_PREM_INDEX_SKIP_DIRS`, per-host `LIST_MAX_FILES` / `MAX_LIST_ENTRIES` / `MAX_READ_BYTES`;
+  - `applySearchReplace`, `searchFileLines`, the native edit matcher;
+  - `.builderForceAgents` writers;
+  - agent-runtime `ast-parser`/`code-map`, agent-tools `symbolRepoMap`, agent-tools `knowledge/statManifest.ts`;
+  - the VS Code `workspaceSearch.ts` shim;
+  - hand glob mirrors in `workspaceAgent.mjs`.
+- **Zero hits after step 5:** `@builderforce/repo-map`, `@seanhogg/builderforce-code-index`, and agent-tools copies of any file moved into `packages/code`.
+- **Guards pass:** `check-source-package-graph.mjs` (no cycle, with `code` below agent-tools), and `worker-safety.test.ts` for every `code` subpath except `/parse/node`.
+- **Tests unchanged:** every moved test runs with byte-identical inputs and expectations. `cross-provider-smoke.test.ts` runs against every adapter and becomes the conformance suite (SHELL-G017).
+- **Box count, before → after:**
+
+| Duplicate | Before | After |
+|---|---:|---:|
+| Symbol parsers | 5 | 2 (tree-sitter + regex fallback) |
+| Chunkers | 3 | 2 (code, prose) |
+| Lexical engines | 6 | 2 (knowledge-index, provider code search) |
+| Tokenizers | 5 | 2 (`codeTokenize`, prefetch intent) |
+| Repo maps | 3 | 2 (TS, plus Rust until the gate) |
+| Ignore lists | 10 | 1 |
+| File-tool hosts with their own bodies | 6 | 0 |
+| Edit matchers | 3 | 1 (plus the `apply_patch` hunk locator, a different contract) |
+| Symbol snapshots per root | 2 | 1 |
+| Root-id schemes for local indexes | 2 | 1 |
+| Local semantic paths | 2 | 1 |
+
+- **Benchmarks:** `scripts/benchmark-code-index*.mjs` still run.
+
+#### 2.5.9 Tool vocabulary on Workspace MCP (§1.1, unchanged)
 
 | Tool | Semantics |
 |---|---|
@@ -170,8 +327,8 @@ An offline check used the same cached BGE-small ONNX model with native and a scr
 | ID | Gap | Fix | Where |
 |---|---|---|---|
 | CIX-G001 | **Bug:** on-prem `search_code` is keyword-ranked ripgrep (`runCodebaseSearch`), but its contract promises an exact substring or regex. The `path` scope is applied after the search. | Route it to exact/regex search, with the scope applied first | `agent-runtime/src/agents/node-capability-provider.ts:296`, `node-code-tools.ts:~187` |
-| CIX-G002 | `codebase_semantic_search` has no embeddings (BM25 over the first 200 lines); the name is misleading | Replace it with `workspace__find` | `node-code-tools.ts:~361-595`, `mcp-server-http.ts` |
-| CIX-G003 | Exact search lives in the VS Code client, not a package; 4 `search_code` semantics exist across hosts | Move `workspaceSearch.ts` into `code-index/search`; make cloud and IDE match its contract | `clients/vscode/src/workspace/workspaceSearch.ts`, `readRepoContents.ts`, `ideWorkspaceCoding.ts` |
+| CIX-G002 | Workspace cutover complete | `workspace__find` and the saved `codebase_semantic_search` call use the shared index and warm embedder policy | `packages/workspace-mcp`, `workspace-search.ts` |
+| CIX-G003 | Workspace exact search shared | VS Code and headless MCP share `workspace__search`. The broader host adapters are tracked here. | `packages/workspace-mcp`, `readRepoContents.ts`, `ideWorkspaceCoding.ts` |
 | CIX-G004 | 5 symbol parsers (native tree-sitter 11 languages, WASM 7, regex, TS compiler API, regex relations) | One `parse` on WASM tree-sitter (11 languages) plus a regex fallback | `lang.rs`, `node-tree-sitter.ts`, `symbols.ts`, `ast-parser.ts`, `symbolRelations.ts` |
 | CIX-G005 | 3 chunkers; only Synapse embeds code bodies; the editor index holds cards only | Port the `chunk.rs` rules; add chunk records to the knowledge index | `chunk.rs`, memory `knowledge-index/*` |
 | CIX-G006 | repo-map is a hand-maintained TS mirror of `graph.rs`/`repo_map.rs`, fed by regex | Keep repo-map as the one implementation, fed by `parse`; delete `symbolRepoMap.ts` | `packages/repo-map`, `agent-tools/symbolRepoMap.ts` |
@@ -182,7 +339,7 @@ An offline check used the same cached BGE-small ONNX model with native and a scr
 | CIX-G011 | One repo is indexed 3× on one machine, in two dot-dirs (`.builderforce` vs `.builderForceAgents`) | One `.idx` per root; single writer; retire `.builderForceAgents` | §2.3 |
 | CIX-G012 | 4 embedding models and no shared fingerprint policy; the editor chain lists a Synapse embedder that is never offered | One `EmbedderPort` chain with a declared default model per surface | `embedderChain.ts`, `embedderPort.ts`, `bf-index/embed.rs`, `knowledgeEmbedder.ts` |
 | CIX-G013 | Change detection: watcher + blake3 (Synapse) vs mtime snapshot (VS Code) vs 5-min staleness (agent-runtime) | Content-hash incremental + host watcher port | `watcher.rs`, `indexWatcher.ts`, `node-code-tools.ts` |
-| CIX-G014 | `check_references` exists only in Rust | Port it to `code-index/refs` | `bf-index/refs.rs` |
+| CIX-G014 | Workspace cutover complete | VS Code and headless MCP share `workspace__references` | `packages/workspace-mcp` |
 | CIX-G015 | Result caps disagree (8/25/20/100/30), as do file caps (1 MB / 256 KB; 5k / 6k / 40k files) | One cap policy per tool, documented | §2.2 |
 | CIX-G016 | Partial comparison only | §2.5 records a full-repo smoke and matched lexical samples. Full-repo matched coverage and dense quality remain open | — |
 | CIX-G017 | API `knowledge.search` is SOP/doc search (`recallSops.ts`), but its name suggests code | Rename it to `docs.search`, or document it | `builtinMcpService.ts:1402` |

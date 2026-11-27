@@ -23,16 +23,18 @@
  * agent first needs a connector, which is the right price.
  */
 
-import { createMcpRelay, requiresWriteApproval, type RelayToolEntry } from "@seanhogg/builderforce-mcp";
+import {
+  CONNECTOR_EXTENSION_ID,
+  createMcpRelay,
+  decodeConnectorTool,
+  encodeConnectorTool,
+  requiresWriteApproval,
+  type RelayToolEntry,
+} from "@seanhogg/builderforce-mcp";
 import { Type } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "../model/agent-types.js";
 import { readSharedEnvVar } from "../../infra/env-file.js";
 import { jsonResult } from "../../agents/tools/common.js";
-
-/** Sentinel the gateway routes to the connector runtime. Mirrors `connectorTools.ts`. */
-const CONNECTOR_EXTENSION_ID = "connector";
-/** Separator inside the round-tripped tool value: `<connectorKey>::<actionKey>`. */
-const TOOL_SEP = "::";
 
 const GATEWAY_TIMEOUT_MS = 30_000;
 
@@ -92,10 +94,9 @@ export const connectorsListTool: AgentTool<typeof ConnectorsListSchema, string> 
     // read than 120 separate tool definitions.
     const byConnector = new Map<string, Array<Record<string, unknown>>>();
     for (const entry of entries) {
-      const sep = entry.tool.indexOf(TOOL_SEP);
-      if (sep <= 0) continue;
-      const connectorKey = entry.tool.slice(0, sep);
-      const actionKey = entry.tool.slice(sep + TOOL_SEP.length);
+      const address = decodeConnectorTool(entry.tool);
+      if (!address) continue;
+      const { connectorKey, actionKey } = address;
       if (params.connector && params.connector !== connectorKey) continue;
       const list = byConnector.get(connectorKey) ?? [];
       list.push({
@@ -149,7 +150,7 @@ export const connectorCallTool: AgentTool<typeof ConnectorCallSchema, string> = 
       const relay = createMcpRelay({ baseUrl: gw.base, token: gw.apiKey, timeoutMs: GATEWAY_TIMEOUT_MS });
       const res = await relay.call({
         extensionId: CONNECTOR_EXTENSION_ID,
-        tool: `${params.connector}${TOOL_SEP}${params.action}`,
+        tool: encodeConnectorTool(params.connector, params.action),
         arguments: params.input ?? {},
       });
       const text = await res.text();

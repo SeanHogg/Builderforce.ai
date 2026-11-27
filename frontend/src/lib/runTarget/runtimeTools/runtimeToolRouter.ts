@@ -13,7 +13,8 @@ import { peekSharedPreviewRuntime, sharedPreviewRuntimeOwner } from '@/lib/brows
 import { activeRunFor, type ActiveRun } from '../activeRun';
 import { RUN_TARGET_OWNER } from '../browserRunTarget';
 import type { RunTargetId } from '../runTarget';
-import { defaultBrowserToolDeps, runBrowserRuntimeTool } from './browserRuntimeTools';
+import { defaultBrowserToolDeps } from './browserRuntimeTools';
+import { callBrowserRuntimeMcp } from './browserRuntimeMcp';
 import { askRuntimeTools, serveRuntimeTools, type BridgeAnswer } from './runtimeToolBridge';
 
 // The Brain's host hook lives in the light `runtimeToolRoute` (it loads this module on call).
@@ -36,7 +37,7 @@ export function callServerRuntimeTool(tool: RuntimeToolId, args: Json): Promise<
 
 /** The browser executor over THIS tab's runtime. */
 export function executeInThisTab(run: ActiveRun, tool: RuntimeToolId, args: Json): Promise<unknown> {
-  return runBrowserRuntimeTool(run, tool, args, defaultBrowserToolDeps(
+  return callBrowserRuntimeMcp(run, tool, args, defaultBrowserToolDeps(
     peekSharedPreviewRuntime,
     () => sharedPreviewRuntimeOwner() === RUN_TARGET_OWNER,
   ));

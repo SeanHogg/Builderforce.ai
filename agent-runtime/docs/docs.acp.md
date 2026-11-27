@@ -43,6 +43,16 @@ builderforce acp --url wss://gateway-host:18789 --token <token>
 
 ## Selecting agents
 
+The built-in bridge uses the Gateway's configured tools. Requests to attach MCP servers
+when creating or loading a bridged session return an error.
+
+The interactive `builderforce acp client` can forward a trusted VS Code MCP config to
+another ACP implementation. Use `--mcp-config <file>` with the peer's `--server <command>`.
+Supply its arguments with `--server-args`. The file is resolved from `--cwd`.
+HTTP and SSE require support advertised by the peer.
+ACP launches stdio servers in the session directory. Use literal configuration values
+that the peer can consume.
+
 ACP does not pick agents directly. It routes by the Gateway session key.
 
 Use agent-scoped session keys to target a specific agent:

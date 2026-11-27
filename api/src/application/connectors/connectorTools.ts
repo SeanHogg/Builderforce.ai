@@ -17,6 +17,7 @@
  */
 
 import { and, eq, inArray } from 'drizzle-orm';
+import { CONNECTOR_EXTENSION_ID, decodeConnectorTool, encodeConnectorTool } from '@seanhogg/builderforce-mcp';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { connectorConnections } from '../../infrastructure/database/schema';
@@ -26,11 +27,7 @@ import { actionInputSchema } from './connectorManifest';
 import { listPublishedConnectors } from './connectorRegistry';
 import { executeConnectorAction, type ConnectorCallResult } from './connectorRuntime';
 
-/** Sentinel `extensionId` the gateway routes to the connector runtime. */
-export const CONNECTOR_EXTENSION_ID = 'connector';
-
-/** Separator inside the round-tripped `tool` value. Not `.` — some clients flatten dots. */
-const TOOL_SEP = '::';
+export { CONNECTOR_EXTENSION_ID, decodeConnectorTool, encodeConnectorTool } from '@seanhogg/builderforce-mcp';
 
 /**
  * The name a connector action is advertised to the MODEL under.
@@ -42,21 +39,6 @@ const TOOL_SEP = '::';
 export function connectorToolName(connectorKey: string, actionKey: string): string {
   const safe = (s: string) => s.replace(/[^a-zA-Z0-9]+/g, '_');
   return `conn_${safe(connectorKey)}_${safe(actionKey)}`;
-}
-
-/** The round-tripped `tool` value the client sends back on `/v1/mcp/call`. */
-export function encodeConnectorTool(connectorKey: string, actionKey: string): string {
-  return `${connectorKey}${TOOL_SEP}${actionKey}`;
-}
-
-/** Inverse of {@link encodeConnectorTool}. Returns null on a malformed value. */
-export function decodeConnectorTool(tool: string): { connectorKey: string; actionKey: string } | null {
-  const i = tool.indexOf(TOOL_SEP);
-  if (i <= 0) return null;
-  const connectorKey = tool.slice(0, i);
-  const actionKey = tool.slice(i + TOOL_SEP.length);
-  if (!connectorKey || !actionKey) return null;
-  return { connectorKey, actionKey };
 }
 
 const connectedKeysCacheKey = (tenantId: number): string => `connectors:connected:${tenantId}`;

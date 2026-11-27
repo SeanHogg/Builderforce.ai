@@ -14,6 +14,7 @@ import {
 } from "@agentclientprotocol/sdk";
 import { ensureBuilderForceAgentsCliOnPath } from "../infra/path-env.js";
 import { DANGEROUS_ACP_TOOLS } from "../security/dangerous-tools.js";
+import { assertAcpMcpCapabilities, loadAcpMcpServers } from "./mcp-config.js";
 
 const SAFE_AUTO_APPROVE_KINDS = new Set(["read", "search"]);
 
@@ -236,6 +237,7 @@ export async function resolvePermissionRequest(
 
 export type AcpClientOptions = {
   cwd?: string;
+  mcpConfig?: string;
   serverCommand?: string;
   serverArgs?: string[];
   serverVerbose?: boolean;
@@ -256,7 +258,7 @@ function toArgs(value: string[] | string | undefined): string[] {
 }
 
 function buildServerArgs(opts: AcpClientOptions): string[] {
-  const args = ["acp", ...toArgs(opts.serverArgs)];
+  const args = [...(opts.serverCommand ? [] : ["acp"]), ...toArgs(opts.serverArgs)];
   if (opts.serverVerbose && !args.includes("--verbose") && !args.includes("-v")) {
     args.push("--verbose");
   }
@@ -318,7 +320,8 @@ function printSessionUpdate(notification: SessionNotification): void {
 }
 
 export async function createAcpClient(opts: AcpClientOptions = {}): Promise<AcpClientHandle> {
-  const cwd = opts.cwd ?? process.cwd();
+  const cwd = path.resolve(opts.cwd ?? process.cwd());
+  const mcpServers = opts.mcpConfig ? await loadAcpMcpServers(opts.mcpConfig, cwd) : [];
   const verbose = Boolean(opts.verbose);
   const log = verbose ? (msg: string) => console.error(`[acp-client] ${msg}`) : () => {};
 
@@ -356,27 +359,24 @@ export async function createAcpClient(opts: AcpClientOptions = {}): Promise<AcpC
     stream,
   );
 
-  log("initializing");
-  await client.initialize({
-    protocolVersion: PROTOCOL_VERSION,
-    clientCapabilities: {
-      fs: { readTextFile: true, writeTextFile: true },
-      terminal: true,
-    },
-    clientInfo: { name: "builderforce-acp-client", version: "1.0.0" },
-  });
-
-  log("creating session");
-  const session = await client.newSession({
-    cwd,
-    mcpServers: [],
-  });
-
-  return {
-    client,
-    agent,
-    sessionId: session.sessionId,
-  };
+  try {
+    log("initializing");
+    const initialized = await client.initialize({
+      protocolVersion: PROTOCOL_VERSION,
+      clientCapabilities: {
+        fs: { readTextFile: true, writeTextFile: true },
+        terminal: true,
+      },
+      clientInfo: { name: "builderforce-acp-client", version: "1.0.0" },
+    });
+    assertAcpMcpCapabilities(mcpServers, initialized.agentCapabilities?.mcpCapabilities);
+    log("creating session");
+    const session = await client.newSession({ cwd, mcpServers });
+    return { client, agent, sessionId: session.sessionId };
+  } catch (error) {
+    agent.kill();
+    throw error;
+  }
 }
 
 export async function runAcpClientInteractive(opts: AcpClientOptions = {}): Promise<void> {

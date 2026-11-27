@@ -84,6 +84,19 @@ it("serves the SDK workspace catalog and searches only the requested file", asyn
           symbols: ["exactMarker"], snippet: expect.stringContaining("return true") }]),
       });
     }
+    const legacySearch = await fetch(`${url}/call`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer workspace-test-token" },
+      body: JSON.stringify({
+        tool: "codebase_search",
+        args: { projectRoot: root, query: "exactMarker", language: ".ts" },
+      }),
+    });
+    expect(legacySearch.status).toBe(200);
+    const legacyResult = await legacySearch.json();
+    expect(JSON.parse(legacyResult.result[0].text)).toMatchObject({
+      results: expect.arrayContaining([expect.objectContaining({ filePath: "match.ts" })]),
+    });
 
     const git = (...args: string[]) => execFileSync(
       "git", ["-c", "user.name=MCP Test", "-c", "user.email=mcp@example.test", "-c", "commit.gpgsign=false", ...args],

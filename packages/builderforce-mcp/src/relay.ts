@@ -15,6 +15,27 @@ export function platformWireToolName(entry: Pick<RelayToolEntry, "extensionId" |
   }
 }
 
+/** Host-facing catalog entry. Dispatch and policy use name, providers use wireName. */
+export type RelayDispatchToolEntry = RelayToolEntry & { wireName?: string };
+
+/** Keep old dispatch IDs when they identify a single tool in this catalog. */
+export function relayDispatchCatalog(entries: readonly RelayToolEntry[]): RelayDispatchToolEntry[] {
+  const aliases = new Map<string, number>();
+  const advertised = new Set(entries.map(({ name }) => name));
+  for (const { legacyName } of entries) {
+    if (legacyName) aliases.set(legacyName, (aliases.get(legacyName) ?? 0) + 1);
+  }
+  return entries.map((entry) => {
+    const { name, legacyName } = entry;
+    if (legacyName && legacyName !== name && aliases.get(legacyName) === 1 && !advertised.has(legacyName)) {
+      return { ...entry, name: legacyName, wireName: name };
+    }
+    // Older gateways ignore the canonical query. First-party names can still be derived.
+    const wireName = legacyName ? undefined : platformWireToolName(entry);
+    return wireName && wireName !== name ? { ...entry, wireName } : entry;
+  });
+}
+
 export function mcpCatalogPath(surface?: string, names?: "canonical"): string {
   const query = [
     ...(surface ? [`surface=${encodeURIComponent(surface)}`] : []),

@@ -33,6 +33,7 @@
       "@builderforce/agent-tools/node-path": ["../packages/agent-tools/src/node-path.ts"],
       "@builderforce/agent-tools/node-desktop": ["../packages/agent-tools/src/node-desktop.ts"],
       "@seanhogg/builderforce-mcp/protocol": ["../packages/builderforce-mcp/src/protocol.ts"],
+      "@seanhogg/builderforce-mcp/config": ["../packages/builderforce-mcp/src/config.ts"],
       "@seanhogg/builderforce-mcp/server": ["../packages/builderforce-mcp/src/server.ts"],
       "@modelcontextprotocol/sdk/types.js": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/types.d.ts", "./node_modules/@modelcontextprotocol/sdk/dist/esm/types.js"],
       "@modelcontextprotocol/sdk/server/index.js": ["./node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.d.ts", "./node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js"],
@@ -48,6 +49,8 @@
       "@builderforce/agent-tools/*": ["../packages/agent-tools/src/*"],
       // Exact entry: `packages/repo-map` imports `@builderforce/agent-tools/symbols` extensionless, and NodeNext does not probe `.ts` for a path-mapped target (the `/*` form above only serves imports that already end in `.js`).
       "@builderforce/agent-tools/symbols": ["../packages/agent-tools/src/symbols.ts"],
+      // Exact entry (the ignore policy `packages/repo-map` imports): the subpath name is not the file name, so the `/*` form cannot serve it.
+      "@builderforce/agent-tools/skip-dirs": ["../packages/agent-tools/src/skipDirs.ts"],
       "@builderforce/agent-run": ["../packages/agent-run/src/index.ts"],
       "@builderforce/difficulty-router": ["../packages/difficulty-router/src/index.ts"],
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],

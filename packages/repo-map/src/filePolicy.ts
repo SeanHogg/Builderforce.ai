@@ -5,13 +5,8 @@
  * Data, not branches: a new skip is a row.
  */
 
+import { isIndexedDirName } from '@builderforce/agent-tools/skip-dirs';
 import { isMapSource } from './extract.js';
-
-/** Directory names never descended into (bf-index `SKIP_DIRS`). */
-export const SKIP_DIRS: ReadonlySet<string> = new Set([
-  '.git', 'node_modules', 'dist', 'build', 'out', 'target', '.next', '.turbo', '.cache', 'coverage',
-  'vendor', '__pycache__', '.venv', 'venv', '.idea', '.vscode-test',
-]);
 
 /** File names never read (bf-index `SKIP_FILES`). */
 export const SKIP_FILES: ReadonlySet<string> = new Set([
@@ -38,15 +33,16 @@ export const DEFAULT_REPO_MAP_LIMITS: Readonly<RepoMapLimits> = {
 };
 
 /**
- * Whether the map reads `path` (repo-relative, `/`-separated) at `size` bytes. Hidden
- * directories are skipped except `.github`, as bf-index does.
+ * Whether the map reads `path` (repo-relative, `/`-separated) at `size` bytes. The
+ * directory rule is the platform's one indexing policy (`isIndexedDirName`): the skip list,
+ * and every hidden directory except `.github`, as bf-index does.
  */
 export function isMapCandidate(path: string, size: number, limits: RepoMapLimits = DEFAULT_REPO_MAP_LIMITS): boolean {
   if (size > limits.maxFileBytes) return false;
   const segments = path.split('/');
   const name = segments[segments.length - 1] ?? '';
   for (const dir of segments.slice(0, -1)) {
-    if (SKIP_DIRS.has(dir) || (dir.startsWith('.') && dir.length > 1 && dir !== '.github')) return false;
+    if (!isIndexedDirName(dir)) return false;
   }
   if (SKIP_FILES.has(name) || SKIP_SUFFIXES.some((s) => name.endsWith(s))) return false;
   return isMapSource(path);

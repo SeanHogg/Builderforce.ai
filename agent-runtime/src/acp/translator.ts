@@ -19,7 +19,7 @@ import type {
   SetSessionModeResponse,
   StopReason,
 } from "@agentclientprotocol/sdk";
-import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { PROTOCOL_VERSION, RequestError } from "@agentclientprotocol/sdk";
 import type { GatewayClient } from "../gateway/client.js";
 import type { EventFrame } from "../gateway/protocol/index.js";
 import type { SessionsListResult } from "../gateway/session-utils.js";
@@ -122,7 +122,7 @@ export class AcpGatewayAgent implements Agent {
 
   async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
     if (params.mcpServers.length > 0) {
-      this.log(`ignoring ${params.mcpServers.length} MCP servers`);
+      throw RequestError.invalidParams(undefined, "Configure MCP servers on the Gateway before starting an ACP session.");
     }
 
     const sessionId = randomUUID();
@@ -152,7 +152,7 @@ export class AcpGatewayAgent implements Agent {
 
   async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
     if (params.mcpServers.length > 0) {
-      this.log(`ignoring ${params.mcpServers.length} MCP servers`);
+      throw RequestError.invalidParams(undefined, "Configure MCP servers on the Gateway before loading an ACP session.");
     }
 
     const meta = parseSessionMeta(params._meta);

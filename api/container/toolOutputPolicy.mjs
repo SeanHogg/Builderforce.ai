@@ -7,7 +7,7 @@
  * Regenerate with `node scripts/gen-container-shared.mjs` (from `api/`).
  * `--check` fails the build when the source no longer matches the hash below.
  *
- * @source-sha256 97580521e8f82bfc14b95956dae16f59c54c0e2d256af1c06462a84cffa7f6ba
+ * @source-sha256 9fe7bf2956a7a7ba7faf30122bbcabe6163dc861ec64147059ae6e4a7a06b80a
  */
 // ── caps.ts ──
 /**
@@ -167,6 +167,20 @@ function windowedCap(tool, tableCap, contextWindowTokens) {
         return Math.min(READ_FILE_MAX_CHARS, Math.max(tableCap, share));
     return Math.min(tableCap, share);
 }
+/**
+ * The file-tool caps (counts and bytes, not model-facing chars): what one `list_files` walk
+ * collects, what it returns, the most one `read_file` reads from disk, and the matches one
+ * `search_code` returns. Every host that lists, reads or searches files takes them from here;
+ * the container receives them through `gen-container-shared.mjs`.
+ */
+/** Files one `list_files` walk collects before it stops and says so. */
+const LIST_MAX_FILES = 5_000;
+/** Entries one `list_files` call returns to the model (the rest is `truncated`). */
+const LIST_RETURN_MAX = 400;
+/** Bytes one `read_file` reads from disk; a larger file is cut and marked truncated. */
+const READ_MAX_BYTES = 2 * 1024 * 1024;
+/** Matches one `search_code` call returns; past this the result says `truncated`. */
+const SEARCH_MAX_MATCHES = 100;
 /** Whether a tool's output is a shell/build/test log. */
 function isShellTool(tool) {
     return SHELL_TOOLS.has(tool);
@@ -825,4 +839,4 @@ function modelToolResultPolicy(opts) {
     return (toolName, data) => shapeToolResult(toolName, data ?? null, { summarize: opts.summarize, caps: opts.caps }).content;
 }
 
-export { SHELL_CAPTURE_CHARS, TOOL_OUTPUT_CAPS, toolOutputCap, keepTail, cutHead, cutHeadTail, summarizeShellOutput, detectRunner, projectJson, windowReadFile, fitToolText, shapeToolResult, modelToolResultPolicy };
+export { SHELL_CAPTURE_CHARS, TOOL_OUTPUT_CAPS, toolOutputCap, keepTail, cutHead, cutHeadTail, summarizeShellOutput, detectRunner, projectJson, windowReadFile, fitToolText, shapeToolResult, modelToolResultPolicy, LIST_MAX_FILES, LIST_RETURN_MAX, READ_MAX_BYTES, SEARCH_MAX_MATCHES };

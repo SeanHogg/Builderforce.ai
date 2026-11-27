@@ -602,7 +602,7 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
   - KV/prefix-cache logic exists in both TS and Rust.
   - Fix: one engine and one catalog.
 - `UP-G015` **Synapse has no editor and cannot host the VSIX.**
-  - Fix: an embedded OpenVSCode Server sidecar with `--enable-proposed-api` and the VSIX preinstalled. The extension provides Workspace MCP and uses `bf-local` and the loopback context service.
+  - Direction: use VS Code with the Builderforce extension as the editor. The extension provides Workspace MCP and can use the separate native inference and context services. Move Spawn to a Roblox project type.
   - First-slice done-checks:
     - WebView2 service-worker and webview behaviour;
     - bundle size;
@@ -618,25 +618,29 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
 
 Source: [platform duplication audit §1](../specs/tasks/platform-duplication-audit.md#1-mcp).
 
-**Verified 2026-11-27.** Platform, Workspace and Memory use the shared `@seanhogg/builderforce-mcp` package. Synapse's Rust Workspace MCP server and connector host are retired. Its desktop features retain a private Evermind stdio client. [Synapse retirement record](../../DONE.md#-resolved-2026-11-26--synapse-rust-workspace-mcp-retirement)
+**Closed 2026-11-27.** All 24 MCP consolidation findings are accounted for. Platform, Workspace and Memory use the shared `@seanhogg/builderforce-mcp` package. Synapse's Rust Workspace MCP server and connector host are retired. Its desktop features retain a private Evermind stdio client. [Synapse retirement record](../../DONE.md#-resolved-2026-11-26--synapse-rust-workspace-mcp-retirement)
 
 | Gaps | Status |
 |---|---|
 | MCP-G001–G002 | **Resolved.** Platform and Workspace use the shared SDK server. Tenant HTTP calls and the marketplace probe share the SDK-backed transport and client protocol helpers. Synapse’s private Evermind stdio client uses the official Rust SDK. |
 | MCP-G003 | **Resolved.** The TypeScript relay consumers share the package's tool contract. |
-| MCP-G004–G006 | **First-party naming cutover implemented.** OpenAI and Anthropic share the tool converters. First-party Brain, Canvas, and headless runs use the shared provider name codec. Builderforce's raw REST consumer opts into canonical names. Stable tool IDs still drive dispatch, saved calls, review, and approval. The versioned raw REST shape and host-specific consent flows remain available. |
+| MCP-G004–G006 | **Resolved.** OpenAI and Anthropic share the tool converters. Web Brain, Canvas, Chrome, and VS Code use the gateway's canonical provider names for built-in tools, connected actions, and tenant MCP tools. Unambiguous legacy IDs still drive dispatch, saved calls, review, and approval. Tools with colliding aliases use their canonical IDs. Local runtime tools keep their host names. |
 | MCP-G007 | **Resolved.** Platform, Workspace, and Memory apply shared output limits and redaction. Memory MCP `2026.10.86` pins the published `0.1.1` and is available on npm and the MCP Registry. |
 | MCP-G008–G012 | **Resolved for the implemented transports.** Memory reports its package version and binds to loopback. Agent-runtime uses the SDK and no longer advertises duplicate Platform write tools. Standard MCP calls use `arguments`. The legacy REST compatibility route still accepts its original payload. |
 | MCP-G013 | **Resolved for Platform.** The authenticated interactive profile exposes catalog-change notifications, a catalog guide resource, and a discovery prompt. Registry clients use the stateless default profile. |
 | MCP-G014–G016 | **Resolved.** The outbound client reuses sessions, marketplace review uses the shared client, and web and VS Code use the shared remote URL check and show a Streamable HTTP `/mcp` example. |
-| MCP-G017 | **Shared model projection implemented.** TypeScript consumers share relay plumbing and catalog caching. Rust and mobile use the gateway’s canonical tool schema, approval decision, and protected result text. Native HTTP transports and old-server response compatibility remain. |
+| MCP-G017 | **Resolved.** TypeScript consumers share the relay, catalog projection, cache helper, and connector action codec. Rust and mobile use the gateway’s canonical tool schema, approval decision, and protected result text. Native HTTP transports and old-server response compatibility remain. |
 | MCP-G018 | **Resolved.** One VS Code chooser consumes the shared Platform connector catalog for HTTP setup and native stdio installation. |
 | MCP-G019 | **Resolved.** VS Code discovers VS Code, Claude Code, and Cursor configs, including the active Claude project, and imports legacy Synapse settings through native review. Local credentials stay in their host config. The released Memory installer uses the shared codec. |
 | MCP-G020 | **Resolved.** Memory's installer defines the launch spec. The Claude plugin manifest and Synapse's Windows and POSIX launch data are generated from it. Synapse retains the explicit executable override. |
-| MCP-G021 | **Workspace MCP cutover implemented.** VS Code and headless runtime share the persisted TypeScript index. Both legacy `codebase_*` calls use it, and the old runtime keyword ranker and `search-index.json` writer were removed. The canonical and legacy git-history tools also share a reader and parser. Broader index migration and the native retirement benchmark remain tracked in Area 2. |
+| MCP-G021 | **Resolved.** VS Code and the headless runtime share the persisted TypeScript index and search policy. Both legacy `codebase_*` calls use that policy with their original result format, and the REST and MCP routes resolve their aliases through the same catalog lookup. Canonical and legacy git history share a reader and parser. |
 | MCP-G022 | **Headless Markdown cutover implemented.** Hosted fact recall and writes use `MemoryCapability`. Headless Markdown uses the shared `WorkspaceMemoryCapability`. Canonical search returns run-scoped chunk references for `workspace__memory_read`, with path and line citations preserved in results. Saved `memory_search` and `memory_get` calls keep their existing dispatch IDs and inputs. |
 | MCP-G023 | **Closed for Builderforce catalogs.** The combined Synapse catalog was retired. Platform and the native editor advertise independently. Combining tools from both in another client would require verified server and account identity. |
 | MCP-G024 | **Resolved.** Workflow execution uses data-provider handlers. The unused API shim was removed, and saved `mcp` nodes still execute. |
+
+The agent-runtime docs command queries the published documentation sitemap through the shared in-process MCP transport. Its interactive ACP client can forward explicitly selected VS Code MCP configurations to supporting peers. The built-in ACP bridge uses Gateway-managed tools and rejects session-supplied server definitions.
+
+Browser preview tools and the WebContainer environment agent host now run tool calls through a tab-local MCP transport. Platform MCP serves the gateway catalog, including the `runtime.agents.*` declarations. Model function calling at the native inference boundary carries the MCP-derived schemas into the model and returns proposed calls to the host.
 
 ### Code index consolidation `[platform]` `[agents]`
 
@@ -654,8 +658,8 @@ The TypeScript `@seanhogg/builderforce-code-index` combines the following compon
 
 Gaps:
 
-- `CIX-G002` **`codebase_semantic_search` has no embeddings**: it is BM25 over the first 200 lines of each file.
-- `CIX-G003` **Exact search lives only in the VS Code client** (`workspaceSearch.ts`), and `search_code` has 4 different meanings across hosts.
+- `CIX-G002` **Workspace cutover complete.** `workspace__find` and the saved `codebase_semantic_search` call use the shared TypeScript index and a warm local embedder when available. The saved call uses lexical search for extension-filtered queries.
+- `CIX-G003` **Workspace exact search shared.** VS Code and headless Workspace MCP expose `workspace__search` through the same `search_code` tool. Other host search adapters remain part of the index audit.
 - `CIX-G004` **5 symbol parsers exist**: native tree-sitter (11 languages), WASM tree-sitter (7), regex, the TS compiler API and regex relations.
 - `CIX-G005` **3 chunkers exist, and only Synapse embeds code bodies.** The editor index holds cards only.
 - `CIX-G006` **repo-map is a hand-kept TS mirror of the Rust `graph.rs`/`repo_map.rs`, fed by regex.** `symbolRepoMap.ts` is a third, graph-less map.
@@ -666,7 +670,7 @@ Gaps:
 - `CIX-G011` **One repo gets three indexes, in two dot-dirs** (`.builderforce` and `.builderForceAgents`).
 - `CIX-G012` **4 embedding models are in use, with no shared fingerprint policy.** The editor's embedder chain lists a Synapse embedder that is never offered.
 - `CIX-G013` **3 change-detection schemes exist**: a watcher plus blake3, an mtime snapshot, and a 5-minute staleness window.
-- `CIX-G014` **`check_references` exists only in Rust.**
+- `CIX-G014` **Workspace cutover complete.** VS Code and headless Workspace MCP expose the shared TypeScript `workspace__references` tool.
 - `CIX-G015` **Result caps and file caps disagree.**
   - Result caps: 8 / 25 / 20 / 100 / 30.
   - File caps: 1 MB / 256 KB.

@@ -25,6 +25,11 @@ import { statSync } from "node:fs";
 import { lstat, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
+/** A root-relative POSIX path from an absolute one under `root`: THE separator-normalising `path.relative` (no containment check, `..` kept as `relative` yields it). */
+export function toPosixRel(root: string, abs: string): string {
+  return relative(root, abs).split(sep).join("/");
+}
+
 /** Thrown by {@link resolveInsideRootOrThrow} when a path leaves the workspace root. */
 export class PathEscapesRootError extends Error {
   constructor(readonly requestedPath: string) {

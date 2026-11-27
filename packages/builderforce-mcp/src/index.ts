@@ -14,6 +14,7 @@ export {
   mcpCallRequest,
   mcpCatalogPath,
   platformWireToolName,
+  relayDispatchCatalog,
   readMcpRelayCatalog,
   relayModelText,
   toRelayModelTool,
@@ -21,6 +22,7 @@ export {
   MCP_CATALOG_TTL_MS,
   PLATFORM_EXTENSION_ID,
 } from "./relay.js";
-export type { RelayCallResult, RelayCatalog, RelayToolCall } from "./relay.js";
+export type { RelayCallResult, RelayCatalog, RelayDispatchToolEntry, RelayToolCall } from "./relay.js";
 export type { ConnectorOffer, ConnectorTransport, StdioConnectorInput } from "./connectorCatalog.js";
+export { CONNECTOR_EXTENSION_ID, decodeConnectorTool, encodeConnectorTool } from "./connectorCatalog.js";
 export { isRemoteMcpEndpoint } from "./endpoint.js";

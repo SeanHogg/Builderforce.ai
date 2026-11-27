@@ -17,3 +17,18 @@ export interface ConnectorOffer {
   name: string;
   transports: ConnectorTransport[];
 }
+
+export const CONNECTOR_EXTENSION_ID = "connector";
+const TOOL_SEPARATOR = "::";
+
+/** The connector action address sent to the REST relay. */
+export function encodeConnectorTool(connectorKey: string, actionKey: string): string {
+  return `${connectorKey}${TOOL_SEPARATOR}${actionKey}`;
+}
+
+export function decodeConnectorTool(tool: string): { connectorKey: string; actionKey: string } | null {
+  const index = tool.indexOf(TOOL_SEPARATOR);
+  if (index <= 0) return null;
+  const actionKey = tool.slice(index + TOOL_SEPARATOR.length);
+  return actionKey ? { connectorKey: tool.slice(0, index), actionKey } : null;
+}

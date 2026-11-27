@@ -1,4 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
   CallToolRequestSchema,
@@ -35,6 +37,19 @@ export interface McpServerOptions {
   listChanged?: boolean;
   textResources?: readonly { descriptor: Resource; text: string }[];
   textPrompts?: readonly { descriptor: Prompt; text: string }[];
+}
+
+/** Use the SDK protocol for tools bound to the current process or browser tab. */
+export async function withInProcessMcp<T>(server: Server, operation: (client: Client) => Promise<T>): Promise<T> {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "builderforce-local-tool-host", version: "1.0.0" });
+  try {
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    return await operation(client);
+  } finally {
+    await Promise.allSettled([client.close(), server.close()]);
+  }
 }
 
 export function createMcpServer<Entry extends McpToolEntry | RelayToolEntry>(

@@ -18,7 +18,7 @@ import {
   type BrainAction,
   type BrainTransport,
 } from '@seanhogg/builderforce-brain-embedded';
-import { createMcpCatalogCache, MCP_CATALOG_TTL_MS, platformWireToolName, requiresWriteApproval } from '@seanhogg/builderforce-mcp';
+import { createMcpCatalogCache, MCP_CATALOG_TTL_MS, requiresWriteApproval } from '@seanhogg/builderforce-mcp';
 import type { RunCatalog } from '../host/rovrRunHost';
 import { ADD_TASK_TOOL, BROWSER_TOOL } from './toolNames';
 
@@ -47,7 +47,7 @@ export interface PlatformCatalog {
 }
 
 const sharedLoad = async (transport: CatalogTransport): Promise<BrainAction[]> =>
-  mcpActionsFrom(await fetchMcpToolEntries(transport), transport, undefined, undefined, platformWireToolName);
+  mcpActionsFrom(await fetchMcpToolEntries(transport), transport);
 
 export function createPlatformCatalog(deps: PlatformCatalogDeps): PlatformCatalog {
   const load = deps.load ?? sharedLoad;

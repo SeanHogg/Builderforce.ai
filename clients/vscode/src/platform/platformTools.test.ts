@@ -51,7 +51,7 @@ beforeEach(() => {
   catalogGets = 0;
   vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit): Promise<Response> => {
     const url = String(input);
-    if (url === "http://api.test/llm/v1/mcp/tools") {
+    if (url === "http://api.test/llm/v1/mcp/tools?names=canonical") {
       catalogGets += 1;
       return new Response(JSON.stringify({ tools: [CATALOG_ENTRY] }), { status: 200 });
     }
@@ -78,19 +78,23 @@ async function toolFor(identity?: PlatformChatIdentity) {
 }
 
 describe("platformTools chatId translation", () => {
-  it("adds a wire name only to first-party entries and keeps the relay address", async () => {
+  it("uses gateway provider names and dispatches to the original relay address", async () => {
     const builtin = { ...CATALOG_ENTRY, extensionId: "builtin", tool: "projects.list", name: "builtin_projects_list" };
-    const external = { ...builtin, extensionId: "third-party", name: "builtin_projects_list_copy" };
+    const external = { ...builtin, extensionId: "third-party", tool: "list", name: "ext-third-party__list", legacyName: "mcp_thirdpar_list" };
     const relay = fetch;
     vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) =>
-      String(input).endsWith("/mcp/tools") ? Response.json({ tools: [builtin, external] }) : relay(input, init),
+      String(input).endsWith("/mcp/tools?names=canonical") ? Response.json({ tools: [builtin, external] }) : relay(input, init),
     );
 
     const [platform, thirdParty] = await listPlatformTools(secrets);
     expect(platform).toMatchObject({ name: "builtin_projects_list", wireName: "platform__projects_list", remote: true });
-    expect(thirdParty).not.toHaveProperty("wireName");
+    expect(thirdParty).toMatchObject({ name: "mcp_thirdpar_list", wireName: "ext-third-party__list", remote: true });
     await platform!.execute({ limit: 3 }, "");
-    expect(posts).toMatchObject([{ body: { extensionId: "builtin", tool: "projects.list", arguments: { limit: 3 } } }]);
+    await thirdParty!.execute({ limit: 2 }, "");
+    expect(posts).toMatchObject([
+      { body: { extensionId: "builtin", tool: "projects.list", arguments: { limit: 3 } } },
+      { body: { extensionId: "third-party", tool: "list", arguments: { limit: 2 } } },
+    ]);
   });
 
   it("does not inherit local read permissions for an external tool with the same name", async () => {

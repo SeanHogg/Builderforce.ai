@@ -104,7 +104,7 @@ export function filterByGlob(paths: readonly string[], pattern: string): string[
  * scope at any depth), and a path outside the scope never matches.
  */
 export function matchGlobInScope(pathPosix: string, pattern: string, scopeDir: string | null | undefined): boolean {
-  const p = pathPosix.split("\\").join("/");
+  const p = toPosixPath(pathPosix);
   const scope = normalizeScopeDir(scopeDir);
   if (!scope) return matchGlob(p, pattern);
   if (!isUnderScopeDir(p, scope)) return false;
@@ -121,6 +121,11 @@ export function filterByGlobInScope(
   return paths.filter((p) => matchGlobInScope(p, pattern, scopeDir));
 }
 
+/** THE separator rule: back-slashes become forward slashes and nothing else changes (no trim, no `..`, no case). */
+export function toPosixPath(p: string): string {
+  return p.split("\\").join("/");
+}
+
 /**
  * Normalize a `path` scope argument (the `search_code` / `list_files` subdirectory
  * filter) to a clean repo-relative POSIX dir: back-slashes → forward, strip a leading
@@ -130,7 +135,7 @@ export function filterByGlobInScope(
  * scope identically instead of re-hand-rolling the same regex.
  */
 export function normalizeScopeDir(raw: string | null | undefined): string {
-  return (raw ?? "").split("\\").join("/").trim().replace(/^\.\/+/, "").replace(/^\/+|\/+$/g, "");
+  return toPosixPath(raw ?? "").trim().replace(/^\.\/+/, "").replace(/^\/+|\/+$/g, "");
 }
 
 /**
@@ -141,7 +146,7 @@ export function normalizeScopeDir(raw: string | null | undefined): string {
  */
 export function isUnderScopeDir(pathPosix: string, scopeDir: string): boolean {
   if (!scopeDir) return true;
-  const p = pathPosix.split("\\").join("/");
+  const p = toPosixPath(pathPosix);
   return p === scopeDir || p.startsWith(`${scopeDir}/`);
 }
 
@@ -201,7 +206,7 @@ export function emptyGlobListingNote(
  *  pattern can match anywhere (no slash, or it starts with a glob metacharacter).
  *  `frontend/src/lib/**\/*.test.ts` → `frontend/src/lib/`. */
 function literalGlobDirPrefix(pattern: string): string | null {
-  const p = pattern.split("\\").join("/");
+  const p = toPosixPath(pattern);
   if (!p.includes("/")) return null;
   const meta = p.search(/[*?\[]/);
   if (meta === 0) return null;
@@ -232,7 +237,7 @@ function prefixCanReach(dir: string, prefix: string): boolean {
 export function dirMayContainGlobMatch(dirPosix: string, pattern: string, scopeDir?: string | null): boolean {
   const dir = normalizeScopeDir(dirPosix);
   const scope = normalizeScopeDir(scopeDir);
-  const pat = pattern.split("\\").join("/");
+  const pat = toPosixPath(pattern);
   if (scope && dir && dir !== scope && !dir.startsWith(`${scope}/`) && !scope.startsWith(`${dir}/`)) {
     return false;
   }

@@ -30,7 +30,7 @@ describe('the Creation Canvas MCP model boundary', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it.each([false, true])('checks tenant approval before a canonical relay call issues a request (%s)', async (approved) => {
-    const create = { extensionId: 'builtin', tool: 'tasks.create', name: 'builtin_tasks_create', description: 'Create a Platform task', parameters: { type: 'object' }, mutates: true };
+    const create = { extensionId: 'builtin', tool: 'tasks.create', name: 'builtin_tasks_create', wireName: 'platform__tasks_create', description: 'Create a Platform task', parameters: { type: 'object' }, mutates: true };
     mocks.fetchTools.mockResolvedValue([create, { ...create, tool: 'runtime.preview_status', name: 'builtin_runtime_preview_status', mutates: false }]);
     mocks.stream.mockResolvedValueOnce({
       text: '', finishReason: 'tool_calls',

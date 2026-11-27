@@ -20,8 +20,8 @@ import type { BrainTransport } from './streamChatCompletion';
 // with the run loop's read-repeat guard, so both fingerprint arguments the same way.
 import { stableStringify } from '@builderforce/agent-tools';
 
-import { createMcpRelay, requiresWriteApproval, type RelayCallResult, type RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
-export type { RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
+import { createMcpRelay, relayDispatchCatalog, requiresWriteApproval, type RelayCallResult, type RelayDispatchToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
+export type { RelayDispatchToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
 
 /**
  * The host's say over where a catalog tool runs: return a runner for a tool the host
@@ -89,8 +89,7 @@ export async function fetchMcpToolEntries(
   }).list();
   const skip = new Set(skipExtensionIds);
   // Catalog names are provider-facing. Brain actions and host callbacks keep their policy IDs.
-  return tools.filter((tool) => !skip.has(tool.extensionId)).map((tool) =>
-    tool.legacyName ? { ...tool, name: tool.legacyName } : tool);
+  return relayDispatchCatalog(tools.filter((tool) => !skip.has(tool.extensionId)));
 }
 
 /**
@@ -108,7 +107,7 @@ export function mcpActionsFrom(
 ): BrainAction[] {
   return entries.map((entry) => ({
     name: entry.name,
-    wireName: toolWireName?.(entry),
+    wireName: toolWireName ? toolWireName(entry) : entry.wireName,
     description: entry.description,
     parameters: entry.parameters,
     // Gate writes off the advertised flag; only an explicit mutates=false is

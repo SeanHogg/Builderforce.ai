@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { advertiseName, isRemoteMcpEndpoint, platformWireToolName, relayModelText, toRelayModelTool } from "../dist/index.js";
+import { advertiseName, isRemoteMcpEndpoint, platformWireToolName, relayDispatchCatalog, relayModelText, toolWireNameCodec, toRelayModelTool } from "../dist/index.js";
 import { readMcpConfig, readSynapseConnectors, writeMcpConfig } from "../dist/config.js";
 
 test("remote MCP registration requires a complete HTTPS URL without embedded credentials", () => {
@@ -25,6 +25,22 @@ test("the native relay projection uses canonical tool shaping and approval", () 
   assert.equal(platformWireToolName({ extensionId: "builtin", tool: "tasks.list" }), "platform__tasks_list");
   assert.equal(platformWireToolName({ extensionId: "remote", tool: "tasks.list" }), undefined);
   assert.equal(platformWireToolName({ extensionId: "builtin", tool: "tasks." + "a".repeat(64) }), undefined);
+});
+
+test("relay dispatch keeps unique aliases and distinguishes tools with a shared legacy spelling", () => {
+  const metadata = { extensionId: "remote", description: "", parameters: {} };
+  const sharedAlias = "mcp_remote_find_it";
+  const longAlias = "mcp_remote_" + "a".repeat(72);
+  const [first, second, long] = relayDispatchCatalog([
+    { ...metadata, tool: "find-it", name: "ext-remote__find-it", legacyName: sharedAlias },
+    { ...metadata, tool: "find_it", name: "ext-remote__find_it", legacyName: sharedAlias },
+    { ...metadata, tool: "long", name: "catalog__cafe", legacyName: longAlias },
+  ]);
+  assert.deepEqual([first.name, second.name, long.name], ["ext-remote__find-it", "ext-remote__find_it", longAlias]);
+  const codec = toolWireNameCodec([first.name, second.name, long.name], [long]);
+  assert.equal(codec.toWire(longAlias), "catalog__cafe");
+  assert.equal(codec.fromWire("catalog__cafe"), longAlias);
+  assert.equal(codec.mapPrompt(`Call ${longAlias} now`), "Call catalog__cafe now");
 });
 
 test("legacy Synapse launch settings round-trip through the VS Code config codec", () => {

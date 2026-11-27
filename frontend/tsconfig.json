@@ -23,6 +23,7 @@
     ],
     "paths": {
       "@seanhogg/builderforce-mcp": ["../packages/builderforce-mcp/src/index.ts"],
+      "@seanhogg/builderforce-mcp/server": ["../packages/builderforce-mcp/src/server.ts"],
       "@/*": [
         "./src/*"
       ],

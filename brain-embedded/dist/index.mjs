@@ -411,7 +411,7 @@ import {
   workFiledNotStaffedVerdict,
   workFinishPorts,
   workSupportsRoutingSample
-} from "./chunk-DC7UNVTA.mjs";
+} from "./chunk-A3IEKXJV.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -8134,6 +8134,24 @@ function toOpenAI(tool) {
 }
 
 // ../packages/builderforce-mcp/src/naming.ts
+var IDENTIFIER = /^[A-Za-z0-9]+(?:[_-][A-Za-z0-9]+)*$/;
+var PLATFORM_ID = /^([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)\.([A-Za-z0-9]+(?:[_-][A-Za-z0-9]+)*)$/;
+var ESCAPE_PREFIX = "encoded-";
+var MAX_NAME_LENGTH = 64;
+function encode(value, force = false) {
+  if (!force && IDENTIFIER.test(value) && !value.startsWith(ESCAPE_PREFIX)) return value;
+  if (/[\uD800-\uDFFF]/u.test(value)) throw new Error("Invalid Unicode in MCP name");
+  return ESCAPE_PREFIX + Array.from(new TextEncoder().encode(value), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+function advertiseName(source, tool) {
+  if (!source || !tool) throw new Error("An MCP name requires a source and tool");
+  const platformId = source === "platform" ? PLATFORM_ID.exec(tool) : null;
+  const readableTool = platformId && `${platformId[1].replaceAll("_", "-")}_${platformId[2]}`;
+  const token = readableTool && !readableTool.startsWith(ESCAPE_PREFIX) ? readableTool : encode(tool, source === "platform");
+  const name = `${encode(source)}__${token}`;
+  if (name.length > MAX_NAME_LENGTH) throw new Error("MCP name exceeds 64 characters");
+  return name;
+}
 function counts(names) {
   const result = /* @__PURE__ */ new Map();
   for (const name of names) result.set(name, (result.get(name) ?? 0) + 1);
@@ -8141,9 +8159,10 @@ function counts(names) {
 }
 function toolWireNameCodec(catalogNames, wireNames) {
   if (!wireNames?.length) return void 0;
+  const dispatchId = /^[A-Za-z0-9_-]+$/;
   const valid = /^[A-Za-z0-9_-]{1,64}$/;
   const catalog = counts(catalogNames);
-  const candidates = wireNames.filter(({ name, wireName }) => valid.test(name) && valid.test(wireName) && catalog.get(name) === 1 && !catalog.has(wireName));
+  const candidates = wireNames.filter(({ name, wireName }) => dispatchId.test(name) && valid.test(wireName) && catalog.get(name) === 1 && !catalog.has(wireName));
   const names = counts(candidates.map(({ name }) => name));
   const aliases = counts(candidates.map(({ wireName }) => wireName));
   const mappings = candidates.filter(({ name, wireName }) => names.get(name) === 1 && aliases.get(wireName) === 1);
@@ -8160,7 +8179,31 @@ function toolWireNameCodec(catalogNames, wireNames) {
 }
 
 // ../packages/builderforce-mcp/src/relay.ts
+var PLATFORM_EXTENSION_ID = "builtin";
 var MCP_CALL_PATH = "/llm/v1/mcp/call";
+function platformWireToolName(entry) {
+  if (entry.extensionId !== PLATFORM_EXTENSION_ID) return void 0;
+  try {
+    return advertiseName("platform", entry.tool);
+  } catch {
+    return void 0;
+  }
+}
+function relayDispatchCatalog(entries) {
+  const aliases = /* @__PURE__ */ new Map();
+  const advertised = new Set(entries.map(({ name }) => name));
+  for (const { legacyName } of entries) {
+    if (legacyName) aliases.set(legacyName, (aliases.get(legacyName) ?? 0) + 1);
+  }
+  return entries.map((entry) => {
+    const { name, legacyName } = entry;
+    if (legacyName && legacyName !== name && aliases.get(legacyName) === 1 && !advertised.has(legacyName)) {
+      return { ...entry, name: legacyName, wireName: name };
+    }
+    const wireName = legacyName ? void 0 : platformWireToolName(entry);
+    return wireName && wireName !== name ? { ...entry, wireName } : entry;
+  });
+}
 function mcpCatalogPath(surface2, names) {
   const query = [
     ...surface2 ? [`surface=${encodeURIComponent(surface2)}`] : [],
@@ -8352,12 +8395,12 @@ async function fetchMcpToolEntries(transport, skipExtensionIds = []) {
     catalogNames: "canonical"
   }).list();
   const skip = new Set(skipExtensionIds);
-  return tools.filter((tool) => !skip.has(tool.extensionId)).map((tool) => tool.legacyName ? { ...tool, name: tool.legacyName } : tool);
+  return relayDispatchCatalog(tools.filter((tool) => !skip.has(tool.extensionId)));
 }
 function mcpActionsFrom(entries, transport, onToolResult, localTools, toolWireName) {
   return entries.map((entry) => ({
     name: entry.name,
-    wireName: toolWireName?.(entry),
+    wireName: toolWireName ? toolWireName(entry) : entry.wireName,
     description: entry.description,
     parameters: entry.parameters,
     // Gate writes off the advertised flag; only an explicit mutates=false is

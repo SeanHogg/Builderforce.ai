@@ -563,8 +563,8 @@ The runtimes Builderforce.ai is built on are open source under MIT, and built to
 |---|---|
 | [builderforce-webcontainers](https://github.com/SeanHogg/builderforce-webcontainers) | The in-browser dev runtime behind the IDE and canvas previews: live preview, production build, type-check, Node processes, `npm install` and a shell, with no COOP/COEP and no session caps. npm: `@seanhogg/builderforce-webcontainers`. |
 | [builderforce-memory](https://github.com/SeanHogg/builderforce-memory) | Persistent, browser-trainable SSM memory for any agent: WebGPU Mamba engine, runtime, semantic cache and the Evermind write-through memory, plus an MCP server. npm: `@seanhogg/builderforce-memory`. |
-| [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) | Synapse, the desktop app and local AI runtime: runs models on your own machine with the native `bfi` engine, keeps a private Evermind memory. Builderforce Workspace MCP and editor connector setup are provided by the VS Code extension. |
-| [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn) | Spawn, the desktop app that builds Roblox games by talking, with a Roblox Studio bridge. |
+| [builderforce-inference](https://github.com/SeanHogg/builderforce-inference) | Native `bfi` inference for local models. The Builderforce VS Code extension is the replacement for the Synapse desktop editor and provides Workspace MCP and connector setup. |
+| [builderforce-spawn](https://github.com/SeanHogg/builderforce-spawn) | Roblox Studio integration. Spawn is moving from a standalone app to a Builderforce project type for Roblox games. |
 
 ---
 

@@ -1,7 +1,8 @@
 import { buildNodeCapabilityProvider } from "../../agents/node-capability-provider.js";
 import { onPremTreeSitterDir } from "../../agents/on-prem-symbol-index.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
-import { searchWorkspaceCodeIndex, workspaceCodeEmbedder } from "@seanhogg/builderforce-code-index";
+import { workspaceCodeEmbedder } from "@seanhogg/builderforce-code-index";
+import { searchWorkspaceMcpIndex } from "@builderforce/workspace-mcp";
 
 const log = createSubsystemLogger("workspace/code-search");
 
@@ -24,14 +25,12 @@ export async function searchWorkspace(options: SearchOptions, lexicalOnly: boole
   try {
     const wasmDir = onPremTreeSitterDir();
     const files = buildNodeCapabilityProvider({ workspaceRoot: root }).repoRead!;
-    const embedder = extension ? undefined : await workspaceCodeEmbedder().catch(() => {
+    const result = await searchWorkspaceMcpIndex({
+      root, files, query, limit: 3 * limit, lexicalOnly, rebuild, extension, wasmDir,
+    }, () => workspaceCodeEmbedder().catch(() => {
       log.debug("Workspace embedder unavailable, using lexical search");
       return undefined;
-    });
-    const result = await searchWorkspaceCodeIndex({
-      root, files, query, limit: 3 * limit, lexicalOnly, ...(rebuild ? { rebuild } : {}), waitForIndexMs: 5_000,
-      ...(extension ? { extension } : {}), ...(embedder ? { embedder } : {}), ...(wasmDir ? { wasmDir } : {}),
-    });
+    }));
     const filesByPath = new Map<string, { filePath: string; score: number; symbols: string[]; snippet: string }>();
     for (const { path, score, symbol, snippet } of result.results ?? []) {
       const existing = filesByPath.get(path);

@@ -13,7 +13,8 @@
     "paths": {
       "@builderforce/code-shield": ["../code-shield/src/index.ts"],
       "@builderforce/secret-redaction": ["../secret-redaction/src/index.ts"],
-      "@builderforce/sarif": ["../sarif/src/index.ts"]
+      "@builderforce/sarif": ["../sarif/src/index.ts"],
+      "@builderforce/tool-output-policy": ["../tool-output-policy/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"],

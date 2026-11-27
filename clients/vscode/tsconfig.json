@@ -33,6 +33,7 @@
       "@seanhogg/builderforce-memory/*": ["./node_modules/@seanhogg/builderforce-memory/dist/*/index.d.ts"],
       "@seanhogg/builderforce-memory-engine/ml/tasks/check-scheduler": ["./node_modules/@seanhogg/builderforce-memory-engine/dist/ml/tasks/check_scheduler.d.ts"],
       "@builderforce/agent-tools/*": ["../../packages/agent-tools/src/*"],
+      "@builderforce/agent-tools/skip-dirs": ["../../packages/agent-tools/src/skipDirs.ts"],
       "@builderforce/cost-levers": ["../../packages/cost-levers/src/index.ts"],
       "@builderforce/difficulty-router": ["../../packages/difficulty-router/src/index.ts"],
       "@builderforce/learned-routing": ["../../packages/learned-routing/src/index.ts"],

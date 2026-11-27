@@ -7,8 +7,19 @@
  */
 
 export const WORKSPACE_SKIP_DIRS: ReadonlySet<string> = new Set([
-  "node_modules", ".git", ".hg", ".svn", "dist", "build", "out", ".next", "coverage", ".turbo", ".vercel", ".cache",
+  "node_modules", ".git", ".hg", ".svn", "dist", "build", "out", ".next", ".nuxt", "coverage", ".turbo", ".vercel", ".cache",
   "target", "vendor", ".venv", "venv", "__pycache__", ".idea", ".vscode-test",
+]);
+
+/** The one hidden directory an index walk still enters: CI workflows and issue templates are source worth indexing. */
+const INDEXED_DOT_DIR = ".github";
+
+/**
+ * Hidden directories a FILE LISTING still shows (`list_files`), so an agent can edit workflows,
+ * editor settings and tool config. Indexing and search skip them; listing does not.
+ */
+export const LIST_CONFIG_DOT_DIRS: ReadonlySet<string> = new Set([
+  ".github", ".vscode", ".devcontainer", ".husky", ".changeset", ".claude", ".cursor",
 ]);
 
 
@@ -43,4 +54,14 @@ export function skippedDirReason(name: string): SkippedFolderReason | undefined 
 /** Whether a walk skips a directory called `name`: in `skipDirs` (default {@link WORKSPACE_SKIP_DIRS}) or matching a name rule. */
 export function isSkippedDirName(name: string, skipDirs: ReadonlySet<string> = WORKSPACE_SKIP_DIRS): boolean {
   return skipDirs.has(name) || skippedDirReason(name) !== undefined;
+}
+
+/** Whether an INDEX / SEARCH / ANALYSIS walk enters a directory called `name`: not skipped, and not a hidden directory other than `.github`. */
+export function isIndexedDirName(name: string): boolean {
+  return !isSkippedDirName(name) && (!name.startsWith(".") || name === INDEXED_DOT_DIR);
+}
+
+/** Whether a FILE LISTING (`list_files`) enters a directory called `name`: not skipped, and not a hidden directory outside {@link LIST_CONFIG_DOT_DIRS}. */
+export function isListedDirName(name: string): boolean {
+  return !isSkippedDirName(name) && (!name.startsWith(".") || LIST_CONFIG_DOT_DIRS.has(name));
 }

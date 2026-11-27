@@ -1,4 +1,4 @@
-import { createMcpRelay, createMcpCatalogCache, platformWireToolName, requiresWriteApproval, type RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
+import { createMcpRelay, createMcpCatalogCache, relayDispatchCatalog, requiresWriteApproval, type RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
 import type * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "../gateway/gateway";
 import { GATEWAY_WORKSPACE_HEADER, gatewayAuthHeaders, gatewayWorkspaceHeaders, observeGatewayResponse } from "../auth/gatewayAuth";
@@ -151,8 +151,8 @@ export async function listPlatformTools(
     return [];
   }
 
-  return entries.map((entry): ToolDef => {
-    const wireName = platformWireToolName(entry);
+  return relayDispatchCatalog(entries).map((entry): ToolDef => {
+    const { wireName } = entry;
     return {
       name: entry.name,
       description: entry.description,
@@ -174,7 +174,7 @@ export async function listPlatformTools(
 function platformRelay(baseUrl: string, key: string) {
   const headers = gatewayAuthHeaders(key);
   return createMcpRelay({
-    baseUrl, headers,
+    baseUrl, headers, catalogNames: "canonical",
     // Retry connection failures only, before a write could have reached the gateway.
     fetch: async (input, init) => observeGatewayResponse(await retryOnConnectFailure(() => fetch(input, init)), headers),
   });

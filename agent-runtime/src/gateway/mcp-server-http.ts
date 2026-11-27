@@ -4,6 +4,7 @@ import { isAbsolute, resolve } from "node:path";
 import {
   createWorkspaceMcpServer,
   createWorkspaceMcpTools,
+  resolveWorkspaceMcpTool,
   WORKSPACE_MCP_INFO,
   type WorkspaceMcpTool,
 } from "@builderforce/workspace-mcp";
@@ -195,8 +196,7 @@ export async function handleMcpHttpRequest(
       return true;
     }
 
-    const tool = WORKSPACE_TOOLS.find((entry) => entry.name === toolName)
-      ?? LEGACY_ENTRIES.find((entry) => entry.legacyName === toolName || entry.name === toolName);
+    const tool = resolveWorkspaceMcpTool(WORKSPACE_TOOLS, LEGACY_ENTRIES, toolName);
     if (!tool) {
       sendJson(res, 404, { ok: false, error: `Tool not found: ${toolName}` });
       return true;

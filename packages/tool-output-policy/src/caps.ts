@@ -183,6 +183,21 @@ export function windowedCap(tool: string, tableCap: number, contextWindowTokens?
   return Math.min(tableCap, share);
 }
 
+/**
+ * The file-tool caps (counts and bytes, not model-facing chars): what one `list_files` walk
+ * collects, what it returns, the most one `read_file` reads from disk, and the matches one
+ * `search_code` returns. Every host that lists, reads or searches files takes them from here;
+ * the container receives them through `gen-container-shared.mjs`.
+ */
+/** Files one `list_files` walk collects before it stops and says so. */
+export const LIST_MAX_FILES = 5_000;
+/** Entries one `list_files` call returns to the model (the rest is `truncated`). */
+export const LIST_RETURN_MAX = 400;
+/** Bytes one `read_file` reads from disk; a larger file is cut and marked truncated. */
+export const READ_MAX_BYTES = 2 * 1024 * 1024;
+/** Matches one `search_code` call returns; past this the result says `truncated`. */
+export const SEARCH_MAX_MATCHES = 100;
+
 /** Whether a tool's output is a shell/build/test log. */
 export function isShellTool(tool: string): boolean {
   return SHELL_TOOLS.has(tool);

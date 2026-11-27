@@ -34,11 +34,12 @@ describe("acp cli option collisions", () => {
     const program = new Command();
     registerAcpCli(program);
 
-    await program.parseAsync(["acp", "client", "--verbose"], { from: "user" });
+    await program.parseAsync(["acp", "client", "--verbose", "--mcp-config", ".vscode/mcp.json"], { from: "user" });
 
     expect(runAcpClientInteractive).toHaveBeenCalledWith(
       expect.objectContaining({
         verbose: true,
+        mcpConfig: ".vscode/mcp.json",
       }),
     );
   });

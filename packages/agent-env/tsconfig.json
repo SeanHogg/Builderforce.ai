@@ -14,6 +14,8 @@
     "skipLibCheck": true,
     "noEmit": true,
     "paths": {
+      "@seanhogg/builderforce-mcp": ["../builderforce-mcp/src/index.ts"],
+      "@seanhogg/builderforce-mcp/server": ["../builderforce-mcp/src/server.ts"],
       "@builderforce/agent-run": ["../agent-run/src/index.ts"],
       "@builderforce/secret-redaction": ["../secret-redaction/src/index.ts"],
       "@builderforce/code-shield": ["../code-shield/src/index.ts"],

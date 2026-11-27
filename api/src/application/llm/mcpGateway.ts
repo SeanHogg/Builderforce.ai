@@ -24,8 +24,8 @@
  */
 
 import { resolveAdvertisedToolName } from '@builderforce/agent-tools';
-import { advertiseName, requiresWriteApproval, resolveName } from '@seanhogg/builderforce-mcp';
-import { callConnectorTool, CONNECTOR_EXTENSION_ID, decodeConnectorTool, listConnectorTools } from '../connectors/connectorTools';
+import { advertiseName, CONNECTOR_EXTENSION_ID, decodeConnectorTool, requiresWriteApproval, resolveName } from '@seanhogg/builderforce-mcp';
+import { callConnectorTool, listConnectorTools } from '../connectors/connectorTools';
 import { BUILTIN_EXTENSION_ID, callBuiltinTool, listBuiltinTools } from './builtinMcpService';
 import {
   BUILTIN_TOOL_FEATURE_GATES,
@@ -112,10 +112,6 @@ export function roleFilterBuiltinTools<T extends { tool: string; mutates?: boole
   return tools.filter((t) => mayRunBuiltinTool(t.tool, requiresWriteApproval(t), role));
 }
 
-interface GatewayCatalogTool extends McpToolEntry {
-  legacyName?: string;
-}
-
 function catalogAddress(entry: McpToolEntry): { source: string; tool: string } {
   if (entry.extensionId === BUILTIN_EXTENSION_ID) return { source: 'platform', tool: entry.tool };
   if (entry.extensionId === CONNECTOR_EXTENSION_ID) {
@@ -125,7 +121,7 @@ function catalogAddress(entry: McpToolEntry): { source: string; tool: string } {
   return { source: `ext-${entry.extensionId}`, tool: entry.tool };
 }
 
-async function canonicalCatalog(tools: readonly McpToolEntry[]): Promise<GatewayCatalogTool[]> {
+async function canonicalCatalog(tools: readonly McpToolEntry[]): Promise<McpToolEntry[]> {
   return Promise.all(tools.map(async (entry) => {
     const { source, tool } = catalogAddress(entry);
     let name: string;
@@ -146,7 +142,7 @@ async function canonicalCatalog(tools: readonly McpToolEntry[]): Promise<Gateway
  * The two network-bound sources are fetched concurrently: the MCP leg calls every
  * customer server, and serialising a cached DB read behind it is free latency.
  */
-export async function listGatewayMcpTools(ctx: GatewayMcpContext): Promise<GatewayCatalogTool[]> {
+export async function listGatewayMcpTools(ctx: GatewayMcpContext): Promise<McpToolEntry[]> {
   const surface = surfaceFor(ctx.surface);
   const db = dbFor(ctx);
   // A source the surface excludes is not fetched at all. The extension leg calls
@@ -192,9 +188,9 @@ const PRIVATE_BUILTIN_TOOL_IDS: ReadonlySet<string> = new Set([
  * is ever disclosed. `?surface=` still applies, so a preview can be narrowed
  * the same way the signed-in catalog can.
  */
-export function listPublicMcpTools(surface?: string | null): GatewayCatalogTool[];
-export function listPublicMcpTools(surface: string | null | undefined, names: 'canonical'): Promise<GatewayCatalogTool[]>;
-export function listPublicMcpTools(surface?: string | null, names?: 'canonical'): GatewayCatalogTool[] | Promise<GatewayCatalogTool[]> {
+export function listPublicMcpTools(surface?: string | null): McpToolEntry[];
+export function listPublicMcpTools(surface: string | null | undefined, names: 'canonical'): Promise<McpToolEntry[]>;
+export function listPublicMcpTools(surface?: string | null, names?: 'canonical'): McpToolEntry[] | Promise<McpToolEntry[]> {
   const resolved = surfaceFor(surface);
   const tools = surfaceIncludesSource(resolved, 'builtin')
     ? applyToolSurface(listBuiltinTools().filter((t) => !PRIVATE_BUILTIN_TOOL_IDS.has(t.tool)), resolved)
@@ -210,7 +206,7 @@ export function listPublicMcpTools(surface?: string | null, names?: 'canonical')
  * identifier. Both therefore route through the SAME `McpToolEntry.name` that was
  * advertised, so a rename can never desync the advertise and call sides.
  */
-export function resolveGatewayMcpTool(tools: readonly GatewayCatalogTool[], name: string): GatewayCatalogTool | null {
+export function resolveGatewayMcpTool(tools: readonly McpToolEntry[], name: string): McpToolEntry | null {
   const requested = name.trim();
   const exact = tools.filter((t) => t.name === requested);
   if (exact.length > 0) return exact.length === 1 ? exact[0]! : null;

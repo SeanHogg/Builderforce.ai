@@ -42,17 +42,10 @@ import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { isGzipPath, readGzipText } from "./gzipText.js";
 import type { RepoSearchResult } from "./capabilities.js";
+import { toPosixRel } from "./node-path.js";
+import { WORKSPACE_SKIP_DIRS, isIndexedDirName } from "./skipDirs.js";
+import { SEARCH_MAX_MATCHES } from "@builderforce/tool-output-policy";
 
-/** Directories no local walk or search descends into — build output and dependencies. */
-export const SKIP_DIRS: ReadonlySet<string> = new Set([
-  "node_modules", ".git", "dist", "build", ".next", "out", "coverage", ".turbo", ".vercel", ".cache",
-  // Compiled webview chunks (`clients/vscode/media/webview`) — a 60KB minified line
-  // matching the query used to drown directory search so the source tree never ran.
-  "media",
-]);
-
-/** Matches handed back per search. Past this the result says `truncated`. */
-export const SEARCH_MAX_MATCHES = 100;
 /** Files the FALLBACK walk reads before giving up (ripgrep has no such cap). */
 const WALK_MAX_FILES = 4_000;
 const SEARCH_MAX_FILE_BYTES = 2 * 1024 * 1024;
@@ -103,11 +96,6 @@ export function compileSearchPattern(query: string, caseSensitive = false): RegE
  */
 export function smartCaseSensitive(query: string): boolean {
   return /[A-Z]/.test(query.replace(/\\./g, ""));
-}
-
-/** A repo-relative POSIX path from an absolute one under `root`. */
-function relPosix(root: string, abs: string): string {
-  return path.relative(root, abs).split(path.sep).join("/");
 }
 
 /**
@@ -281,7 +269,7 @@ export async function searchWorkspace(opts: WorkspaceSearchOptions): Promise<Rep
   // step args carry `backend`/`ms` and a slow search is visible in the trace, not a guess.
   const stamp = (r: RepoSearchResult, backend: "rg" | "walk"): RepoSearchResult => Object.assign(r, { backend, ms: Date.now() - t0 });
   const stat = await fs.stat(start).catch(() => null);
-  if (!stat) return stamp({ ok: false, query, error: `path not found: ${relPosix(root, start) || "."}` }, "walk");
+  if (!stat) return stamp({ ok: false, query, error: `path not found: ${toPosixRel(root, start) || "."}` }, "walk");
   if (stat.isFile()) {
     // The file-scope case: search exactly that file. The walker's readdir threw here
     // and reported "not referenced" — the false negative that started this module.
@@ -308,7 +296,7 @@ async function searchOneFile(root: string, abs: string, re: RegExp, size: number
   if (size > SEARCH_MAX_FILE_BYTES) return [];
   const content = await fileText(abs);
   if (!content || content.includes("\0")) return [];
-  const rel = relPosix(root, abs);
+  const rel = toPosixRel(root, abs);
   const out: SearchMatch[] = [];
   const lines = content.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -348,7 +336,7 @@ export async function ripgrepSearch(root: string, start: string, query: string, 
 function spawnRipgrepSearch(root: string, start: string, query: string, ripgrep: string, run: SearchRunOptions): Promise<RepoSearchResult | null> {
   // The resolved scope IS ripgrep's search path (`-- <target>` from cwd=root), never a
   // post-filter over a whole-root scan — a scoped search only walks the subtree.
-  const target = relPosix(root, start) || ".";
+  const target = toPosixRel(root, start) || ".";
   if (run.signal?.aborted) return Promise.resolve({ ok: false, query, error: STOPPED });
   const args = [
     // JSON events, not `path:line:text` — on Windows that colon format collides with

@@ -65,10 +65,11 @@ export function toolWireNameCodec(
   wireNames: readonly { name: string; wireName: string }[] | undefined,
 ) {
   if (!wireNames?.length) return undefined;
+  const dispatchId = /^[A-Za-z0-9_-]+$/;
   const valid = /^[A-Za-z0-9_-]{1,64}$/;
   const catalog = counts(catalogNames);
   const candidates = wireNames.filter(({ name, wireName }) =>
-    valid.test(name) && valid.test(wireName) && catalog.get(name) === 1 && !catalog.has(wireName));
+    dispatchId.test(name) && valid.test(wireName) && catalog.get(name) === 1 && !catalog.has(wireName));
   const names = counts(candidates.map(({ name }) => name));
   const aliases = counts(candidates.map(({ wireName }) => wireName));
   const mappings = candidates.filter(({ name, wireName }) => names.get(name) === 1 && aliases.get(wireName) === 1);

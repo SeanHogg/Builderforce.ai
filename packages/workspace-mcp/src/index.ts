@@ -76,13 +76,20 @@ interface WorkspaceMcpOptions {
   embedder?: () => Promise<EmbedderPort | undefined>;
 }
 
+/** Default index policy for the Workspace catalog and its saved search calls. */
+export async function searchWorkspaceMcpIndex(
+  input: Omit<Parameters<typeof searchWorkspaceCodeIndex>[0], "embedder" | "waitForIndexMs">,
+  loadEmbedder: () => Promise<EmbedderPort | undefined> = workspaceCodeEmbedder,
+): ReturnType<typeof searchWorkspaceCodeIndex> {
+  const embedder = input.extension ? undefined : await loadEmbedder().catch(() => undefined);
+  return searchWorkspaceCodeIndex({ ...input, embedder, waitForIndexMs: INDEX_WAIT_MS });
+}
+
 async function findWorkspaceCode({ root, caps }: Workspace, args: Record<string, unknown>, options: WorkspaceMcpOptions) {
-  const embedder = await (options.embedder ?? workspaceCodeEmbedder)().catch(() => undefined);
   const semantic = {
-    search: (query: string, { scope, limit }: { scope?: string; limit?: number } = {}) => searchWorkspaceCodeIndex({
-      root, files: caps.repoRead!, query, limit: limit ?? 8, waitForIndexMs: INDEX_WAIT_MS,
-      ...(scope ? { scope } : {}), ...(embedder ? { embedder } : {}), ...options.grammar?.(),
-    }),
+    search: (query: string, { scope, limit }: { scope?: string; limit?: number } = {}) => searchWorkspaceMcpIndex({
+      root, files: caps.repoRead!, query, limit: limit ?? 8, scope, ...options.grammar?.(),
+    }, options.embedder),
     repoMap: (args: Record<string, unknown>) => workspaceRepoMap({ caps }, args),
   };
   return fromDefinition(semanticSearchTool)({ root, caps: { ...caps, semantic } }, args);
@@ -188,6 +195,16 @@ export function createWorkspaceMcpTools(resolve: ResolveWorkspace, options: Work
   })) : tools;
 }
 
+export function resolveWorkspaceMcpTool(
+  tools: readonly WorkspaceMcpTool[],
+  compatibility: readonly WorkspaceMcpTool[],
+  name: string,
+): WorkspaceMcpTool | null {
+  return tools.find((entry) => entry.name === name)
+    ?? compatibility.find((entry) => entry.legacyName === name || entry.name === name)
+    ?? null;
+}
+
 export function createWorkspaceMcpServer(tools: readonly WorkspaceMcpTool[], compatibility: readonly WorkspaceMcpTool[] = []) {
   return createMcpServer({
     async list() {
@@ -197,9 +214,7 @@ export function createWorkspaceMcpServer(tools: readonly WorkspaceMcpTool[], com
       }
       return available;
     },
-    resolve: (entries, name) => entries.find((entry) => entry.name === name)
-      ?? compatibility.find((entry) => entry.legacyName === name || entry.name === name)
-      ?? null,
+    resolve: (entries, name) => resolveWorkspaceMcpTool(entries, compatibility, name),
     call: (entry, args) => entry.run(args),
   }, { info: WORKSPACE_MCP_INFO, gate: {} });
 }

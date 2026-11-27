@@ -12,8 +12,10 @@
  */
 import { DEFAULT_TOOL_LIMIT, type CapabilityProvider, type PlatformToolResult, type PlatformTools } from "@builderforce/agent-run";
 import type { Capability, ToolSchema } from "@builderforce/agent-tools";
+import { normalizeInputSchema, requiresWriteApproval, toOpenAI, type McpToolEntry } from "@seanhogg/builderforce-mcp";
+import { createMcpServer, withInProcessMcp } from "@seanhogg/builderforce-mcp/server";
 import { ENV_TOOL_KEYS, type EnvironmentToolPort } from "./envContract.js";
-import { ENV_TOOL_MUTATES, envToolKeyOf, envToolName, isEnvToolKey, type IdempotencyKey } from "./idempotentTools.js";
+import { ENV_TOOL_MUTATES, envToolKeyOf, envToolName, type IdempotencyKey } from "./idempotentTools.js";
 
 export { envToolKeyOf, envToolName };
 
@@ -42,7 +44,17 @@ const ENV_TOOL_SPECS: Readonly<Record<string, Omit<ToolSchema["function"], "name
   "env.services.status": { description: "The environment's services: state, port and restarts.", parameters: { type: "object", properties: {} } },
 };
 
-const schemaOf = (key: string): ToolSchema => ({ type: "function", function: { name: envToolName(key), ...ENV_TOOL_SPECS[key]! } });
+const descriptors = new Map<string, McpToolEntry>(ENV_TOOL_KEYS.map((key) => {
+  const { description, parameters } = ENV_TOOL_SPECS[key]!;
+  return [key, {
+    name: envToolName(key),
+    description,
+    inputSchema: normalizeInputSchema(parameters),
+    effect: ENV_TOOL_MUTATES[key] ? "write" : "read",
+    surfaces: ["webcontainer"],
+  }];
+}));
+const ENV_MCP_TIMEOUT_MS = 120_000;
 
 export interface EnvCapabilitiesDeps {
   /** The environment's tool port, bound to this agent. */
@@ -76,8 +88,8 @@ function toolResult(outcome: Awaited<ReturnType<EnvironmentToolPort["call"]>>): 
 
 export function createEnvCapabilities(deps: EnvCapabilitiesDeps): EnvCapabilities {
   const allowed = new Set(deps.allowlist);
-  const envAllowed = ENV_TOOL_KEYS.filter((key) => allowed.has(key));
-  const schemas = envAllowed.map(schemaOf);
+  const advertised = [...descriptors].filter(([key]) => allowed.has(key)).map(([, tool]) => tool);
+  const schemas = advertised.map(toOpenAI);
   const granted = new Set<Capability>([...(deps.catalog?.capabilities ?? [])].filter((capability) => allowed.has(capability)));
 
   const platform: PlatformTools = {
@@ -86,13 +98,33 @@ export function createEnvCapabilities(deps: EnvCapabilitiesDeps): EnvCapabilitie
     selection: { query: "", limit: DEFAULT_TOOL_LIMIT, required: new Set(schemas.map((schema) => schema.function.name)) },
     declared: (name) => {
       const key = envToolKeyOf(name);
-      return key ? { mutates: ENV_TOOL_MUTATES[key] === true } : undefined;
+      const descriptor = key ? descriptors.get(key) : undefined;
+      return descriptor ? { mutates: requiresWriteApproval(descriptor) } : undefined;
     },
     async execute(name, args, env) {
       const key = envToolKeyOf(name);
-      if (!key || !isEnvToolKey(key)) return { data: { ok: false, error: `\`${name}\` is not a tool of this environment.` }, isError: true };
+      const descriptor = key ? descriptors.get(key) : undefined;
+      if (!key || !descriptor) return { data: { ok: false, error: `\`${name}\` is not a tool of this environment.` }, isError: true };
       const idempotencyKey: IdempotencyKey | undefined = env.callId === undefined ? undefined : { runId: deps.runId, step: env.step, toolCallId: env.callId };
-      return toolResult(await deps.port.call(key, args, idempotencyKey));
+      const server = createMcpServer({
+        list: () => advertised,
+        // The agent-bound port records typed Shield refusals even for a known but withheld tool.
+        resolve: (_entries, requested) => requested === descriptor.name ? descriptor : null,
+        async callPrepared(_tool, input) {
+          const result = toolResult(await deps.port.call(key, input, idempotencyKey));
+          return { content: [], structuredContent: { data: result.data }, ...(result.isError ? { isError: true } : {}) };
+        },
+      }, {
+        info: { name: "builderforce-webcontainer", version: "1.0.0" },
+        // openRun governs dispatch and the bound environment port enforces its own write policy.
+        gate: { approveWrite: () => true },
+      });
+      const result = await withInProcessMcp(server, (client) =>
+        client.callTool({ name: descriptor.name, arguments: args }, undefined, { timeout: ENV_MCP_TIMEOUT_MS }),
+      );
+      const content = result.structuredContent;
+      const data = content && typeof content === "object" && "data" in content ? content.data : content ?? result.content;
+      return { data, ...(result.isError ? { isError: true } : {}) };
     },
   };
 

@@ -47,8 +47,9 @@ export function registerAcpCli(program: Command) {
     .command("client")
     .description("Run an interactive ACP client against the local ACP bridge")
     .option("--cwd <dir>", "Working directory for the ACP session")
+    .option("--mcp-config <file>", "Forward a trusted VS Code MCP config to a supporting ACP peer")
     .option("--server <command>", "ACP server command (default: builderforce)")
-    .option("--server-args <args...>", "Extra arguments for the ACP server")
+    .option("--server-args <args...>", "Arguments for a custom ACP server command")
     .option("--server-verbose", "Enable verbose logging on the ACP server", false)
     .option("--verbose, -v", "Verbose client logging", false)
     .action(async (opts, command) => {
@@ -56,6 +57,7 @@ export function registerAcpCli(program: Command) {
       try {
         await runAcpClientInteractive({
           cwd: opts.cwd as string | undefined,
+          mcpConfig: opts.mcpConfig as string | undefined,
           serverCommand: opts.server as string | undefined,
           serverArgs: opts.serverArgs as string[] | undefined,
           serverVerbose: Boolean(opts.serverVerbose),

@@ -12,7 +12,7 @@ export {
   type ImportRow, type RefRow, type SerializedFileGraph,
 } from './graph.js';
 export { extractFileFacts, isMapSource, type FileFacts, type SymbolRow } from './extract.js';
-export { DEFAULT_REPO_MAP_LIMITS, SKIP_DIRS, SKIP_FILES, isMapCandidate, type RepoMapLimits } from './filePolicy.js';
+export { DEFAULT_REPO_MAP_LIMITS, SKIP_FILES, isMapCandidate, type RepoMapLimits } from './filePolicy.js';
 export {
   REPO_GRAPH_VERSION, RepoGraph, RepoGraphBuilder,
   type MapSymbol, type RepoGraphStats, type SerializedRepoGraph, type SerializedSymbol,
