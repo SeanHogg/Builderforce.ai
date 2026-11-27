@@ -42,7 +42,7 @@ function webToken(overrides: Partial<Claims> = {}): Promise<string> {
 
 function row(overrides: Partial<RenewalTokenRow> = {}): RenewalTokenRow {
   return {
-    jti: 'old-jti', sessionId: 'sid-1', sessionLive: true,
+    jti: 'old-jti', sessionId: 'sid-1', tokenType: 'web', sessionLive: true,
     issuedAt: new Date((nowSec() - 60) * 1000), revokedAt: null, supersededBy: null,
     ...overrides,
   };
@@ -198,9 +198,19 @@ describe('renewWebSession — a token that is no longer current', () => {
 
 describe('renewWebSession — what is never renewed', () => {
   it('refuses a forged token and a pending-MFA token', async () => {
-    const forged = (await webToken()).replace(/.$/, (ch) => (ch === 'A' ? 'B' : 'A'));
+    // Tamper the FIRST signature character: all six of its bits are signature bytes (the last
+    // character also carries padding bits a decoder may drop, so flipping it is not always a forgery).
+    const [header, body, sig] = (await webToken()).split('.') as [string, string, string];
+    const forged = `${header}.${body}.${sig[0] === 'A' ? 'B' : 'A'}${sig.slice(1)}`;
     expect(await renewWebSession(db, env, forged, ctx)).toMatchObject({ ok: false, code: 'invalid_token' });
     expect(await renewWebSession(db, env, await webToken({ mfaPending: true }), ctx)).toMatchObject({ ok: false, code: 'invalid_token' });
+  });
+
+  it('refuses a workspace token: only a web session row renews', async () => {
+    ledger([row({ tokenType: 'tenant' })]);
+    expect(await renewWebSession(db, env, await webToken(), ctx)).toMatchObject({ ok: false, code: 'invalid_token' });
+    expect(mocks.recordAuthToken).not.toHaveBeenCalled();
+    expect(mocks.supersedeToken).not.toHaveBeenCalled();
   });
 
   it('refuses a suspended account', async () => {

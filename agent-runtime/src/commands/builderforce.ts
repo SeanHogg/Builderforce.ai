@@ -802,7 +802,14 @@ async function ensureProjectMappingFromStoredCreds(params: {
 
   // The stored web token is short-lived: renew it (rotation — store the successor at once,
   // the old one is spent). A session that has ended means the mapping waits for a sign-in.
-  const webToken = await renewWebToken(serverUrl, storedWebToken).catch(() => null);
+  const webToken = await renewWebToken(serverUrl, storedWebToken).catch((error: unknown) => {
+    console.warn(
+      theme.warn(
+        `Builderforce session could not be renewed; sign in again to map this project (${error instanceof Error ? error.message : String(error)})`,
+      ),
+    );
+    return null;
+  });
   if (!webToken) {
     return;
   }

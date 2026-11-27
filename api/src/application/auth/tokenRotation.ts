@@ -22,6 +22,8 @@ import { dropCachedTokenVerdicts } from './sessionRevocation';
 export interface RenewalTokenRow {
   jti: string;
   sessionId: string | null;
+  /** Only `web` rows are renewable; workspace, API and host tokens are minted their own way. */
+  tokenType: string;
   /** The token's session exists and is active (always true for a session-less token). */
   sessionLive: boolean;
   issuedAt: Date;
@@ -39,6 +41,7 @@ export async function findTokenForRenewal(db: Db, userId: string, jti: string): 
     .select({
       jti: authTokens.jti,
       sessionId: authTokens.sessionId,
+      tokenType: authTokens.tokenType,
       sessionRowId: authUserSessions.id,
       issuedAt: authTokens.issuedAt,
       revokedAt: authTokens.revokedAt,
@@ -61,6 +64,7 @@ export async function findTokenForRenewal(db: Db, userId: string, jti: string): 
   return {
     jti: row.jti,
     sessionId: row.sessionId,
+    tokenType: row.tokenType,
     sessionLive: !row.sessionId || !!row.sessionRowId,
     issuedAt: row.issuedAt,
     revokedAt: row.revokedAt,

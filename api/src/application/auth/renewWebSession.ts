@@ -106,6 +106,8 @@ export async function renewWebSession(
 
   const row = await findTokenForRenewal(db, claims.sub, claims.jti);
   if (!row || (claims.sid && row.sessionId && row.sessionId !== claims.sid)) return REVOKED;
+  // Renewal continues a WEB session only; a workspace, API or host token is never exchanged here.
+  if (row.tokenType !== 'web') return INVALID;
   if (row.revokedAt) return answerRotated(db, env, chain, row, ctx);
   if (!row.sessionLive) return REVOKED;
 

@@ -98,6 +98,7 @@ describe('the status chip and the action button', () => {
         await mount(source);
         fireEvent.click(await screen.findByTestId('kg-status-chip'));
         const panel = await screen.findByTestId('kg-drawer');
+        fireEvent.click(within(panel).getByRole('tab', { name: new RegExp(`^${L.surface.run.review.tabReview}`) })); // synced: the chip opens on Runs
         expect(await within(panel).findByTestId('kg-review-idle')).toBeTruthy();
         expect(within(panel).queryByTestId('kg-review-planning')).toBeNull();
         expect(source.requests).toEqual([]);
@@ -109,6 +110,7 @@ describe('the review in the strip', () => {
         const source = sourceOf() as KnowledgeGraphSource & { confirmed: boolean[] };
         await mount(source);
         fireEvent.click(await screen.findByTestId('kg-status-chip'));
+        fireEvent.click(within(await screen.findByTestId('kg-drawer')).getByRole('tab', { name: new RegExp(`^${L.surface.run.review.tabReview}`) })); // the chip opens on Runs
         await screen.findByTestId('kg-review-idle');
         fireEvent.click(screen.getByTestId('kg-footer-action'));
         await waitFor(() => expect(source.confirmed).toEqual([true]));
