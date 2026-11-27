@@ -48,7 +48,14 @@ export function useComputed<K extends TaskKind>(
     const sync = enabled && inline;
     // `input` is built from `deps` by the caller; both the memo and the effect list exactly them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const now = useMemo(() => (sync ? client.runSync(kind, input) : null), [client, kind, sync, ...deps]);
+    const now = useMemo(() => {
+        if (!sync) return null;
+        try { return { value: client.runSync(kind, input) }; }
+        catch (error) { return { value: failed, error: error instanceof Error ? error : new Error(String(error)) }; }
+    }, [client, kind, sync, failed, ...deps]);
+    useEffect(() => {
+        if (now?.error) trace('inline compute failed', kind, now.error);
+    }, [now, kind, trace]);
     const [answer, setAnswer] = useState<Answer<KindResult<K>>>({ value: initial, settled: false, scope, deps });
     useEffect(() => {
         if (!enabled || inline) return undefined;
@@ -65,9 +72,9 @@ export function useComputed<K extends TaskKind>(
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [client, kind, enabled, inline, ...deps]);
     const current = same(answer.scope, scope);
-    const value = sync ? now : enabled && current ? answer.value : initial;
+    const value = sync ? now?.value : enabled && current ? answer.value : initial;
     // Pending from the render the deps change in, not from the effect after it: the previous answer still shows, but a caller
     // that pairs it with the NEW inputs (the transit map: old routes, new lines) must know it is not theirs.
     const settled = answer.settled && current && same(answer.deps, deps);
-    return { value: value ?? initial, pending: enabled && !inline && !settled, failed: enabled && !inline && settled && !!answer.failed };
+    return { value: value ?? initial, pending: enabled && !inline && !settled, failed: sync ? !!now?.error : enabled && settled && !!answer.failed };
 }

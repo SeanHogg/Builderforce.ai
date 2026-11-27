@@ -31,12 +31,19 @@ export function ViewSurface({ scale, ...p }: ViewSurfaceProps) {
     const { drill } = p.surface;
     const trace = useRenderTrace();
     const location = `${camera.id}\0${p.graph.scope.rootId}\0${drill.stack.map((f) => f.ref).join(' > ')}`;
+    const loading = (
+        <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            {p.tools}
+            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}><LayingOut labels={p.labels} /></div>
+            {p.journey}
+        </div>
+    );
     return (
         <SurfaceErrorBoundary labels={p.labels} resetKey={location} onBack={drill.canOut ? drill.out : undefined}
             onError={(error, info) => trace('camera failed', `${camera.id} ${p.graph.scope.rootId}${info.componentStack ?? ''}`, error)}>
             {camera.placement
                 ? (
-                    <Suspense fallback={<LayingOut labels={p.labels} />}>
+                    <Suspense fallback={loading}>
                         <StageHost {...p} camera={camera.placement} scale={scale} fallback={FALLBACK.component!} />
                     </Suspense>
                 )

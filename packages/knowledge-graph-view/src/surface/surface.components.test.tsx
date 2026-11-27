@@ -84,7 +84,7 @@ describe('LinesPanel', () => {
 describe('ActPanel', () => {
     const act = (over: Partial<Parameters<typeof ActPanel>[0]> = {}) => render(
         <ActPanel
-            graph={graph} findings={graph.findings} labels={L} station={null} stations={model.stations} scopeName={null} compact={false}
+            graph={graph} findings={graph.findings} labels={L} station={null} stations={model.stations} scopeName={null}
             onClearScope={vi.fn()} onShow={vi.fn()} onCompose={vi.fn()} {...over}
         />,
     );

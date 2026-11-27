@@ -47,6 +47,7 @@ describe('the surface', () => {
         expect(cameraNames())
             .toEqual([L.viewTransit, L.viewSystem, L.viewGraph, L.viewMap, L.viewHeat, L.viewStyle, L.viewFeatures, L.viewFlow, L.viewSequence, L.viewList]);
         expect(screen.getByTestId('kg-path')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: L.surface.linesButton }));
         expect(screen.getByTestId('kg-surface-legend')).toBeTruthy();
     });
 
@@ -118,7 +119,7 @@ describe('the surface', () => {
         expect(source.pinpoint).toHaveBeenCalledWith(expect.any(File), 'sys');
         await waitFor(() => expect(proxyNames()).toEqual(expect.arrayContaining(['API', 'repositories'])));
         const strip = within(screen.getByTestId('kg-path'));
-        expect(strip.getAllByRole('button').map((b) => b.textContent).filter((t) => t === 'API' || t === 'repositories')).toEqual(['API', 'repositories']);
+        expect(strip.getAllByRole('button').map((b) => b.getAttribute('aria-label')).filter((t) => t === 'API' || t === 'repositories')).toEqual(['API', 'repositories']);
         expect(strip.queryByRole('button', { name: 'main.tsx' })).toBeNull();
         expect(screen.getByRole('button', { name: L.surface.questions.wrong }).getAttribute('aria-pressed')).toBe('true');
 
@@ -153,30 +154,29 @@ describe('the surface', () => {
         expect(screen.queryByTestId('kg-answer-mode')).toBeNull();
     });
 
-    it('draws the line in the spine, between the folder and the station; picking it steps back up', async () => {
+    it('keeps the entry-point route in the journey and uses the spine for the selected component', async () => {
         // The root crumb is the scope's TITLE (the project name); `fixtureSource` titles a scope by its root id ('sys'), so name it.
         const graph = surfaceFixture();
         const titled = { ...fixtureSource([graph]), scopes: async () => [{ rootId: graph.scope.rootId, title: 'Builderforce', packs: graph.scope.packs }] };
         await mount(graph, { source: titled });
         const spine = () => within(screen.getByTestId('kg-spine'));
-        const lineCrumb = () => spine().getAllByRole('button').find((b) => new RegExp(`^${L.surface.lineName.replace('{name}', '.+')}$`).test(b.textContent ?? ''))!;
-        expect(spine().getAllByRole('button').map((b) => b.textContent)).toEqual(['Builderforce', lineCrumb().textContent]);
+        expect(spine().getAllByRole('button').map((b) => b.textContent)).toEqual(['Builderforce']);
         fireEvent.click(station('cron'));
-        await waitFor(() => expect(spine().getAllByRole('button').map((b) => b.textContent)).toEqual(['Builderforce', lineCrumb().textContent, 'cron']));
+        await waitFor(() => expect(spine().getAllByRole('button').map((b) => b.textContent)).toEqual(['Builderforce', 'cron']));
         expect(spine().getByRole('button', { name: 'cron' }).getAttribute('aria-current')).toBe('location');
-        fireEvent.click(lineCrumb());
+        fireEvent.click(spine().getByRole('button', { name: 'Builderforce' }));
         expect(within(aside()).getByTestId('kg-act-title').textContent).toMatch(/^On this path/);
-        expect(spine().getAllByRole('button').map((b) => b.textContent)).toEqual(['Builderforce', lineCrumb().textContent]);
+        expect(spine().getAllByRole('button').map((b) => b.textContent)).toEqual(['Builderforce']);
     });
 
-    it('starts the scene below the floating controls: its top is the measured controls height', async () => {
+    it('lays the toolbar and journey in the picture column next to the code panel', async () => {
         const box = (height: number) => vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 1400, height, top: 0, left: 0, right: 1400, bottom: height, x: 0, y: 0, toJSON: () => ({}) } as DOMRect);
         box(104);
         await mount();
-        const scene = screen.getByTestId('kg-scene-box');
-        expect(scene.style.top).toBe('var(--kg-scene-top, 88px)');
-        expect(scene.parentElement!.style.getPropertyValue('--kg-scene-top')).toBe('104px');
-        expect(screen.getByTestId('kg-scene-controls').parentElement!.parentElement).toBe(scene.parentElement); // the overlay and the scene share the box that carries it
+        const column = screen.getByTestId('kg-scene-overlay').parentElement!;
+        expect(column.querySelector('[data-map-pane]')).toBeTruthy();
+        expect(column.contains(screen.getByTestId('kg-path'))).toBe(true);
+        expect(column.parentElement?.querySelector('[data-code-split]')).toBeTruthy();
     });
 
     it('selecting a station scopes the Act panel and drills the spine', async () => {
@@ -200,7 +200,9 @@ describe('the surface', () => {
         await mount(surfaceFixture(), { initialLens: 'unused' });
         const title = within(aside()).getByTestId('kg-act-title').textContent!;
         const queue = within(aside()).getByRole('button', { name: /^Fix queue · \d+$/ }).textContent!.match(/\d+/)![0];
-        const heading = within(aside()).getByRole('region', { name: L.findingsTitle, hidden: true }).querySelector('h3')!.textContent!;
+        const heading = within(aside()).getAllByRole('region', { name: L.findingsTitle, hidden: true })
+            .map((region) => region.querySelector(':scope > h3')?.textContent)
+            .find(Boolean)!;
         expect(title).toContain(queue);
         // The Details list is the lens's insights (a visible filter): "Findings · {lens} lens ({shown} of {total})", total = the queue's count.
         const m = heading.match(/\((\d+) of (\d+)\)/);
@@ -212,10 +214,11 @@ describe('the surface', () => {
 
     it('picking a line lists its stations and fills the path strip', async () => {
         await mount();
-        fireEvent.click(screen.getByRole('button', { name: new RegExp(L.surface.lineName.replace('{name}', 'cron')) }));
+        fireEvent.click(screen.getByRole('button', { name: L.surface.linesButton }));
+        fireEvent.click(within(screen.getByTestId('kg-lines-rail')).getByRole('button', { name: new RegExp(L.surface.lineName.replace('{name}', 'cron')) }));
         expect(document.querySelectorAll('[data-station-row]')).toHaveLength(3);
         const strip = within(screen.getByTestId('kg-path'));
-        expect(strip.getAllByRole('button').map((b) => b.textContent)).toContain('cron');
+        expect(strip.getByRole('button', { name: 'cron' })).toBeTruthy();
         fireEvent.click(strip.getByRole('button', { name: L.surface.pathNext }));
         await waitFor(() => expect(within(aside()).getByTestId('kg-act-title').textContent).toMatch(/^At /));
     });
@@ -229,14 +232,14 @@ describe('the surface', () => {
         await waitFor(() => expect(stageCamera()).toBe('map'));
     });
 
-    it('collapses the left panel into a sheet on a phone', async () => {
+    it('starts with the picture on a phone and opens lines through the code chevron', async () => {
         vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 420, height: 700, top: 0, left: 0, right: 420, bottom: 700, x: 0, y: 0, toJSON: () => ({}) } as DOMRect);
         await mount();
         expect(screen.queryByTestId('kg-surface-legend')).toBeNull();
         expect(screen.queryByRole('dialog')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: L.surface.linesButton }));
-        const sheet = await screen.findByRole('dialog');
-        expect(sheet.style.bottom).toBe('0px');
-        expect(within(sheet).getByTestId('kg-surface-legend')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: L.surface.code.dockShow }));
+        const dock = await screen.findByRole('complementary', { name: L.surface.code.dockAria });
+        fireEvent.click(within(dock).getByRole('button', { name: L.surface.linesButton }));
+        expect(within(dock).getByTestId('kg-surface-legend')).toBeTruthy();
     });
 });

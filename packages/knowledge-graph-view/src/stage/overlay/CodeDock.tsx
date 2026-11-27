@@ -22,6 +22,7 @@ import { list } from '../../styles';
 import { ShapeGlyph } from '../../surface/LegendGlyph';
 import { TYPE } from '../../surface/ui/type';
 import { fileRefOf } from '../../surface/stations';
+import { parentName, shortName, symbolSort } from '../../surface/transit/symbols';
 import type { SymbolFacts } from '../../surface/symbolFacts';
 import type { SourceLocation, SourceReader, SourceReaderAt, SourceText, SymbolRecord } from '../../types';
 import { CodeLayer, RAIL_TONE, type LensAction } from '../drill/CodeLayer';
@@ -248,20 +249,23 @@ function isRecord(x: unknown): x is SymbolRecord {
 
 /** Symbols the drill already loaded, else graph nodes that carry a line. */
 export function recordsForCode(graph: KnowledgeGraph, drill: object): SymbolRecord[] {
-    if ('symbols' in drill && Array.isArray((drill as { symbols?: unknown }).symbols)) {
-        const loaded = (drill as { symbols: unknown[] }).symbols.filter(isRecord);
-        if (loaded.length > 0) return loaded;
+    const loaded = 'symbols' in drill && Array.isArray(drill.symbols) ? drill.symbols.filter(isRecord) : [];
+    const records = new Map<string, SymbolRecord>(loaded.map((record) => [record.ref, record]));
+    const kept = graph.nodes.filter((n) => ['symbol', 'function', 'method', 'class'].includes(n.kind) && readLine(n) > 0);
+    const names = new Map<string, string>();
+    for (const n of kept) {
+        const file = fileRefOf(n.ref);
+        names.set(`${file}\0${n.ref}`, n.ref);
+        names.set(`${file}\0${n.label.replace(/\(.*$/, '')}`, n.ref);
     }
-    const out: SymbolRecord[] = [];
-    for (const n of graph.nodes) {
-        const line = readLine(n);
-        if (!(line > 0)) continue;
-        if (n.kind !== 'symbol' && n.kind !== 'function' && n.kind !== 'method' && n.kind !== 'class') continue;
-        const label = 'label' in n && typeof (n as { label?: unknown }).label === 'string' ? (n as { label: string }).label : n.ref;
-        const dot = label.lastIndexOf('.');
-        out.push({ ref: n.ref, name: dot >= 0 ? label.slice(dot + 1) : label, kind: n.kind, parent: n.ref, line, exported: false });
+    for (const n of kept) {
+        if (records.has(n.ref)) continue;
+        const file = fileRefOf(n.ref);
+        const claimedParent = parentName(n);
+        const parent = claimedParent ? names.get(`${file}\0${claimedParent}`) ?? file : file;
+        records.set(n.ref, { ref: n.ref, name: shortName(n), kind: n.kind === 'symbol' ? symbolSort(n) : n.kind, parent, line: readLine(n), exported: n.badges?.exported === 1 });
     }
-    return out;
+    return [...records.values()];
 }
 
 /** The mark's code range: its own record, else the first symbol in its file, else `path:1` when the ref is a file. */

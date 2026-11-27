@@ -16,6 +16,7 @@ import { ghostButtonStyle, Seg } from './surface/ui';
 import { chromeGlyph } from './surface/ui/glyphs';
 import { DiagnosticsButton } from './surface/DiagnosticsButton';
 import { TYPE } from './surface/ui/type';
+import { PanelChevron } from './surface/ui/PanelChevron';
 import type { QuestionId } from './surface/questions';
 
 export interface ToolbarProps {
@@ -119,7 +120,7 @@ export function Toolbar({ labels, onSearch, question, askName, wrapped, outTo, o
                 )}
                 {action}
                 {drawerAvailable && (
-                    <button type="button" data-testid="kg-panels-button" aria-expanded={drawerOpen} onClick={onToggleDrawer} {...iconBtn(panelsName, drawerOpen)}>{icon('panels')}</button>
+                    <PanelChevron testId="kg-panels-button" side={wrapped ? 'bottom' : 'right'} open={drawerOpen} label={panelsName} onClick={onToggleDrawer} />
                 )}
                 {diagnostics && <DiagnosticsButton labels={labels} text={diagnostics} />}
             </div>

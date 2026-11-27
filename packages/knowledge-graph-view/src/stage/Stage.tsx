@@ -17,7 +17,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Canvas, useFrame, useThree, type RootState } from '@react-three/fiber';
 import { PerspectiveCamera, type OrthographicCamera } from 'three';
 import type { ThemeColors } from '../scene/themeColors';
-import { StageFrameTap } from './anchor/StageFrameTap';
+import { CameraProjector } from './projector';
 import { StageBusContext, stageBus, type StageBus } from './anchor/stageBus';
 import { CaptionLayer } from './captions/CaptionLayer';
 import { ChipLayer } from './labels/ChipLayer';
@@ -106,14 +106,19 @@ interface SceneProps { renderer: StageRenderer; rig: RigController; inputs: Inpu
 /** A matrix no real transform equals: the first frame always writes. */
 const unwritten = (): Affine2 => ({ a: NaN, b: NaN, c: NaN, d: NaN, e: NaN, f: NaN });
 
-function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLost, onRenderError, width, height }: SceneProps & { canvasLabel: string; width: number; height: number }) {
+function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLost, onRenderError, width, height, bus }: SceneProps & { canvasLabel: string; width: number; height: number; bus: StageBus }) {
     const trace = useRenderTrace();
+    const projector = useMemo(() => new CameraProjector(), []);
     const invalidate = useThree((s) => s.invalidate);
     const gl = useThree((s) => s.gl);
     const set = useThree((s) => s.set);
     const get = useThree((s) => s.get);
     const size = useThree((s) => s.size);
     const setSize = useThree((s) => s.setSize);
+    useEffect(() => {
+        bus.invalidate = invalidate;
+        return () => { bus.invalidate = () => {}; };
+    }, [bus, invalidate]);
     // ONE size: the canvas draws at the stage box the rig, the captions and picking project into. R3F measures its own
     // container with a ResizeObserver, which can lag a box that just grew (a fill camera on a stacked layout) — the
     // drawing then covered only the old height and the rest of the box stayed blank.
@@ -131,6 +136,15 @@ function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLos
     const giveUp = useRef(onContextLost);
     giveUp.current = onContextLost;
     useEffect(() => bindContextLoss(gl.domElement, renderer, invalidate, () => giveUp.current?.(), (event, error) => trace(`WebGL context ${event}`, undefined, error)), [gl, renderer, invalidate, trace]);
+    useEffect(() => {
+        const previous = gl.debug.onShaderError;
+        gl.debug.onShaderError = (context, program, vertex, fragment) => {
+            const message = [context.getProgramInfoLog(program), context.getShaderInfoLog(vertex), context.getShaderInfoLog(fragment)].filter(Boolean).join('\n');
+            trace('WebGL shader failed', undefined, new Error(message || 'Shader compilation failed'));
+            previous?.(context, program, vertex, fragment);
+        };
+        return () => { gl.debug.onShaderError = previous; };
+    }, [gl, trace]);
     // Arrow keys orbit only while the canvas itself has focus (never the proxies' roving arrows).
     // The canvas is a tab stop only while there is something for the keys to do (an orbit view).
     useEffect(() => {
@@ -155,6 +169,7 @@ function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLos
         const camera = aimCamera(pose, rig.currentOrbit.distance, ortho, persp, rig);
         if (get().camera !== camera) set({ camera });
         scratch.view.pxPerWorld = rig.pxPerWorld; scratch.view.dpr = gl.getPixelRatio();
+        if (!Number.isFinite(scratch.view.pxPerWorld) || scratch.view.pxPerWorld <= 0) throw new Error(`Invalid camera scale: ${scratch.view.pxPerWorld}`);
         renderer.setView(scratch.view);
         // The extrude follows the rig (held at 1 in 3D, blended across a Map ↔ 3D tween); the label pass and overlay
         // re-place once it stops moving.
@@ -164,6 +179,10 @@ function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLos
         if (captions.current) applyCaptionTransform(captions.current, groundAffine(rig.projectInto, scratch.affine, at[0], at[2]), scratch.last);
         const moving = renderer.tick(t);
         gl.render(scene, camera);
+        if (inputs.placement) {
+            projector.update(camera, width, height, rig.pxPerWorld);
+            bus.frame(projector);
+        }
         if (moving || rigMoving) { invalidate(); return; }
         // The label fade (next frame) and decorative motion (the pulse, ≤ 30 fps, only while visible and allowed).
         const delay = renderer.motionDelay(t);
@@ -185,7 +204,7 @@ function StageScene({ renderer, rig, inputs, captions, canvasLabel, onContextLos
             onRenderError?.(error instanceof Error ? error : new Error(String(error)));
         }
     }, 1);
-    return renderer.object ? <primitive object={renderer.object} dispose={null} /> : null;
+    return inputs.placement && renderer.object ? <primitive object={renderer.object} dispose={null} /> : null;
 }
 
 /** No canvas (jsdom, no WebGL): the rig still drives the captions and hands the bus its projection. */
@@ -292,8 +311,7 @@ export function Stage(p: StageProps) {
                 {renderer.kind === 'webgl'
                     ? (
                         <Canvas orthographic frameloop="demand" dpr={[1, 2]} gl={{ antialias: false, alpha: true }} style={{ position: 'absolute', inset: 0, touchAction: 'none' }}>
-                            <StageScene {...scene} canvasLabel={p.description ?? ''} width={width} height={height} />
-                            <StageFrameTap bus={bus} onError={p.onRenderError} />
+                            <StageScene {...scene} canvasLabel={p.description ?? ''} width={width} height={height} bus={bus} />
                         </Canvas>
                     )
                     : <NoCanvas {...scene} bus={bus} />}

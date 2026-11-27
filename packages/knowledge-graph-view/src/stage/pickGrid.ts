@@ -93,9 +93,10 @@ export class PickGrid {
             if (!(scale[s]! > 0)) continue;
             const i3 = s * 3, x = pos[i3]!, y = pos[i3 + 1]! * yk, z = pos[i3 + 2]!;
             const w = m3 * x + m7 * y + m11 * z + m15;
-            if (w <= 1e-9) continue;
+            if (!(w > 1e-9)) continue;
             const nx = m0 * x + m4 * y + m8 * z + m12, ny = m1 * x + m5 * y + m9 * z + m13;
             const X = nx / w, Y = ny / w;
+            if (!Number.isFinite(X) || !Number.isFinite(Y)) continue;
             ok[s] = 1; ax[s] = X; ay[s] = Y; projected++;
             const h = ext === undefined ? 0 : ext[s]! * k;
             if (h > 0) {

@@ -73,7 +73,7 @@ import { useSurfaceActions } from './surface/useSurfaceActions';
 import { useSurfaceChrome } from './surface/useSurfaceChrome';
 import type { SurfaceEnv } from './surface/registry';
 import { scopeFindings } from './surface/scope';
-import { stationOfRef } from './surface/stations';
+import { fileRefOf, stationOfRef } from './surface/stations';
 import { Spine } from './surface/Spine';
 import { SceneState, SceneStatus } from './surface/SceneState';
 import { SurfaceFrame } from './surface/SurfaceStates';
@@ -84,7 +84,7 @@ import { useCompareActions } from './surface/useCompareActions';
 import { RestructureContext } from './surface/useRestructure';
 import type { EvidenceSide, KnowledgeConfirm, KnowledgeGraphSource, KnowledgePanelRenderer, LensId, EditorView, SourceLocation, SourceRange, ViewMode } from './types';
 import { createRenderTrace, RenderTraceContext } from './renderTrace';
-import type { HierarchyView } from './stage/overlay/CodeHierarchy';
+import { buildCodeHierarchy, type HierarchyView } from './surface/codeHierarchy';
 
 /** Nodes a desktop view draws at most (instanced geometry is sized for it). */
 const MAX_DRAWN_NODES = 2000;
@@ -136,6 +136,7 @@ function KnowledgeGraphSurface({
     const env = useRenderEnvironment();
     const [chosen, setMode] = useState<ViewMode | null>(null);
     const [hierarchy, setHierarchy] = useState<HierarchyView>('architecture');
+    const [codeLocation, setCodeLocation] = useState<{ root: string; ref: string } | null>(null);
     const [showAll, setShowAll] = useState(false), [tracing, setTracing] = useState(false);
     const [narrowCode, setNarrowCode] = useState(false);
     const targets = useReviewTargets(source); // read ONCE: the empty state's launcher uses it
@@ -150,6 +151,20 @@ function KnowledgeGraphSurface({
     // null until a graph arrives; the frame is drawn regardless. The findings of stray copies are folded away (PRD 41 A9).
     const real = shown ? foldCopyFindings(shown) : shown;
     const graph = real ?? EMPTY_GRAPH;
+    const rootTitle = kg.scopes.find((scope) => scope.rootId === graph.scope.rootId)?.title ?? graph.scope.rootId;
+    const codeFiles = useMemo(() => buildCodeHierarchy(graph, rootTitle, labels.surface.layers), [graph, rootTitle, labels.surface.layers]);
+    const codeRef = codeLocation?.root === graph.scope.rootId ? codeLocation.ref : null;
+    useEffect(() => {
+        if (!real) return;
+        const areas = new Set<string>();
+        for (const file of codeFiles.values()) for (const group of file.architecture) if (group.id.startsWith('area:')) areas.add(group.id);
+        renderTrace.record('code hierarchy ready', `root=${real.scope.rootId} files=${codeFiles.size}/${real.stats.sources} areaGroups=${areas.size} source=${real.stats.truncated && real.outline ? 'graph outline' : 'graph nodes'}`);
+    }, [real, codeFiles, renderTrace]);
+    const selectCode = (ref: string | null) => {
+        const file = ref ? codeFiles.get(fileRefOf(ref)) : undefined;
+        if (file) renderTrace.record('code selected', `view=${hierarchy} file=${file.path} groups=${file.architecture.map((group) => group.name).join(' > ')}`);
+        setCodeLocation(ref ? { root: graph.scope.rootId, ref } : null);
+    };
     useGraphResident(real); // registered in this render so the cameras' subsets find it; posted to the worker early
     useGraphResident(kg.baseline?.graph ?? null); // the Before/After twin the surface also reads
     const side = compare.showingBefore ? 'baseline' as const : 'current' as const;
@@ -234,7 +249,7 @@ function KnowledgeGraphSurface({
         : undefined;
     const chrome = useSurfaceChrome({
         kg, surface, graph, labels, layout, index, titleOf, select, cameras, mode, setMode, zoom: zoom.api, pickQuestion, pickLens, lens,
-        visibleNodes: visible.nodes.length, showAll, setShowAll, hierarchy: stageCamera ? hierarchy : undefined,
+        visibleNodes: visible.nodes.length, showAll, setShowAll, hierarchy: stageCamera ? hierarchy : undefined, codeFiles, codeRef, selectCode,
     });
 
     const hasLines = surface.lines.lines.length > 0;
@@ -261,8 +276,8 @@ function KnowledgeGraphSurface({
         <LinesPanel
             lines={surface.lines} stations={surface.stations} overlay={surface.overlay} labels={labels} lineId={surface.line?.id ?? null} rail={rail}
             selectedStation={surface.station?.id ?? null}
-            onSelectLine={(id) => { kg.select(null); surface.drill.climb(0); surface.selectLine(id); setNarrowCode(false); }}
-            onSelectStation={(id) => { kg.select(null); surface.drill.climb(0); surface.selectStation(id); setNarrowCode(false); }}
+            onSelectLine={(id) => { selectCode(null); kg.select(null); surface.drill.climb(0); surface.selectLine(id); }}
+            onSelectStation={(id) => { selectCode(null); kg.select(null); surface.drill.climb(0); surface.selectStation(id); setNarrowCode(false); }}
             coverage={surface.coverage} extras={legendExtras} kinds={mode === 'system' ? graph.findings.map((f) => f.kind) : undefined} findings={graph.findings}
         />
     );
@@ -291,7 +306,7 @@ function KnowledgeGraphSurface({
     const leftDock = !stageCamera && hasLines && !layout.linesStacked;
     const stackLines = !stageCamera && hasLines && layout.linesStacked;
     const journey = hasLines ? <PathStrip path={surface.path} step={surface.step} labels={labels}
-        onStep={(step) => { kg.select(null); surface.drill.climb(0); surface.setStep(step); }} pathTitle={chrome.pathTitle} stations={surface.stations.byId} /> : null;
+        onStep={(step) => { selectCode(null); kg.select(null); surface.drill.climb(0); surface.setStep(step); }} pathTitle={chrome.pathTitle} stations={surface.stations.byId} /> : null;
     const notice = <SceneStatus stale={kg.stale} refreshFailed={kg.refreshFailed} labels={labels} onRetry={kg.reload} onRun={real && !kg.running ? kg.run : undefined} />;
     // The Code | Picture switch shows exactly when the stage shows ONE of the two: a stage camera whose box (what the Lines dock and the drawer column
     // leave) is too narrow to split. Its state is the code slot the stage reads, so the switch and the stage never disagree.
@@ -337,6 +352,7 @@ function KnowledgeGraphSurface({
                                             onCompose={onCompose} evidence={evidenceOf} onOpenSource={onOpenSource}
                                             codeShown={codeShown} onToggleCode={toggleCode} onSimulate={actions.onSimulate} onRestructure={actions.onRestructure} restructureLoading={actions.restructureStatus === 'loading'} compare={compare.view} flat={flatView.flat}
                                             lines={stageCamera && hasLines ? linesPanel(false) : undefined} hierarchy={hierarchy} onHierarchy={setHierarchy}
+                                            codeFiles={codeFiles} codeRef={codeRef} onCodeRef={selectCode}
                                             tools={stageCamera ? overlay : undefined} journey={stageCamera ? journey : undefined} notice={stageCamera ? notice : undefined}
                                             scale={<span data-testid="kg-scale-note"><ScaleLine {...chrome.scaleProps} /></span>}
                                         />

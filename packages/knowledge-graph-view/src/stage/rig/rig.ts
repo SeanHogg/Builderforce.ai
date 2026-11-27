@@ -48,6 +48,9 @@ export class RigController {
     private target: RigView = this.view;
     /** The screen point the last zoom was about (the semantic zoom's focus); null = the box centre. */
     focusPoint: readonly [number, number] | null = null;
+    /** Only a zoom gesture or explicit zoom flight may change semantic levels. */
+    private zoomRequested = false;
+    get canChangeZoomLevel(): boolean { return this.zoomRequested; }
     private readonly tween = new Tween();
     /** Ground views rest tilted on first paint (no tween from flat); the depth control still spans 0..1. */
     private depthNow = RESTING_DEPTH;
@@ -108,6 +111,7 @@ export class RigController {
      * present ⇒ an orbit home looking at `rig.home.target`.
      */
     setHome(home: RigView, rig: Pick<CameraRig, 'depth' | 'home' | 'view'>, width: number, height: number, now: number, ms: number = TWEEN_MS): void {
+        this.zoomRequested = false;
         this.width = width; this.height = height;
         this.moved = false; this.reframed = false;
         this.depthFrom = this.depthUniform;
@@ -159,6 +163,7 @@ export class RigController {
     }
 
     fit(now: number, ms: number = TWEEN_MS): void {
+        this.zoomRequested = false;
         this.moved = false; this.reframed = false;
         if (this.kind === 'orbit') { this.goOrbit(this.orbit, this.orbitHome, now, ms); return; }
         this.go(this.home, now, ms);
@@ -166,6 +171,7 @@ export class RigController {
 
     /** Zoom by `factor` about the screen point (`sx`, `sy`) (default: the centre); in orbit, a dolly toward the target. */
     zoomBy(factor: number, sx = this.width / 2, sy = this.height / 2): void {
+        this.zoomRequested = true;
         this.stop();
         if (this.kind === 'orbit') {
             const h = this.orbitHome.distance;
@@ -191,6 +197,7 @@ export class RigController {
      * re-home (`ms` 0 jumps). The focus returns to the centre. In orbit, dolly to the requested scale.
      */
     flyTo(x: number, z: number, zoom: number, now: number, ms: number = TWEEN_MS, y = 0): void {
+        this.zoomRequested = true;
         this.stop();
         const h = this.home;
         this.moved = true;
@@ -269,6 +276,7 @@ export class RigController {
 
     /** Centres the view on ground point (x, z) at the current zoom / distance (a focused off-screen proxy, B5). */
     centreOn(x: number, z: number): void {
+        this.zoomRequested = false;
         this.stop();
         if (this.kind === 'orbit') this.orbit = { ...this.orbit, tx: x, tz: z };
         else this.view = { ...this.view, cx: x, cz: z };

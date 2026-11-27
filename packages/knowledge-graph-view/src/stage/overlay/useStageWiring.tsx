@@ -42,7 +42,8 @@ import type { StageRenderer } from '../renderer';
 import type { MarkSet, Placement } from '../types';
 import { SlotIncident } from './incident';
 import { StageToast, useStageToast } from './StageToast';
-import { architectureGroups, FilesystemTree, type HierarchyView } from './CodeHierarchy';
+import { CodeHierarchyTree } from './CodeHierarchy';
+import { architectureGroupsOf, type CodeFile, type HierarchyView } from '../../surface/codeHierarchy';
 import { Pill } from '../../surface/ui/Pill';
 import { CallSiteCard } from './CallSiteCard';
 import { StageCard, stationCardOf } from './StageCard';
@@ -55,7 +56,7 @@ const SYMBOL_MARK_TYPE: Readonly<Record<RailKind, MarkType>> = { class: 'class',
 
 /** What the host hands the dock: its visibility (the viewer's `code` slot) and the actions another slice wires (Simulate, Restructure). */
 export interface StageDockOptions {
-    /** The pane is shown (default true); reading shows it regardless. */
+    /** Whether the shared Code and Lines pane is shown. */
     shown?: boolean | undefined;
     onToggleCode?: (() => void) | undefined;
     onSimulate?: ((ref: string) => void) | undefined;
@@ -71,6 +72,9 @@ export interface StageDockOptions {
     lines?: ReactNode;
     hierarchy?: HierarchyView | undefined;
     onHierarchy?: ((view: HierarchyView) => void) | undefined;
+    codeFiles?: ReadonlyMap<string, CodeFile> | undefined;
+    codeRef?: string | null | undefined;
+    onCodeRef?: ((ref: string | null) => void) | undefined;
 }
 
 export interface StageWiring {
@@ -99,8 +103,7 @@ export interface StageWiring {
     card: ReactNode;
     /**
      * The code pane. `visible`: shown at all (docked or read); `split`: beside the map (else one half of the Code | Picture
-     * switch); `reading`: a file is open, so the bar over the map and the status strip show. `show` brings a hidden pane back;
-     * `hide` hides it (and leaves the reading).
+     * switch); `reading`: a file is open, so the bar over the map shows. `show` brings a hidden pane back; `hide` collapses it.
      */
     code: { pane: ReactNode; bar: ReactNode; visible: boolean; split: boolean; reading: boolean; show: (() => void) | undefined; hide: () => void };
 }
@@ -175,6 +178,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     }, [map.drill, stack, bus]);
 
     const onSelect = useCallback((key: string) => {
+        dock.onCodeRef?.(null);
         setSelected(key);
         setDismissed(null);
         setSite(null);
@@ -182,7 +186,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
         setCardKey(station ? key : null);
         if (station) { if (drill.view) drill.select(station.id); else surface.selectStation(station.id); return; }
         if (key.startsWith('node:')) p.onSelect(key.slice('node:'.length));
-    }, [map, drill, surface, p]);
+    }, [map, drill, surface, p, dock.onCodeRef]);
 
     const onDrill = useCallback((key: string) => {
         // A method is a station too (the method band's marks), so a station that cannot be entered falls through to its code.
@@ -197,9 +201,10 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     // level's or the surface's own selection.
     const surfaceSelected = p.selected ?? null;
     const clearSelection = useCallback(() => {
+        dock.onCodeRef?.(null);
         setSelected(null); setCardKey(null); setSite(null); setDismissed(surfaceSelected);
         if (drill.view) drill.select(null); else surface.selectStation(null);
-    }, [drill, surface, surfaceSelected]);
+    }, [drill, surface, surfaceSelected, dock.onCodeRef]);
 
     const patched = useMemo(() => new WeakMap<Placement, Placement>(), [map.patch, zoom.nest]);
     const patchMap = useCallback((pl: Placement | null) => {
@@ -220,13 +225,24 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const toBand = useCallback((target: number) => goToBand(target, selected, () => toast.show(t.toastNoMethod)), [goToBand, selected, toast.show, t]);
 
     // The code dock: docked or read, what it reads and what that drives on the map (`useCodeDock`).
-    const d = useCodeDock({ p, bus, map, zoom, selected, setSelected, cardKey, toast: toast.show, width, slotOf, shown: dock.shown ?? true, onToggle: dock.onToggleCode, sequence: dock.sequence, factsGraph: dock.factsGraph });
-    const groups = useMemo(() => drill.view ? undefined : architectureGroups(graph, map.stations.stations, p.rootTitle), [drill.view, graph, map.stations, p.rootTitle]);
+    const d = useCodeDock({ p, bus, map, zoom, selected, codeRef: dock.codeRef, onCodeRef: dock.onCodeRef, setSelected, cardKey, toast: toast.show, width, slotOf, shown: dock.shown ?? true, onToggle: dock.onToggleCode, sequence: dock.sequence, factsGraph: dock.factsGraph });
+    const systems = surface.lines?.systems;
+    const layers = p.labels.surface.layers;
+    const groups = useMemo(() => drill.view ? undefined : new Map(map.stations.stations.map((station) => [station.id, architectureGroupsOf(station, systems, p.rootTitle, layers)])), [drill.view, map.stations, systems, p.rootTitle, layers]);
+    const [rootCrumb, ...drillCrumbs] = depthCrumbs(drill.stack, p.rootTitle, p.labels.surface.depth);
+    const component = surface.stations.byId.get(drill.stack[0]?.ref ?? '');
+    const ancestors = [
+        rootCrumb!,
+        ...architectureGroupsOf(component, systems, p.rootTitle, layers).map((group) => ({ ...group, depth: 0 })),
+        ...drillCrumbs,
+    ];
+    const codeSelection = dock.codeRef ?? p.selected;
     const openFile = (ref: string) => {
         const local = stationOfRef(map.stations, ref);
         if (drill.view) { if (local) drill.select(local); else drill.climb(0); }
-        setSelected(`node:${ref}`);
-        p.onSelect(ref);
+        surface.selectStation(stationOfRef(surface.stations, ref) ?? null);
+        dock.onCodeRef?.(ref);
+        drill.loadFileSymbols?.(ref);
         d.openCode();
     };
     const { reader, records, methodTarget, out } = d;
@@ -300,12 +316,15 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
         <CodePane
             labels={p.labels} say={say} onHide={d.hide} note={surface.readSource ? undefined : t.levelNoSource} narrow={!d.split} source={reading} lines={dock.lines}
             hierarchy={dock.onHierarchy && <div role="group" aria-label={t.levelAria} style={{ display: 'flex', gap: 4, padding: '0 12px 6px' }}>
-                <Pill on={dock.hierarchy !== 'filesystem'} aria-pressed={dock.hierarchy !== 'filesystem'} onClick={() => dock.onHierarchy?.('architecture')}>{t.architecture}</Pill>
+                <Pill on={dock.hierarchy === 'architecture'} aria-pressed={dock.hierarchy === 'architecture'} onClick={() => dock.onHierarchy?.('architecture')}>{t.architecture}</Pill>
                 <Pill on={dock.hierarchy === 'filesystem'} aria-pressed={dock.hierarchy === 'filesystem'} onClick={() => dock.onHierarchy?.('filesystem')}>{t.filesystem}</Pill>
+                <Pill on={dock.hierarchy === 'picture'} aria-pressed={dock.hierarchy === 'picture'} onClick={() => dock.onHierarchy?.('picture')}>{t.outline}</Pill>
             </div>}
-            filesystem={dock.hierarchy === 'filesystem' ? <FilesystemTree graph={graph} labels={p.labels} selected={p.selected} onFile={openFile} /> : null}
+            outline={dock.codeFiles && dock.hierarchy && dock.hierarchy !== 'picture'
+                ? <CodeHierarchyTree key={dock.hierarchy} files={dock.codeFiles} view={dock.hierarchy} label={t[dock.hierarchy]} selected={codeSelection ? fileRefOf(codeSelection) : null} onFile={openFile} />
+                : null}
             tree={{
-                ancestors: depthCrumbs(drill.stack, p.rootTitle, p.labels.surface.depth), onClimb: drill.climb, stations: map.stations.stations, keyOf: map.keyOfStation, types: d.types, groups,
+                ancestors, onClimb: drill.climb, stations: map.stations.stations, keyOf: map.keyOfStation, types: d.types, groups,
                 facts: d.facts, selected, canEnter: (id) => drill.canEnter(id).can, onSelect: (key) => {
                     onSelect(key);
                     if (drill.stack.at(-1)?.level === 'package' && key.startsWith('node:')) d.openCode();

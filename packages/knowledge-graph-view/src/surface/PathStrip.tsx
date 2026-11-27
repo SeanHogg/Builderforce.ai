@@ -56,8 +56,8 @@ export function PathStrip({ path, step, labels, onStep, pathTitle, stations }: P
             <ol aria-label={s.path.stops} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', gap: 2, minWidth: 0, overflowX: 'auto', flex: '1 1 160px' }}>
                 {path.stops.map((stop, i) => (
                     <li key={stop.id} style={{ display: 'flex', flex: 'none' }}>
-                        <button type="button" aria-current={i === at ? 'step' : undefined} title={stations?.get(stop.id)?.path} style={chip(i === at)} onClick={() => onStep(i)}>
-                            <b style={{ color: cssVar('accent'), fontWeight: 600, marginInlineEnd: 4 }}>{i + 1}</b>{stop.name}
+                        <button type="button" aria-label={stop.name} aria-current={i === at ? 'step' : undefined} title={stations?.get(stop.id)?.path} style={chip(i === at)} onClick={() => onStep(i)}>
+                            <b aria-hidden="true" style={{ color: cssVar('accent'), fontWeight: 600, marginInlineEnd: 4 }}>{i + 1}</b>{stop.name}
                         </button>
                     </li>
                 ))}

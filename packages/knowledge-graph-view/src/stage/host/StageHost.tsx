@@ -53,7 +53,7 @@ import { useHeldFrame } from './useHeldFrame';
 import { useSideMask } from './useSideMask';
 import { holdsForNestBasis, useNestBasis } from './useNestBasis';
 import { useStageStrings } from './stageStrings';
-import type { HierarchyView } from '../overlay/CodeHierarchy';
+import type { CodeFile, HierarchyView } from '../../surface/codeHierarchy';
 import { SurfaceErrorBoundary } from '../../surface/SurfaceErrorBoundary';
 import { useRenderTrace } from '../../renderTrace';
 
@@ -70,6 +70,9 @@ export interface StageCodeProps {
     lines?: ReactNode;
     hierarchy?: HierarchyView | undefined;
     onHierarchy?: ((view: HierarchyView) => void) | undefined;
+    codeFiles?: ReadonlyMap<string, CodeFile> | undefined;
+    codeRef?: string | null | undefined;
+    onCodeRef?: ((ref: string | null) => void) | undefined;
 }
 
 /** The open comparison, if any (PRD 43 C5): the side on show, what it lacks, how it differs. The graph the host hands in is already the union. */
@@ -120,18 +123,21 @@ export default function StageHost({ fallback: Fallback, ...p }: StageHostProps) 
         {p.journey}
     </div>;
     if (renderer === false || failedAt === location) return fallback;
-    return renderer ? (
+    if (!renderer) return <div style={{ ...BOX, display: 'flex', flexDirection: 'column' }} data-stage-host>
+        {p.tools}<div style={{ flex: 1, minHeight: 0, position: 'relative' }}><LayingOut labels={p.labels} /></div>{p.journey}
+    </div>;
+    return (
         <SurfaceErrorBoundary labels={p.labels} resetKey={location} fallback={fallback}
             onError={(error, info) => trace('stage failed', `${location}${info.componentStack ?? ''}`, error)}>
             <StageBody {...p} renderer={renderer} onLost={onLost} onRenderError={onRenderError} onComputeError={() => setFailedAt(location)} />
         </SurfaceErrorBoundary>
-    ) : <div style={BOX} data-stage-host />;
+    );
 }
 
 /** The Map's ladder: system, class, method, code (drill depth 0..3). Going in stays with the wheel, double-click and Enter. */
 const MAP_BANDS: readonly ZoomBand[] = ZOOM_BANDS.map((b) => b.band);
 
-function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, scale, codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, lines, hierarchy, onHierarchy, compare, flat = false, tools, journey, notice, ...p }: Omit<StageHostProps, 'fallback'> & { renderer: StageRenderer; onLost(): void; onRenderError(error: Error): void; onComputeError(): void }) {
+function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, scale, codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, compare, flat = false, tools, journey, notice, ...p }: Omit<StageHostProps, 'fallback'> & { renderer: StageRenderer; onLost(): void; onRenderError(error: Error): void; onComputeError(): void }) {
     const box = useRef<HTMLDivElement>(null);
     const picture = useRef<HTMLDivElement>(null);
     // Before the box is measured (and where nothing measures it: jsdom) the stage is laid out for a standard box.
@@ -150,20 +156,14 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     const generation = marks?.generation ?? 0;
     const codeCompare = useMemo(() => codeCompareOf(compare), [compare]);
     const wiring = useStageWiring(p, renderer, marks, boxWidth, {
-        shown: codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, compare: codeCompare, sequence: camera === 'sequence', factsGraph: compare?.sideGraph, lines, hierarchy, onHierarchy,
+        shown: codeShown, onToggleCode, onSimulate, onRestructure, restructureLoading, compare: codeCompare, sequence: camera === 'sequence', factsGraph: compare?.sideGraph,
+        lines: p.lines, hierarchy: p.hierarchy, onHierarchy: p.onHierarchy, codeFiles: p.codeFiles, codeRef: p.codeRef, onCodeRef: p.onCodeRef,
     });
     const drilled = !!surface.drill.view;
-    // The map's own box: beside the docked pane, under the zoom-path bar and above the status strip (the last two while a file is read).
+    // The map's own box is measured below the toolbar and above the journey.
     const code = wiring.code;
     const codeWidth = code.split ? codePaneWidth(boxWidth) : 0;
-    const narrow = code.visible && !code.split;
-    // A box up to 900px wide shows ONE of the two, as the header's Code | Picture switch says: the pane while the viewer's
-    // `code` slot is on, else the picture (a file being read stays open behind it).
-    const slotOn = codeShown ?? true;
-    const showCodeHalf = narrow && slotOn;
-    // Opening a file in a narrow box shows it: the switch flips to Code (once per opening, so Picture can still be picked).
-    const opensCode = code.reading && !code.split && onePaneStage(boxWidth);
-    useEffect(() => { if (opensCode && !slotOn) onToggleCode?.(); }, [opensCode]); // eslint-disable-line react-hooks/exhaustive-deps
+    const showCodeHalf = code.visible && !code.split;
     const barPx = code.reading && !showCodeHalf ? CODE_BAR_PX : 0;
     const width = Math.max(1, boxWidth - codeWidth), height = Math.max(1, (pictureSize.height || boxHeight) - barPx);
 
@@ -238,7 +238,12 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     }, [trace, camera, drillIdentity, frame?.placement, width, height]);
 
     // The selection: the stage's own (a mark picked here), else the surface's (a search hit, the List).
-    const selected = wiring.selected ?? (p.selected && p.selected !== wiring.dismissed ? `node:${p.selected}` : null);
+    const fileSlot = p.codeRef && frame ? frame.marks.keys.indexOf(`node:${p.codeRef}`) : -1;
+    const fileOnStage = fileSlot >= 0 && (frame?.placement.scale[fileSlot] ?? 0) > 0;
+    const stationOnStage = surface.station && frame ? frame.marks.keys.indexOf(`st:${surface.station.id}`) : -1;
+    const selected = p.codeRef && fileOnStage ? `node:${p.codeRef}`
+        : p.codeRef && stationOnStage >= 0 && (frame?.placement.scale[stationOnStage] ?? 0) > 0 ? `st:${surface.station!.id}`
+        : wiring.selected ?? (p.selected && p.selected !== wiring.dismissed ? `node:${p.selected}` : null);
     const bus = useMemo(() => stageBus(renderer), [renderer]);
 
     const zoom = labels.surface.zoom;

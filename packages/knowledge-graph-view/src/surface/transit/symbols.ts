@@ -35,6 +35,17 @@ export { isClassLike, symbolSort, type SymbolSort } from '../../shapes';
 
 export const isSymbol = (n: KNode): boolean => n.kind === 'symbol';
 
+/** The enclosing symbols of a definition, outermost first. A file ref ends the chain. */
+export function symbolChain(ref: string | null, byRef: ReadonlyMap<string, SymbolRecord>): SymbolRecord[] {
+    const out: SymbolRecord[] = [];
+    const seen = new Set<string>();
+    for (let record = ref ? byRef.get(ref) : undefined; record && !seen.has(record.ref); record = byRef.get(record.parent)) {
+        seen.add(record.ref);
+        out.push(record);
+    }
+    return out.reverse();
+}
+
 /** The part of a symbol's name after the last dot. */
 export const shortName = (n: Pick<KNode, 'label'>): string => {
     const bare = n.label.replace(/\(.*$/, '');

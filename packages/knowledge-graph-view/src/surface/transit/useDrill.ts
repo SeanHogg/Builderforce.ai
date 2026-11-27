@@ -46,6 +46,8 @@ export interface DrillModel {
     notice: string | null;
     /** The definitions read so far, append-only (the stage places a drilled level's symbols from them, PRD 43 B7). */
     symbols: readonly SymbolRecord[];
+    /** Load definitions for a file opened directly from a hierarchy. */
+    loadFileSymbols?(ref: string): void;
     /** The package frames the last rebuilt map moved (old id → new id), numbered so each is seen once: what is keyed by a package id follows it. */
     reanchored: Reanchored;
 }
@@ -150,6 +152,6 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
     const out = useCallback(() => { setStack((s) => s.slice(0, -1)); setSelected(null); setNotice(null); }, []);
     return {
         stack, view, canOut: stack.length > 0, parent: stack[stack.length - 2] ?? null, selected, select: setSelected, canEnter, enter, climb, out,
-        loading: pending > 0, notice, symbols: records, reanchored,
+        loading: pending > 0, notice, symbols: records, loadFileSymbols: (ref) => requestSymbols([ref]), reanchored,
     };
 }

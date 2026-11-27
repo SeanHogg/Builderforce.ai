@@ -16,6 +16,7 @@ import { compareCallSites } from '../../compute/tasks/placement/callIndex';
 import { pathOf } from '../../graphModel';
 import { typeShape, type NodeShape } from '../../shapes';
 import { fileRefOf } from '../../surface/stations';
+import { symbolChain } from '../../surface/transit/symbols';
 import type { SymbolRecord } from '../../types';
 
 /** Lines asked for when no later definition bounds a method (the host caps the read too). */
@@ -250,17 +251,7 @@ export function spanInFile(ref: string | null, records: readonly SymbolRecord[],
     return t && t.path === path ? { startLine: t.startLine, endLine: t.endLine } : null;
 }
 
-/** `ref` and its enclosing symbols, outermost first, by `parent` (stops at an unloaded parent, a self-parent or a cycle). */
-export function symbolChain(ref: string | null, byRef: ReadonlyMap<string, SymbolRecord>): SymbolRecord[] {
-    const out: SymbolRecord[] = [];
-    const seen = new Set<string>();
-    for (let r = ref ? byRef.get(ref) : undefined; r && !seen.has(r.ref); r = byRef.get(r.parent)) {
-        seen.add(r.ref);
-        out.push(r);
-        if (r.parent === r.ref) break;
-    }
-    return out.reverse();
-}
+export { symbolChain };
 
 /** The symbol a method name in the panel drills to: same file first, else the first loaded record of that name. Keywords never drill. */
 export function drillRefForName(name: string, records: readonly SymbolRecord[], path?: string): string | null {

@@ -6,7 +6,7 @@
  */
 
 import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { labelFor, pathOf } from '../graphModel';
+import { labelFor } from '../graphModel';
 import { fillTemplate, type KnowledgeGraphLabels } from '../labels';
 import type { SurfaceLayout } from '../layout';
 import type { LensDef } from '../lenses';
@@ -20,7 +20,8 @@ import type { CameraDef } from './registry';
 import type { SceneOverlayProps } from './SceneOverlay';
 import type { MapCap, ScaleLineProps } from './ScaleLine';
 import { fileRefOf, stationOfRef } from './stations';
-import type { HierarchyView } from '../stage/overlay/CodeHierarchy';
+import { architectureGroupsOf, type CodeFile, type HierarchyView } from './codeHierarchy';
+import { symbolChain } from './transit/symbols';
 import type { SurfaceModel } from './useSurface';
 import type { ZoomApi } from './zoom';
 
@@ -45,6 +46,9 @@ export interface SurfaceChromeInput {
     showAll: boolean;
     setShowAll(on: boolean): void;
     hierarchy?: HierarchyView | undefined;
+    codeFiles: ReadonlyMap<string, CodeFile>;
+    codeRef: string | null;
+    selectCode(ref: string | null): void;
 }
 
 export function useSurfaceChrome(i: SurfaceChromeInput) {
@@ -65,36 +69,37 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
     ), systemCrumb === rootTitle ? undefined : systemCrumb);
     let spineItems = legacySpine;
     const drill = surface.drill;
-    if (i.hierarchy === 'architecture') {
+    const ref = i.codeRef ?? selected ?? drill.view?.stations.byId.get(drill.selected ?? '')?.refs[0];
+    const file = ref ? i.codeFiles.get(fileRefOf(ref)) : undefined;
+    if (file && (i.hierarchy === 'architecture' || i.hierarchy === 'filesystem')) {
+        spineItems = [
+            root,
+            ...file[i.hierarchy].map(({ id, name }): SpineItem => ({ kind: 'folder', id, label: name })),
+            { kind: 'file', id: file.ref, label: file.name },
+        ];
+        if (ref && ref !== file.ref) {
+            const chain = symbolChain(ref, new Map(drill.symbols.map((symbol) => [symbol.ref, symbol])));
+            if (chain.length) spineItems.push(...chain.map((symbol): SpineItem => ({ kind: 'symbol', id: symbol.ref, label: symbol.name })));
+            else spineItems.push({ kind: 'symbol', id: ref, label: labelFor(index, ref) });
+        }
+    } else if (i.hierarchy === 'picture' || i.hierarchy === 'architecture') {
         const component = surface.stations.byId.get(drill.stack[0]?.ref ?? '') ?? spineStation;
-        const system = systemName(surface.lines.systems, component?.system);
-        const app = component?.app?.split('/').at(-1);
-        spineItems = [root];
-        if (system && system !== rootTitle) spineItems.push({ kind: 'system', label: system });
-        if (app && app !== system && app !== rootTitle && app !== component?.name) spineItems.push({ kind: 'system', id: component?.app ?? app, label: app });
+        spineItems = [root, ...architectureGroupsOf(component, surface.lines.systems, rootTitle, s.layers).map(({ id, name }): SpineItem => ({ kind: 'system', id, label: name }))];
         for (const [depth, frame] of drill.stack.entries()) spineItems.push({ kind: 'level', id: frame.ref, label: frame.name, depth: depth + 1 });
         const member = drill.view?.stations.byId.get(drill.selected ?? '') ?? (!drill.view ? component : null);
         if (member && !drill.stack.some((frame) => frame.ref === member.id)) spineItems.push({ kind: 'station', id: member.id, label: member.name });
     } else if (i.hierarchy === 'filesystem') {
-        const ref = selected ?? drill.view?.stations.byId.get(drill.selected ?? '')?.refs[0] ?? spineStation?.refs[0];
         spineItems = [root];
-        if (ref) {
-            const file = fileRefOf(ref), parts = pathOf(file)?.replaceAll('\\', '/').split('/').filter(Boolean) ?? [];
-            const name = parts.pop() ?? labelFor(index, file);
-            for (const [depth, part] of parts.entries()) spineItems.push({ kind: 'folder', id: parts.slice(0, depth + 1).join('/'), label: part });
-            spineItems.push({ kind: 'file', id: file, label: name });
-            if (ref !== file) spineItems.push({ kind: 'symbol', id: ref, label: labelFor(index, ref) });
-        }
     }
     const onSpinePick = (item: SpineItem) => {
         if (i.hierarchy) {
             if (item.kind === 'root' || item.kind === 'system') {
-                drill.climb(0); kg.select(null); surface.selectStation(null);
+                i.selectCode(null); drill.climb(0); kg.select(null); surface.selectStation(null);
             } else if (item.kind === 'level') {
-                kg.select(null); drill.select(null); drill.climb(item.depth ?? 0);
+                i.selectCode(null); kg.select(null); drill.select(null); drill.climb(item.depth ?? 0);
             } else if (item.kind === 'station' && item.id) {
                 if (drill.view) drill.select(item.id); else surface.selectStation(item.id);
-            } else if (item.id && item.kind !== 'folder') i.select(item.id);
+            } else if ((item.kind === 'file' || item.kind === 'symbol') && item.id) i.selectCode(item.id);
             return;
         }
         if (item.kind === 'root') { kg.select(null); surface.selectStation(null); } else if (item.kind === 'line' || item.kind === 'system') surface.selectStation(null);

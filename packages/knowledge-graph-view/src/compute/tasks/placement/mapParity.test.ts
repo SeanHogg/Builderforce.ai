@@ -16,7 +16,6 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { ROLE_TONE } from '../../../scene/highlightRoles';
 import { MARK_TYPE_ORDER } from '../../../shapes';
 import { makeOverlay, PRESETS, segmentUntested } from '../../../surface/overlays';
-import { MARK_TYPE_ORDER } from '../../../shapes';
 import { FORM_RISE, TYPE_FORM } from '../../../stage/marks/forms';
 import { towerHeight } from '../../../surface/transit/towerHeight';
 import { withDocs } from '../../../surface/transit/testFixtures';

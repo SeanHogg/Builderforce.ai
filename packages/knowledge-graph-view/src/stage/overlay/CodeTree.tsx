@@ -19,14 +19,14 @@ import { selectionFacts } from '../../surface/transit/cardModel';
 import { actionGlyph } from '../../surface/ui/glyphs';
 import { FONT_MONO, TYPE } from '../../surface/ui/type';
 import { useVirtualRows } from '../drill/useVirtualRows';
+import type { ArchitectureGroup } from '../../surface/codeHierarchy';
 
 const ROW_PX = 24;
 const INDENT_PX = 14;
 const ICON_PX = 12;
 
 /** A level above the one on show (`depthCrumbs`): its depth is what `DrillModel.climb` takes. */
-export interface TreeAncestor { depth: number; name: string }
-export interface CodeTreeGroup { id: string; name: string }
+export interface TreeAncestor { depth: number; name: string; id?: string }
 
 type Row =
     | { kind: 'ancestor'; id: string; depth: number; name: string; up: number }
@@ -58,15 +58,15 @@ export interface CodeTreeProps {
     /** A row is hovered (its slot key) or left (null): the stage lights its shape. */
     onHover(key: string | null): void;
     labels: KnowledgeGraphLabels;
-    groups?: ReadonlyMap<string, readonly CodeTreeGroup[]> | undefined;
+    groups?: ReadonlyMap<string, readonly ArchitectureGroup[]> | undefined;
 }
 
 export function CodeTree({ ancestors, onClimb, stations, keyOf, types, facts, selected, canEnter, onSelect, onEnter, onHover, labels, groups }: CodeTreeProps) {
     const t = labels.surface.code;
     const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
-    const rows: Row[] = ancestors.map((a, i) => ({ kind: 'ancestor', id: `up:${a.depth}`, depth: i, name: a.name, up: a.depth }));
+    const rows: Row[] = ancestors.map((a, i) => ({ kind: 'ancestor', id: a.id ?? `up:${a.depth}`, depth: i, name: a.name, up: a.depth }));
     function addMembers(members: readonly Station[], depth: number, parent: string, groupIndex: number) {
-        const branches = new Map<string, { group: CodeTreeGroup; members: Station[] }>();
+        const branches = new Map<string, { group: ArchitectureGroup; members: Station[] }>();
         for (const station of members) {
             const group = groups?.get(station.id)?.[groupIndex];
             if (!group) { rows.push({ kind: 'member', id: station.id, depth, station, key: keyOf(station) }); continue; }

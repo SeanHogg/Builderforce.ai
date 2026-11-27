@@ -63,7 +63,6 @@ export default {
     worker: { format: 'es', plugins: () => [peersFromHost] },
     build: {
         target: 'es2022',
-        modulePreload: false,
         outDir: OUT_DIR,
         emptyOutDir: true,
         rollupOptions: { output: { inlineDynamicImports: true } },

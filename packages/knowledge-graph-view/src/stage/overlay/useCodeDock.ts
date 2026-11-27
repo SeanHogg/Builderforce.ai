@@ -4,7 +4,7 @@
  *
  * Two states, not one. DOCKED is the pane on the left (the outline of the level, from the stations the stage already has).
  * READING is a file open in it (the Code button, the code band, the editor's Follow): only then do the records walk
- * (`needRecords`), the call arcs and badges, the hover tint, the fade, the reading ring and the status strip turn on.
+ * (`needRecords`), the call arcs and badges, the hover tint, the fade and the reading ring turn on.
  * A docked pane alone costs none of them.
  *
  * What the pane reads (`useCodeReading`) drives the map side: the reading ring and the open method's numbered call arcs
@@ -12,7 +12,7 @@
  * code level on it, or, with no mark of its own at this level, its file in the pane while the map reveals its file.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { nodeIndex, pathOf } from '../../graphModel';
 import type { SceneProps } from '../../surface/registry';
@@ -39,6 +39,8 @@ export interface CodeDockInput {
     map: StageMap;
     zoom: SemanticZoom;
     selected: string | null;
+    codeRef?: string | null | undefined;
+    onCodeRef?: ((ref: string) => void) | undefined;
     setSelected(key: string | null): void;
     /** A station's card is open (a station keeps its card; the symbol card is for nodes). */
     cardKey: string | null;
@@ -57,7 +59,7 @@ export interface CodeDockInput {
 }
 
 export interface CodeDockModel {
-    /** A file is open in the pane (or the code band): the records walk, call arcs, tint, fade, ring and status are on. */
+    /** A file is open in the pane (or the code band): the records walk, call arcs, tint, fade and ring are on. */
     reading: boolean;
     /** The pane is shown at all (docked, or read). */
     visible: boolean;
@@ -101,7 +103,7 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     const [codeOpen, setCodeOpen] = useState(false);
     // The pane opens as a reading with the code level too: there the code is the primary view, beside the map.
     const reading = codeOpen || !!zoom.code;
-    const visible = shown || reading;
+    const visible = shown;
     const split = visible && codePaneWidth(width) > 0;
     const mapWidth = split ? width - codePaneWidth(width) : width;
     // Computed once per graph: the lens rows, the gutter and the outline's marks all read it.
@@ -135,6 +137,15 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     // The method whose calls are numbered: the one opened across, else the code level's.
     const methodTarget = acrossTarget ?? zoom.code?.target ?? null;
     const methodRef = methodTarget?.ref ?? null;
+    const previousMethod = useRef<string | null>(null);
+    const { codeRef, onCodeRef } = a;
+    useEffect(() => {
+        const previous = previousMethod.current;
+        previousMethod.current = methodRef;
+        if (methodRef === previous) return;
+        if (methodRef) onCodeRef?.(methodRef);
+        else if (previous && codeRef === previous) onCodeRef?.(fileRefOf(previous));
+    }, [methodRef, codeRef, onCodeRef]);
     // A station key is not a symbol. Resolve it to the station's first file so the pane has a source line and the station's name.
     const stationPick = selected?.startsWith('st:') ? map.stationOfKey(selected) : null;
     const subject = codeSubject(selected, stationPick);
@@ -144,13 +155,13 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     const stopStation = stop ? surface.stations.byId.get(stop.id) ?? map.stations.byId.get(stop.id) ?? null : null;
     const stopRef = codeRefForStop(stop?.id ?? null, stopStation);
     // At the code level the pane reads the open method; else the selected mark, else the journey stop.
-    const explicitRef = p.selected && fileRefOf(p.selected) === p.selected ? p.selected : null;
+    const explicitRef = a.codeRef ?? (p.selected && fileRefOf(p.selected) === p.selected ? p.selected : null);
     const dockRef = methodRef ?? explicitRef ?? markRef ?? stopRef;
     const codeName = subject.name || (dockRef === stopRef && stopStation ? stopStation.name : '') || (dockRef ? index.get(dockRef)?.label ?? dockRef : '');
     // The pane reads the whole file; the mark's own line is `scrollLine`, so another method in the same file only scrolls it.
     const markTarget = reading ? (methodTarget ?? targetForMark(dockRef, codeName, records)) : null;
     const codeTarget = markTarget ? fileTargetOf(markTarget) : null;
-    const scrollLine = reading ? (methodTarget?.startLine ?? focusLine(records, markRef, stopRef)) : undefined;
+    const scrollLine = reading ? (methodTarget?.startLine ?? focusLine(records, explicitRef ?? markRef, stopRef)) : undefined;
     // Code scrolled onto another symbol: the stage rings and centres its mark (else its file's), without selecting it;
     // selection would scroll the code back (`scrollLine`).
     const followCode = useCallback((ref: string) => {
@@ -211,15 +222,22 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     const out = across ? clearAcross : zoom.code ? zoom.closeCode : drill.canOut ? drill.out : undefined;
 
     const toggleFollow = useCallback(() => { toast(reader.follow ? t.toastFollowOff : t.toastFollowOn); reader.toggleFollow(); }, [reader, toast, t]);
-    // Closing the pane leaves the code level too.
+    // Closing the file leaves the code level. Collapsing the pane keeps the reading position.
     const leaveCode = zoom.leaveCode;
     const closeCode = useCallback(() => { setCodeOpen(false); setHoverRef(null); setAcross(null); if (atCodeLevel) leaveCode(); }, [atCodeLevel, leaveCode]);
-    const hide = useCallback(() => { closeCode(); if (shown) onToggle?.(); }, [closeCode, shown, onToggle]);
-    const openCode = useCallback(() => setCodeOpen(true), []);
+    const hide = useCallback(() => { if (shown) onToggle?.(); }, [shown, onToggle]);
+    const openCode = useCallback(() => { setCodeOpen(true); if (!shown) onToggle?.(); }, [shown, onToggle]);
+    const previousCode = useRef<string | undefined>(undefined);
+    const codeKey = zoom.code?.key;
+    useEffect(() => {
+        const entering = codeKey !== undefined && previousCode.current === undefined;
+        previousCode.current = codeKey;
+        if (entering && !shown) onToggle?.();
+    }, [codeKey, shown, onToggle]);
     // A method name in the code (or "Into") opens the code level on it when the zoom can; a loaded callee with no mark
     // here opens its file in the pane (the stage follows its reading line there); anything else selects the mark, as before.
     const enterCode = zoom.enterCode;
-    const onSelectRef = p.onSelect;
+    const onSelectRef = a.onCodeRef ?? p.onSelect;
     const drillTo = useCallback((ref: string) => {
         if (enterCode(ref)) { setAcross(null); return; }
         if (atCodeLevel && codeTargetOf(ref, records)) { setAcross(ref); return; }

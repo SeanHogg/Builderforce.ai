@@ -23,7 +23,7 @@ import { bandOf, drawnPx, focusOf, sequenceLodOf, stepBand, zoomForBand } from '
 import { now, TWEEN_MS } from '../tween';
 import type { Placement } from '../types';
 import { codeTargetOf, type CodeTarget } from './codeText';
-import { nestEntryOf, type NestBasis, type NestEntry } from './nest';
+import { drillOfPlacement, nestEntryOf, type NestBasis, type NestEntry } from './nest';
 import { useNestEntries } from './useNestEntries';
 import type { StageMap } from './useStageMap';
 
@@ -123,7 +123,9 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         const p = bus.placement, proj = bus.projector;
         if (!p || !proj || bus.tweening || pending.current) return;
         const s = state.current;
-        const at = rigOf(bus)?.focusPoint ?? [proj.width / 2, proj.height / 2];
+        const rig = rigOf(bus);
+        if (rig && !rig.canChangeZoomLevel) return;
+        const at = rig?.focusPoint ?? [proj.width / 2, proj.height / 2];
         const camera = cameraOf(p);
         // Sequence: the band follows the size of its participants at every level. At code depth (a method is open) it draws
         // that method's calls, which have no bands, so the zoom there steps nothing. Flow's level is the drill's, not a zoom's.
@@ -134,7 +136,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
             if (next !== s.seqBand) { s.seqBand = next; setSeqBand(next); }
             return;
         }
-        if (camera !== 'map') return;
+        if (camera !== 'map' || (drillOfPlacement(p) || null) !== s.map.drill) return;
         const px = proj.pxPerWorld;
         const entry = s.map.drill ? s.entries.get(s.map.drill) : undefined;
         const parentPx = s.band === CODE ? drawnPx(p, bus.slotOf(s.codeKey), px) : entry ? entry.diameter * px : Number.POSITIVE_INFINITY;
@@ -143,7 +145,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         const next = stepBand(s.band, focus?.px ?? 0, parentPx);
         if (next > s.band && focus) {
             const c = s.candidates[slots.indexOf(focus.slot)]!;
-            if (s.band === CODE - 1) { s.codeKey = c.key; setTrail([c.key]); return; }
+            if (s.band === CODE - 1) { s.drill.select(c.id); s.codeKey = c.key; setTrail([c.key]); return; }
             const check = s.drill.canEnter(c.id);
             if (!check.can) return;
             const e = nestEntryOf(p, focus.slot, `${check.level}:${c.id}`);
@@ -249,6 +251,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         const at = s.trail.indexOf(key);
         s.trail = s.band === CODE ? (at >= 0 ? s.trail.slice(0, at + 1) : [...s.trail, key]) : [key];
         s.codeKey = key;
+        if (s.map.stations.byId.has(ref)) s.drill.select(ref);
         setTrail(s.trail);
         flyToCode(key);
         return true;

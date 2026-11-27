@@ -52,8 +52,10 @@ describe('StageHost across a regenerated graph', () => {
             return b!;
         }));
         await waitFor(() => expect(seen.surface!.drill.view?.level).toBe('package'));
-        const mounted = proxies();
-        expect(mounted).not.toBeNull();
+        const mounted = await waitFor(() => {
+            expect(proxies()).not.toBeNull();
+            return proxies();
+        });
 
         // The same graph, rebuilt: a new object, so a new generation whose MarkSet and placement are still to be computed.
         await act(async () => { rerender(tree({ ...first, nodes: [...first.nodes] })); });
