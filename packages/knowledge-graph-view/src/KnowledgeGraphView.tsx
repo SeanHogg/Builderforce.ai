@@ -271,7 +271,9 @@ export function KnowledgeGraphView({
     const stackLines = hasLines && layout.linesStacked && !layout.phone;
     // The Code | Picture switch shows exactly when the stage shows ONE of the two: a stage camera whose box (what the Lines dock and the drawer column
     // leave) is too narrow to split. Its state is the code slot the stage reads, so the switch and the stage never disagree.
-    const stageWidth = stageWidthOf(width, { lines: leftDock ? (panels.visibility.left ? 'shown' : 'rail') : 'none', drawerColumn: !!real && drawer.open && !layout.drawerSheet });
+    // With no graph the drawer exists for ONE panel: Reviews (a review started from the empty state opens it, as `useReviewsPanel` documents); Act and the rest need a graph.
+    const drawerMounted = !!real || panel === 'run';
+    const stageWidth = stageWidthOf(width, { lines: leftDock ? (panels.visibility.left ? 'shown' : 'rail') : 'none', drawerColumn: drawerMounted && drawer.open && !layout.drawerSheet });
     const panes = real && CAMERAS.find((c) => c.id === mode)?.placement && onePaneStage(stageWidth)
         ? { code: panels.visibility.code, onPane: (code: boolean) => { if (code !== panels.visibility.code) toggleCode(); } }
         : undefined;

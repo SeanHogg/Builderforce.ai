@@ -200,7 +200,7 @@ const options = integration
       external: ["vscode"],
       alias: sharedPackageAliases,
       nodePaths: peerNodePaths,
-      plugins: [agentToolsTsResolve, pinnedMemoryResolve],
+      plugins: [agentToolsTsResolve, pinnedMemoryResolve, jsoncParserEsmResolve],
       ...importMetaUrlShim,
       define: { ...importMetaUrlShim.define, ...buildIdentity.define },
       sourcemap: !production,
@@ -429,4 +429,10 @@ if (watch) {
     l3Worker ? esbuild.build(l3Worker) : null,
     graphWorker ? esbuild.build(graphWorker) : null,
   ]);
+  if (!harness && !integration) {
+    assertNoUmdRelativeRequires([
+      "out/extension.js",
+      ...["bfiHostWorker", "knowledgeExtractWorker", "runDeltaWorker", "runOutcomeWorker", "knowledgeL3Worker", "knowledgeGraphWorker"].map((n) => `out/${n}.js`),
+    ]);
+  }
 }

@@ -7969,8 +7969,9 @@ import { CONTENT_HASH_FIELD as CONTENT_HASH_FIELD2, hashText as hashText4 } from
 // ../packages/secret-redaction/src/index.ts
 var shape = (id, label, re) => ({ id, label, re });
 var SECRET_SHAPES = [
-  // PEM blocks. An unterminated block (a capped tool output) is redacted to the end of the text: the body is the secret.
-  shape("private-key", "private key block", /-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|[\s\S]*)/gi),
+  // PEM blocks, and PGP armor (`-----BEGIN PGP PRIVATE KEY BLOCK-----`). An unterminated block (a capped tool output) is
+  // redacted to the end of the text: the body is the secret.
+  shape("private-key", "private key block", /-----BEGIN [A-Z ]*PRIVATE KEY(?: BLOCK)?-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY(?: BLOCK)?-----|[\s\S]*)/gi),
   // OpenAI / Anthropic / OpenRouter style keys: `sk-proj-…`, `sk-ant-api03-…`, test/live-mode `sk-test-…` / `sk-live-…`, legacy
   // `sk-` + base62. A bare `sk-` needs a hyphen-free run of 16+ chars, so a package name like `sk-learn-components` is not a key.
   shape("openai-key", "OpenAI-style key", /\b(sk-(?:(?:proj|svcacct|admin|ant\d*|or-v\d|test|live)-[A-Za-z0-9_-]{16,}|[A-Za-z0-9_]{16,}))(?![A-Za-z0-9_])/gi),
@@ -7994,8 +7995,9 @@ var SECRET_SHAPES = [
   shape("huggingface-token", "Hugging Face token", /\b(hf_[A-Za-z0-9]{20,})\b/g),
   shape("sendgrid-key", "SendGrid key", /\b(SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,})\b/g),
   // Our own credentials: `<prefix>_<hex>` (api `generateApiKey`): bfk workspace, bfa agent-host, bfr site, bfq/bff/bfx ingest and
-  // LRS keys, clk/clu legacy agent-host keys.
-  shape("builderforce-key", "BuilderForce API key", /\b((?:bf[a-z]|cl[ku])_[A-Za-z0-9]{8,})\b/g),
+  // LRS keys, clk/clu legacy agent-host keys. The body is random hex, so it holds a digit: an all-letter word with the same
+  // prefix (`bfi_unavailable`, a code/reason string) is not a key.
+  shape("builderforce-key", "BuilderForce API key", /\b((?:bf[a-z]|cl[ku])_(?=[A-Za-z]*\d)[A-Za-z0-9]{8,})\b/g),
   // A bare JWT (header.payload.signature, all base64url).
   shape("jwt", "JSON web token", /\b(eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})/g),
   // Telegram Bot API URLs embed the token as `/bot<token>/...`.
@@ -8036,7 +8038,9 @@ var DEFAULT_SECRET_PATTERNS = [
 var LEGACY_SHAPE_RULE_IDS = {
   "openai-key": "secret.provider-api-key",
   "google-api-key": "secret.provider-api-key",
-  "stripe-key": "secret.provider-api-key"
+  "stripe-key": "secret.provider-api-key",
+  // The hand-written GitHub rule matched both `gh*_` tokens and fine-grained `github_pat_` tokens under one id.
+  "github-pat": "secret.github-token"
 };
 var HIGH_SHAPES = /* @__PURE__ */ new Set([
   "slack-token",
@@ -8046,6 +8050,16 @@ var HIGH_SHAPES = /* @__PURE__ */ new Set([
   "telegram-bot-url",
   "telegram-bot-token",
   "stripe-webhook-secret"
+]);
+var FULL_SEVERITY_IN_TESTS = /* @__PURE__ */ new Set([
+  "private-key",
+  "aws-access-key",
+  "github-token",
+  "github-pat",
+  "slack-token",
+  "openai-key",
+  "google-api-key",
+  "stripe-key"
 ]);
 var ATTACK_PRIVATE_KEY = "T1552.004";
 var ATTACK_CREDENTIALS = "T1552.001";
@@ -8063,7 +8077,8 @@ function secretRuleFor(shape2) {
     paths: "secret",
     title: shape2.id === "private-key" ? "Private key committed" : `${shape2.label} committed`,
     pattern: stateless(shape2.re),
-    remediation: shape2.id === "private-key" ? "Remove the key from the repository, rotate it, and load it from the secret store." : "Revoke and rotate the credential with its provider; never commit it, load it from the secret store."
+    remediation: shape2.id === "private-key" ? "Remove the key from the repository, rotate it, and load it from the secret store." : "Revoke and rotate the credential with its provider; never commit it, load it from the secret store.",
+    ...FULL_SEVERITY_IN_TESTS.has(shape2.id) ? {} : { testPathSeverity: "MEDIUM" }
   };
 }
 var SHAPE_RULES = SECRET_SHAPES.map(secretRuleFor);
@@ -21764,4 +21779,4 @@ export {
   computeBrainDiagnostics,
   buildBrainTriageReport
 };
-//# sourceMappingURL=chunk-NWNYO3KB.mjs.map
+//# sourceMappingURL=chunk-5TQ2GGKA.mjs.map
