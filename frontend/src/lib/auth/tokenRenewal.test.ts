@@ -14,7 +14,7 @@ vi.mock('../auth', async (importOriginal) => {
 });
 
 /** The mock instance the module under test imported (the registry is reset between tests). */
-const signOutSpy = async () => (await import('../auth')).handleApiUnauthorized as ReturnType<typeof vi.fn>;
+const signOutSpy = async () => (await import('../auth')).handleApiUnauthorized as unknown as ReturnType<typeof vi.fn>;
 
 const b64 = (value: object) => btoa(JSON.stringify(value)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const jwt = (claims: Record<string, unknown>) => `${b64({ alg: 'HS256' })}.${b64(claims)}.sig`;
@@ -108,6 +108,37 @@ describe('scheduled renewal', () => {
     stop();
   });
 
+  it('signs out when the API ended the session because a rotated token was presented again', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(WEB_KEY, webToken(900, 1000));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ code: 'session_revoked' }), { status: 401 }),
+    );
+    const { startTokenRenewal } = await import('./tokenRenewal');
+
+    const stop = startTokenRenewal();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(await signOutSpy()).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it('does nothing in an embed, even with a lapsed web token in storage', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(WEB_KEY, webToken(900, 1000));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const { setEmbedAuth } = await import('../auth');
+    setEmbedAuth('embed-token');
+    try {
+      const { startTokenRenewal } = await import('./tokenRenewal');
+      const stop = startTokenRenewal();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      stop();
+    } finally {
+      setEmbedAuth(null);
+    }
+  });
+
   it('renews on focus only when the token is near its end', async () => {
     const fresh = webToken(900);
     localStorage.setItem(WEB_KEY, webToken(900, 100));
@@ -162,6 +193,51 @@ describe('single flight', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem(WEB_KEY)).toBe(fresh);
     expect(localStorage.getItem('bf_renew_lock')).toBeNull();
+  });
+
+  it('waits, rather than giving up, when another tab takes the lock at the same instant', async () => {
+    const fresh = webToken(900);
+    localStorage.setItem(WEB_KEY, webToken(900, 800));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('must not renew'));
+    const realSet = localStorage.setItem.bind(localStorage);
+    let raced = false;
+    vi.spyOn(localStorage, 'setItem').mockImplementation((key: string, value: string) => {
+      realSet(key, value);
+      if (key !== 'bf_renew_lock' || raced) return;
+      // Another tab's write lands right after ours; it renews and releases a moment later.
+      raced = true;
+      realSet(key, JSON.stringify({ tab: 'other-tab', until: Date.now() + 15_000 }));
+      setTimeout(() => {
+        realSet(WEB_KEY, fresh);
+        localStorage.removeItem('bf_renew_lock');
+      }, 200);
+    });
+    const { renewSession } = await import('./tokenRenewal');
+
+    expect(await renewSession()).toBe('adopted');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(localStorage.getItem(WEB_KEY)).toBe(fresh);
+  });
+});
+
+describe('renewInBackgroundAfterUnauthorized', () => {
+  it('renews for a web session and tells the stream transport not to sign out itself', async () => {
+    const fresh = webToken(900);
+    localStorage.setItem(WEB_KEY, webToken(900, 1000));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(renewResponse(fresh));
+    const { renewInBackgroundAfterUnauthorized, SESSION_RENEWED_EVENT } = await import('./tokenRenewal');
+    const renewed = new Promise<void>((resolve) => window.addEventListener(SESSION_RENEWED_EVENT, () => resolve(), { once: true }));
+
+    expect(renewInBackgroundAfterUnauthorized()).toBe(true);
+    await renewed;
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(WEB_KEY)).toBe(fresh);
+    expect(await signOutSpy()).not.toHaveBeenCalled();
+  });
+
+  it('leaves the 401 to the caller when there is no web session', async () => {
+    const { renewInBackgroundAfterUnauthorized } = await import('./tokenRenewal');
+    expect(renewInBackgroundAfterUnauthorized()).toBe(false);
   });
 });
 

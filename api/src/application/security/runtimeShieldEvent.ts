@@ -10,10 +10,11 @@
  *
  * Everything in an event is CLIENT-ATTESTED: the browser reported it and the server cannot
  * verify it. Evidence is already redacted by the runtime; {@link findForbiddenEvidenceKey} is
- * the server's refusal of anything that still looks like a credential. It checks KEYS only: a
- * credential smuggled as the VALUE of a benign key (`{ note: 'Bearer …' }`) is not detected — the
- * runtime's redaction is the control for values, and the size cap bounds what can ride along.
+ * the server's refusal of anything that still looks like a credential. It checks KEYS only; a
+ * credential smuggled as the VALUE of a benign key (`{ note: 'Bearer …' }`) is not refused but is
+ * masked by {@link redactShieldEvidence} before the evidence is stored, and the size cap bounds what can ride along.
  */
+import { redactDeep } from '../../infrastructure/security/redactSecrets';
 import type { IncidentSeverity } from './findingIncidentKinds';
 
 export const SHIELD_CATEGORIES = ['ingress', 'network', 'process', 'filesystem', 'database', 'resource'] as const;
@@ -176,6 +177,14 @@ export function findForbiddenEvidenceKey(value: unknown, path: string[] = []): s
     if (nested) return nested;
   }
   return null;
+}
+
+/**
+ * The evidence as it is STORED: every string value passes the shared redactor after the key check, so a
+ * credential smuggled as the value of a benign key (`{ note: 'sk-live-…' }`) never reaches a row. PURE.
+ */
+export function redactShieldEvidence(evidence: Record<string, unknown>): Record<string, unknown> {
+  return redactDeep(evidence);
 }
 
 /** Bytes of the evidence as it will be stored (UTF-8 JSON). */

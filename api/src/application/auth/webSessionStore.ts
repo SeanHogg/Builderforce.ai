@@ -27,7 +27,7 @@
 
 import { eq, sql } from 'drizzle-orm';
 import { authTokens, authUserSessions } from '../../infrastructure/database/schema';
-import { decodeJwtPayload, signWebJwt } from '../../infrastructure/auth/JwtService';
+import { authTokenRowExpiresAt, decodeJwtPayload, signWebJwt, WEB_ACCESS_TOKEN_TTL_SECONDS } from '../../infrastructure/auth/JwtService';
 import type { Db } from '../../infrastructure/database/connection';
 
 /** The claims this module reads. A token missing `jti` is not recorded. */
@@ -36,7 +36,10 @@ interface SessionTokenClaims {
   jti?: string;
   sid?: string;
   tid?: number;
+  iat?: number;
   exp: number;
+  sat?: number;
+  sma?: number;
 }
 
 export interface WebSessionContext {
@@ -119,14 +122,32 @@ export async function persistWebSessionToken(
     });
   }
 
+  await recordAuthToken(db, token, { ...opts, sessionId: sessionId ?? null });
+}
+
+/**
+ * Write ONLY the token's `auth_tokens` row, for a session that already exists and is
+ * live. A renewal uses this rather than {@link persistWebSessionToken}: re-activating
+ * the session there would undo a sign-out that landed while the renewal was in flight.
+ *
+ * `issued_at` is the token's own `iat` (a renewal re-signs an issued successor from
+ * it), and `expires_at` follows {@link authTokenRowExpiresAt}.
+ */
+export async function recordAuthToken(
+  db: Db,
+  token: string,
+  opts: Pick<WebSessionContext, 'userId' | 'tenantId' | 'tokenType' | 'userAgent' | 'ipAddress'> & { sessionId: string | null },
+): Promise<void> {
+  const payload = decodeJwtPayload<SessionTokenClaims>(token);
+  if (!payload.jti) return;
   await db.insert(authTokens).values({
     jti: payload.jti,
     userId: opts.userId,
-    sessionId: sessionId ?? null,
+    sessionId: opts.sessionId,
     tenantId: opts.tenantId ?? null,
     tokenType: opts.tokenType ?? 'web',
-    issuedAt: new Date(),
-    expiresAt: new Date(payload.exp * 1000),
+    issuedAt: typeof payload.iat === 'number' ? new Date(payload.iat * 1000) : new Date(),
+    expiresAt: authTokenRowExpiresAt(payload),
     userAgent: opts.userAgent ?? null,
     ipAddress: opts.ipAddress ?? null,
   });
@@ -171,7 +192,7 @@ export async function issueWebSession(
   claims: { amr: string[]; mfa: boolean },
   session: { expiresIn?: number; sessionName?: string | null; userAgent?: string | null; ipAddress?: string | null },
 ): Promise<IssuedWebSession> {
-  const expiresIn = session.expiresIn ?? 86_400;
+  const sessionMaxAge = session.expiresIn ?? 86_400;
   const token = await signWebJwt(
     {
       sub: user.id,
@@ -183,7 +204,7 @@ export async function issueWebSession(
       amr: claims.amr,
     },
     jwtSecret,
-    expiresIn,
+    sessionMaxAge,
   );
 
   await persistWebSessionToken(db, token, {
@@ -194,5 +215,6 @@ export async function issueWebSession(
   });
 
   const { isSuspended: _suspended, ...safe } = user;
-  return { token, expiresIn, user: safe };
+  // `expiresIn` describes the TOKEN handed back (it is renewed in the background), not the session.
+  return { token, expiresIn: Math.min(WEB_ACCESS_TOKEN_TTL_SECONDS, sessionMaxAge), user: safe };
 }

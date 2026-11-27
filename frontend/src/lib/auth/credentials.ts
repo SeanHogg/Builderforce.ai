@@ -232,9 +232,13 @@ export async function getTenantToken(
  * What `POST /api/auth/web/renew` said.
  *  - `renewed`     a fresh short-lived web token;
  *  - `refused`     a 401 — the session is over (`code`: `session_expired` past its
- *                  maximum age, `token_revoked`, `invalid_token`, `account_unavailable`);
+ *                  maximum age, `session_revoked` when a token already rotated away was
+ *                  presented again, `token_revoked`, `invalid_token`, `account_unavailable`);
  *  - `unavailable` no answer we can act on (offline, 5xx) — try again later, never sign out.
  */
+/** How long one renewal request may take before it is treated as unreachable. */
+export const RENEW_REQUEST_TIMEOUT_MS = 10_000;
+
 export type WebRenewResponse =
   | { kind: 'renewed'; token: string }
   | { kind: 'refused'; code?: string }
@@ -249,7 +253,9 @@ export async function renewWebToken(webToken: string): Promise<WebRenewResponse>
   try {
     const res = await fetchWithTransportReport(
       `${AUTH_API_URL}/api/auth/web/renew`,
-      { method: 'POST', headers: { Authorization: `Bearer ${webToken}` } },
+      // Bounded well inside the API's replay window, so the retry of a renewal whose answer
+      // was lost presents the old token while the API still hands back the same successor.
+      { method: 'POST', headers: { Authorization: `Bearer ${webToken}` }, signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(RENEW_REQUEST_TIMEOUT_MS) : undefined },
       { silent: true },
     );
     const body = await res.json().catch(() => ({})) as { token?: string; code?: string };

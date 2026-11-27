@@ -29,6 +29,15 @@ describe("redactFallbackText", () => {
   });
 });
 
+describe("redactFallbackText (shared detector)", () => {
+  it("redacts provider token shapes the old local patterns never knew", () => {
+    const pat = `github_pat_${"a".repeat(40)}`;
+    const stripe = `sk_live_${"b".repeat(24)}`;
+    const out = redactFallbackText(`failed with ${pat} then ${stripe}`, "/home/zz");
+    expect(out).toBe("failed with [redacted] then [redacted]");
+  });
+});
+
 describe("fallbackDetail", () => {
   it("clamps to one short line", () => {
     const out = fallbackDetail({ from: "m", reason: `a\n${"x".repeat(400)}` });

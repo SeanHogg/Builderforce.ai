@@ -125,6 +125,20 @@ export async function login(): Promise<BfSession> {
   return { webToken, tenantToken: tokenRes.token, user, tenant };
 }
 
+/**
+ * Renew an operator-mode session: swap the web token for its successor
+ * (`POST /api/auth/web/renew`) and re-mint the workspace token from it. Web tokens
+ * live minutes and renewal ROTATES them — the old one is spent, and presenting it
+ * again later ends the session — so callers must use the returned session from
+ * here on. Agent mode has one injected tenant token and nothing to renew.
+ */
+export async function renewSession(session: BfSession): Promise<BfSession> {
+  if (process.env.BF_AGENT_TOKEN?.trim()) return session;
+  const { token } = await postJson<{ token: string }>('/api/auth/web/renew', {}, session.webToken);
+  const tenantRes = await postJson<{ token: string }>('/api/auth/tenant-token', { tenantId: session.tenant.id }, token);
+  return { ...session, webToken: token, tenantToken: tenantRes.token };
+}
+
 export interface ActiveTest {
   id: string;
   name: string;

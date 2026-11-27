@@ -22,6 +22,7 @@ import {
   authenticateWithPassword,
   builderforceApiFetch,
   ensureProjectMapping,
+  renewWebToken,
   selectProjectMapping,
   selectTenantAndToken,
 } from "./builderforce-api.js";
@@ -782,9 +783,9 @@ async function ensureProjectMappingFromStoredCreds(params: {
   description?: string;
 }): Promise<void> {
   const serverUrl = readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai";
-  const webToken = readSharedEnvVar("BUILDERFORCE_WEB_TOKEN");
+  const storedWebToken = readSharedEnvVar("BUILDERFORCE_WEB_TOKEN");
   const tenantIdRaw = readSharedEnvVar("BUILDERFORCE_TENANT_ID");
-  if (!webToken || !tenantIdRaw) {
+  if (!storedWebToken || !tenantIdRaw) {
     return;
   }
 
@@ -798,6 +799,21 @@ async function ensureProjectMappingFromStoredCreds(params: {
   if (!agentNodeId) {
     return;
   }
+
+  // The stored web token is short-lived: renew it (rotation — store the successor at once,
+  // the old one is spent). A session that has ended means the mapping waits for a sign-in.
+  const webToken = await renewWebToken(serverUrl, storedWebToken).catch((error: unknown) => {
+    console.warn(
+      theme.warn(
+        `Builderforce session could not be renewed; sign in again to map this project (${error instanceof Error ? error.message : String(error)})`,
+      ),
+    );
+    return null;
+  });
+  if (!webToken) {
+    return;
+  }
+  upsertSharedEnvVar({ key: "BUILDERFORCE_WEB_TOKEN", value: webToken });
 
   const tenantJwtRes = await builderforceApiFetch<{ token: string }>(
     `${serverUrl}/api/auth/tenant-token`,

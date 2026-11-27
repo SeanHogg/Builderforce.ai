@@ -21,31 +21,10 @@ import {
   patchExploration,
   postFindings,
   projectId,
-  type BfSession,
 } from './bf';
 import { loginPersona } from './persona-login';
 import { explore, outcomeStatus, summarize } from './explorer-engine';
-
-/** Self-test storageState: the QA user's tokens in localStorage (SPA) + cookies
- *  (SSR middleware), mirroring global-setup so the explorer runs authenticated. */
-function selfTestState(session: BfSession, origin: string) {
-  const { hostname } = new URL(origin);
-  const localStorage = [
-    { name: 'bf_web_token', value: session.webToken },
-    { name: 'bf_tenant_token', value: session.tenantToken },
-    { name: 'bf_user', value: JSON.stringify(session.user) },
-    { name: 'bf_tenant', value: JSON.stringify(session.tenant) },
-  ];
-  const cookie = (name: string, value: string) => ({
-    name, value, domain: hostname, path: '/',
-    expires: Math.floor(Date.now() / 1000) + 60 * 60 * 6,
-    httpOnly: false, secure: hostname !== 'localhost', sameSite: 'Lax' as const,
-  });
-  return {
-    cookies: [cookie('bf_web_token', session.webToken), cookie('bf_tenant_token', session.tenantToken)],
-    origins: [{ origin, localStorage }],
-  };
-}
+import { storageStateFor, type BfStorageState } from './storageState';
 
 export async function runExploration(): Promise<void> {
   const session = await login();
@@ -73,12 +52,12 @@ export async function runExploration(): Promise<void> {
   const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   try {
     // Establish the session: persona login (project mode) or injected QA tokens.
-    let storageState: Awaited<ReturnType<typeof loginPersona>> | ReturnType<typeof selfTestState>;
+    let storageState: Awaited<ReturnType<typeof loginPersona>> | BfStorageState;
     if (bundle.credential) {
       const secret = await fetchCredentialSecret(session, bundle.credential.id);
       storageState = await loginPersona(runBaseUrl, secret);
     } else {
-      storageState = selfTestState(session, runBaseUrl);
+      storageState = storageStateFor(session, runBaseUrl);
     }
 
     const context = await browser.newContext({ baseURL: runBaseUrl, storageState });

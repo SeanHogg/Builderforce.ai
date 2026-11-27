@@ -420,32 +420,11 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
   - The journey then starts at `frontend/lib/data-manager.ts` and lists it twice.
   - Fix: extend the one manifest seam (HTML module script, wrangler main, literal Vite input), ignore config-file targets, de-duplicate path stops, and add a regression test per case.
   - Fixing this makes every line start where the app really starts. [make.md › PRD 43](../../docs/specs/make.md)
-- `AE-G063` **The visualizer crashes VS Code on large repos when a load finishes** (user, 2026-11-26, VSIX .224, hired.video: 6315 files).
-  - Cause: the graph payload is unbounded. Nodes are capped at 2000, but edges and findings are not:
-    - 123,843 edges, of which 110,968 are `references`;
-    - 24,674 per-edge `partition-violation` findings.
-  - The payload is copied from the worker to the host, written as JSON for `lastSeen` (7.7 s on the host main thread; event-loop lag up to 10 s), then posted to the webview, which draws 75,796 edges.
-  - Two Crashpad dumps were written at the moment the load completed. That also explains AE-G062: `lastSeen` was never written, because earlier runs crashed first.
-  - Fix (in progress):
-    - in the worker build, keep only edges between kept nodes, merge parallel edges into one weighted edge, and cap edges by weight and kind;
-    - aggregate `partition-violation` findings per area pair;
-    - add a size budget where the payload crosses from the worker to the host, and record what was trimmed in the trace;
-    - make `rememberLastSeen` stop blocking the host main thread.
-- `AE-G062` **The VS Code visualizer opens on "Ready to run" although reviews exist** (user, 2026-11-26, VSIX .224, hired.video).
-  - Cause: on a run-gated host, only the `lastSeen` cache can paint without Run. It misses in three cases:
-    - it was never written, or was over `LAST_SEEN_MAX_BYTES`;
-    - its root differs from the newest scope (a race with `scopes()`);
-    - it errored, and both catches are silent.
-  - Also broken:
-    - the header expand-column button does nothing;
-    - diagnostics cannot be reached on first load;
-    - nothing logs the load steps.
-  - Fix (in progress):
-    - paint the stored review on open, read-only; Run still starts live updates;
-    - make the expand button work, or hide itself when it cannot act;
-    - offer Copy diagnostics in every state;
-    - record decision marks in the load timeline;
-    - log host bridge ops to an output channel and a capped rolling file.
+- `AE-G064` **7 knowledge-view tests are stale after the Visualizer header change** (`1958de654`, 2026-11-26).
+  - `KnowledgeGraphView.header.test.tsx` (2 tests) expects the synced status chip to open the Review tab. It now opens Runs (`syncPill` `upToDate` → `'runs'`), and that stays.
+  - `KnowledgeGraphView.run.test.tsx` (5 tests) uses `testing.ts` `openList`/`pickCamera`, which look for a "List" radio the camera bar no longer renders.
+  - Fix: the tests open the Review tab themselves, and the helpers are updated to the current camera bar. Queued.
+  - Same pass: 3 test files committed in `a44de213b` do not parse (apostrophes inside single-quoted test names): `src/compute/tasks/placement/bandCaptions.test.ts`, `src/stage/overlay/useCodeDock.test.tsx`, `src/stage/rig/rig.test.ts`.
 - `AE-G059` **The 3D view is copied per surface, the canvas Room is a separate scene, and app components and agents are not drawn in 3D** (user, 2026-11-26).
   - There are four `<Canvas>` roots and three camera systems: the KG `stage/*`, `world3d/WorldViewport`+`Scene3D`, `RoomScene` and `Model3dViewport`.
   - Agents appear only as generic Room seats, and nothing renders an `AppBlueprint`.
@@ -813,6 +792,8 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §7. 
 - `AUTH-G013` **Rust and VS Code derive the web origin from the API URL by hand.**
 - `AUTH-G014` **Not yet audited:** Chrome SettingsView sign-in, webcontainers `aiGateway`/`hostRelay`, `knowledge-client`, `provider-connect`.
 - `AUTH-G015`–`AUTH-G019` **Security-sensitive client and credential findings.** Details are in the local security findings file. `AUTH-G015` decided (user, 2026-11-26): shorter-lived web tokens with silent background renewal; queued behind the running fixes.
+- `AUTH-G021` **15-minute web and workspace tokens write about 2 `auth_tokens` rows every 11 minutes per active session,** each kept 7 days by the expired-credential sweep. Neon core storage was last noted at 504/512 MB.
+  - Fix: a shorter sweep grace for superseded rows (`superseded_by IS NOT NULL`), keeping just enough for reuse detection, plus a row-count check on the storage dashboard.
 - `AUTH-G020` **The workspace-switch route `/api/vscode/tenants/:id/token` is VS Code-named but used by every editor host.** Alias it host-neutrally (expand/contract).
 
 ### Security policy consolidation `[platform]`

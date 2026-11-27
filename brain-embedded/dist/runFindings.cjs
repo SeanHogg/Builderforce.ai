@@ -927,7 +927,7 @@ var TOOL_NAME_ALIASES = {
   // Edit / write
   str_replace: "edit_file",
   search_replace: "edit_file",
-  apply_patch: "edit_file",
+  // NOT apply_patch: it carries patch syntax, edit_file is a unique-string replace - an unknown name gets the normal unknown-tool error.
   write_to_file: "write_file",
   create_file: "write_file",
   delete: "delete_file"
@@ -3381,6 +3381,8 @@ var semanticSearchTool = defineTool({
     const data = { ok: true, query, total: results.length, results };
     if (r.indexing) {
       data.note = "The index is still being built \u2014 these results cover only the files scanned so far. A miss is not proof of absence yet; fall back to search_code if needed.";
+    } else if (r.partial) {
+      data.note = "The workspace search covered part of the repository. Narrow the path or use search_code for an exact string.";
     } else if (results.length === 0) {
       data.note = `Nothing matched "${query}"${scope ? ` under "${scope}"` : ""}. Rephrase with likely identifier words, drop \`path\`, or use search_code for an exact string.`;
     }
@@ -4924,6 +4926,126 @@ var PARAM_NAME = new RegExp(`^\\s*(?:\\.\\.\\.)?(?:(?:public|private|protected|r
 // ../packages/agent-tools/src/knowledge/codePack.ts
 var import_knowledge23 = require("@seanhogg/builderforce-memory/knowledge");
 var import_ingest4 = require("@seanhogg/builderforce-memory/ingest");
+
+// ../packages/secret-redaction/src/index.ts
+var shape = (id, label, re) => ({ id, label, re });
+var SECRET_SHAPES = [
+  // PEM blocks. An unterminated block (a capped tool output) is redacted to the end of the text: the body is the secret.
+  shape("private-key", "private key block", /-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|[\s\S]*)/gi),
+  // OpenAI / Anthropic / OpenRouter style keys: `sk-proj-…`, `sk-ant-api03-…`, test/live-mode `sk-test-…` / `sk-live-…`, legacy
+  // `sk-` + base62. A bare `sk-` needs a hyphen-free run of 16+ chars, so a package name like `sk-learn-components` is not a key.
+  shape("openai-key", "OpenAI-style key", /\b(sk-(?:(?:proj|svcacct|admin|ant\d*|or-v\d|test|live)-[A-Za-z0-9_-]{16,}|[A-Za-z0-9_]{16,}))(?![A-Za-z0-9_])/gi),
+  shape("github-token", "GitHub token", /\b(gh[pousr]_[A-Za-z0-9]{20,})\b/gi),
+  shape("github-pat", "GitHub fine-grained token", /\b(github_pat_[A-Za-z0-9_]{20,})\b/gi),
+  shape("slack-token", "Slack token", /\b(xox[baprs]-[A-Za-z0-9-]{10,})\b/gi),
+  shape("slack-rotating-token", "Slack rotating token", /\b(xoxe[.-][A-Za-z0-9._-]{10,})/g),
+  shape("slack-app-token", "Slack app token", /\b(xapp-[A-Za-z0-9-]{10,})\b/gi),
+  shape("groq-key", "Groq key", /\b(gsk_[A-Za-z0-9_-]{10,})\b/gi),
+  shape("google-api-key", "Google API key", /\b(AIza[0-9A-Za-z\-_]{20,})\b/gi),
+  shape("google-oauth-token", "Google OAuth access token", /\b(ya29\.[A-Za-z0-9_-]{20,})/g),
+  shape("google-client-secret", "Google OAuth client secret", /\b(GOCSPX-[A-Za-z0-9_-]{20,})/g),
+  shape("perplexity-key", "Perplexity key", /\b(pplx-[A-Za-z0-9_-]{10,})\b/gi),
+  shape("npm-token", "npm token", /\b(npm_[A-Za-z0-9]{10,})\b/gi),
+  // AWS access key ids (long-term AKIA, temporary ASIA).
+  shape("aws-access-key", "AWS access key id", /\b((?:AKIA|ASIA)[A-Z0-9]{16})\b/g),
+  // Stripe secret/restricted keys and webhook secrets.
+  shape("stripe-key", "Stripe secret key", /\b((?:sk|rk)_(?:live|test)_[A-Za-z0-9]{8,})\b/g),
+  shape("stripe-webhook-secret", "Stripe webhook secret", /\b(whsec_[A-Za-z0-9]{8,})\b/g),
+  shape("gitlab-token", "GitLab token", /\b(glpat-[A-Za-z0-9_-]{20,})/g),
+  shape("huggingface-token", "Hugging Face token", /\b(hf_[A-Za-z0-9]{20,})\b/g),
+  shape("sendgrid-key", "SendGrid key", /\b(SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,})\b/g),
+  // Our own credentials: `<prefix>_<hex>` (api `generateApiKey`): bfk workspace, bfa agent-host, bfr site, bfq/bff/bfx ingest and
+  // LRS keys, clk/clu legacy agent-host keys.
+  shape("builderforce-key", "BuilderForce API key", /\b((?:bf[a-z]|cl[ku])_[A-Za-z0-9]{8,})\b/g),
+  // A bare JWT (header.payload.signature, all base64url).
+  shape("jwt", "JSON web token", /\b(eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})/g),
+  // Telegram Bot API URLs embed the token as `/bot<token>/...`.
+  shape("telegram-bot-url", "Telegram bot token", /\bbot(\d{6,}:[A-Za-z0-9_-]{20,})\b/gi),
+  shape("telegram-bot-token", "Telegram bot token", /\b(\d{6,}:[A-Za-z0-9_-]{20,})\b/gi)
+];
+var TYPE_WORD = String.raw`(?:string|number|boolean|null|undefined|true|false)`;
+var VALUE_ENV = String.raw`(?:\\"([^"\\\n]*)\\"|"((?:[^"\\\n]|\\.)*)"|'([^'\n]*)'|([^\s"'\\]+))`;
+var NOT_MASKED = String.raw`(?![^\s"'\\]*…)`;
+var VALUE_CONFIG = String.raw`(?:\\"${NOT_MASKED}(?!${TYPE_WORD}\\")([^"\\\n]{3,})\\"|"${NOT_MASKED}(?!${TYPE_WORD}")([^"\\\n]{3,})"|'${NOT_MASKED}(?!${TYPE_WORD}')([^'\\\n]{3,})'|` + String.raw`${NOT_MASKED}(?!${TYPE_WORD}\b)(?![A-Za-z_$][\w$.]*\()(?![A-Za-z_$][\w$]*(?:\.[\w$]+)+;?(?:[\s"',&)\]}\\]|$))([^\s"',&\\]{6,})(?=[\s"',&)\]}\\]|$))`;
+var SECRET_WORD = String.raw`(?:password|passwd|passphrase|secret|token|api[-_]?key|private[-_]?key|access[-_]?key)`;
+var DEFAULT_SECRET_PATTERNS = [
+  // ENV-style assignments: an UPPER_CASE name in which KEY/TOKEN/SECRET/PASSWORD/PASSWD is a whole `_`-delimited word
+  // (`SECRET_KEY_BASE=…`, `API_KEY_2=…`, `GITHUB_TOKEN=…`), so `MONKEY` / `HOTKEY` are not assignments; `isBenignKey` then skips
+  // a name that is a reference or a database/cache key (`TOKEN_COUNT`, `KEY_ID`, `PRIMARY_KEY`, `SORT_KEY`). Case-sensitive.
+  // The value may be quoted and contain spaces. NO nested quantifiers: the lookahead finds the word once, the name is one
+  // unambiguous run (a regex that is quadratic or exponential here is a ReDoS on attacker-controlled tool output).
+  { id: "env-assignment", re: new RegExp(String.raw`(?<![A-Za-z0-9_])(?=(?:[A-Z0-9]+_+)*?(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|APIKEY)(?![A-Z0-9]))(?<key>[A-Z][A-Z0-9]*(?:_+[A-Z0-9]+)*)\s*[=:]\s*${VALUE_ENV}`, "g") },
+  // Lower-case / camelCase / snake_case config, CLI and source assignments (`password=hunter2`, `export github_token=…`,
+  // `refresh_token=…`), only for a name containing a secret word and a secret-LIKE value. The key is ONE `[\w-]+` run found by
+  // a lookahead (no nested quantifier, starts only at a run boundary) and `isBenignKey` then judges the whole captured key.
+  { id: "assignment", re: new RegExp(String.raw`(?<![\w-])(?=[\w-]*?${SECRET_WORD})(?<key>[\w-]+)\s*[=:]\s*${VALUE_CONFIG}`, "gi") },
+  // JSON fields inside text, any spelling of the key (`apiKey`, `access_token`, `client_secret`).
+  { id: "json-field", re: new RegExp(String.raw`"(?=[\w.-]*?${SECRET_WORD})(?<key>[\w.-]+)"\s*:\s*"((?:[^"\\]|\\.)+)"`, "gi") },
+  // CLI flags (`--token x`, `--token "x"`, `--token=x`).
+  { id: "cli-flag", re: /--(?:api[-_]?key|token|secret|password|passwd)(?:\s+|=)(\\"|["']?)([^\s"'\\]+)\1/gi },
+  // Authorization headers: a scheme (`Bearer x`, `Basic x`, `token x`) or a bare token-shaped credential (20+ chars with a digit).
+  // `Authorization: denied for user` is prose, not a credential.
+  { id: "authorization", re: /Authorization\s*[:=]\s*(?:(?:Bearer|Basic|Token|Digest|Negotiate|ApiKey|OAuth)\s+([A-Za-z0-9._\-+=/~]{8,})|(?=[A-Za-z0-9._\-+=/~]*\d)([A-Za-z0-9._\-+=/~]{20,}))/gi },
+  { id: "bearer", re: /\bBearer\s+([A-Za-z0-9._\-+=]{18,})\b/gi },
+  // Credentials embedded in a URL: scheme://[user]:PASSWORD@host (the user may be empty: redis://:pw@host).
+  { id: "url-credential", re: /:\/\/[^\s/:@]*:([^\s/@\\"]+)@/g },
+  // Provider token prefixes (PEM blocks included).
+  ...SECRET_SHAPES.map(({ id, re }) => ({ id, re, known: true }))
+];
+
+// ../packages/code-shield/src/rules/secretRules.ts
+var LEGACY_SHAPE_RULE_IDS = {
+  "openai-key": "secret.provider-api-key",
+  "google-api-key": "secret.provider-api-key",
+  "stripe-key": "secret.provider-api-key"
+};
+var HIGH_SHAPES = /* @__PURE__ */ new Set([
+  "slack-token",
+  "slack-rotating-token",
+  "slack-app-token",
+  "jwt",
+  "telegram-bot-url",
+  "telegram-bot-token",
+  "stripe-webhook-secret"
+]);
+var ATTACK_PRIVATE_KEY = "T1552.004";
+var ATTACK_CREDENTIALS = "T1552.001";
+var stateless = (re) => new RegExp(re.source, re.flags.replace(/[gy]/g, ""));
+function secretRuleFor(shape2) {
+  const critical = !HIGH_SHAPES.has(shape2.id);
+  return {
+    id: LEGACY_SHAPE_RULE_IDS[shape2.id] ?? `secret.${shape2.id}`,
+    category: "secret",
+    severity: critical ? "CRITICAL" : "HIGH",
+    weight: critical ? 50 : 30,
+    cwe: "CWE-798",
+    attack: shape2.id === "private-key" ? ATTACK_PRIVATE_KEY : ATTACK_CREDENTIALS,
+    scope: "line",
+    paths: "secret",
+    title: shape2.id === "private-key" ? "Private key committed" : `${shape2.label} committed`,
+    pattern: stateless(shape2.re),
+    remediation: shape2.id === "private-key" ? "Remove the key from the repository, rotate it, and load it from the secret store." : "Revoke and rotate the credential with its provider; never commit it, load it from the secret store."
+  };
+}
+var SHAPE_RULES = SECRET_SHAPES.map(secretRuleFor);
+var SECRET_RULES = [
+  ...SHAPE_RULES,
+  {
+    id: "secret.hardcoded-credential",
+    category: "secret",
+    severity: "HIGH",
+    weight: 30,
+    cwe: "CWE-798",
+    attack: "T1552.001",
+    scope: "line",
+    paths: "secret",
+    title: "Hard-coded credential assignment",
+    pattern: /\b(?:password|passwd|secret|api[_-]?key|access[_-]?token)\s*[:=]\s*['"][^'"\s]{12,}['"]/i,
+    remediation: "Move the value to configuration / the secret store and reference it by name.",
+    // A generic assignment in a test or fixture is usually a fake: reported, but as MEDIUM (informs, never holds a merge).
+    testPathSeverity: "MEDIUM"
+  }
+];
 
 // ../packages/code-shield/src/signatures.ts
 var EICAR_RULE = {

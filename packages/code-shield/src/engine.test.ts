@@ -43,7 +43,12 @@ const CASES: readonly (readonly [string, string, string])[] = [
   ['obfuscation.hex-identifiers', hexIdentifiers(20), hexIdentifiers(3)],
   ['signature.eicar', EICAR, 'X5O!P%@AP'],
   // Secret rules DERIVED from `SECRET_SHAPES` (one rule per shape, id `secret.<shape id>`).
-  ['secret.github-pat', `github_pat_${'a'.repeat(30)}`, 'github_pat_short'],
+  // A fine-grained token keeps the id the hand-written GitHub rule stored for it (PR-gate fingerprints hash the rule id).
+  ['secret.github-token', `github_pat_${'a'.repeat(30)}`, 'github_pat_short'],
+  // regression: the derived private-key rule missed PGP armor, which the hand-written rule caught.
+  ['secret.private-key', '-----BEGIN PGP PRIVATE KEY BLOCK-----', '-----BEGIN PGP PUBLIC KEY BLOCK-----'],
+  // regression: an all-letter reason code with a platform-key prefix (`bfi_unavailable`) is not a key.
+  ['secret.builderforce-key', 'bfr_00112233445566778899aabbccddeeff', "reason: 'bfi_unavailable'"],
   ['secret.slack-rotating-token', 'xoxe.xoxp-1234567890', 'xoxe.1'],
   ['secret.slack-app-token', 'xapp-1-ABCDEFGHIJ', 'xapp-1'],
   ['secret.groq-key', `gsk_${'a'.repeat(20)}`, 'gsk_abc'],
@@ -56,7 +61,7 @@ const CASES: readonly (readonly [string, string, string])[] = [
   ['secret.huggingface-token', `hf_${'a'.repeat(24)}`, 'hf_abc'],
   ['secret.sendgrid-key', `SG.${'a'.repeat(20)}.${'b'.repeat(20)}`, 'SG.abc.def'],
   ['secret.builderforce-key', 'bfk_0123456789abcdef', 'bfk_abc'],
-  ['secret.jwt', 'eyJhbGciOi.eyJzdWIiOiJ4.c2lnbmF0dXJl', 'eyJ.a.b'],
+  ['secret.jwt', 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4eHh4.c2lnbmF0dXJlMTIz', 'eyJ.a.b'],
   ['secret.telegram-bot-url', `/bot123456789:${'A'.repeat(25)}/getMe`, 'bot12:abc'],
   ['secret.telegram-bot-token', `123456789:${'A'.repeat(25)}`, '123:abc'],
 ];
@@ -77,6 +82,16 @@ describe('rules', () => {
     }
   });
 
+  it.each([
+    ['a Stripe key', `const k = "sk_live_${'a'.repeat(24)}"`],
+    ['a Google API key', `const k = "AIza${'a'.repeat(35)}"`],
+    ['a github_pat_ token', `const k = "github_pat_${'a'.repeat(40)}"`],
+    ['an sk- key', `const k = "sk-${'a'.repeat(32)}"`],
+  ])('the PR-diff profile flags %s as a secret', (_name, content) => {
+    const findings = scanText({ path: 'src/config.ts', content }, 'pr-diff');
+    expect(findings.some((f) => f.category === 'secret' && f.ruleId?.startsWith('secret.'))).toBe(true);
+  });
+
   it('never copies the matched secret into a finding', () => {
     const secret = `ghp_${'q'.repeat(36)}`;
     const json = JSON.stringify(scanText({ path: 'a.ts', content: `const t = "${secret}"` }, 'runtime'));
@@ -94,6 +109,14 @@ describe('rules', () => {
     expect(scanText({ path: 'src/a.test.ts', content: 'eval(x)' }, 'pr-diff')).toEqual([]);
     const [f] = scanText({ path: 'tests/a.ts', content: 'password = "abcdefghijkl1"' }, 'pr-diff');
     expect(f?.severity).toBe('MEDIUM');
+  });
+
+  it('reports a derived-only shape at MEDIUM in a test path, a pre-derivation shape at full severity', () => {
+    const sev = (path: string, content: string): string | undefined => scanText({ path, content }, 'pr-diff', ['secret'])[0]?.severity;
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4eHh4.c2lnbmF0dXJlMTIz';
+    expect(sev('src/a.test.ts', jwt)).toBe('MEDIUM');
+    expect(sev('src/a.ts', jwt)).toBe('HIGH');
+    expect(sev('src/a.test.ts', `ghp_${'a'.repeat(36)}`)).toBe('CRITICAL');
   });
 
   it('limits a call to the requested categories', () => {

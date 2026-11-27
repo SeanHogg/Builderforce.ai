@@ -44,10 +44,17 @@ async function mount(source: ReturnType<typeof runSource>['source']) {
     await openList({ screen, fireEvent });
 }
 
+/** The chip opens the panel on its Runs tab when synced: open the Review tab, where a review is started. */
+const openReviewTab = async () => {
+    const dialog = await screen.findByRole('dialog', { name: 'docs' });
+    fireEvent.click(within(dialog).getByRole('tab', { name: new RegExp(`^${L.surface.run.review.tabReview}`) }));
+};
+
 /** The review action's button → nothing planned → Start review counts and starts in one press: the review is running. */
 async function reviewRunning(source: ReturnType<typeof runSource>['source']) {
     await mount(source);
     await openReviews({ screen, fireEvent });
+    await openReviewTab();
     await screen.findByTestId('kg-review-idle');
     fireEvent.click(screen.getByTestId('kg-footer-action'));
     await waitFor(() => expect(chip().getAttribute('data-kind')).toBe('running'));
@@ -63,6 +70,7 @@ describe('the Reviews panel from the strip', () => {
         const open = await screen.findByRole('dialog', { name: 'docs' });
         expect(open.getAttribute('aria-modal')).toBe('false');
         // Opening does not plan (RunPanel.tsx): planning walks and hashes every file, which opening the panel did not ask for.
+        fireEvent.click(within(open).getByRole('tab', { name: new RegExp(`^${L.surface.run.review.tabReview}`) }));
         expect(await within(open).findByTestId('kg-review-idle')).toBeTruthy();
         expect(within(open).queryByTestId('kg-review-planning')).toBeNull();
         expect(answers).toEqual([]);
@@ -73,6 +81,7 @@ describe('the Reviews panel from the strip', () => {
         const { source, answers } = runSource(true, []);
         render(<div style={{ height: 600 }}><KnowledgeGraphView source={source} /></div>);
         fireEvent.click(await screen.findByRole('button', { name: L.reviewFolder }));
+        await openReviewTab();
         await screen.findByTestId('kg-review-start');
         const open = screen.getByRole('dialog');
         fireEvent.click(within(open).getByRole('button', { name: L.close }));

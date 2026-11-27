@@ -55,6 +55,14 @@ describe("governance matchers", () => {
     expect(out.hits[0]?.detail).toContain("aws-access-key");
   });
 
+  it("secret: the shared detector catches a github_pat_ token and the evidence is redacted", async () => {
+    const token = `github_pat_${"a".repeat(40)}`;
+    const out = await prefilter({ "config.ts": `const k = '${token}';` }, [rule("S2", { kind: "secret" })]);
+    expect(out.hits).toHaveLength(1);
+    expect(out.hits[0]?.detail).toContain("github-pat");
+    expect(out.hits[0]?.evidence ?? "").not.toContain(token);
+  });
+
   it("glob: flags files whose PATH matches the glob", async () => {
     const out = await prefilter(
       { "a/prod.env": "X=1", "src/index.ts": "" },

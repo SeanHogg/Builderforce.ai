@@ -238,7 +238,7 @@ describe('the orbit rig (3D, a placement carrying rig.view)', () => {
         rig.setHome({ cx: 0, cz: 0, zoom: 1 }, ORBIT_RIG, 800, 600, 10, 0);
         expect(rig.currentOrbit.pitch).toBe(90);
     });
-    describe('a fitted orbit (the Map: fit-to-content from the stage's own aspect)', () => {
+    describe("a fitted orbit (the Map: fit-to-content from the stage's own aspect)", () => {
         const FITTED = {
             home: { position: [0, 0, 0] as const, target: [0, 0, 0] as const, up: [0, 1, 0] as const },
             depth: { tilt: [5, 83] as [number, number], orbit: true },
@@ -254,7 +254,7 @@ describe('the orbit rig (3D, a placement carrying rig.view)', () => {
             expect(wide.currentOrbit.distance).toBeGreaterThan(100);
         });
 
-        it('re-fits on a resize and eases there, keeping the person's yaw; reduced motion (motionMs 0) jumps', () => {
+        it("re-fits on a resize and eases there, keeping the person's yaw; reduced motion (motionMs 0) jumps", () => {
             const rig = new RigController();
             rig.setHome(HOME, FITTED, 1200, 600, 0, 0);
             const before = rig.currentOrbit.distance;

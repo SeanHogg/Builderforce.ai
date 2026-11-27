@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isPathInside } from "@builderforce/agent-tools/node-path.js";
 
 const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
 const HTTP_URL_RE = /^https?:\/\//i;
@@ -144,14 +145,6 @@ async function tryRealpath(value: string): Promise<string> {
   } catch {
     return path.resolve(value);
   }
-}
-
-function isPathInside(root: string, target: string): boolean {
-  const relative = path.relative(root, target);
-  if (!relative || relative === "") {
-    return true;
-  }
-  return !(relative.startsWith("..") || path.isAbsolute(relative));
 }
 
 function shortPath(value: string) {

@@ -1,4 +1,4 @@
-import { decodeJwtPayload, signHs256, verifyHs256 } from '@builderforce/hs256-jwt';
+import { decodeJwtPayload, signHs256, tryDecodeJwtPayload, verifyHs256 } from '@builderforce/hs256-jwt';
 import { TenantRole } from '../../domain/shared/types';
 import type { DeviceClient } from '@builderforce/creation-canvas-contract';
 
@@ -67,6 +67,13 @@ const FAILURE_MESSAGE = {
   expired: 'Token expired',
   not_yet_valid: 'Token not yet valid',
 } as const;
+
+const REJECTIONS: ReadonlySet<string> = new Set(Object.values(FAILURE_MESSAGE));
+
+/** Did a verify throw because the TOKEN was refused — as opposed to a server fault (no secret)? */
+export function isTokenRejection(error: unknown): boolean {
+  return error instanceof Error && REJECTIONS.has(error.message);
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -171,9 +178,6 @@ export interface WebJwtPayload {
 /** How long one web access token is valid. Renewed in the background before it lapses. */
 export const WEB_ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 
-/** How far past `exp` a web token may still be presented to `/web/renew`. */
-export const WEB_RENEW_GRACE_SECONDS = 60 * 60;
-
 /**
  * Sign a web session token.
  *
@@ -182,13 +186,17 @@ export const WEB_RENEW_GRACE_SECONDS = 60 * 60;
  * and never past the session's end. A renewal passes the original `sat`/`sma` in the
  * payload so the session end never moves. A pending-MFA token is a one-step challenge
  * and keeps its own short lifetime.
+ *
+ * `options.nowSeconds` fixes `iat`: a renewal that hands back an already-issued
+ * successor re-signs it at its original issue time, so it is the same token.
  */
 export async function signWebJwt(
   payload:                Omit<WebJwtPayload, 'iat' | 'exp'>,
   secret:                 string,
   sessionMaxAgeSeconds:   number = 86_400, // 24 hours for web sessions
+  options?:               { nowSeconds?: number },
 ): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
+  const now = options?.nowSeconds ?? Math.floor(Date.now() / 1000);
   let session: { sat?: number; sma?: number; exp: number };
   if (payload.mfaPending) {
     session = { exp: now + sessionMaxAgeSeconds };
@@ -210,12 +218,33 @@ export async function signWebJwt(
   return signClaims(full as unknown as Record<string, unknown>, secret);
 }
 
+/**
+ * Verify a web token. `options.ignoreExpiry` checks the signature and shape only —
+ * for renewal, where the gate is the session's maximum age (`sat + sma`) and the
+ * token's ledger row, not the access token's own `exp`. The token's own `iat` is the
+ * clock for the time checks; the signature is checked first either way, and a forged
+ * `iat` fails it.
+ */
 export async function verifyWebJwt(
   token: string,
   secret: string,
-  options?: { nowSeconds?: number },
+  options?: { ignoreExpiry?: boolean },
 ): Promise<WebJwtPayload> {
-  return verifyClaims<WebJwtPayload>(token, secret, options);
+  if (!options?.ignoreExpiry) return verifyClaims<WebJwtPayload>(token, secret);
+  const iat = tryDecodeJwtPayload<{ iat?: unknown }>(token)?.iat;
+  if (typeof iat !== 'number') throw new Error(FAILURE_MESSAGE.malformed);
+  return verifyClaims<WebJwtPayload>(token, secret, { nowSeconds: iat });
+}
+
+/**
+ * The `auth_tokens.expires_at` a web token's ledger row carries: the end of its
+ * SESSION (`sat + sma`) when the token names one, so a renewable token's row is not
+ * swept while the session may still be renewed (a device asleep for days); the
+ * token's own `exp` otherwise (pending-MFA, tenant and pre-renewal tokens).
+ */
+export function authTokenRowExpiresAt(claims: { exp: number; sat?: number; sma?: number }): Date {
+  const end = typeof claims.sat === 'number' && typeof claims.sma === 'number' ? claims.sat + claims.sma : claims.exp;
+  return new Date(end * 1000);
 }
 
 // ---------------------------------------------------------------------------

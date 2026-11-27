@@ -9,6 +9,7 @@
  */
 
 import { isUnderScopeDir, matchGlob, normalizeScopeDir } from "@builderforce/agent-tools";
+import { findSecretShapes, redactSecrets } from "@builderforce/secret-redaction";
 import type { GovernancePrefilterHit, GovernanceRule, GovernanceRuleCheck } from "./types.js";
 import { isProbablyBinaryPath, type WorkingTreeReader } from "./walker.js";
 
@@ -31,19 +32,6 @@ export type RuleMatcher = (
   check: GovernanceRuleCheck,
   ctx: MatcherContext,
 ) => Promise<GovernancePrefilterHit[]>;
-
-/** Built-in secret patterns applied when a "secret" check names no pattern of its own. */
-export const SECRET_PATTERNS: ReadonlyArray<{ name: string; re: RegExp }> = [
-  { name: "aws-access-key", re: /\bAKIA[0-9A-Z]{16}\b/ },
-  { name: "aws-secret-key", re: /\b[A-Za-z0-9/+=]{40}\b(?=\s*[,)\n])/ },
-  {
-    name: "generic-assignment",
-    re: /\b(api[_-]?key|secret|password|token|private[_-]?key)\b\s*[:=]\s*["'][^"'\n]{8,}["']/i,
-  },
-  { name: "private-key-block", re: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
-  { name: "slack-token", re: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/ },
-  { name: "github-token", re: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b/ },
-];
 
 // ── Compilation (throws RuleCompileError) ────────────────────────────────────────
 
@@ -119,7 +107,10 @@ async function scanLines(
   rule: GovernanceRule,
   check: GovernanceRuleCheck,
   ctx: MatcherContext,
-  patterns: ReadonlyArray<{ name: string; re: RegExp }>,
+  /** The names of every pattern that matches this line. */
+  namesIn: (line: string) => readonly string[],
+  /** What of the matching line is kept as evidence (a secret line is redacted first). */
+  evidenceOf: (line: string) => string = (line) => line,
 ): Promise<GovernancePrefilterHit[]> {
   const hits: GovernancePrefilterHit[] = [];
   for (const relPath of scopedFiles(ctx, check)) {
@@ -127,14 +118,18 @@ async function scanLines(
     const text = await ctx.readFile(relPath);
     if (text === null) continue;
     const lines = text.split("\n");
-    for (const { name, re } of patterns) {
-      const index = lines.findIndex((line) => re.test(line));
-      if (index < 0) continue;
+    const firstLineOf = new Map<string, number>();
+    lines.forEach((line, index) => {
+      for (const name of namesIn(line)) {
+        if (!firstLineOf.has(name)) firstLineOf.set(name, index);
+      }
+    });
+    for (const [name, index] of firstLineOf) {
       hits.push(
         hitFor(rule, `Pre-filter "${name}" matched ${relPath}:${index + 1} — candidate violation of ${rule.ruleRef}.`, {
           filePath: relPath,
           line: index + 1,
-          evidence: (lines[index] ?? "").trim().slice(0, 500),
+          evidence: evidenceOf((lines[index] ?? "").trim()).slice(0, 500),
         }),
       );
     }
@@ -144,13 +139,27 @@ async function scanLines(
 
 const regexMatcher: RuleMatcher = async (rule, check, ctx) => {
   const pattern = requirePattern(check);
-  return scanLines(rule, check, ctx, [{ name: pattern, re: compileRegex(pattern) }]);
+  const re = compileRegex(pattern);
+  return scanLines(rule, check, ctx, (line) => (re.test(line) ? [pattern] : []));
 };
+
+/** The name a line matching only the generic assignment patterns (`password = "…"`) is reported under. */
+const SECRET_ASSIGNMENT = "secret-assignment";
+
+/** The built-in secret detector is THE shared one (`@builderforce/secret-redaction`): provider shapes, then assignments. */
+function builtInSecretNames(line: string): readonly string[] {
+  const shapes = findSecretShapes(line);
+  if (shapes.length > 0) return shapes.map((shape) => shape.id);
+  return redactSecrets(line) !== line ? [SECRET_ASSIGNMENT] : [];
+}
 
 const secretMatcher: RuleMatcher = async (rule, check, ctx) => {
   const own = typeof check.pattern === "string" ? check.pattern.trim() : "";
-  const patterns = own ? [{ name: own, re: compileRegex(own) }] : SECRET_PATTERNS;
-  return scanLines(rule, check, ctx, patterns);
+  if (own) {
+    const re = compileRegex(own);
+    return scanLines(rule, check, ctx, (line) => (re.test(line) ? [own] : []), redactSecrets);
+  }
+  return scanLines(rule, check, ctx, builtInSecretNames, redactSecrets);
 };
 
 /** glob / path_forbidden: every scoped file whose path matches the glob is a candidate. */

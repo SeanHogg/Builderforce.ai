@@ -22,11 +22,11 @@ export interface PickDeps {
 
 const all = (selector: string): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(selector)];
 
-/** Switches the camera (the View group is a radio group, one radio per camera). */
+/** Switches the camera (the View group is a `Seg`: one icon button per camera, named by its aria-label). */
 export function pickCamera({ fireEvent }: PickDeps, name: string): void {
-    const radio = all('[role="radio"]').find((r) => r.textContent === name);
-    if (!radio) throw new Error(`no camera named ${name}`);
-    fireEvent.click(radio);
+    const button = all('[role="group"][aria-label="View"] button[data-seg]').find((b) => b.getAttribute('aria-label') === name);
+    if (!button) throw new Error(`no camera named ${name}`);
+    fireEvent.click(button);
 }
 
 /** Opens the Act rail's Details section (Insights and the Lens panel) so its contents are visible to role queries. */

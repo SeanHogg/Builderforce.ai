@@ -1854,9 +1854,9 @@ function claimsMissingToolData(text) {
   return UNCALLED_TOOL_CLAIM.test(t);
 }
 var MAX_ANNOUNCEMENT_RECOVERIES = 3;
-function stallRecoveryNudge(lastChance, shape, ctx) {
-  if (shape === "handed-off") return handoffRecoveryNudge(lastChance);
-  if (shape === "asked-permission") {
+function stallRecoveryNudge(lastChance, shape2, ctx) {
+  if (shape2 === "handed-off") return handoffRecoveryNudge(lastChance);
+  if (shape2 === "asked-permission") {
     return permissionRecoveryNudge(lastChance, askUserAdvertised(ctx?.availableToolNames));
   }
   return (
@@ -1893,9 +1893,9 @@ function resolveShape(arg) {
   if (typeof arg === "string") return arg;
   return "announced";
 }
-function whatItDid(shape) {
+function whatItDid(shape2) {
   const rounds = `${MAX_ANNOUNCEMENT_RECOVERIES} turns in a row`;
-  switch (shape) {
+  switch (shape2) {
     case "empty":
       return `returned an empty turn \u2014 no tool call and no words \u2014 ${rounds}`;
     case "handed-off":
@@ -1908,8 +1908,8 @@ function whatItDid(shape) {
       return `described tool calls instead of making them, ${rounds}`;
   }
 }
-function whatYouGot(shape) {
-  switch (shape) {
+function whatYouGot(shape2) {
+  switch (shape2) {
     case "empty":
       return "there is no answer above to show you.";
     case "handed-off":
@@ -1920,13 +1920,13 @@ function whatYouGot(shape) {
       return "the answer above is only a description of intended actions.";
   }
 }
-function modelFailoverNotice(from, to, shape = false) {
+function modelFailoverNotice(from, to, shape2 = false) {
   const who = from && from !== "default" ? `\`${from}\`` : "The previous model";
-  return `${who} ${whatItDid(resolveShape(shape))}, so it cannot complete this request. Retrying on \`${to}\`.`;
+  return `${who} ${whatItDid(resolveShape(shape2))}, so it cannot complete this request. Retrying on \`${to}\`.`;
 }
-function stallExhaustedNotice(model, tried, shape = false) {
+function stallExhaustedNotice(model, tried, shape2 = false) {
   const who = model && model !== "default" ? `The model \`${model}\`` : "The model";
-  const kind = resolveShape(shape);
+  const kind = resolveShape(shape2);
   const others = (tried ?? []).filter((m) => m && m !== model);
   return `${who} ${whatItDid(kind)}, so nothing was actually run and ` + whatYouGot(kind) + (others.length ? ` This run already failed over from ${others.map((m) => `\`${m}\``).join(", ")}, so the problem is unlikely to be any single model \u2014 check that the tool catalog loaded (see the "Tools available to the model" line in a copied diagnostics report).` : kind === "handed-off" ? " Nothing upstream failed here \u2014 the model reached the right answer and declined to carry it out, which is an agency limitation. Run the steps it listed, or retry on a model from the coding pool, which is selected for exactly this." : " Before switching models, check your runtime or gateway log for this turn: a request REJECTED upstream \u2014 a prompt over the context limit, an exhausted quota \u2014 produces exactly these symptoms, and no other model will fix it. If the log is clean, this is a model limitation and a different model is the answer.");
 }
@@ -2487,7 +2487,7 @@ function resolveStallStep(policy, turn, recoveriesUsed, source = {}) {
     availableToolNames: turn.availableToolNames,
     ...turn.requestText !== void 0 ? { requestText: turn.requestText } : {}
   };
-  const shape = stallShape(input);
+  const shape2 = stallShape(input);
   const toolChoice = stallRecoveryToolChoice(input);
   if (shouldRecoverStalledTurn(input)) {
     const used = recoveriesUsed + 1;
@@ -2495,10 +2495,10 @@ function resolveStallStep(policy, turn, recoveriesUsed, source = {}) {
       policy,
       step: {
         kind: "nudge",
-        nudge: stallRecoveryNudge(used >= MAX_ANNOUNCEMENT_RECOVERIES, shape, input),
+        nudge: stallRecoveryNudge(used >= MAX_ANNOUNCEMENT_RECOVERIES, shape2, input),
         ...toolChoice ? { toolChoice } : {},
         recoveriesUsed: used,
-        shape
+        shape: shape2
       }
     };
   }
@@ -2517,21 +2517,21 @@ function resolveStallStep(policy, turn, recoveriesUsed, source = {}) {
         kind: "failover",
         // The incoming model gets the FIRST nudge, not the last-chance one: the outgoing
         // model's failures say nothing about it.
-        nudge: stallRecoveryNudge(false, shape, input),
+        nudge: stallRecoveryNudge(false, shape2, input),
         ...toolChoice ? { toolChoice } : {},
-        notice: modelFailoverNotice(outcome.from, outcome.to, shape),
+        notice: modelFailoverNotice(outcome.from, outcome.to, shape2),
         from: outcome.from,
         to: outcome.to,
         attempt: outcome.attempt,
         of: outcome.of,
         recoveriesUsed: 0,
-        shape
+        shape: shape2
       }
     };
   }
   const tried = outcome.kind === "failover_exhausted" ? outcome.tried : next.tried;
   const spent = turn.resolvedModel ?? policy.model;
-  return { policy: next, step: { kind: "exhausted", notice: stallExhaustedNotice(spent, tried, shape), tried, shape } };
+  return { policy: next, step: { kind: "exhausted", notice: stallExhaustedNotice(spent, tried, shape2), tried, shape: shape2 } };
 }
 
 // ../packages/run-policy/src/handoffBudget.ts
@@ -3524,7 +3524,7 @@ var TOOL_NAME_ALIASES = {
   // Edit / write
   str_replace: "edit_file",
   search_replace: "edit_file",
-  apply_patch: "edit_file",
+  // NOT apply_patch: it carries patch syntax, edit_file is a unique-string replace - an unknown name gets the normal unknown-tool error.
   write_to_file: "write_file",
   create_file: "write_file",
   delete: "delete_file"
@@ -6186,6 +6186,8 @@ var semanticSearchTool = defineTool({
     const data = { ok: true, query, total: results.length, results };
     if (r.indexing) {
       data.note = "The index is still being built \u2014 these results cover only the files scanned so far. A miss is not proof of absence yet; fall back to search_code if needed.";
+    } else if (r.partial) {
+      data.note = "The workspace search covered part of the repository. Narrow the path or use search_code for an exact string.";
     } else if (results.length === 0) {
       data.note = `Nothing matched "${query}"${scope ? ` under "${scope}"` : ""}. Rephrase with likely identifier words, drop \`path\`, or use search_code for an exact string.`;
     }
@@ -7964,6 +7966,126 @@ import {
 } from "@seanhogg/builderforce-memory/knowledge";
 import { CONTENT_HASH_FIELD as CONTENT_HASH_FIELD2, hashText as hashText4 } from "@seanhogg/builderforce-memory/ingest";
 
+// ../packages/secret-redaction/src/index.ts
+var shape = (id, label, re) => ({ id, label, re });
+var SECRET_SHAPES = [
+  // PEM blocks. An unterminated block (a capped tool output) is redacted to the end of the text: the body is the secret.
+  shape("private-key", "private key block", /-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|[\s\S]*)/gi),
+  // OpenAI / Anthropic / OpenRouter style keys: `sk-proj-…`, `sk-ant-api03-…`, test/live-mode `sk-test-…` / `sk-live-…`, legacy
+  // `sk-` + base62. A bare `sk-` needs a hyphen-free run of 16+ chars, so a package name like `sk-learn-components` is not a key.
+  shape("openai-key", "OpenAI-style key", /\b(sk-(?:(?:proj|svcacct|admin|ant\d*|or-v\d|test|live)-[A-Za-z0-9_-]{16,}|[A-Za-z0-9_]{16,}))(?![A-Za-z0-9_])/gi),
+  shape("github-token", "GitHub token", /\b(gh[pousr]_[A-Za-z0-9]{20,})\b/gi),
+  shape("github-pat", "GitHub fine-grained token", /\b(github_pat_[A-Za-z0-9_]{20,})\b/gi),
+  shape("slack-token", "Slack token", /\b(xox[baprs]-[A-Za-z0-9-]{10,})\b/gi),
+  shape("slack-rotating-token", "Slack rotating token", /\b(xoxe[.-][A-Za-z0-9._-]{10,})/g),
+  shape("slack-app-token", "Slack app token", /\b(xapp-[A-Za-z0-9-]{10,})\b/gi),
+  shape("groq-key", "Groq key", /\b(gsk_[A-Za-z0-9_-]{10,})\b/gi),
+  shape("google-api-key", "Google API key", /\b(AIza[0-9A-Za-z\-_]{20,})\b/gi),
+  shape("google-oauth-token", "Google OAuth access token", /\b(ya29\.[A-Za-z0-9_-]{20,})/g),
+  shape("google-client-secret", "Google OAuth client secret", /\b(GOCSPX-[A-Za-z0-9_-]{20,})/g),
+  shape("perplexity-key", "Perplexity key", /\b(pplx-[A-Za-z0-9_-]{10,})\b/gi),
+  shape("npm-token", "npm token", /\b(npm_[A-Za-z0-9]{10,})\b/gi),
+  // AWS access key ids (long-term AKIA, temporary ASIA).
+  shape("aws-access-key", "AWS access key id", /\b((?:AKIA|ASIA)[A-Z0-9]{16})\b/g),
+  // Stripe secret/restricted keys and webhook secrets.
+  shape("stripe-key", "Stripe secret key", /\b((?:sk|rk)_(?:live|test)_[A-Za-z0-9]{8,})\b/g),
+  shape("stripe-webhook-secret", "Stripe webhook secret", /\b(whsec_[A-Za-z0-9]{8,})\b/g),
+  shape("gitlab-token", "GitLab token", /\b(glpat-[A-Za-z0-9_-]{20,})/g),
+  shape("huggingface-token", "Hugging Face token", /\b(hf_[A-Za-z0-9]{20,})\b/g),
+  shape("sendgrid-key", "SendGrid key", /\b(SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,})\b/g),
+  // Our own credentials: `<prefix>_<hex>` (api `generateApiKey`): bfk workspace, bfa agent-host, bfr site, bfq/bff/bfx ingest and
+  // LRS keys, clk/clu legacy agent-host keys.
+  shape("builderforce-key", "BuilderForce API key", /\b((?:bf[a-z]|cl[ku])_[A-Za-z0-9]{8,})\b/g),
+  // A bare JWT (header.payload.signature, all base64url).
+  shape("jwt", "JSON web token", /\b(eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})/g),
+  // Telegram Bot API URLs embed the token as `/bot<token>/...`.
+  shape("telegram-bot-url", "Telegram bot token", /\bbot(\d{6,}:[A-Za-z0-9_-]{20,})\b/gi),
+  shape("telegram-bot-token", "Telegram bot token", /\b(\d{6,}:[A-Za-z0-9_-]{20,})\b/gi)
+];
+var TYPE_WORD = String.raw`(?:string|number|boolean|null|undefined|true|false)`;
+var VALUE_ENV = String.raw`(?:\\"([^"\\\n]*)\\"|"((?:[^"\\\n]|\\.)*)"|'([^'\n]*)'|([^\s"'\\]+))`;
+var NOT_MASKED = String.raw`(?![^\s"'\\]*…)`;
+var VALUE_CONFIG = String.raw`(?:\\"${NOT_MASKED}(?!${TYPE_WORD}\\")([^"\\\n]{3,})\\"|"${NOT_MASKED}(?!${TYPE_WORD}")([^"\\\n]{3,})"|'${NOT_MASKED}(?!${TYPE_WORD}')([^'\\\n]{3,})'|` + String.raw`${NOT_MASKED}(?!${TYPE_WORD}\b)(?![A-Za-z_$][\w$.]*\()(?![A-Za-z_$][\w$]*(?:\.[\w$]+)+;?(?:[\s"',&)\]}\\]|$))([^\s"',&\\]{6,})(?=[\s"',&)\]}\\]|$))`;
+var SECRET_WORD = String.raw`(?:password|passwd|passphrase|secret|token|api[-_]?key|private[-_]?key|access[-_]?key)`;
+var DEFAULT_SECRET_PATTERNS = [
+  // ENV-style assignments: an UPPER_CASE name in which KEY/TOKEN/SECRET/PASSWORD/PASSWD is a whole `_`-delimited word
+  // (`SECRET_KEY_BASE=…`, `API_KEY_2=…`, `GITHUB_TOKEN=…`), so `MONKEY` / `HOTKEY` are not assignments; `isBenignKey` then skips
+  // a name that is a reference or a database/cache key (`TOKEN_COUNT`, `KEY_ID`, `PRIMARY_KEY`, `SORT_KEY`). Case-sensitive.
+  // The value may be quoted and contain spaces. NO nested quantifiers: the lookahead finds the word once, the name is one
+  // unambiguous run (a regex that is quadratic or exponential here is a ReDoS on attacker-controlled tool output).
+  { id: "env-assignment", re: new RegExp(String.raw`(?<![A-Za-z0-9_])(?=(?:[A-Z0-9]+_+)*?(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|APIKEY)(?![A-Z0-9]))(?<key>[A-Z][A-Z0-9]*(?:_+[A-Z0-9]+)*)\s*[=:]\s*${VALUE_ENV}`, "g") },
+  // Lower-case / camelCase / snake_case config, CLI and source assignments (`password=hunter2`, `export github_token=…`,
+  // `refresh_token=…`), only for a name containing a secret word and a secret-LIKE value. The key is ONE `[\w-]+` run found by
+  // a lookahead (no nested quantifier, starts only at a run boundary) and `isBenignKey` then judges the whole captured key.
+  { id: "assignment", re: new RegExp(String.raw`(?<![\w-])(?=[\w-]*?${SECRET_WORD})(?<key>[\w-]+)\s*[=:]\s*${VALUE_CONFIG}`, "gi") },
+  // JSON fields inside text, any spelling of the key (`apiKey`, `access_token`, `client_secret`).
+  { id: "json-field", re: new RegExp(String.raw`"(?=[\w.-]*?${SECRET_WORD})(?<key>[\w.-]+)"\s*:\s*"((?:[^"\\]|\\.)+)"`, "gi") },
+  // CLI flags (`--token x`, `--token "x"`, `--token=x`).
+  { id: "cli-flag", re: /--(?:api[-_]?key|token|secret|password|passwd)(?:\s+|=)(\\"|["']?)([^\s"'\\]+)\1/gi },
+  // Authorization headers: a scheme (`Bearer x`, `Basic x`, `token x`) or a bare token-shaped credential (20+ chars with a digit).
+  // `Authorization: denied for user` is prose, not a credential.
+  { id: "authorization", re: /Authorization\s*[:=]\s*(?:(?:Bearer|Basic|Token|Digest|Negotiate|ApiKey|OAuth)\s+([A-Za-z0-9._\-+=/~]{8,})|(?=[A-Za-z0-9._\-+=/~]*\d)([A-Za-z0-9._\-+=/~]{20,}))/gi },
+  { id: "bearer", re: /\bBearer\s+([A-Za-z0-9._\-+=]{18,})\b/gi },
+  // Credentials embedded in a URL: scheme://[user]:PASSWORD@host (the user may be empty: redis://:pw@host).
+  { id: "url-credential", re: /:\/\/[^\s/:@]*:([^\s/@\\"]+)@/g },
+  // Provider token prefixes (PEM blocks included).
+  ...SECRET_SHAPES.map(({ id, re }) => ({ id, re, known: true }))
+];
+
+// ../packages/code-shield/src/rules/secretRules.ts
+var LEGACY_SHAPE_RULE_IDS = {
+  "openai-key": "secret.provider-api-key",
+  "google-api-key": "secret.provider-api-key",
+  "stripe-key": "secret.provider-api-key"
+};
+var HIGH_SHAPES = /* @__PURE__ */ new Set([
+  "slack-token",
+  "slack-rotating-token",
+  "slack-app-token",
+  "jwt",
+  "telegram-bot-url",
+  "telegram-bot-token",
+  "stripe-webhook-secret"
+]);
+var ATTACK_PRIVATE_KEY = "T1552.004";
+var ATTACK_CREDENTIALS = "T1552.001";
+var stateless = (re) => new RegExp(re.source, re.flags.replace(/[gy]/g, ""));
+function secretRuleFor(shape2) {
+  const critical = !HIGH_SHAPES.has(shape2.id);
+  return {
+    id: LEGACY_SHAPE_RULE_IDS[shape2.id] ?? `secret.${shape2.id}`,
+    category: "secret",
+    severity: critical ? "CRITICAL" : "HIGH",
+    weight: critical ? 50 : 30,
+    cwe: "CWE-798",
+    attack: shape2.id === "private-key" ? ATTACK_PRIVATE_KEY : ATTACK_CREDENTIALS,
+    scope: "line",
+    paths: "secret",
+    title: shape2.id === "private-key" ? "Private key committed" : `${shape2.label} committed`,
+    pattern: stateless(shape2.re),
+    remediation: shape2.id === "private-key" ? "Remove the key from the repository, rotate it, and load it from the secret store." : "Revoke and rotate the credential with its provider; never commit it, load it from the secret store."
+  };
+}
+var SHAPE_RULES = SECRET_SHAPES.map(secretRuleFor);
+var SECRET_RULES = [
+  ...SHAPE_RULES,
+  {
+    id: "secret.hardcoded-credential",
+    category: "secret",
+    severity: "HIGH",
+    weight: 30,
+    cwe: "CWE-798",
+    attack: "T1552.001",
+    scope: "line",
+    paths: "secret",
+    title: "Hard-coded credential assignment",
+    pattern: /\b(?:password|passwd|secret|api[_-]?key|access[_-]?token)\s*[:=]\s*['"][^'"\s]{12,}['"]/i,
+    remediation: "Move the value to configuration / the secret store and reference it by name.",
+    // A generic assignment in a test or fixture is usually a fake: reported, but as MEDIUM (informs, never holds a merge).
+    testPathSeverity: "MEDIUM"
+  }
+];
+
 // ../packages/code-shield/src/signatures.ts
 var EICAR_RULE = {
   id: "signature.eicar",
@@ -9284,11 +9406,11 @@ var VisitTally = class {
 function revisitAdvisory(tool, target, visit) {
   if (visit.count < REVISIT_NUDGE_AT) return null;
   if (visit.mayHaveChanged) return null;
-  const shape = visit.priorArgs.length > 1 ? ` The argument sets you have already used on it: ${visit.priorArgs.map((a) => `\`${a}\``).join(", ")}.` : "";
+  const shape2 = visit.priorArgs.length > 1 ? ` The argument sets you have already used on it: ${visit.priorArgs.map((a) => `\`${a}\``).join(", ")}.` : "";
   if (visit.count >= REVISIT_HARD_AT) {
-    return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape} Re-reading it again will return content you already have and will not move the task forward \u2014 this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, continue from the \`offset\` the last result's note gave you and page forward in order \u2014 never re-open a window you already have; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
+    return `STOP RE-READING. This is call ${visit.count} of \`${tool}\` against ${target} in this run, and the previous ${visit.count - 1} results are all still above you in this conversation.${shape2} Re-reading it again will return content you already have and will not move the task forward \u2014 this pattern is how a run exhausts its tool budget without producing a single change. Do ONE of these now: (a) if you still need more of the file, continue from the \`offset\` the last result's note gave you and page forward in order \u2014 never re-open a window you already have; (b) otherwise stop reading and make the edit, or state plainly what is blocking you. Do not issue another partial read of this target.`;
   }
-  return `You have now read ${target} ${visit.count} times in this run with \`${tool}\`, and every earlier result is still above you in this conversation.${shape} If you are looking for something you have not found, another window over the same lines is unlikely to surface it \u2014 page forward from the \`offset\` the last result's note gave you, or search for the specific symbol with search_code. If you already have what you need, act on it rather than re-reading.`;
+  return `You have now read ${target} ${visit.count} times in this run with \`${tool}\`, and every earlier result is still above you in this conversation.${shape2} If you are looking for something you have not found, another window over the same lines is unlikely to surface it \u2014 page forward from the \`offset\` the last result's note gave you, or search for the specific symbol with search_code. If you already have what you need, act on it rather than re-reading.`;
 }
 function withAdvisory(result, advisory) {
   if (result && typeof result === "object" && !Array.isArray(result)) {
@@ -21642,4 +21764,4 @@ export {
   computeBrainDiagnostics,
   buildBrainTriageReport
 };
-//# sourceMappingURL=chunk-YHJLXV7C.mjs.map
+//# sourceMappingURL=chunk-NWNYO3KB.mjs.map

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../src/sessionFixture';
 
 /**
  * Baseline authenticated smoke test — always present, independent of generation.

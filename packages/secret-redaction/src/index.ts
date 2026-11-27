@@ -44,8 +44,9 @@ export interface SecretShape {
 const shape = (id: string, label: string, re: RegExp): SecretShape => ({ id, label, re });
 
 export const SECRET_SHAPES: readonly SecretShape[] = [
-  // PEM blocks. An unterminated block (a capped tool output) is redacted to the end of the text: the body is the secret.
-  shape('private-key', 'private key block', /-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|[\s\S]*)/gi),
+  // PEM blocks, and PGP armor (`-----BEGIN PGP PRIVATE KEY BLOCK-----`). An unterminated block (a capped tool output) is
+  // redacted to the end of the text: the body is the secret.
+  shape('private-key', 'private key block', /-----BEGIN [A-Z ]*PRIVATE KEY(?: BLOCK)?-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY(?: BLOCK)?-----|[\s\S]*)/gi),
   // OpenAI / Anthropic / OpenRouter style keys: `sk-proj-…`, `sk-ant-api03-…`, test/live-mode `sk-test-…` / `sk-live-…`, legacy
   // `sk-` + base62. A bare `sk-` needs a hyphen-free run of 16+ chars, so a package name like `sk-learn-components` is not a key.
   shape('openai-key', 'OpenAI-style key', /\b(sk-(?:(?:proj|svcacct|admin|ant\d*|or-v\d|test|live)-[A-Za-z0-9_-]{16,}|[A-Za-z0-9_]{16,}))(?![A-Za-z0-9_])/gi),
@@ -69,8 +70,9 @@ export const SECRET_SHAPES: readonly SecretShape[] = [
   shape('huggingface-token', 'Hugging Face token', /\b(hf_[A-Za-z0-9]{20,})\b/g),
   shape('sendgrid-key', 'SendGrid key', /\b(SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,})\b/g),
   // Our own credentials: `<prefix>_<hex>` (api `generateApiKey`): bfk workspace, bfa agent-host, bfr site, bfq/bff/bfx ingest and
-  // LRS keys, clk/clu legacy agent-host keys.
-  shape('builderforce-key', 'BuilderForce API key', /\b((?:bf[a-z]|cl[ku])_[A-Za-z0-9]{8,})\b/g),
+  // LRS keys, clk/clu legacy agent-host keys. The body is random hex, so it holds a digit: an all-letter word with the same
+  // prefix (`bfi_unavailable`, a code/reason string) is not a key.
+  shape('builderforce-key', 'BuilderForce API key', /\b((?:bf[a-z]|cl[ku])_(?=[A-Za-z]*\d)[A-Za-z0-9]{8,})\b/g),
   // A bare JWT (header.payload.signature, all base64url).
   shape('jwt', 'JSON web token', /\b(eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})/g),
   // Telegram Bot API URLs embed the token as `/bot<token>/...`.
@@ -165,7 +167,7 @@ function redactPemBlock(block: string): string {
  * `mask` replaces the computed masking (a caller that tags the span, e.g. `[REDACTED:id]`).
  */
 export function redactMatch(match: string, groups: Array<string | undefined>, isKnown: boolean, mode: MaskMode = 'strict', mask?: string): string {
-  if (match.includes('PRIVATE KEY-----')) return mask ?? redactPemBlock(match);
+  if (/PRIVATE KEY(?: BLOCK)?-----/.test(match)) return mask ?? redactPemBlock(match);
   const token = groups.filter((v): v is string => typeof v === 'string' && v.length > 0).at(-1);
   if (token === undefined) return match;
   const masked = mask ?? (mode === 'display' || isKnown ? maskToken(token) : '***');
