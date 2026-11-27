@@ -333,7 +333,7 @@ export function KnowledgeGraphView({
                         )}
                     </div>
                 </div>
-                {real && (
+                {drawerMounted && (
                     <Drawer
                         drawer={drawer} sheet={layout.drawerSheet}
                         graph={graph} env={surfaceEnv} labels={labels} surface={surface} source={source} rootId={kg.rootId ?? undefined}
