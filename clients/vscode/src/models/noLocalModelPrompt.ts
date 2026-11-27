@@ -19,7 +19,7 @@ import * as vscode from "vscode";
 import { INFERENCE_MODES, isInferenceMode } from "@builderforce/local-first";
 import { inferenceModeState, onDidChangeInferenceMode, setInferenceMode } from "./inferenceModeSetting";
 import { inferenceModeCopy } from "./inferenceModeLabels";
-import type { TurnSink } from "../chat/builderforceTurn";
+import type { TurnSink } from "../chat/turnSink";
 
 export const SET_INFERENCE_MODE_COMMAND = "builderforce.setInferenceMode";
 /** Where a model is picked — and a local one downloaded: the model picker. */

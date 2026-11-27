@@ -2,6 +2,13 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.11.228] — BuilderForce chat agent replaces `@builderforce`
+
+- VS Code no longer supports chat participants in the Copilot harness, so the `@builderforce` participant is retired. Customizations › Migrations no longer flags it.
+- Pick the **BuilderForce** agent in the chat agent picker. It hands substantial work to the BuilderForce agent through the new `runAgent` tool (`#runAgent`), which any Copilot agent can also call. Follow-ups pass the returned chat id and continue the same conversation with its history.
+- Stopping the tool call stops the BuilderForce run.
+- The BuilderForce Workspace MCP server and the dedicated BuilderForce session tab are unchanged.
+
 ## [2026.11.218] — Maintenance release
 
 - Rebuilt against BuilderForce WebContainers 2026.11.29.

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
-import { isRunning, type BrainRunOpening, type ChatCompletionMessage } from "@seanhogg/builderforce-brain-embedded";
+import { isRunning, transcriptSeedOf, type BrainRunOpening } from "@seanhogg/builderforce-brain-embedded";
+import type { TurnInput, TurnResult, TurnSink } from "./turnSink";
 import { SECRET_KEY } from "../gateway/gateway";
 import { turnLimbicBlock } from "../memory/personalityLimbic";
 import { resolveModelRoute, routeNeedsLocalModel, routeNeedsSpecificModel, routeRequiresSignIn } from "../models/modelRouting";
@@ -26,27 +27,6 @@ import { installRunRecovery } from "../run/installRunRecovery";
 /** Said when the chat's previous request is still in flight (read per use, so it follows the UI language). */
 const ALREADY_RUNNING = (): string =>
   vscode.l10n.t("BuilderForce is still working on this chat's previous request. Wait for it to finish or stop it, then ask again.");
-
-/** Where a turn writes what the person reads: a chat response stream, or a buffer a language-model tool returns. */
-export interface TurnSink {
-  markdown(text: string): void;
-  progress(label: string): void;
-  button(cmd: { command: string; title: string }): void;
-}
-
-/** What a turn is asked: the person's words, the earlier turns, and the chat it continues (none = a new chat). */
-export interface TurnInput {
-  prompt: string;
-  seed: ChatCompletionMessage[];
-  priorChatId?: number;
-  references: readonly vscode.ChatPromptReference[];
-  isCancelled(): boolean;
-}
-
-/** The chat the turn ran on; absent when the turn ended before one was resolved (a gate refused it, or it was cancelled). */
-export interface TurnResult {
-  brainChatId?: number;
-}
 
 /**
  * The ONE BuilderForce turn: drives the agent loop and writes into a {@link TurnSink}. Used by the dedicated chat-session tab
@@ -88,7 +68,6 @@ export function createBuilderForceTurn(
     }
 
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    const cfg = vscode.workspace.getConfiguration("builderforce");
     const permissionMode = resolvePermissionMode();
 
     // Limbic affective layer + PERSONALITY — parity with the webview chat and the cloud
@@ -120,9 +99,12 @@ export function createBuilderForceTurn(
     const local = localBrainApplication(ctx);
     const localPersistence = local.persistence;
     let brainChatId = input.priorChatId;
+    // A resumed chat is a chat whose persisted rows exist; its model-visible history is read from them below.
+    let resumed = false;
     if (brainChatId != null) {
       try {
         await localPersistence.getChat(brainChatId);
+        resumed = true;
       } catch {
         brainChatId = undefined;
       }
@@ -152,7 +134,6 @@ export function createBuilderForceTurn(
       ...(limbicBlock ? { limbic: limbicBlock } : {}),
     };
 
-    const abort = new AbortController();
     // The tenant's governance gates are read here to FAIL CLOSED with a localized refusal before anything starts: an unreadable
     // policy refuses the turn. The host reads them again for the run (`resolveRunPolicyGates`: the same cache window, no second round-trip).
     try {
@@ -186,11 +167,21 @@ export function createBuilderForceTurn(
       budget: () => routeMentionBudget(modelChoice),
       deps: hostIngressDeps(),
       ...(deterministicAnswer ? { deterministicAnswer } : {}),
-      cancelled: () => input.isCancelled(),
+      cancelled: () => input.signal.aborted,
     }).catch(() => "");
     const runChatId = brainChatId;
     const referenced = await referencedReady;
-    if (input.isCancelled()) return {};
+    if (input.signal.aborted) return {};
+    // The model's earlier turns: the chat's persisted rows (the person's row for THIS turn is saved by `runViaHost` below, so it is
+    // not in them) - the ONE history source, the panel's own (`transcriptSeedOf`), for the session tab and the tool alike.
+    let history: ReturnType<typeof transcriptSeedOf> = { messages: [], ids: [] };
+    if (resumed) {
+      try {
+        history = transcriptSeedOf(await localPersistence.getMessages(runChatId));
+      } catch (e) {
+        hostLog(`[chat turn] reading chat ${runChatId}'s history failed; the turn starts without it: ${String(e)}`);
+      }
+    }
     // The restart-recovery journal (G22): surface a run of THIS chat the previous editor session left in flight (marked
     // `interrupted` by activation recovery) - reported, never silently forgotten. Only the chat's own run is announced. The
     // run's OWN journal (start, checkpoints, terminal status) is the host's (`hostRunLifecycle.ts`), written by its gated start.
@@ -223,7 +214,8 @@ export function createBuilderForceTurn(
         // No prompt text: `assembleOpening` builds the opening from `opening` (the panel's path).
         systemPrompt: "",
         opening,
-        seed: input.seed,
+        seed: history.messages,
+        seedIds: history.ids,
         // The person's own words: the persisted row, the route and PreFetch read these. The `#file` references ride the turn context.
         userTurn: input.prompt,
         ...(referenced ? { turnContext: referenced } : {}),
@@ -240,7 +232,7 @@ export function createBuilderForceTurn(
       },
       approve: (req) => confirmToolCall(req, req.agentName),
       onModelFallback: (from, reason) => stream.markdown(`_${vscode.l10n.t("Your pick {0} failed; answered with Auto.", from)}${reason ? ` (${reason})` : ""}_\n\n`),
-      signal: abort.signal,
+      signal: input.signal,
       labels: {
         dispatchHint: vscode.l10n.t(
           "_This turn was stopped because its last few tool calls all failed. Read what they answered and reply with what they ask for, or hand the work to a cloud agent from the board so it continues in its own runtime._",

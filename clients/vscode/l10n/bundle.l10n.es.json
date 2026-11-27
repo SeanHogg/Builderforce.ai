@@ -92,6 +92,7 @@
   "Run the command \"{0}\" ({1}).": "Ejecuta el comando «{0}» ({1}).",
   "BuilderForce chat {0} — pass continueChatId: {0} to continue this conversation.": "Chat de BuilderForce {0}: pasa continueChatId: {0} para continuar esta conversación.",
   "BuilderForce finished without a reply.": "BuilderForce terminó sin dar una respuesta.",
+  "Give BuilderForce a task to work on.": "Dale a BuilderForce una tarea en la que trabajar.",
   "Branch {0}": "Rama {0}",
   "Browse the web": "Explorar la web",
   "Browser": "Vista del navegador",

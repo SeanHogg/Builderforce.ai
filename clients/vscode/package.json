@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.11.227",
+  "version": "2026.11.228",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -998,7 +998,8 @@
               "description": "The task for BuilderForce, in the user's words, including any relevant attached context verbatim."
             },
             "continueChatId": {
-              "type": "number",
+              "type": "integer",
+              "minimum": 1,
               "description": "The BuilderForce chat id from a previous runAgent result, to continue that conversation. Omit to start a new one."
             }
           },
