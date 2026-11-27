@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Builderforce MCP contracts, tool policy, SDK transports, and platform relay",
   "license": "MIT",
