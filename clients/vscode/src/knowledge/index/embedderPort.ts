@@ -16,6 +16,8 @@
  */
 
 import { statSync } from "node:fs";
+import type { EvermindEmbedderOptions } from "@seanhogg/builderforce-memory-mcp";
+import * as bundledEngine from "@seanhogg/builderforce-memory-engine";
 import type { EmbedderPort } from "@seanhogg/builderforce-memory/knowledge";
 import {
   KNOWLEDGE_IDLE_MS,
@@ -54,7 +56,7 @@ async function loadEvermindEmbedder(stamp: string, env: Record<string, string | 
   const at = stamp.lastIndexOf("@");
   const modelFile = stamp.slice(0, at);
   const { createEvermindEmbedder } = await import("@seanhogg/builderforce-memory-mcp");
-  const embedder = await createEvermindEmbedder({ modelFile, tokenizerFile: env[EVERMIND_TOKENIZER_ENV] });
+  const embedder = await createEvermindEmbedder({ modelFile, tokenizerFile: env[EVERMIND_TOKENIZER_ENV], engine: bundledEngine as unknown as EvermindEmbedderOptions["engine"] });
   if (!embedder || embedder.dimensions <= 0) return undefined;
   return batchEmbedder(embedder, `evermind-cpu:${embedder.fingerprint}@${stamp.slice(at + 1)}`, embedder.dimensions);
 }

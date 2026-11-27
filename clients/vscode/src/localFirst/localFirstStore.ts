@@ -34,6 +34,7 @@ import { pruneRailReadMarkOnDelete } from "../chatRail/refreshRail";
 import { mergeLocalTicketSummaries } from "../chatRail/localTicketSummary";
 import { hostLog } from "../host/hostLog";
 import { messageOf } from "../shared/messageOf";
+import { LOCAL_DEVICE_ID_KEY } from "./localDeviceId";
 
 /** The durable store over this extension's global storage. */
 export function createVsCodeLocalFirstStore(
@@ -65,7 +66,7 @@ const applications = new WeakMap<vscode.ExtensionContext, LocalApplication>();
 export function localBrainApplication(ctx: vscode.ExtensionContext): LocalApplication {
   const existing = applications.get(ctx);
   if (existing) return existing;
-  const deviceKey = "builderforce.localDeviceId";
+  const deviceKey = LOCAL_DEVICE_ID_KEY;
   const storedDeviceId = ctx.globalState.get<string>(deviceKey);
   // G04: the id must be durable before any write stamps it. A crash between
   // minting and globalState.update used to mint a second device id on restart.

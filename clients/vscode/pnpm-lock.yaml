@@ -75,8 +75,8 @@ importers:
         specifier: ^2026.10.65
         version: 2026.10.65
       '@seanhogg/builderforce-memory-mcp':
-        specifier: ^2026.10.88
-        version: 2026.10.88(@seanhogg/builderforce-memory-engine@2026.10.65)(@seanhogg/builderforce-memory@2026.10.88(@seanhogg/builderforce-memory-engine@2026.10.65))(fake-indexeddb@6.2.5)
+        specifier: ^2026.10.89
+        version: 2026.10.89(@seanhogg/builderforce-memory-engine@2026.10.65)(@seanhogg/builderforce-memory@2026.10.88(@seanhogg/builderforce-memory-engine@2026.10.65))(fake-indexeddb@6.2.5)
       '@seanhogg/builderforce-studio':
         specifier: link:../../studio
         version: link:../../studio
@@ -128,6 +128,9 @@ importers:
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
+      fake-indexeddb:
+        specifier: ^6.0.0
+        version: 6.2.5
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
@@ -1116,8 +1119,8 @@ packages:
     resolution: {integrity: sha512-lzZJmvS80wE4SuM4mUfxncWKPBeCFn/HU2xNMhkfTxOG6YHxe4RexaN7YJWMgWGT/9BGSyJpSRhnjOSJ0itz8Q==}
     engines: {node: '>=18.0.0'}
 
-  '@seanhogg/builderforce-memory-mcp@2026.10.88':
-    resolution: {integrity: sha512-fWXf2t97rLIeXpl0YIy2rG8DTOOSbg0r91SG1A9ADSNai3+k9BzL2mlhUp6kMBqeWK1SR5uzbvenXCQ4V6Dcng==}
+  '@seanhogg/builderforce-memory-mcp@2026.10.89':
+    resolution: {integrity: sha512-Y37fF1Oam8GzCa1O+qCHRGeVK4PwWxqOYXP28GMJxvv8fCVwz4V9Kc7hiw5J2mBK2M9XfXN6Y3sqKrPwUn1NDA==}
     engines: {node: '>=18.0.0'}
     hasBin: true
     peerDependencies:
@@ -5443,7 +5446,7 @@ snapshots:
 
   '@seanhogg/builderforce-memory-engine@2026.10.65': {}
 
-  '@seanhogg/builderforce-memory-mcp@2026.10.88(@seanhogg/builderforce-memory-engine@2026.10.65)(@seanhogg/builderforce-memory@2026.10.88(@seanhogg/builderforce-memory-engine@2026.10.65))(fake-indexeddb@6.2.5)':
+  '@seanhogg/builderforce-memory-mcp@2026.10.89(@seanhogg/builderforce-memory-engine@2026.10.65)(@seanhogg/builderforce-memory@2026.10.88(@seanhogg/builderforce-memory-engine@2026.10.65))(fake-indexeddb@6.2.5)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.32.2(zod@4.6.7)
       '@seanhogg/builderforce-mcp': 0.1.1(zod@4.6.7)
@@ -6916,8 +6919,7 @@ snapshots:
 
   extend@3.0.2: {}
 
-  fake-indexeddb@6.2.5:
-    optional: true
+  fake-indexeddb@6.2.5: {}
 
   fast-deep-equal@3.1.3: {}
 

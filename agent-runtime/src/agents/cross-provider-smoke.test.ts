@@ -311,5 +311,5 @@ runWorkspaceConformance(
       },
     };
   },
-  { search: false },
+  { search: false, absolutePaths: "repoRooted" },
 );

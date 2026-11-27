@@ -1,3 +1,5 @@
+import { randomUUID } from "crypto";
+import * as path from "path";
 import * as vscode from "vscode";
 import * as bfApi from "../bfApi";
 import { reportExtensionError, logLine } from "../diagnostics/errorReporter";
@@ -6,11 +8,13 @@ import { createAgentsGate } from "./agentsGate";
 import { createExperienceHostProvider } from "./experienceHost";
 import { createPhoneApprovalRelay } from "./phoneApprovalRelay";
 import { createRoutineScheduler } from "./routineScheduler";
+import { createRunnerLock } from "./runnerLock";
 import { createSkillOps } from "./skillOps";
 import { createSkillRunner } from "./skillRunner";
 import type { RunnerMessages } from "./skillRunnerPorts";
 import { createSkillSecrets } from "./skillSecrets";
 import { SkillsController, type SkillsHostUi } from "./skillsController";
+import { explainError } from "./skillsErrors";
 import { SkillsViewProvider } from "./skillsView";
 import { skillsLabels } from "./skillsViewLabels";
 import { createTeachHelper, resolveHelperBinary } from "./teachHelper";
@@ -40,6 +44,9 @@ function runnerMessages(): RunnerMessages {
     orphaned: vscode.l10n.t("Synapse closed during the run"),
     unsupported: vscode.l10n.t("Not available on this system"),
     busy: vscode.l10n.t("A skill is already running."),
+    lockedElsewhere: vscode.l10n.t("Another BuilderForce window is already running a skill."),
+    stopped: vscode.l10n.t("Stopped before the run began."),
+    explain: explainError,
     unknownSkill: (id) => vscode.l10n.t("Skill {0} was not found.", id),
     approvalDescription: (skill, step, action) => vscode.l10n.t("{0}: step {1} needs your approval ({2})", skill, step, action),
     // A fact for later recall, not UI: kept in plain English like every other memory.
@@ -97,11 +104,18 @@ export function registerExperience(context: vscode.ExtensionContext): void {
     sleep,
     report,
   });
+  // One run at a time across every window: the lock sits beside experience.json.
+  const lock = createRunnerLock({
+    file: async () => path.join(path.dirname((await provider.get()).file), "runner.lock"),
+    pid: process.pid,
+    sessionId: randomUUID(),
+  });
   const runner = createSkillRunner({
     helper,
     store: ops,
     secrets,
     relay,
+    lock,
     clock: { now: Date.now, setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (h) => clearTimeout(h as NodeJS.Timeout) },
     messages: runnerMessages(),
     remember: (fact) => provider.remember(fact),
@@ -117,11 +131,12 @@ export function registerExperience(context: vscode.ExtensionContext): void {
     ui: hostUi(gate, context.secrets),
     helperAvailable: !!binary,
     labels: skillsLabels,
+    explain: explainError,
     post: (m) => view.post(m),
     report,
   });
   view.attach(controller);
-  const scheduler = createRoutineScheduler({ enabled: gate.enabled, runner, due: () => ops.due(), report });
+  const scheduler = createRoutineScheduler({ enabled: gate.enabled, runner, supported: async () => (await helper.probe()).supported, due: () => ops.due(), report });
 
   // The commands hide until the helper is known to work here (statically, then by `hello`).
   const setSupported = (on: boolean) => void vscode.commands.executeCommand("setContext", SUPPORTED_KEY, on);

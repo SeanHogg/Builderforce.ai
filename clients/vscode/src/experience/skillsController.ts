@@ -1,6 +1,6 @@
 import * as path from "path";
 import { newExperienceId, type Episode } from "@seanhogg/builderforce-memory-engine";
-import type { SkillRunner, LiveRunState } from "./skillRunner";
+import type { SkillRunner, LiveRunState, StartRequest } from "./skillRunner";
 import type { SkillOps } from "./skillOps";
 import type { SkillSecrets } from "./skillSecrets";
 import type { TeachHelperPort } from "./teachHelper";
@@ -28,11 +28,13 @@ export interface SkillsControllerDeps {
   /** The vendored helper is present and this platform can run it (decided without spawning it). */
   helperAvailable: boolean;
   labels(): Record<string, string>;
+  /** A caught error in localized words for the person. */
+  explain(error: unknown): string;
   post(message: SkillsOutbound): void;
   report(error: unknown, operation: string): void;
 }
 
-const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
 
 /**
  * The Skills view's brain: answers the page's messages (teach, review, run, schedule,
@@ -44,6 +46,8 @@ export class SkillsController {
   private review: SkillsState["review"] = null;
   private live: LiveRunState | null = null;
   private error: string | null = null;
+  /** The program the person chose in the host dialog; a page-supplied path is never trusted. */
+  private pickedProgram: string | undefined;
   private readonly subscriptions: Array<{ dispose(): void }>;
 
   constructor(private readonly deps: SkillsControllerDeps) {
@@ -70,7 +74,7 @@ export class SkillsController {
       await this.dispatch(msg);
     } catch (error) {
       this.deps.report(error, `skills:${msg.type}`);
-      this.error = messageOf(error);
+      this.error = this.deps.explain(error);
     }
     await this.push();
   }
@@ -86,14 +90,19 @@ export class SkillsController {
         return ui.setPhoneApprovals(msg.on);
       case "program.pick": {
         const program = await ui.pickProgram();
-        if (program) this.deps.post({ type: "program.picked", program });
+        if (program) {
+          this.pickedProgram = program;
+          this.deps.post({ type: "program.picked", program });
+        }
         return;
       }
       case "record.start": {
-        if (runner.active || this.recording) return;
+        if (!ui.enabled()) return;
+        const program = this.pickedProgram;
+        if (!program || runner.active || this.recording) return;
         const id = newExperienceId();
-        await helper.recordStart({ program: msg.program, shotsDir: path.join(await ops.episodesDir(), id) });
-        this.recording = { count: 0, program: msg.program, id };
+        await helper.recordStart({ program, shotsDir: path.join(await ops.episodesDir(), id) });
+        this.recording = { count: 0, program, id };
         return;
       }
       case "record.stop":
@@ -107,20 +116,47 @@ export class SkillsController {
         this.review = null;
         return;
       case "run.start": {
-        const r = await runner.start({ skillId: msg.skillId, trigger: "manual", values: msg.values, remember: msg.remember });
+        if (!ui.enabled()) return;
+        const req = await this.checkedRunRequest(msg);
+        if (!req) return;
+        const r = await runner.start(req);
         if (!r.ok) this.error = r.error;
         return;
       }
       case "run.stop":
         return runner.stop();
       case "approval.answer":
-        return runner.answerApproval(msg.approved);
+        return runner.answerApproval(msg.runId, msg.idx, msg.approved);
       case "skill.schedule":
+        if (!ui.enabled()) return;
         await ops.schedule(msg.skillId, msg.routine);
         return;
       case "skill.delete":
         return this.deleteSkill(msg.skillId);
     }
+  }
+
+  /**
+   * What the page asked to run, checked against the skill: `values` must be strings keyed
+   * by the skill's own parameters, `remember` a list of its secret parameters. Anything
+   * else is refused (undefined). A kept secret whose "Remember" is not ticked is forgotten
+   * once the run has read it.
+   */
+  private async checkedRunRequest(msg: Extract<SkillsInbound, { type: "run.start" }>): Promise<StartRequest | undefined> {
+    const skill = await this.deps.ops.getSkill(msg.skillId);
+    if (!skill) return undefined;
+    const names = new Set(skill.params.map((p) => p.name));
+    const secretNames = new Set(skill.params.filter((p) => p.secret).map((p) => p.name));
+    const values = msg.values as unknown;
+    const remember = msg.remember as unknown;
+    if (!values || typeof values !== "object" || Array.isArray(values)) return undefined;
+    if (Object.entries(values).some(([k, v]) => typeof v !== "string" || !names.has(k))) return undefined;
+    if (!Array.isArray(remember) || remember.some((n) => typeof n !== "string" || !secretNames.has(n))) return undefined;
+    const forget: string[] = [];
+    for (const p of skill.params) {
+      if (p.secret && !remember.includes(p.name) && (await this.deps.secrets.get(skill.id, p.name)) !== undefined) forget.push(p.name);
+    }
+    return { skillId: skill.id, trigger: "manual", values: values as Record<string, string>, remember: remember as string[], forget };
   }
 
   private async stopRecording(): Promise<void> {
@@ -174,7 +210,7 @@ export class SkillsController {
       }));
     } catch (error) {
       this.deps.report(error, "skills:snapshot");
-      base.error = base.error ?? messageOf(error);
+      base.error = base.error ?? this.deps.explain(error);
     }
     return base;
   }

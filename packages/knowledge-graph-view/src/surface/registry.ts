@@ -53,6 +53,8 @@ export interface SceneProps {
     onShow(refs: string[]): void;
     /** Switches the camera (the System camera's "+N more" opens the List). Absent = the host cannot switch. */
     onCamera?: ((mode: ViewMode) => void) | undefined;
+    /** The cameras available now (what `onCamera` may switch to). */
+    cameras?: readonly ViewMode[] | undefined;
     onCompose?: ((text: string) => void) | undefined;
     evidence?: ((f: Finding) => FindingEvidence[]) | undefined;
     onOpenSource?: ((location: SourceLocation) => void) | undefined;

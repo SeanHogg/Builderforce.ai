@@ -6,6 +6,7 @@
 import type { Context } from 'hono';
 import type { HonoEnv } from '../../env';
 import { slidingWindowLimited } from '../middleware/rateLimitResponse';
+import { getClientIp } from '../middleware/requestClaims';
 
 /** On-device clip registrations per tenant+user per minute (each one signs and writes a row). */
 export const VOICE_REGISTER_RPM = 30;
@@ -17,5 +18,5 @@ export const voiceRateLimited = slidingWindowLimited;
 
 /** The caller's address as the edge saw it, or 'unknown' (one shared bucket) without one. */
 export function clientIp(c: Context<HonoEnv>): string {
-  return c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? 'unknown';
+  return getClientIp(c) ?? 'unknown';
 }

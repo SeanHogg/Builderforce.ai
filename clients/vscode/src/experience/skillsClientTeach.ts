@@ -64,7 +64,7 @@ function teachSection() {
     row(button(L.stopRecording, function () { post({ type: 'record.stop' }); }))));
   else kids.push(card(
     row(h('span', { class: 'grow mono' }, ui.program || L.noProgram), button(L.chooseProgram, function () { post({ type: 'program.pick' }); }, 'secondary')),
-    row(button(L.record, function () { post({ type: 'record.start', program: ui.program }); }, '', !ui.program || !!S.live))));
+    row(button(L.record, function () { post({ type: 'record.start' }); }, '', !ui.program || !!S.live))));
   return kids;
 }
 `;

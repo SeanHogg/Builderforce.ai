@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { HelperError, LineSplitter, RequestCorrelator, encodeRequest, parseLine } from "./teachHelperProtocol";
 
 describe("encodeRequest / parseLine", () => {
@@ -74,6 +74,36 @@ describe("RequestCorrelator", () => {
     const p = c.request("hello", undefined, () => undefined);
     c.rejectAll(new HelperError("helper_gone", "exited"));
     await expect(p).rejects.toMatchObject({ code: "helper_gone" });
+  });
+
+  it("a null-id error reply settles the OLDEST pending request", async () => {
+    const c = new RequestCorrelator();
+    const first = c.request("a", undefined, () => undefined);
+    const second = c.request("b", undefined, () => undefined);
+    const msg = parseLine('{"id":null,"error":{"code":"bad_request","message":"unreadable"}}');
+    expect(msg.kind).toBe("reply");
+    if (msg.kind === "reply") expect(c.settle(msg)).toBe(true);
+    await expect(first).rejects.toMatchObject({ code: "bad_request" });
+    expect(c.inFlight).toBe(1);
+    c.rejectAll(new Error("done"));
+    await expect(second).rejects.toThrow("done");
+  });
+
+  it("times a request out after 30 s by default, but never when told null", async () => {
+    vi.useFakeTimers();
+    try {
+      const c = new RequestCorrelator();
+      const timed = c.request("hello", undefined, () => undefined);
+      const open = c.request("record.stop", undefined, () => undefined, { timeoutMs: null });
+      const assertion = expect(timed).rejects.toMatchObject({ code: "timeout" });
+      await vi.advanceTimersByTimeAsync(30_001);
+      await assertion;
+      expect(c.inFlight).toBe(1);
+      c.rejectAll(new Error("end"));
+      await expect(open).rejects.toThrow("end");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("a send that throws rejects the request and leaves nothing pending", async () => {

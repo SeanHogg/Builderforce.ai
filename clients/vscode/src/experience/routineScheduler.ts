@@ -13,7 +13,9 @@ export const TICK_MS = 30_000;
 export interface RoutineSchedulerDeps {
   /** `builderforce.agents.enabled`. */
   enabled(): boolean;
-  runner: Pick<SkillRunner, "active" | "start">;
+  runner: Pick<SkillRunner, "active" | "start" | "blockedElsewhere">;
+  /** The helper can run here (a repeat tick on an unsupported system does nothing). */
+  supported(): Promise<boolean>;
   /** The skills due now (`skillsDue` over the store). */
   due(): Promise<Skill[]>;
   report(error: unknown, operation: string): void;
@@ -36,17 +38,30 @@ export function createRoutineScheduler(deps: RoutineSchedulerDeps): RoutineSched
     clearInterval: (h) => clearInterval(h as NodeJS.Timeout),
   };
   let ticking = false;
+  /** The last failure reported: the same one repeating every 30 s is reported once. */
+  let lastFailure: string | undefined;
+
+  const fail = (error: unknown, operation: string): void => {
+    const key = `${operation}:${error instanceof Error ? error.message : String(error)}`;
+    if (key === lastFailure) return;
+    lastFailure = key;
+    deps.report(error, operation);
+  };
 
   async function tick(): Promise<void> {
     if (ticking || !deps.enabled() || deps.runner.active) return;
     ticking = true;
     try {
+      if (!(await deps.supported())) return;
+      // Another window is running a skill: leave the routine due for a later tick.
+      if (await deps.runner.blockedElsewhere()) return;
       const [first] = await deps.due();
       if (!first) return;
       const started = await deps.runner.start({ skillId: first.id, trigger: "routine" });
-      if (!started.ok) deps.report(new Error(started.error), "routineScheduler:start");
+      if (started.ok) lastFailure = undefined;
+      else fail(new Error(started.error), "routineScheduler:start");
     } catch (error) {
-      deps.report(error, "routineScheduler:tick");
+      fail(error, "routineScheduler:tick");
     } finally {
       ticking = false;
     }

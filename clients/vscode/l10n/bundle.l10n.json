@@ -1661,5 +1661,14 @@
   "succeeded": "succeeded",
   "{0} steps": "{0} steps",
   "{0}: step {1} needs your approval ({2})": "{0}: step {1} needs your approval ({2})",
+  "Synapse is already recording or running something.": "Synapse is already recording or running something.",
+  "A secret value is missing. Type it in, or tick Remember on this computer.": "A secret value is missing. Type it in, or tick Remember on this computer.",
+  "Nothing is running.": "Nothing is running.",
+  "Recording could not start: {0}": "Recording could not start: {0}",
+  "The Teach helper stopped unexpectedly.": "The Teach helper stopped unexpectedly.",
+  "The Teach helper did not answer in time.": "The Teach helper did not answer in time.",
+  "Sign in to BuilderForce first.": "Sign in to BuilderForce first.",
+  "Another BuilderForce window is already running a skill.": "Another BuilderForce window is already running a skill.",
+  "Stopped before the run began.": "Stopped before the run began.",
   "BuilderForce: .builderforce/project.json was linked to another project in the meantime, so it was left unchanged.": "BuilderForce: .builderforce/project.json was linked to another project in the meantime, so it was left unchanged."
 }

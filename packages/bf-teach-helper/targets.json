@@ -1,0 +1,9 @@
+{
+  "_comment": "The ONE table of helper targets. `asset` is the release file name, `tag` the platform-arch the extension loads, `out` the file esbuild copies into out/ (src/experience/teachHelper.ts helperFileName() must agree; a test holds it to this).",
+  "repository": "SeanHogg/builderforce-inference",
+  "targets": [
+    { "triple": "x86_64-pc-windows-msvc", "tag": "win32-x64", "asset": "bf-teach-helper-x86_64-pc-windows-msvc.exe", "out": "bf-teach-helper.win32-x64.exe", "binary": "bf-teach-helper.exe" },
+    { "triple": "aarch64-apple-darwin", "tag": "darwin-arm64", "asset": "bf-teach-helper-aarch64-apple-darwin", "out": "bf-teach-helper.darwin-arm64", "binary": "bf-teach-helper" },
+    { "triple": "x86_64-apple-darwin", "tag": "darwin-x64", "asset": "bf-teach-helper-x86_64-apple-darwin", "out": "bf-teach-helper.darwin-x64", "binary": "bf-teach-helper" }
+  ]
+}

@@ -7,6 +7,7 @@
 import nodeFs from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import nodePath from "node:path";
+import { sleep } from "../shared/sleep";
 
 const fs = nodeFs.promises;
 
@@ -49,6 +50,28 @@ export async function writeFrameFile(path: string, frames: AsyncIterable<Uint8Ar
   return { bytes, frames: count };
 }
 
+/**
+ * Replace `target` with `text` atomically: a unique sibling temp is written, fsynced, renamed over
+ * (`renameDurably`) and removed again on any failure, so a reader never sees half a file. For a
+ * plain whole-file write; lock files and exclusive creates have their own semantics.
+ */
+export async function writeFileAtomically(target: string, text: string): Promise<void> {
+  const temporary = temporaryPathFor(target);
+  try {
+    const handle = await fs.open(temporary, "wx");
+    try {
+      await handle.writeFile(text, "utf8");
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await renameDurably(temporary, target);
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
 /** Errors a rename over a file another process has open raises on Windows (antivirus, an indexer, a reader). */
 const TRANSIENT_RENAME = new Set(["EPERM", "EACCES", "EBUSY"]);
 const RENAME_RETRY_DELAYS_MS: readonly number[] = [20, 40, 80, 160];
@@ -67,7 +90,7 @@ export async function renameDurably(from: string, to: string): Promise<void> {
     } catch (error) {
       const delay = RENAME_RETRY_DELAYS_MS[attempt];
       if (delay === undefined || !TRANSIENT_RENAME.has((error as NodeJS.ErrnoException).code ?? "")) throw error;
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await sleep(delay);
     }
   }
   await fs.open(nodePath.dirname(to), "r").then(async (directory) => {

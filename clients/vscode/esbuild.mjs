@@ -248,6 +248,7 @@ async function copyBfiWasm() {
   fs.mkdirSync("out", { recursive: true });
   fs.copyFileSync(wasm, path.join("out", "bfi_web_bg.wasm"));
   copyBfiNative();
+  copyTeachHelper();
   await copyTreeSitterWasm();
   installBundledAnalyzers();
   copyLauncherAssets();
@@ -401,6 +402,27 @@ function copyBfiNative() {
     fs.copyFileSync(path.join(dir, name), path.join("out", name));
   }
   if (!addons.length) console.warn("[esbuild] no bfi-node addon vendored: the host bfi worker will run the wasm.");
+}
+
+/**
+ * The Teach helper (`packages/bf-teach-helper/bin/<tag>/`, fetched by its `fetch.mjs`), copied to
+ * `out/<targets.json out>` — the name `src/experience/teachHelper.ts` loads. Honours the same
+ * `BFI_NATIVE_TARGET` as the addons. A binary that is not there is NOT a build failure: the
+ * feature then reports "Not available on this system".
+ */
+function copyTeachHelper() {
+  const table = JSON.parse(fs.readFileSync(path.join(repoRoot, "packages", "bf-teach-helper", "targets.json"), "utf8"));
+  const target = process.env.BFI_NATIVE_TARGET;
+  const wanted = table.targets.filter((t) => !target || t.tag === target);
+  for (const stale of table.targets) fs.rmSync(path.join("out", stale.out), { force: true });
+  let copied = 0;
+  for (const t of wanted) {
+    const from = path.join(repoRoot, "packages", "bf-teach-helper", "bin", t.tag, t.binary);
+    if (!fs.existsSync(from)) continue;
+    fs.copyFileSync(from, path.join("out", t.out));
+    copied++;
+  }
+  if (!copied) console.warn("[esbuild] no Teach helper vendored: self-directed agents will report unsupported.");
 }
 
 if (watch) {

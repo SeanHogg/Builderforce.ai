@@ -27,6 +27,7 @@ import {
 } from "@builderforce/provider-connect";
 import { LOCAL_RUNTIMES } from "@builderforce/local-inference";
 import { gatewayRequest } from "../gateway/gatewayRequest";
+import { sleep } from "../shared/sleep";
 import { connectedAccounts } from "./localProviderCredentials";
 import type { ConnectedAccounts } from "@builderforce/provider-connect/accounts";
 import { messageOf } from "../shared/messageOf";
@@ -88,7 +89,7 @@ export async function connectProviderInteractively(
           const cancel = token.onCancellationRequested(() => controller.abort());
           try {
             await awaitDeviceApproval(request, provider, start, {
-              sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+              sleep,
               now: Date.now,
               signal: controller.signal,
             });

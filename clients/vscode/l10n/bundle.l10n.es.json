@@ -1661,5 +1661,14 @@
   "succeeded": "completada",
   "{0} steps": "{0} pasos",
   "{0}: step {1} needs your approval ({2})": "{0}: el paso {1} necesita tu aprobación ({2})",
+  "Synapse is already recording or running something.": "Synapse ya está grabando o ejecutando algo.",
+  "A secret value is missing. Type it in, or tick Remember on this computer.": "Falta un valor secreto. Escríbelo o marca «Recordar en este equipo».",
+  "Nothing is running.": "No hay nada en ejecución.",
+  "Recording could not start: {0}": "No se pudo iniciar la grabación: {0}",
+  "The Teach helper stopped unexpectedly.": "El ayudante de Teach se detuvo inesperadamente.",
+  "The Teach helper did not answer in time.": "El ayudante de Teach no respondió a tiempo.",
+  "Sign in to BuilderForce first.": "Primero inicia sesión en BuilderForce.",
+  "Another BuilderForce window is already running a skill.": "Otra ventana de BuilderForce ya está ejecutando una habilidad.",
+  "Stopped before the run began.": "Detenido antes de que empezara la ejecución.",
   "BuilderForce: .builderforce/project.json was linked to another project in the meantime, so it was left unchanged.": "BuilderForce: .builderforce/project.json se vinculó entretanto a otro proyecto, por lo que se dejó sin cambios."
 }

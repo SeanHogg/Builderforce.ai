@@ -1,5 +1,6 @@
 import type { Run, RunStatus, Skill, StepOutcome } from "@seanhogg/builderforce-memory-engine";
 import type { PhoneApprovalRelay } from "./phoneApprovalRelay";
+import type { RunnerLock } from "./runnerLock";
 import type { SkillSecrets } from "./skillSecrets";
 import type { TeachHelperPort } from "./teachHelper";
 
@@ -23,6 +24,12 @@ export interface RunnerMessages {
   orphaned: string;
   unsupported: string;
   busy: string;
+  /** Another editor window is running a skill right now. */
+  lockedElsewhere: string;
+  /** Stop was pressed before the helper began. */
+  stopped: string;
+  /** A caught error in words the person can act on (localized). */
+  explain(error: unknown): string;
   unknownSkill(id: string): string;
   approvalDescription(skillName: string, step: number, action: string): string;
   lastRun(skillName: string, status: RunStatus, whenIso: string, trigger: string): string;
@@ -33,6 +40,8 @@ export interface SkillRunnerPorts {
   store: RunStore;
   secrets: SkillSecrets;
   relay: PhoneApprovalRelay;
+  /** Machine-wide one-run-at-a-time lock. */
+  lock: RunnerLock;
   clock: RunnerClock;
   messages: RunnerMessages;
   /** Writes the `synapse.skill.<id>.last-run` fact through the extension's memory remember path. */
@@ -60,6 +69,8 @@ export interface StartRequest {
   values?: Record<string, string>;
   /** Secret parameter names to keep in the OS keychain for next time. */
   remember?: string[];
+  /** Kept secrets to delete once this run has read them (their "Remember" was unticked). */
+  forget?: string[];
 }
 
 export type StartResult = { ok: true; runId: string; done: Promise<void> } | { ok: false; error: string };

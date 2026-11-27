@@ -24,6 +24,8 @@
  */
 
 import type { EntityDestination, LocalFirstStore } from "@builderforce/local-first";
+import { readLocalDeviceId } from "../localFirst/localDeviceId";
+import { sleep } from "../shared/sleep";
 import {
   listInterruptedRuns,
   recoverInterruptedRuns,
@@ -91,8 +93,6 @@ export interface InstalledRunRecovery {
   safeToResume(run: InterruptedRun): boolean;
 }
 
-const DEVICE_KEY = "builderforce.localDeviceId";
-
 const installed = new WeakMap<object, InstalledRunRecovery>();
 
 function asId(value: string | number | undefined): string | undefined {
@@ -102,9 +102,9 @@ function asId(value: string | number | undefined): string | undefined {
 
 async function readDeviceId(ctx: RunRecoveryHostContext): Promise<string> {
   for (let attempt = 0; attempt < 40; attempt++) {
-    const id = ctx.globalState.get<string>(DEVICE_KEY);
-    if (typeof id === "string" && id.length > 0) return id;
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    const id = readLocalDeviceId(ctx.globalState);
+    if (id.length > 0) return id;
+    await sleep(25);
   }
   throw new Error("local_device_id_unavailable");
 }

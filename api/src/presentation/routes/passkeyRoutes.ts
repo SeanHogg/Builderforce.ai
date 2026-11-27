@@ -14,6 +14,7 @@
  */
 
 import { Hono, type Context } from 'hono';
+import { getClientIp as clientIp, getUserAgent as userAgent } from '../middleware/requestClaims';
 import { resolveAppBaseUrl, type HonoEnv } from '../../env';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import {
@@ -64,17 +65,6 @@ const AuthenticationBody = z.looseObject({
 const RenameBody = z.object({ name: z.string().nullish() });
 
 const LoginOptionsBody = z.object({ email: z.string().nullish() });
-
-function clientIp(c: Context<HonoEnv>): string | null {
-  const cf = c.req.header('CF-Connecting-IP');
-  if (cf) return cf.trim();
-  return c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null;
-}
-
-function userAgent(c: Context<HonoEnv>): string | null {
-  const ua = c.req.header('User-Agent');
-  return ua ? ua.slice(0, 1024) : null;
-}
 
 /** The relying party is derived from the app's own base URL, never from the request. */
 const relyingParty = (c: Context<HonoEnv>) => relyingPartyFor(resolveAppBaseUrl(c.env));

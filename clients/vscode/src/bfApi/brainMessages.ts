@@ -4,6 +4,7 @@ import { registerDeadLetterQueue } from "../sync/deadLetterCommand";
 import { createDurableOutbox, outboxSecrets, scopeTenantId } from "../sync/outboxStorage";
 import { authed } from "./transport";
 import { messageOf } from "../shared/messageOf";
+import { sleep } from "../shared/sleep";
 
 /** One turn row as the messages endpoint takes it. `eventKey` is its idempotency key. */
 interface BrainMessageInput {
@@ -95,7 +96,7 @@ async function postBrainMessages(
   let last = "";
   let status: number | undefined;
   for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt += 1) {
-    if (attempt > 0) await new Promise((r) => setTimeout(r, WRITE_BACKOFF_MS[attempt - 1]));
+    if (attempt > 0) await sleep(WRITE_BACKOFF_MS[attempt - 1]);
     try {
       const r = await authed<{ messages?: BrainMessage[]; evermindLearn?: EvermindLearnOutcome }>(
         secrets,

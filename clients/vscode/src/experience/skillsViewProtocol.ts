@@ -96,13 +96,14 @@ export type SkillsInbound =
   | { type: "enable" }
   | { type: "phone.set"; on: boolean }
   | { type: "program.pick" }
-  | { type: "record.start"; program: string }
+  /** The program is the one the host picked (`program.pick`); the page names none. */
+  | { type: "record.start" }
   | { type: "record.stop" }
   | { type: "review.compile"; episodeId: string; edits: ReviewEdits }
   | { type: "review.discard"; episodeId: string }
   | { type: "run.start"; skillId: string; values: Record<string, string>; remember: string[] }
   | { type: "run.stop" }
-  | { type: "approval.answer"; approved: boolean }
+  | { type: "approval.answer"; runId: string; idx: number; approved: boolean }
   | { type: "skill.schedule"; skillId: string; routine: RoutineInput | null }
   | { type: "skill.delete"; skillId: string };
 

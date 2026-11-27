@@ -4,6 +4,7 @@ import type { DbHandle as Db } from '../../application/shared/dbHandle';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { mintScopedToken } from '../../application/auth/mintScopedToken';
 import { isScopedTokenAudience, SCOPED_TOKEN_AUDIENCES } from '../../application/auth/scopedTokenAudiences';
+import { claimsFromContext } from '../middleware/requestClaims';
 import { parseBody, z } from './requestBody';
 
 const ScopedTokenBody = z.object({ audience: z.string().nullish() });
@@ -34,18 +35,17 @@ export function createScopedTokenRoute(db: Db): Hono<HonoEnv> {
     if (!isScopedTokenAudience(audience)) {
       return c.json({ error: 'Unknown audience', allowed: Object.keys(SCOPED_TOKEN_AUDIENCES) }, 400);
     }
+    const { keyId, ...requestClaims } = claimsFromContext(c);
     const result = await mintScopedToken(db, c.env, {
       claims: {
         userId: c.get('userId') as string,
         tenantId: c.get('tenantId') as number,
         role: c.get('role'),
-        clientSurface: c.get('clientSurface'),
-        userAgent: c.req.header('User-Agent') ?? null,
-        ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+        ...requestClaims,
       },
       audience,
       sessionId: c.get('sessionId'),
-      apiKeyId: c.get('apiKeyId'),
+      apiKeyId: keyId,
     });
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json({ token: result.token, expiresAt: result.expiresAt });

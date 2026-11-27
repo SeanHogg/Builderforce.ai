@@ -352,7 +352,7 @@ function KnowledgeGraphSurface({
                                     <ZoomProvider host={zoom}>
                                         <ViewSurface
                                             mode={mode} graph={graph} drawn={drawn} lens={lens} labels={labels} rootTitle={titleOf(graph.scope.rootId)}
-                                            selected={selected} focus={kg.focus} reducedMotion={env.reducedMotion} surface={surface} onSelect={select} onShow={show} onCamera={setMode}
+                                            selected={selected} focus={kg.focus} reducedMotion={env.reducedMotion} surface={surface} onSelect={select} onShow={show} onCamera={setMode} cameras={cameras.map((c) => c.id)}
                                             onCompose={onCompose} evidence={evidenceOf} onOpenSource={onOpenSource}
                                             codeShown={codeShown} onToggleCode={toggleCode} onSimulate={actions.onSimulate} onRestructure={actions.onRestructure} restructureLoading={actions.restructureStatus === 'loading'} compare={compare.view} flat={flatView.flat}
                                             lines={stageCamera && hasLines ? linesPanel(false) : undefined} hierarchy={hierarchy} onHierarchy={setHierarchy}

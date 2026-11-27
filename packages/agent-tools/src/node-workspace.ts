@@ -22,6 +22,7 @@ import { mkdir, open, readFile, readdir, rm, stat, writeFile } from "node:fs/pro
 import { dirname, resolve } from "node:path";
 import type { RepoSearchResult } from "./capabilities.js";
 import { isGzipPath, latin1Bytes, readGzipText } from "./gzipText.js";
+import { gitIgnoredMatcher } from "./node-git-ignore.js";
 import { resolveInsideRoot, toPosixRel, tryResolveInsideRootReal } from "./node-path.js";
 import { SEARCH_STOPPED, isGeneratedSearchPath, ripgrepSearch, type RgSemaphore } from "./node-text-search.js";
 import { scanFiles, type SearchMatch } from "./text-scan.js";
@@ -76,6 +77,8 @@ export async function searchWorkspace(opts: WorkspaceSearchOptions): Promise<Rep
   }
   // A file scope searches that file (the old directory walk threw on it and reported "not referenced").
   const fs = nodeWorkspaceFs(resolve(root));
+  // ripgrep honours .gitignore; the scan must too (one matcher per search, not per file).
+  const isIgnored = await gitIgnoredMatcher(resolve(root));
   const scanned = await scanFiles({
     ...fs,
     async read(path, readOptions) {
@@ -88,18 +91,21 @@ export async function searchWorkspace(opts: WorkspaceSearchOptions): Promise<Rep
         return { status: "ok", content: "", truncated: false };
       }
     },
-  }, query, scope, { ...(opts.signal ? { signal: opts.signal } : {}), skipFile: isGeneratedSearchPath });
+  }, query, scope, { ...(opts.signal ? { signal: opts.signal } : {}), skipFile: (path) => isGeneratedSearchPath(path) || isIgnored(path) });
   return stamp(scanned.error === "search stopped" ? { ...scanned, error: SEARCH_STOPPED } : scanned, "walk");
+}
+
+/** A message with the host's root path (native and POSIX spelling) taken out: the model sees root-relative paths only. */
+export function scrubRoot(message: string, root: string): string {
+  const rootPosix = root.split("\\").join("/");
+  return message.split(root).join(".").split(rootPosix).join(".");
 }
 
 /** The local-disk workspace rooted at `root`. */
 export function nodeWorkspaceFs(root: string, options: NodeWorkspaceOptions = {}): WorkspaceFs {
   const rootResolved = resolve(root);
-  const rootPosix = rootResolved.split("\\").join("/");
   const unconfined = options.scope === "unconfined";
-
-  /** A message with the host's root path taken out: the model sees root-relative paths only. */
-  const scrub = (message: string): string => message.split(rootResolved).join(".").split(rootPosix).join(".");
+  const scrub = (message: string): string => scrubRoot(message, rootResolved);
 
   /** The error a filesystem failure becomes: `not_found` for a missing path, else `io` with no host path. */
   const failure = (e: unknown, rel: string): WorkspaceError => {

@@ -30,12 +30,21 @@ export interface WorkspaceConformanceOptions {
   searchLineNumbers?: boolean;
   /** Extra provider options (a `dirFilter`, ...). */
   capabilityOptions?: RepoCapabilityOptions;
+  /**
+   * What a leading "/" means. `repoRooted` (default; adapters without `toRelative`: memory, cloud, git
+   * remote): "/src/a.ts" is "src/a.ts", so "/etc/passwd" is `not_found`. `host` (adapters with `toRelative`,
+   * the node disk): an absolute path is a host path, so "/etc/passwd" is `outside_root`.
+   */
+  absolutePaths?: "host" | "repoRooted";
 }
+
+/** Builds a fresh adapter per case. */
+export type ConformanceFactory = () => Promise<ConformanceHarness>;
 
 /** Register the conformance cases for the adapter `makeFs` builds (a fresh one per case). */
 export function runWorkspaceConformance(
   name: string,
-  makeFs: () => Promise<ConformanceHarness>,
+  makeFs: ConformanceFactory,
   opts: WorkspaceConformanceOptions = {},
 ): void {
   describe(`workspace conformance - ${name}`, () => {
@@ -111,13 +120,39 @@ export function runWorkspaceConformance(
         await repoWrite.editFile("../escape.txt", "a", "b"),
         await repoWrite.deleteFile("../escape.txt"),
         await repoRead.readFile("../../etc/passwd"),
-        await repoRead.readFile("/etc/passwd"),
       ];
       for (const r of results) {
         expect(r.ok).toBe(false);
         expect(r.error).toMatch(/outside the workspace/);
         expect(r.code).toBe("outside_root");
       }
+    });
+
+    if (opts.absolutePaths === "host") {
+      it("refuses a host absolute path outside the root with code outside_root", async () => {
+        const r = await caps().repoRead.readFile("/etc/passwd");
+        expect(r).toMatchObject({ ok: false, code: "outside_root" });
+        expect(r.error).toMatch(/outside the workspace/);
+      });
+    } else {
+      it("treats a leading / as repo-rooted: /etc/passwd is not_found, /src/a.ts reads src/a.ts", async () => {
+        await harness.seed({ "src/a.ts": "const a = 1;\n" });
+        const { repoRead } = caps();
+        expect(await repoRead.readFile("/etc/passwd")).toMatchObject({ ok: false, code: "not_found" });
+        expect(await repoRead.readFile("/src/a.ts")).toMatchObject({ ok: true, content: "const a = 1;\n" });
+      });
+    }
+
+    it("a not_found read and edit name the relative path", async () => {
+      const { repoRead, repoWrite } = caps();
+      expect((await repoRead.readFile("no/such.ts")).error).toMatch(/file not found: no\/such\.ts/);
+      expect((await repoWrite.editFile("no/such.ts", "a", "b")).error).toMatch(/file not found: no\/such\.ts/);
+    });
+
+    it("refuses writing or editing a .gz archive as text with code unsupported", async () => {
+      const { repoWrite } = caps();
+      expect(await repoWrite.writeFile("pack.json.gz", "x")).toMatchObject({ ok: false, code: "unsupported" });
+      expect(await repoWrite.editFile("pack.json.gz", "a", "b")).toMatchObject({ ok: false, code: "unsupported" });
     });
 
     it("filters list_files by glob", async () => {
@@ -168,6 +203,11 @@ export function runWorkspaceConformance(
         expect(await caps().repoRead.listFiles("nope")).toMatchObject({ ok: false, code: "not_found" });
       });
     }
+
+    it("an empty or blank search query is refused with code invalid", async () => {
+      expect(await caps().repoRead.searchCode("")).toMatchObject({ ok: false, error: "query is required", code: "invalid" });
+      expect(await caps().repoRead.searchCode("   ")).toMatchObject({ ok: false, code: "invalid" });
+    });
 
     if (opts.search !== false) {
       it("search returns the exact match only, scoped by path", async () => {

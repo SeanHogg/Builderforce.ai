@@ -185,7 +185,7 @@ export function createRepoCapabilities(fs: WorkspaceFs, opts: RepoCapabilityOpti
       if ("bad" in r0) return r0.bad;
       try {
         const r = await fs.read(r0.path, { maxBytes: maxRead });
-        if (r.status === "not_found") return { ok: false, path: p, error: "file not found", code: "not_found" };
+        if (r.status === "not_found") return { ok: false, path: p, error: `file not found: ${r0.path}`, code: "not_found" };
         if (r.status === "is_directory") return { ok: false, path: p, error: "path is a directory, not a file — use list_files to see its contents", code: "is_directory" };
         // Oversized: a bounded prefix marked truncated, never a hard failure; read_file pages from there.
         return r.truncated ? { ok: true, path: p, content: r.content, truncated: true } : { ok: true, path: p, content: r.content };
@@ -259,7 +259,7 @@ export function createRepoCapabilities(fs: WorkspaceFs, opts: RepoCapabilityOpti
       if (isGzipPath(r0.path)) return GZ_UNSUPPORTED;
       try {
         const cur = await fs.read(r0.path, { maxBytes: maxEdit });
-        if (cur.status === "not_found") return { ok: false, error: "file not found", code: "not_found" };
+        if (cur.status === "not_found") return { ok: false, error: `file not found: ${r0.path}`, code: "not_found" };
         if (cur.status === "is_directory") return { ok: false, error: "path is a directory, not a file", code: "is_directory" };
         // Writing back a byte-capped prefix would silently destroy the rest of the file.
         if (cur.truncated) return { ok: false, error: "file is too large to edit in place", code: "too_large" };

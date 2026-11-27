@@ -1,3 +1,5 @@
+import type { ViewMode } from '../../types';
+
 /** Diagram identities are stable across persisted or imported models. */
 export const UML_STRUCTURE = ['classDiagram', 'objectDiagram', 'packageDiagram', 'componentDiagram', 'compositeDiagram', 'deploymentDiagram', 'profileDiagram'] as const;
 export const UML_BEHAVIOR = ['useCaseDiagram', 'activityDiagram', 'stateDiagram'] as const;
@@ -15,3 +17,11 @@ export type DiagramId = UmlDiagramId | typeof STANDARD_VIEWS[number];
 export const DIAGRAM_IDS: readonly DiagramId[] = [
     ...UML_STRUCTURE, ...UML_BEHAVIOR, ...UML_INTERACTION, ...STANDARD_VIEWS,
 ];
+
+/**
+ * Diagrams the 3D stage already draws better than a DOM board: picking one switches the camera instead of opening a board.
+ * Sequence is the stage's `sequence` camera (call-site order, depth, activation bars); the code city is the Tower, the 3D camera.
+ */
+export const STAGE_CAMERA_VIEWS: Partial<Record<DiagramId, ViewMode>> = {
+    sequenceDiagram: 'sequence', msc: 'sequence', codeCity: '3d',
+};

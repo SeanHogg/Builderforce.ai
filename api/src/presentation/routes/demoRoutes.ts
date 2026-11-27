@@ -15,6 +15,7 @@ import { recordVisitorEvent } from '../../application/marketing/VisitorEventServ
 import { mintWebSessionToken } from '../../infrastructure/auth/webSessionToken';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
+import { claimsFromContext, getClientIp } from '../middleware/requestClaims';
 import { parseOptionalBody, z, zOptionalString } from './requestBody';
 
 /** `isDemoPersona` / `isValidVisitorId` answer their own 400s, so both stay optional. */
@@ -81,9 +82,6 @@ async function bumpIpCounter(env: Env, bucket: keyof typeof IP_LIMITS, ip: strin
   return true;
 }
 
-const clientIp = (c: { req: { header(name: string): string | undefined } }): string | null =>
-  c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
-
 /** Deploy-hook secret OR superadmin web token may trigger a reseed. */
 const reseedGuard: MiddlewareHandler<HonoEnv> = async (c, next) => {
   const secret = c.env.DEMO_RESEED_SECRET;
@@ -105,29 +103,27 @@ export function createDemoRoutes(): Hono<HonoEnv> {
     if (!isDemoPersona(body.persona)) return c.json({ error: 'Unknown demo persona' }, 400);
     if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
 
-    const ip = clientIp(c);
-    if (!(await bumpIpCounter(c.env, 'session', ip))) {
+    const claims = claimsFromContext(c);
+    if (!(await bumpIpCounter(c.env, 'session', claims.ipAddress))) {
       return c.json({ error: 'Demo session limit reached for today.', code: 'demo_limit_reached' }, 429);
     }
 
     const target = await getDemoSessionTarget(c.env, body.persona);
     const db = requestDb(c);
-    const userAgent = c.req.header('user-agent') ?? null;
     const [web, tenant] = [
       await mintWebSessionToken(db, c.env.JWT_SECRET, {
         userId: target.userId,
         email: target.email,
         username: target.username,
         sessionName: `Demo: ${target.persona}`,
-        userAgent,
-        ipAddress: ip,
+        userAgent: claims.userAgent,
+        ipAddress: claims.ipAddress,
         expiresIn: DEMO_SESSION_TTL_SECONDS,
       }),
       await mintTenantSessionToken(db, c.env.JWT_SECRET, {
         userId: target.userId,
         tenantId: target.tenantId,
-        userAgent,
-        ipAddress: ip,
+        ...claims,
         expiresIn: DEMO_SESSION_TTL_SECONDS,
       }),
     ];
@@ -177,7 +173,7 @@ export function createDemoRoutes(): Hono<HonoEnv> {
     if (!name) return c.json({ error: 'Name is required' }, 400);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return c.json({ error: 'A valid email is required' }, 400);
 
-    if (!(await bumpIpCounter(c.env, 'lead', clientIp(c)))) {
+    if (!(await bumpIpCounter(c.env, 'lead', getClientIp(c)))) {
       return c.json({ error: 'Too many requests today.', code: 'demo_limit_reached' }, 429);
     }
 

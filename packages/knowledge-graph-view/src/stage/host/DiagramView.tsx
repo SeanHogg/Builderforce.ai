@@ -49,7 +49,7 @@ function DiagramBox({ node, point, flat, onOpen }: { node: DiagramNode; point: P
         transform: diamondKinds.has(node.kind) ? 'scale(.92)' : undefined,
         clipPath: diamondKinds.has(node.kind) ? 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)' : undefined,
         background: cssVar(diamondKinds.has(node.kind) ? 'accentSoft' : 'panel'), color: cssVar('text'), overflow: 'hidden', display: 'flex', flexDirection: 'column',
-        boxShadow: flat ? undefined : `0 5px 0 ${cssVar('plane')}, 4px 10px 16px #0004`,
+        boxShadow: flat ? undefined : `0 5px 0 ${cssVar('plane')}, 4px 10px 16px color-mix(in srgb, ${cssVar('text')} 25%, transparent)`,
     }}>
         <header style={{ ...TYPE.meta, fontWeight: 700, padding: '6px 9px', margin: node.members?.length ? 0 : 'auto', textAlign: 'center', overflowWrap: 'anywhere' }}>
             {node.kind === 'interface' || node.kind === 'component' || node.kind === 'stereotype' ? <small style={{ display: 'block', color: cssVar('muted') }}>«{node.kind}»</small> : null}
@@ -82,21 +82,14 @@ function Matrix({ model, labels }: Pick<Props, 'model' | 'labels'>) {
 
 export function DiagramView({ id, model, flat, labels, onOpen }: Props) {
     const uid = useId();
-    const sequence = id === 'sequenceDiagram' || id === 'msc';
     const timing = id === 'timingDiagram';
     const strategy = id === 'wardley';
-    const placed = useMemo(() => {
-        if (!sequence) return diagramLayout(model, timing, strategy);
-        return {
-            points: new Map(model.nodes.map((node, i) => [node.id, { x: PAD + i * (CARD_WIDTH + GAP_X), y: PAD }])),
-            width: 2 * PAD + Math.max(1, model.nodes.length) * (CARD_WIDTH + GAP_X), height: CARD_HEIGHT + 2 * PAD + model.edges.length * 36,
-        };
-    }, [model, sequence, timing, strategy]);
+    const placed = useMemo(() => diagramLayout(model, timing, strategy), [model, timing, strategy]);
     if (id === 'dsm') return <Matrix model={model} labels={labels} />;
     const { points, width, height } = placed;
     const stroke = cssVar('muted');
     const positioned = timing ? model.nodes.filter((node) => node.x !== undefined) : [];
-    return <div data-notation={id} data-depth={flat ? 'flat' : '3d'} className="kg-notation-board"
+    return <div data-notation={id} data-depth={flat ? 'flat' : '3d'}
         style={{ width, height, transform: flat ? undefined : 'rotateX(16deg) rotateZ(-3deg)', transformOrigin: 'top left' }}>
         <svg aria-label={labels.surface.code.diagramUml} role="img" width={width} height={height} style={{ position: 'absolute', inset: 0 }}>
             <defs>
@@ -106,8 +99,6 @@ export function DiagramView({ id, model, flat, labels, onOpen }: Props) {
                 <marker id={`${uid}-many`} viewBox="0 0 12 12" refX="11" refY="6" markerWidth="12" markerHeight="12" orient="auto"><path d="M1,6 L11,1 M1,6 L11,6 M1,6 L11,11" fill="none" stroke={stroke} /></marker>
             </defs>
             {strategy && <path d={`M 12,12 V ${height - 12} H ${width - 12}`} fill="none" stroke={stroke} />}
-            {sequence && [...points.values()].map((p) => <line key={p.x} x1={p.x + CARD_WIDTH / 2} y1={PAD + CARD_HEIGHT} x2={p.x + CARD_WIDTH / 2} y2={height - PAD}
-                stroke={stroke} strokeDasharray="5 5" />)}
             {positioned.length > 0 && <g stroke={stroke} fill={stroke}>
                 <line x1={PAD} x2={width - PAD} y1={height - 16} y2={height - 16} />
                 {[...new Map(positioned.map((node) => [node.x, points.get(node.id)!.x])).entries()].map(([time, x]) => <g key={time}>
@@ -117,11 +108,10 @@ export function DiagramView({ id, model, flat, labels, onOpen }: Props) {
             {model.edges.map((edge, i) => {
                 const a = points.get(edge.from), b = points.get(edge.to);
                 if (!a || !b) return null;
-                const y = PAD + CARD_HEIGHT + (i + 1) * 35;
-                const p = sequence ? { x: a.x + CARD_WIDTH / 2, y } : end(a, b);
-                const q = sequence ? { x: b.x + CARD_WIDTH / 2, y } : end(b, a);
+                const p = end(a, b);
+                const q = end(b, a);
                 const kind = edgeKindLabel(labels, edge.kind);
-                const ordered = sequence || id === 'communicationDiagram';
+                const ordered = id === 'communicationDiagram';
                 const label = `${ordered ? `${i + 1}. ` : ''}${edge.label ?? kind}${edge.count && edge.count > 1 ? ` (${edge.count})` : ''}`;
                 const self = edge.from === edge.to;
                 const d = self ? `M ${p.x},${p.y} h 30 v 16 h -30` : `M ${p.x},${p.y} L ${q.x},${q.y}`;

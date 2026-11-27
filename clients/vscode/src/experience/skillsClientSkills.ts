@@ -6,13 +6,16 @@
 export const SKILLS_CLIENT_SKILLS = String.raw`
 function valKey(skillId, name) { return skillId + '|' + name; }
 
+// A kept secret stays ticked until the person unticks it; unticking forgets it.
+function remembered(p, k) { return ui.remember[k] !== undefined ? !!ui.remember[k] : !!p.kept; }
+
 function runForm(s) {
   var inputs = s.params.map(function (p) {
     var k = valKey(s.id, p.name);
     var start = ui.vals[k] !== undefined ? ui.vals[k] : (p.secret ? '' : (p.default || ''));
     return h('div', { class: 'stack' },
       h('label', { class: 'block' }, p.label || p.name, textInput(start, function (v) { ui.vals[k] = v; }, p.secret ? 'password' : 'text', p.secret && p.kept ? L.secretKept : '')),
-      p.secret ? check(L.rememberSecret, ui.remember[k], function (on) { ui.remember[k] = on; }) : null);
+      p.secret ? check(L.rememberSecret, remembered(p, k), function (on) { ui.remember[k] = on; }) : null);
   });
   return h('div', { class: 'stack' }, inputs, row(
     button(L.startRun, function () {
@@ -22,7 +25,7 @@ function runForm(s) {
         var k = valKey(s.id, p.name);
         var v = ui.vals[k] !== undefined ? ui.vals[k] : (p.secret ? '' : (p.default || ''));
         if (v) values[p.name] = v;
-        if (p.secret && ui.remember[k] && v) remember.push(p.name);
+        if (p.secret && remembered(p, k)) remember.push(p.name);
       });
       s.params.forEach(function (p) { if (p.secret) delete ui.vals[valKey(s.id, p.name)]; });
       ui.runForm = null;

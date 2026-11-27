@@ -35,7 +35,9 @@ import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionT
 import type { Db } from '../../infrastructure/database/connection';
 import { persistWebSessionToken } from '../../application/auth/webSessionStore';
 import { parseTokenTimeToDate } from '../../infrastructure/auth/MfaService';
-import { deserializeScopes, keyMayActAsMember, revokeTenantApiKeyByRawKey } from '../../application/llm/tenantApiKeyService';
+import { revokeTenantApiKeyByRawKey } from '../../application/llm/tenantApiKeyService';
+import { assertExchangeableKeyRow } from '../../application/llm/editorKeyGate';
+import { claimsFromContext, getClientIp, getUserAgent } from '../middleware/requestClaims';
 import { issueVerificationCode, verifyVerificationCode, type VerifyResult } from '../../application/auth/EmailVerificationService';
 import { checkTermsAcceptance, invalidateAcceptedTermsVersion, recordAcceptance } from '../../application/legal/termsAcceptance';
 import { getActiveLegalDoc } from '../../application/legal/legalDocsService';
@@ -125,21 +127,6 @@ const SUPERADMIN_EMAIL = 'seanhogg@gmail.com';
 
 function canUseSuperAdmin(user: Pick<typeof users.$inferSelect, 'email' | 'isSuperadmin'>): boolean {
   return user.isSuperadmin && normalizeEmail(user.email) === SUPERADMIN_EMAIL;
-}
-
-function getClientIp(c: Context<HonoEnv>): string | null {
-  const cfIp = c.req.header('CF-Connecting-IP');
-  if (cfIp) return cfIp.trim();
-
-  const xff = c.req.header('X-Forwarded-For');
-  if (!xff) return null;
-
-  return xff.split(',')[0]?.trim() ?? null;
-}
-
-function getUserAgent(c: Context<HonoEnv>): string | null {
-  const ua = c.req.header('User-Agent');
-  return ua ? ua.slice(0, 1024) : null;
 }
 
 function toUserResponse(user: typeof users.$inferSelect) {
@@ -369,7 +356,7 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
     if (!body.apiKey) return c.json({ error: 'apiKey is required' }, 400);
 
     const keyHash = await hashSecret(body.apiKey);
-    const [row] = await db
+    const [found] = await db
       .select({
         id: tenantApiKeys.id,
         tenantId: tenantApiKeys.tenantId,
@@ -382,10 +369,10 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
       .where(eq(tenantApiKeys.keyHash, keyHash))
       .limit(1);
 
-    if (!row || row.revokedAt) return c.json({ error: 'Invalid or revoked API key' }, 401);
-    // A scoped key (a public `bfr_` Insights site key above all) is a least-privilege
-    // service token; it never becomes a member session. Same answer as an unknown key.
-    if (!keyMayActAsMember(deserializeScopes(row.scopes))) return c.json({ error: 'Invalid or revoked API key' }, 401);
+    // Unknown, revoked or scoped (a public `bfr_` Insights site key above all) - one answer.
+    const gate = assertExchangeableKeyRow(found);
+    if (!gate.ok) return c.json({ error: gate.message }, gate.status);
+    const { row } = gate;
     // The token is minted AS the key's creator (human-in-the-loop) and MUST be a real
     // user: signJwt always stamps a `jti`, and authMiddleware rejects any jti without a
     // matching persisted authTokens row — so we persist it below (FK → users.id).
@@ -402,12 +389,11 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
     const { token, expiresIn } = await mintTenantSessionToken(db, c.env.JWT_SECRET, {
       userId: row.createdByUserId,
       tenantId: row.tenantId,
+      ...claimsFromContext(c),
       // The app the key was minted for; a hand-made key keeps the editor surface.
       clientSurface: isDeviceClient(row.client) ? row.client : 'vscode',
       // Which key this session came from, so the workspace switch can apply the key's limits.
       keyId: row.id,
-      userAgent: getUserAgent(c),
-      ipAddress: getClientIp(c),
     });
     return c.json({ token, expiresIn, tenantId: row.tenantId, userId: row.createdByUserId });
   });

@@ -50,5 +50,5 @@ runWorkspaceConformance(
       },
     };
   },
-  { missingDirListing: 'empty' },
+  { missingDirListing: 'empty', absolutePaths: 'repoRooted' },
 );

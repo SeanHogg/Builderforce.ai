@@ -75,14 +75,20 @@ export function createPhoneApprovalRelay(deps: RelayDeps): PhoneApprovalRelay {
     },
 
     async answer(approvalId, signal) {
+      let failing = false;
       while (!signal.aborted) {
+        // Signed out, or phone approvals switched off mid-wait: stop asking the server.
+        if (!(await deps.isActive())) return undefined;
         try {
           const { status } = await deps.http.get(approvalId);
+          failing = false;
           if (status === "approved") return true;
           if (status === "rejected" || status === "expired") return false;
         } catch (error) {
-          // A blip must not end the wait; the next poll tries again.
-          deps.report(error, "phoneApprovals:poll");
+          // A blip must not end the wait; the next poll tries again. Only the first of a
+          // run of consecutive failures is reported, so an outage does not flood the log.
+          if (!failing) deps.report(error, "phoneApprovals:poll");
+          failing = true;
         }
         await deps.sleep(POLL_MS, signal);
       }

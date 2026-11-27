@@ -1661,5 +1661,14 @@
   "succeeded": "成功",
   "{0} steps": "{0} 个步骤",
   "{0}: step {1} needs your approval ({2})": "{0}：第 {1} 步需要你的批准（{2}）",
+  "Synapse is already recording or running something.": "Synapse 正在录制或运行其他内容。",
+  "A secret value is missing. Type it in, or tick Remember on this computer.": "缺少机密值。请输入，或勾选“在这台电脑上记住”。",
+  "Nothing is running.": "没有正在运行的内容。",
+  "Recording could not start: {0}": "无法开始录制：{0}",
+  "The Teach helper stopped unexpectedly.": "Teach 辅助程序意外停止。",
+  "The Teach helper did not answer in time.": "Teach 辅助程序未能及时响应。",
+  "Sign in to BuilderForce first.": "请先登录 BuilderForce。",
+  "Another BuilderForce window is already running a skill.": "另一个 BuilderForce 窗口正在运行技能。",
+  "Stopped before the run began.": "运行开始前已停止。",
   "BuilderForce: .builderforce/project.json was linked to another project in the meantime, so it was left unchanged.": "BuilderForce：.builderforce/project.json 在此期间已关联到另一个项目，因此未作更改。"
 }

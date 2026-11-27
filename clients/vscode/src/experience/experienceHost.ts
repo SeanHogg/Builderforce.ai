@@ -1,4 +1,7 @@
-import type { ExperienceHost } from "@seanhogg/builderforce-memory-mcp/experience";
+import * as memory from "@seanhogg/builderforce-memory";
+import * as engine from "@seanhogg/builderforce-memory-engine";
+import type { ExperienceEngine, ExperienceHost } from "@seanhogg/builderforce-memory-mcp/experience";
+import { IDBFactory } from "fake-indexeddb";
 
 /**
  * The experience host (Teach-once episodes, skills, runs, the private model) and the
@@ -46,7 +49,8 @@ export function createExperienceHostProvider(opts: ExperienceHostProviderOptions
       if (!opened || opened.modelFile !== modelFile) {
         const host = (async () => {
           const { openExperienceHost } = await import("@seanhogg/builderforce-memory-mcp/experience");
-          return openExperienceHost({ memoryFile: await memoryFile(), ...(modelFile ? { modelFile } : {}) });
+          // The bundled engine is handed in: memory-mcp's own indirect import cannot see a bundle.
+          return openExperienceHost({ memoryFile: await memoryFile(), engine: engine as unknown as ExperienceEngine, ...(modelFile ? { modelFile } : {}) });
         })();
         opened = { modelFile, host };
         // A failed open must not be cached: the next call tries again.
@@ -59,7 +63,8 @@ export function createExperienceHostProvider(opts: ExperienceHostProviderOptions
     async remember(fact) {
       backend ??= (async () => {
         const { createLocalMemoryStoreBackend } = await import("@seanhogg/builderforce-memory-mcp");
-        return createLocalMemoryStoreBackend({ persistFile: await memoryFile(), semanticRecall: false });
+        // The bundled memory module and an in-memory IndexedDB are handed in (nothing is imported by name at run time).
+        return createLocalMemoryStoreBackend({ persistFile: await memoryFile(), semanticRecall: false, memory, idbFactory: new IDBFactory() });
       })();
       try {
         const b = await backend;

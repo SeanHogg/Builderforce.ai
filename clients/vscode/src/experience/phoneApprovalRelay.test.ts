@@ -71,6 +71,27 @@ describe("phoneApprovalRelay.answer", () => {
     expect(report).toHaveBeenCalledTimes(1);
   });
 
+  it("reports only the first of consecutive poll failures", async () => {
+    const { relay, report } = setup([new Error("a"), new Error("b"), new Error("c"), "approved"]);
+    expect(await relay.answer("a1", new AbortController().signal)).toBe(true);
+    expect(report).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops polling, answering undefined, once the relay is no longer active", async () => {
+    let active = true;
+    const http: ApprovalsHttp = {
+      create: vi.fn(),
+      get: vi.fn(async () => {
+        active = false;
+        return { status: "pending" };
+      }),
+      resolve: vi.fn(),
+    };
+    const relay = createPhoneApprovalRelay({ http, isActive: () => active, now: () => 0, sleep: async () => undefined, report: vi.fn() });
+    expect(await relay.answer("a1", new AbortController().signal)).toBeUndefined();
+    expect(http.get).toHaveBeenCalledTimes(1);
+  });
+
   it("stops polling once aborted and answers undefined", async () => {
     const { http, relay } = setup([]);
     const ac = new AbortController();

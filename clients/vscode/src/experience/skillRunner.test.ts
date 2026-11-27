@@ -32,6 +32,9 @@ const messages: RunnerMessages = {
   orphaned: "Synapse closed during the run",
   unsupported: "unsupported",
   busy: "busy",
+  lockedElsewhere: "locked elsewhere",
+  stopped: "stopped before start",
+  explain: (e) => (e instanceof Error ? e.message : String(e)),
   unknownSkill: (id) => `no skill ${id}`,
   approvalDescription: (s, n, a) => `${s} #${n}: ${a}`,
   lastRun: (s, status, at, trigger) => `${s} ${status} ${at} ${trigger}`,
@@ -90,9 +93,15 @@ function setup(opts: { skill?: Skill; relayAnswer?: (signal: AbortSignal) => Pro
   };
   const remember = vi.fn(async () => undefined);
   const report = vi.fn();
-  const ports: SkillRunnerPorts = { helper, store, secrets, relay, clock, messages, remember, report };
+  const lockState = { acquire: true, other: false };
+  const lock = {
+    acquire: vi.fn(async () => lockState.acquire),
+    release: vi.fn(async () => undefined),
+    heldByOther: vi.fn(async () => lockState.other),
+  };
+  const ports: SkillRunnerPorts = { helper, store, secrets, relay, lock, clock, messages, remember, report };
   const runner = createSkillRunner(ports);
-  return { runner, helper, store, secrets, relay, clock, remember, report, calls, emit: (e: HelperEvent) => listener(e), fire: () => fireTimeout(), sk };
+  return { runner, helper, store, secrets, relay, lock, lockState, clock, remember, report, calls, emit: (e: HelperEvent) => listener(e), fire: () => fireTimeout(), sk };
 }
 
 describe("resolveRunValues", () => {
@@ -114,11 +123,11 @@ describe("skillRunner audit trail", () => {
     const t = setup({ secrets: { pin: "kept" } });
     const started = await t.runner.start({ skillId: "s1", trigger: "routine", values: { amount: "9" } });
     expect(started.ok).toBe(true);
-    expect(t.helper.runStart).toHaveBeenCalledWith(t.sk, { amount: "9", pin: "kept" });
-    t.emit({ event: "run.stepStarted", idx: 0 });
-    t.emit({ event: "run.stepFinished", idx: 0, outcome: "ok" });
-    t.emit({ event: "run.stepFinished", idx: 1, outcome: "fallback", detail: "by position" });
-    t.emit({ event: "run.finished", status: "succeeded" });
+    expect(t.helper.runStart).toHaveBeenCalledWith("run1", t.sk, { amount: "9", pin: "kept" });
+    t.emit({ event: "run.stepStarted", runId: "run1", idx: 0 });
+    t.emit({ event: "run.stepFinished", runId: "run1", idx: 0, outcome: "ok" });
+    t.emit({ event: "run.stepFinished", runId: "run1", idx: 1, outcome: "fallback", detail: "by position" });
+    t.emit({ event: "run.finished", runId: "run1", status: "succeeded" });
     if (started.ok) await started.done;
     expect(t.calls).toEqual(["startRun:routine", "stepRun:0:ok", "stepRun:1:fallback", "finishRun:run1:succeeded"]);
     expect(t.store.stepRun).toHaveBeenCalledWith(expect.objectContaining({ stepId: "st1", detail: "by position" }));
@@ -162,15 +171,15 @@ describe("skillRunner audit trail", () => {
 describe("skillRunner approvals", () => {
   async function atGate(t: ReturnType<typeof setup>) {
     await t.runner.start({ skillId: "s1", trigger: "manual", values: { pin: "1" } });
-    t.emit({ event: "run.approvalNeeded", idx: 0 });
+    t.emit({ event: "run.approvalNeeded", runId: "run1", idx: 0 });
     await vi.waitFor(() => expect(t.relay.answer).toHaveBeenCalled());
   }
 
   it("the in-window answer wins and the phone's copy is closed", async () => {
     const t = setup();
     await atGate(t);
-    t.runner.answerApproval(true);
-    await vi.waitFor(() => expect(t.helper.approveAnswer).toHaveBeenCalledWith(0, true));
+    t.runner.answerApproval("run1", 0, true);
+    await vi.waitFor(() => expect(t.helper.approveAnswer).toHaveBeenCalledWith("run1", 0, true));
     expect(t.relay.close).toHaveBeenCalledWith("ap1", true);
     expect((t.relay.answer.mock.calls[0]![1] as AbortSignal).aborted).toBe(true);
     expect(t.relay.open).toHaveBeenCalledWith(expect.objectContaining({ runId: "run1", skill: "Invoice", step: 1, action: "click Send", description: "Invoice #1: click Send" }));
@@ -179,14 +188,14 @@ describe("skillRunner approvals", () => {
   it("the phone wins when it answers first, and is not PATCHed again", async () => {
     const t = setup({ relayAnswer: async () => true });
     await atGate(t);
-    await vi.waitFor(() => expect(t.helper.approveAnswer).toHaveBeenCalledWith(0, true));
+    await vi.waitFor(() => expect(t.helper.approveAnswer).toHaveBeenCalledWith("run1", 0, true));
     expect(t.relay.close).not.toHaveBeenCalled();
   });
 
   it("a phone refusal is a no", async () => {
     const t = setup({ relayAnswer: async () => false });
     await atGate(t);
-    await vi.waitFor(() => expect(t.helper.approveAnswer).toHaveBeenCalledWith(0, false));
+    await vi.waitFor(() => expect(t.helper.approveAnswer).toHaveBeenCalledWith("run1", 0, false));
   });
 
   it("a 15 minute timeout is a no", async () => {
@@ -194,7 +203,7 @@ describe("skillRunner approvals", () => {
     await atGate(t);
     expect(t.clock.setTimeout).toHaveBeenCalledWith(expect.any(Function), APPROVAL_TIMEOUT_MS);
     t.fire();
-    await vi.waitFor(() => expect(t.helper.approveAnswer).toHaveBeenCalledWith(0, false));
+    await vi.waitFor(() => expect(t.helper.approveAnswer).toHaveBeenCalledWith("run1", 0, false));
     expect(t.relay.close).toHaveBeenCalledWith("ap1", false);
   });
 
@@ -202,7 +211,7 @@ describe("skillRunner approvals", () => {
     const t = setup();
     await atGate(t);
     await t.runner.stop();
-    await vi.waitFor(() => expect(t.helper.approveAnswer).toHaveBeenCalledWith(0, false));
+    await vi.waitFor(() => expect(t.helper.approveAnswer).toHaveBeenCalledWith("run1", 0, false));
     expect(t.helper.runStop).toHaveBeenCalled();
     expect(t.relay.close).toHaveBeenCalledWith("ap1", false);
   });
@@ -211,10 +220,10 @@ describe("skillRunner approvals", () => {
     const t = setup();
     t.relay.open.mockResolvedValueOnce(undefined);
     await t.runner.start({ skillId: "s1", trigger: "manual", values: { pin: "1" } });
-    t.emit({ event: "run.approvalNeeded", idx: 0 });
+    t.emit({ event: "run.approvalNeeded", runId: "run1", idx: 0 });
     await vi.waitFor(() => expect(t.clock.setTimeout).toHaveBeenCalled());
-    t.runner.answerApproval(false);
-    await vi.waitFor(() => expect(t.helper.approveAnswer).toHaveBeenCalledWith(0, false));
+    t.runner.answerApproval("run1", 0, false);
+    await vi.waitFor(() => expect(t.helper.approveAnswer).toHaveBeenCalledWith("run1", 0, false));
     expect(t.relay.answer).not.toHaveBeenCalled();
     expect(t.relay.close).not.toHaveBeenCalled();
   });
@@ -228,5 +237,107 @@ describe("skillRunner.recoverOrphans", () => {
     expect(t.store.finishRun).toHaveBeenCalledWith("a", "failed", "Synapse closed during the run");
     expect(t.store.finishRun).toHaveBeenCalledWith("c", "failed", "Synapse closed during the run");
     expect(t.store.finishRun).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves `running` runs alone while another window holds the lock: they are live", async () => {
+    const mk = (id: string) => ({ id, skillId: "s1", skillName: "Invoice", trigger: "manual", status: "running", startedAt: 0, steps: [] }) as Run;
+    const t = setup({ runs: [mk("a")] });
+    t.lockState.other = true;
+    expect(await t.runner.recoverOrphans()).toBe(0);
+    expect(t.store.finishRun).not.toHaveBeenCalled();
+  });
+});
+
+describe("skillRunner machine-wide lock", () => {
+  it("refuses to start while another window holds the lock, writing no run", async () => {
+    const t = setup();
+    t.lockState.acquire = false;
+    expect(await t.runner.start({ skillId: "s1", trigger: "manual" })).toEqual({ ok: false, error: "locked elsewhere" });
+    expect(t.store.startRun).not.toHaveBeenCalled();
+    expect(t.runner.active).toBe(false);
+  });
+
+  it("releases the lock when the run finishes and when a start is refused", async () => {
+    const t = setup();
+    const r = await t.runner.start({ skillId: "s1", trigger: "manual" });
+    t.emit({ event: "run.finished", runId: "run1", status: "succeeded" });
+    if (r.ok) await r.done;
+    expect(t.lock.release).toHaveBeenCalledTimes(1);
+
+    const u = setup();
+    u.helper.runStart.mockRejectedValueOnce(new Error("busy"));
+    await u.runner.start({ skillId: "s1", trigger: "manual" });
+    expect(u.lock.release).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("skillRunner run identity and stale gates", () => {
+  it("ignores events that name another run", async () => {
+    const t = setup();
+    await t.runner.start({ skillId: "s1", trigger: "manual" });
+    t.emit({ event: "run.stepFinished", runId: "other", idx: 0, outcome: "ok" });
+    t.emit({ event: "run.finished", runId: "other", status: "failed" });
+    expect(t.store.stepRun).not.toHaveBeenCalled();
+    expect(t.store.finishRun).not.toHaveBeenCalled();
+    expect(t.runner.active).toBe(true);
+  });
+
+  it("an in-window answer for another run or step is ignored", async () => {
+    const t = setup();
+    await t.runner.start({ skillId: "s1", trigger: "manual", values: { pin: "1" } });
+    t.emit({ event: "run.approvalNeeded", runId: "run1", idx: 0 });
+    await vi.waitFor(() => expect(t.relay.answer).toHaveBeenCalled());
+    t.runner.answerApproval("old-run", 0, true);
+    t.runner.answerApproval("run1", 1, true);
+    expect(t.helper.approveAnswer).not.toHaveBeenCalled();
+  });
+
+  it("a run that finishes with a gate still open closes the phone copy as rejected and sends no answer", async () => {
+    const t = setup();
+    const r = await t.runner.start({ skillId: "s1", trigger: "manual", values: { pin: "1" } });
+    t.emit({ event: "run.approvalNeeded", runId: "run1", idx: 0 });
+    await vi.waitFor(() => expect(t.relay.answer).toHaveBeenCalled());
+    t.emit({ event: "run.finished", runId: "run1", status: "stopped" });
+    if (r.ok) await r.done;
+    expect(t.relay.close).toHaveBeenCalledWith("ap1", false);
+    expect(t.helper.approveAnswer).not.toHaveBeenCalled();
+  });
+
+  it("dispose answers an open gate no (closing the phone copy) without touching the helper", async () => {
+    const t = setup();
+    await t.runner.start({ skillId: "s1", trigger: "manual", values: { pin: "1" } });
+    t.emit({ event: "run.approvalNeeded", runId: "run1", idx: 0 });
+    await vi.waitFor(() => expect(t.relay.answer).toHaveBeenCalled());
+    t.runner.dispose();
+    await vi.waitFor(() => expect(t.relay.close).toHaveBeenCalledWith("ap1", false));
+    expect(t.helper.approveAnswer).not.toHaveBeenCalled();
+  });
+});
+
+describe("skillRunner stop during startup", () => {
+  it("a Stop pressed before the helper has the run finishes it as stopped and never starts the helper", async () => {
+    const t = setup();
+    let release!: () => void;
+    t.store.startRun.mockImplementationOnce(async (_id: string, trigger: string) => {
+      await new Promise<void>((r) => (release = r));
+      return { id: "run1", skillId: "s1", skillName: "Invoice", trigger, status: "running", startedAt: 0, steps: [] } as Run;
+    });
+    const started = t.runner.start({ skillId: "s1", trigger: "manual" });
+    await vi.waitFor(() => expect(t.store.startRun).toHaveBeenCalled());
+    await t.runner.stop();
+    release();
+    expect(await started).toEqual({ ok: false, error: "stopped before start" });
+    expect(t.helper.runStart).not.toHaveBeenCalled();
+    expect(t.store.finishRun).toHaveBeenCalledWith("run1", "stopped", null);
+    expect(t.runner.active).toBe(false);
+  });
+});
+
+describe("skillRunner forgetting a kept secret", () => {
+  it("clears it after this run has read it", async () => {
+    const t = setup({ secrets: { pin: "kept" } });
+    await t.runner.start({ skillId: "s1", trigger: "manual", forget: ["pin"] });
+    expect(t.helper.runStart).toHaveBeenCalledWith("run1", t.sk, { pin: "kept" });
+    expect(t.secrets.clear).toHaveBeenCalledWith("s1", ["pin"]);
   });
 });

@@ -15,6 +15,7 @@
  * any host import, so the host file is the only place that binds the two.
  */
 import type { EntityScope, LocalFirstStore } from "@builderforce/local-first";
+import { LOCAL_DEVICE_ID_KEY } from "../localFirst/localDeviceId";
 import {
   createInMemoryLocalSyncQueue,
   createLocalDomainToolsWithRepository,
@@ -56,7 +57,7 @@ export const HOST_DOMAIN_TOOL_LINE = "return installLocalDomainTools(ctx).execut
 const INSTALLED = new WeakMap<object, InstalledLocalDomainTools>();
 
 function deviceIdOf(ports: LocalDomainToolPorts): string {
-  const fromConfig = ports.getConfig?.("builderforce.localDeviceId");
+  const fromConfig = ports.getConfig?.(LOCAL_DEVICE_ID_KEY);
   const configured = typeof fromConfig === "string" ? fromConfig.trim() : "";
   if (configured) return configured;
   const held = ports.localDeviceId?.trim();

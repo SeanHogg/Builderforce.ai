@@ -12,6 +12,7 @@ import { getApiKey, postRunOutcome } from "../gateway/gateway";
 import { activeEntityScope } from "../auth/chatAccount";
 import { activeWorkspaceManager, fetchRunContextSection, getCurrentUserId, projectEvermindHooks } from "../bfApi";
 import { localBrainApplication } from "../localFirst/localFirstStore";
+import { readLocalDeviceId } from "../localFirst/localDeviceId";
 import { hostLog } from "../host/hostLog";
 import { messageOf } from "../shared/messageOf";
 import { editorRunSettings } from "../run/editorRunSettings";
@@ -59,9 +60,6 @@ import { withWorkspaceStaleness } from "../memory/memoryStaleness";
 /** The Sessions-tree overlay source for host-owned runs (one bucket, not per panel). */
 const RUNS_SOURCE = "brain-host";
 
-/** Same key `localFirstStore` mints. Read it; never mint a second device id here. */
-const LOCAL_DEVICE_KEY = "builderforce.localDeviceId";
-
 export interface VsCodeRunHostHooks {
   /** A chat gained a turn — refresh the Sessions sidebar. */
   onChatsChanged(): void;
@@ -87,8 +85,8 @@ function workspaceRoot(): string {
  * By the time a tool request is dispatched the id is durable.
  */
 function installHostDomainTools(ctx: vscode.ExtensionContext, store: LocalFirstStore): void {
-  const deviceId = ctx.globalState.get<string>(LOCAL_DEVICE_KEY);
-  if (typeof deviceId !== "string" || deviceId.length === 0) return;
+  const deviceId = readLocalDeviceId(ctx.globalState);
+  if (deviceId.length === 0) return;
   installLocalDomainTools(ctx, { localFirstStore: store, localDeviceId: deviceId, scope: activeEntityScope });
 }
 
@@ -289,7 +287,7 @@ export function createVsCodeRunHost(ctx: vscode.ExtensionContext, hooks: VsCodeR
   // The run list's "Interrupted" rows: host state, re-sent to every panel that attaches.
   const interrupted = createInterruptedRuns({ recovery, log: hostLog });
   // PRD 41: each finalized change set gets its run delta, computed after the run settled and posted to the chat.
-  const deviceId = (): string => ctx.globalState.get<string>(LOCAL_DEVICE_KEY) ?? "";
+  const deviceId = (): string => readLocalDeviceId(ctx.globalState);
   const delta = editorRunDelta({
     secrets,
     store: local.store,

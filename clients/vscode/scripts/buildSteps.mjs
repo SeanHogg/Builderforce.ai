@@ -18,6 +18,8 @@ export const STEPS = {
   /** The webview alone consumes the frontend's links, never the extension's own. */
   linkedBuildsFrontend: node('ensure-linked-builds', '../../scripts/ensure-linked-builds.mjs', FRONTEND),
   esbuildProduction: node('esbuild --production', 'esbuild.mjs', '--production'),
+  /** After a build: the bundle may not import the memory engine or runtime by name (see the script). */
+  bundleDynamicImports: node('check-bundle-dynamic-imports', 'scripts/check-bundle-dynamic-imports.mjs'),
   esbuildDev: node('esbuild', 'esbuild.mjs'),
   // Through the package script so `vite` resolves from node_modules/.bin, as before.
   webview: { name: 'bundle:webview', command: 'pnpm', args: ['run', 'bundle:webview'], shell: process.platform === 'win32' },
@@ -25,7 +27,7 @@ export const STEPS = {
 
 /** Preset name -> ordered step names. `prepublish` is the default. */
 export const PRESETS = {
-  prepublish: ['ranges', 'priceSnapshot', 'linkedDeps', 'linkedBuilds', 'esbuildProduction', 'webview'],
-  compile: ['linkedDeps', 'linkedBuilds', 'esbuildDev', 'webview'],
+  prepublish: ['ranges', 'priceSnapshot', 'linkedDeps', 'linkedBuilds', 'esbuildProduction', 'bundleDynamicImports', 'webview'],
+  compile: ['linkedDeps', 'linkedBuilds', 'esbuildDev', 'bundleDynamicImports', 'webview'],
   webview: ['linkedDeps', 'linkedBuildsFrontend', 'webview'],
 };

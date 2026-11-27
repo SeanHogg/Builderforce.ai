@@ -17,7 +17,7 @@ runWorkspaceConformance("memoryWorkspaceFs", async () => {
       for (const [path, content] of Object.entries(files)) fs.files.set(path, content);
     },
   };
-});
+}, { absolutePaths: "repoRooted" });
 
 it("reads a gzip file as text and preserves the archive when a text edit is refused", async () => {
   const root = await mkdtemp(join(tmpdir(), "bf-workspace-gzip-"));
@@ -52,4 +52,4 @@ runWorkspaceConformance("nodeWorkspaceFs (temp dir)", async () => {
       await rm(root, { recursive: true, force: true });
     },
   };
-});
+}, { absolutePaths: "host" });

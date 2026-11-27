@@ -24,6 +24,7 @@
 import nodeFs from "node:fs";
 import nodePath from "node:path";
 import { isImported, type JournalEvent, type LocalFirstDelta, type LocalFirstSnapshot } from "@builderforce/local-first";
+import { writeFileAtomically } from "./localFirstAtomicFile";
 import { LEGACY_JOURNAL_FILE } from "./localFirstJournalIo";
 import { readLegacyJournal } from "./localFirstMigration";
 
@@ -71,14 +72,7 @@ export function baselineOf(snapshot: LocalFirstSnapshot, stat: LegacyStat, previ
 
 export async function writeLegacyBaseline(directory: string, baseline: LegacyBaseline): Promise<void> {
   const file = nodePath.join(directory, IMPORT_SIDECAR_FILE);
-  const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    await fs.writeFile(temporary, JSON.stringify(baseline), { encoding: "utf8", flag: "wx" });
-    await fs.rename(temporary, file);
-  } catch (error) {
-    await fs.rm(temporary, { force: true });
-    throw error;
-  }
+  await writeFileAtomically(file, JSON.stringify(baseline));
 }
 
 async function readLegacyBaseline(directory: string): Promise<LegacyBaseline | undefined> {

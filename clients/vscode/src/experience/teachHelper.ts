@@ -32,9 +32,10 @@ export interface TeachHelperPort {
   recordStart(params: { program: string; args?: string[]; shotsDir: string }): Promise<void>;
   /** The recorded episode (engine `Episode` JSON), or null when nothing was recorded. */
   recordStop(): Promise<unknown | null>;
-  runStart(skill: unknown, values: Record<string, string>): Promise<void>;
+  /** `runId` is the store's run id; every `run.*` event of this run carries it back. */
+  runStart(runId: string, skill: unknown, values: Record<string, string>): Promise<void>;
   runStop(): Promise<void>;
-  approveAnswer(idx: number, approved: boolean): Promise<void>;
+  approveAnswer(runId: string, idx: number, approved: boolean): Promise<void>;
   onEvent(listener: (event: HelperEvent) => void): { dispose(): void };
   dispose(): void;
 }
@@ -77,15 +78,15 @@ export function createTeachHelper(opts: TeachHelperOptions): TeachHelperPort {
   let child: ChildProcessWithoutNullStreams | undefined;
   let probed: HelperProbe | undefined;
   /** A run is in flight: if the helper dies now, nothing else will ever say the run ended. */
-  let running = false;
+  let runningId: string | undefined;
 
   function emit(event: HelperEvent): void {
-    if (event.event === "run.finished") running = false;
+    if (event.event === "run.finished" && event.runId === runningId) runningId = undefined;
     for (const l of [...listeners]) l(event);
   }
 
   function onExit(reason: string): void {
-    if (running) emit({ event: "run.finished", status: "failed", error: reason });
+    if (runningId) emit({ event: "run.finished", runId: runningId, status: "failed", error: reason });
     child = undefined;
     correlator.rejectAll(new HelperError("helper_gone", reason));
   }
@@ -118,11 +119,11 @@ export function createTeachHelper(opts: TeachHelperOptions): TeachHelperPort {
     return proc;
   }
 
-  function call(method: string, params?: unknown): Promise<unknown> {
+  function call(method: string, params?: unknown, reqOpts?: { timeoutMs?: number | null }): Promise<unknown> {
     if (!usable) return Promise.reject(UNSUPPORTED);
     return correlator.request(method, params, (line) => {
       start().stdin.write(line);
-    });
+    }, reqOpts);
   }
 
   async function probe(): Promise<HelperProbe> {
@@ -153,24 +154,31 @@ export function createTeachHelper(opts: TeachHelperOptions): TeachHelperPort {
       await call("record.start", params);
     },
     async recordStop() {
-      const r = (await call("record.stop")) as { episode?: unknown } | undefined;
+      // No timeout: finishing a recording can take as long as the person's own pace.
+      const r = (await call("record.stop", undefined, { timeoutMs: null })) as { episode?: unknown } | undefined;
       return r?.episode ?? null;
     },
-    async runStart(skill, values) {
+    async runStart(runId, skill, values) {
       // Set before the call: a very fast run can finish before the reply is read.
-      running = true;
+      runningId = runId;
       try {
-        await call("run.start", { skill, values });
+        await call("run.start", { runId, skill, values });
       } catch (error) {
-        running = false;
+        if (runningId === runId) runningId = undefined;
         throw error;
       }
     },
     async runStop() {
       await call("run.stop");
     },
-    async approveAnswer(idx, approved) {
-      await call("approve.answer", { idx, approved });
+    async approveAnswer(runId, idx, approved) {
+      try {
+        await call("approve.answer", { runId, idx, approved });
+      } catch (error) {
+        // The gate was already settled (a Stop or the helper's own end): nothing left to answer.
+        if (error instanceof HelperError && error.code === "not_waiting") return;
+        throw error;
+      }
     },
     onEvent(listener) {
       listeners.add(listener);

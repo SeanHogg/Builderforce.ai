@@ -1,5 +1,6 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
+import { getClientIp, getUserAgent } from '../middleware/requestClaims';
 import { and, eq, sql } from 'drizzle-orm';
 import { resolveAppBaseUrl, type HonoEnv, type Env } from '../../env';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
@@ -262,19 +263,6 @@ function safeRedirect(path: string | null | undefined): string {
 
 function normalizeEmail(input: string): string {
   return input.trim().toLowerCase();
-}
-
-function getClientIp(c: Context<HonoEnv>): string | null {
-  const cfIp = c.req.header('CF-Connecting-IP');
-  if (cfIp) return cfIp.trim();
-  const xff = c.req.header('X-Forwarded-For');
-  if (!xff) return null;
-  return xff.split(',')[0]?.trim() ?? null;
-}
-
-function getUserAgent(c: Context<HonoEnv>): string | null {
-  const ua = c.req.header('User-Agent');
-  return ua ? ua.slice(0, 1024) : null;
 }
 
 async function generateUsername(db: Db, email: string): Promise<string> {

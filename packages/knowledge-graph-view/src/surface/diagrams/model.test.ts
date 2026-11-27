@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { KNode } from '@seanhogg/builderforce-memory/knowledge';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS } from '../../labels';
+import { pathOf } from '../../graphModel';
 import { surfaceFixture } from '../../testing';
 import type { SymbolRecord } from '../../types';
 import { buildStations } from '../stations';
@@ -48,7 +50,7 @@ describe('diagram models', () => {
     it('uses recorded order for trace messages and requires observed coordinates for timing', () => {
         const nodes = [{ id: 'a', kind: 'participant', label: 'A' }, { id: 'b', kind: 'participant', label: 'B' }];
         const edges = [{ from: 'a', to: 'b', kind: 'calls', time: 3 }, { from: 'b', to: 'a', kind: 'calls', time: 1 }];
-        expect(diagramFromFile('sequenceDiagram', { nodes, edges })?.edges.map((edge) => edge.time)).toEqual([1, 3]);
+        expect(diagramFromFile('communicationDiagram', { nodes, edges })?.edges.map((edge) => edge.time)).toEqual([1, 3]);
         expect(diagramFromFile('timingDiagram', { nodes, edges })).toBeNull();
     });
 
@@ -56,5 +58,65 @@ describe('diagram models', () => {
         const value = { openapi: '3.1.0', paths: { '/logs': { get: { operationId: 'readLog' }, parameters: [] } } };
         expect(diagramFromFile('openapi', value)?.nodes[0]?.members).toEqual([{ text: 'GET · readLog' }]);
         expect(diagramFromFile('asyncapi', value)).toBeNull();
+    });
+
+    it('reads a Swagger 2 contract for the OpenAPI view', () => {
+        const value = { swagger: '2.0', paths: { '/logs': { post: { operationId: 'addLog' } } } };
+        expect(diagramFromFile('openapi', value)?.nodes[0]?.members).toEqual([{ text: 'POST · addLog' }]);
+        expect(diagramFromFile('openapi', { swagger: '1.2', paths: {} })).toBeNull();
+    });
+
+    it('reads AsyncAPI 2 publish and subscribe, and AsyncAPI 3 send and receive operations on their channel', () => {
+        const v2 = { asyncapi: '2.6.0', channels: { logs: { publish: { operationId: 'emit' }, subscribe: {} } } };
+        expect(diagramFromFile('asyncapi', v2)?.nodes[0]?.members).toEqual([{ text: 'PUBLISH · emit' }, { text: 'SUBSCRIBE' }]);
+        const v3 = {
+            asyncapi: '3.0.0',
+            channels: { logs: {}, quiet: {}, 'logs/~/daily news': {} },
+            operations: {
+                sendLog: { action: 'send', channel: { $ref: '#/channels/logs' } },
+                onLog: { action: 'receive', channel: { $ref: '#/channels/logs' } },
+                odd: { action: 'publish', channel: { $ref: '#/channels/logs' } },
+                lost: { action: 'send', channel: { $ref: '#/channels/missing' } },
+                daily: { action: 'receive', channel: { $ref: '#/channels/logs~1~0~1daily%20news' } },
+            },
+        };
+        const diagram = diagramFromFile('asyncapi', v3);
+        expect(diagram?.nodes.find((node) => node.id === 'logs')?.members).toEqual([{ text: 'SEND · sendLog' }, { text: 'RECEIVE · onLog' }]);
+        expect(diagram?.nodes.find((node) => node.id === 'quiet')?.members).toEqual([]);
+        expect(diagram?.nodes.find((node) => node.id === 'logs/~/daily news')?.members).toEqual([{ text: 'RECEIVE · daily' }]);
+    });
+
+    it('regression: an imported edge count must be a positive integer, never an object or string that reaches the page', () => {
+        const nodes = [{ id: 'a', label: 'A', kind: 'component' }, { id: 'b', label: 'B', kind: 'component' }];
+        const edge = (count: unknown) => ({ nodes, edges: [{ from: 'a', to: 'b', kind: 'references', count }] });
+        expect(checkedDiagram(edge(3))?.edges[0]?.count).toBe(3);
+        expect(checkedDiagram({ nodes, edges: [{ from: 'a', to: 'b', kind: 'references' }] })).not.toBeNull();
+        for (const bad of [{ x: 1 }, '3', 0, -1, 1.5, Number.NaN, Infinity, 2e9, null, []]) expect(checkedDiagram(edge(bad))).toBeNull();
+    });
+
+    it('selects the owning class when the scope is one of its methods', () => {
+        const diagram = sourceDiagram('classDiagram', surfaceFixture(), records, run, []);
+        expect(diagram.nodes.map((node) => node.id)).toContain(cls);
+        expect(diagram.nodes.some((node) => node.kind === 'package')).toBe(false);
+        expect(diagram.nodes.find((node) => node.id === cls)?.members).toEqual([{ text: 'log()', ref: run }]);
+        // Only a selected class keeps its own kind in the composite view; the old file-level fallback made every type a part.
+        const composite = sourceDiagram('compositeDiagram', surfaceFixture(), records, run, []);
+        expect(composite.nodes.find((node) => node.id === cls)?.kind).toBe('class');
+        expect(composite.nodes.find((node) => node.id === iface)?.kind).toBe('part');
+    });
+
+    it('narrows C4 containers to the system of the scope file and components to its app', () => {
+        const base = surfaceFixture();
+        const tag = (path: string): Partial<KNode> =>
+            path.startsWith('web/') ? { system: 'ui', app: 'web' } : path.startsWith('api/') ? { system: 'srv', app: 'api' }
+                : path.startsWith('db/') ? { system: 'srv', app: 'db' } : {};
+        const graph = { ...base, nodes: base.nodes.map((node) => ({ ...node, ...tag(pathOf(node.ref) ?? '') })) } as typeof base;
+        const stations = buildStations(graph).stations;
+        const scope = graph.nodes.find((node) => pathOf(node.ref) === 'api/useCase.ts')!.ref;
+        const labels = (id: 'c4Containers' | 'c4Components', at: string | null) =>
+            sourceDiagram(id, graph, [], at, stations).nodes.map((node) => node.label).sort();
+        expect(labels('c4Containers', null)).toContain('web');
+        expect(labels('c4Containers', scope)).toEqual(['api', 'db']);
+        expect(labels('c4Components', scope)).toEqual(['api']);
     });
 });

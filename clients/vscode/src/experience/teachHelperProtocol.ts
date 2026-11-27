@@ -17,6 +17,8 @@ export type HelperErrorCode =
   | "missing_value"
   | "idle"
   | "record_failed"
+  /** `approve.answer` for a gate that is not pending: harmless, treated as a no-op. */
+  | "not_waiting"
   | "internal"
   /** Host-side: the helper process exited or could not start. */
   | "helper_gone";
@@ -33,15 +35,19 @@ export type RunFinishStatus = "succeeded" | "failed" | "stopped" | "denied";
 
 /** Everything the helper pushes unprompted. */
 export type HelperEvent =
-  | { event: "run.stepStarted"; idx: number }
-  | { event: "run.stepFinished"; idx: number; outcome: StepOutcomeWire; detail?: string | null }
-  | { event: "run.approvalNeeded"; idx: number }
-  | { event: "run.finished"; status: RunFinishStatus; error?: string | null }
+  | { event: "run.stepStarted"; runId: string; idx: number }
+  | { event: "run.stepFinished"; runId: string; idx: number; outcome: StepOutcomeWire; detail?: string | null }
+  | { event: "run.approvalNeeded"; runId: string; idx: number }
+  | { event: "run.finished"; runId: string; status: RunFinishStatus; error?: string | null }
   | { event: "record.step"; count: number };
 
-/** One decoded line. `invalid` carries the raw text so the caller can report it. */
+/**
+ * One decoded line. `invalid` carries the raw text so the caller can report it. A reply
+ * whose `id` is null (the helper could not even read the request's id) is an error reply
+ * for the OLDEST request in flight: the helper answers strictly in order.
+ */
 export type HelperMessage =
-  | { kind: "reply"; id: number; result?: unknown; error?: { code: string; message: string } }
+  | { kind: "reply"; id: number | null; result?: unknown; error?: { code: string; message: string } }
   | { kind: "event"; event: HelperEvent }
   | { kind: "invalid"; line: string };
 
@@ -62,12 +68,12 @@ export function parseLine(line: string): HelperMessage {
   }
   if (!isObject(raw)) return { kind: "invalid", line };
   if (typeof raw["event"] === "string") return { kind: "event", event: raw as unknown as HelperEvent };
-  if (typeof raw["id"] === "number") {
-    const err = raw["error"];
-    if (isObject(err) && typeof err["message"] === "string") {
-      return { kind: "reply", id: raw["id"], error: { code: String(err["code"] ?? "internal"), message: err["message"] } };
-    }
-    return { kind: "reply", id: raw["id"], result: raw["result"] };
+  const err = raw["error"];
+  const hasError = isObject(err) && typeof err["message"] === "string";
+  if (typeof raw["id"] === "number" || (raw["id"] === null && hasError)) {
+    const id = raw["id"] as number | null;
+    if (hasError) return { kind: "reply", id, error: { code: String((err as Record<string, unknown>)["code"] ?? "internal"), message: (err as Record<string, string>)["message"]! } };
+    return { kind: "reply", id, result: raw["result"] };
   }
   return { kind: "invalid", line };
 }
@@ -89,32 +95,60 @@ export class LineSplitter {
 interface Pending {
   resolve(value: unknown): void;
   reject(error: Error): void;
+  timer?: ReturnType<typeof setTimeout>;
 }
 
-/** Matches replies to the requests that asked for them, by id. */
+/** How long a request may wait for its reply unless it says otherwise. */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * Matches replies to the requests that asked for them, by id. Every request times out
+ * (30 s) unless `timeoutMs: null` (a call the person ends, like `record.stop`).
+ */
 export class RequestCorrelator {
   private nextId = 1;
+  /** Insertion-ordered, so the first entry is the OLDEST request in flight. */
   private readonly pending = new Map<number, Pending>();
 
   /** Register a request; `send` is handed the line to write. Rejects if `send` throws. */
-  request(method: string, params: unknown, send: (line: string) => void): Promise<unknown> {
+  request(method: string, params: unknown, send: (line: string) => void, opts: { timeoutMs?: number | null } = {}): Promise<unknown> {
     const id = this.nextId++;
+    const timeoutMs = opts.timeoutMs === undefined ? DEFAULT_REQUEST_TIMEOUT_MS : opts.timeoutMs;
     return new Promise<unknown>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const entry: Pending = { resolve, reject };
+      if (timeoutMs !== null) {
+        entry.timer = setTimeout(() => {
+          this.pending.delete(id);
+          reject(new HelperError("timeout", `the Teach helper did not answer ${method} within ${Math.round(timeoutMs / 1000)}s`));
+        }, timeoutMs);
+      }
+      this.pending.set(id, entry);
       try {
         send(encodeRequest(id, method, params));
       } catch (error) {
-        this.pending.delete(id);
+        this.drop(id);
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }
 
-  /** Settle the request a reply answers. Returns false for an id nobody is waiting on. */
+  private drop(id: number): Pending | undefined {
+    const entry = this.pending.get(id);
+    if (!entry) return undefined;
+    this.pending.delete(id);
+    if (entry.timer) clearTimeout(entry.timer);
+    return entry;
+  }
+
+  /**
+   * Settle the request a reply answers. A null id settles the OLDEST pending request with
+   * that error. Returns false when nobody was waiting.
+   */
   settle(reply: Extract<HelperMessage, { kind: "reply" }>): boolean {
-    const waiting = this.pending.get(reply.id);
+    const id = reply.id ?? this.pending.keys().next().value;
+    if (id === undefined) return false;
+    const waiting = this.drop(id);
     if (!waiting) return false;
-    this.pending.delete(reply.id);
     if (reply.error) waiting.reject(new HelperError(reply.error.code, reply.error.message));
     else waiting.resolve(reply.result);
     return true;
@@ -122,8 +156,7 @@ export class RequestCorrelator {
 
   /** Fail everything in flight (the helper exited). */
   rejectAll(error: Error): void {
-    const all = [...this.pending.values()];
-    this.pending.clear();
+    const all = [...this.pending.keys()].map((id) => this.drop(id)!);
     for (const p of all) p.reject(error);
   }
 

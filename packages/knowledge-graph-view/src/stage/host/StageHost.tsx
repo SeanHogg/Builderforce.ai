@@ -121,7 +121,8 @@ function StageFallback({ fallback: Fallback, ...p }: StageHostProps) {
     return <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {p.tools}
         <DiagramPicker active={diagram} onPick={setDiagram} graph={graph} records={records} scope={scope}
-            stations={surface.stations.stations} flat labels={p.labels} onOpen={(ref) => {
+            stations={surface.stations.stations} flat labels={p.labels} onCamera={p.onCamera} cameras={p.cameras}
+            onLoadSymbols={load} onOpen={(ref) => {
                 const target = targetForMark(ref, ref, records);
                 if (target) p.onOpenSource?.({ path: target.path, startLine: target.startLine, endLine: target.startLine });
             }} />
@@ -349,7 +350,7 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
             {!showCodeHalf && <DiagramPicker active={activeDiagram} onPick={(id) => {
                 setDiagramPick(id ? { root: graph.scope.rootId, camera, id } : null);
             }} graph={graph} records={diagramRecords} scope={diagramScope} stations={diagramStations} flat={flat} labels={labels}
-                onOpen={(ref) => {
+                onCamera={p.onCamera} cameras={p.cameras} onLoadSymbols={loadDiagramSymbols} onOpen={(ref) => {
                     const file = fileRefOf(ref);
                     if (file !== ref) wiring.openDefinition(ref);
                     else if (codeFiles?.has(file)) wiring.openFile(file);

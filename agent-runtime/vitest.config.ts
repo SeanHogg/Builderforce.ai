@@ -42,6 +42,15 @@ export default defineConfig({
         replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-text-search.ts"),
       },
       {
+        // Node-only exports importers spell in the NodeNext `.js` form (watcher port, on-prem index layout).
+        find: "@builderforce/agent-tools/node-watch-port.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-watch-port.ts"),
+      },
+      {
+        find: "@builderforce/agent-tools/node-index-layout.js",
+        replacement: path.join(monorepoRoot, "packages", "agent-tools", "src", "node-index-layout.ts"),
+      },
+      {
         // The second node-only export (the definition index behind find_symbol /
         // file_outline), spelled the same NodeNext way for the same reason.
         find: "@builderforce/agent-tools/node-symbols.js",

@@ -1,4 +1,4 @@
-import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
+import type { KNode, KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { callIndex, externalName, isExternal } from '../../compute/tasks/placement/callIndex';
 import { deployBindingsOf, deployUnitsOf } from '../../deployFacts';
 import { pathOf } from '../../graphModel';
@@ -7,7 +7,7 @@ import type { SymbolRecord } from '../../types';
 import { parseRoutes } from '../drawers/apiModel';
 import { fileNodesOf, isArchitectureFile, mapEdges, tailOf } from '../outlineGraph';
 import { fileRefOf, type Station } from '../stations';
-import { appOfNode, modulesOfFiles, systemOfNode } from '../systems';
+import { modulesOfFiles, systemOfNode } from '../systems';
 import type { DiagramId } from './catalog';
 
 export interface DiagramMember { text: string; ref?: string }
@@ -42,9 +42,10 @@ export function checkedDiagram(value: unknown): Diagram | null {
             node.members.some((member) => !member || !string(member.text) || member.ref !== undefined))) return null;
         ids.add(node.id);
     }
+    const count = (x: unknown) => x === undefined || typeof x === 'number' && Number.isInteger(x) && x >= 1 && x <= 1e9;
     for (const edge of edges) {
         if (!edge || !ids.has(edge.from) || !ids.has(edge.to) || !string(edge.kind, 40)
-            || edge.label !== undefined && !string(edge.label) || !coordinate(edge.time)) return null;
+            || edge.label !== undefined && !string(edge.label) || !coordinate(edge.time) || !count(edge.count)) return null;
     }
     return { nodes, edges };
 }
@@ -54,7 +55,7 @@ export function diagramFromFile(id: DiagramId, value: unknown): Diagram | null {
     const checked = checkedDiagram(value);
     if (checked) {
         if (id === 'timingDiagram' && checked.nodes.some((node) => node.x === undefined)) return null;
-        if ((id === 'sequenceDiagram' || id === 'communicationDiagram' || id === 'msc') &&
+        if (id === 'communicationDiagram' &&
             checked.edges.length && checked.edges.every((edge) => edge.time !== undefined)) {
             return { ...checked, edges: [...checked.edges].sort((a, b) => a.time! - b.time!) };
         }
@@ -62,25 +63,50 @@ export function diagramFromFile(id: DiagramId, value: unknown): Diagram | null {
     }
     if (!value || typeof value !== 'object') return null;
     const contract = value as Record<string, unknown>;
-    const matches = id === 'openapi' ? typeof contract.openapi === 'string'
+    const matches = id === 'openapi' ? typeof contract.openapi === 'string' || contract.swagger === '2.0'
         : id === 'asyncapi' && typeof contract.asyncapi === 'string';
     if (!matches) return null;
     const entries = id === 'openapi' ? contract.paths : contract.channels;
     if (!entries || typeof entries !== 'object' || Array.isArray(entries)) return null;
     const httpMethods = new Set(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']);
+    const caption = (method: string, operation: unknown) => {
+        const op = operation && typeof operation === 'object' ? (operation as Record<string, unknown>).operationId : undefined;
+        const name = typeof op === 'string' ? op.slice(0, 480) : '';
+        return name ? `${method} · ${name}` : method;
+    };
+    // AsyncAPI 3 moves send / receive out of the channel into top-level operations that point back at it.
+    const v3 = id === 'asyncapi' && /^3(?:\.|$)/.test(String(contract.asyncapi));
+    const byChannel = new Map<string, DiagramMember[]>();
+    if (v3 && contract.operations && typeof contract.operations === 'object' && !Array.isArray(contract.operations)) {
+        for (const [opId, operation] of Object.entries(contract.operations)) {
+            if (!operation || typeof operation !== 'object') continue;
+            const { action, channel } = operation as { action?: unknown; channel?: { $ref?: unknown } };
+            if (action !== 'send' && action !== 'receive' || typeof channel?.$ref !== 'string') continue;
+            const target = channelNameFromRef(channel.$ref);
+            if (target === null) continue;
+            const members = byChannel.get(target) ?? [];
+            if (!byChannel.has(target)) byChannel.set(target, members);
+            if (members.length < 100) members.push({ text: `${action.toUpperCase()} · ${opId}`.slice(0, 512) });
+        }
+    }
     const nodes = Object.entries(entries).slice(0, MAX_NODES).flatMap(([name, entry]) => {
         if (!entry || typeof entry !== 'object' || !name || name.length > 512) return [];
-        const item = entry as Record<string, unknown>;
-        const members = Object.entries(item).flatMap(([method, operation]) => {
+        const members = v3 ? byChannel.get(name) ?? [] : Object.entries(entry).flatMap(([method, operation]) => {
             const supported = id === 'openapi' ? httpMethods.has(method) : method === 'publish' || method === 'subscribe';
-            if (!supported || !operation || typeof operation !== 'object') return [];
-            const op = operation as Record<string, unknown>;
-            const caption = typeof op.operationId === 'string' ? op.operationId.slice(0, 480) : '';
-            return [{ text: caption ? `${method.toUpperCase()} · ${caption}` : method.toUpperCase() }];
+            return supported && operation && typeof operation === 'object' ? [{ text: caption(method.toUpperCase(), operation) }] : [];
         });
         return [{ id: name, label: name, kind: id === 'openapi' ? 'useCase' : 'participant', members }];
     });
     return { nodes, edges: [] };
+}
+
+function channelNameFromRef(ref: string): string | null {
+    if (!ref.startsWith('#')) return null;
+    try {
+        const [prefix, section, name, ...nested] = decodeURIComponent(ref.slice(1)).split('/');
+        if (prefix || section !== 'channels' || !name || nested.length) return null;
+        return name.replaceAll('~1', '/').replaceAll('~0', '~');
+    } catch { return null; }
 }
 
 function scopedRecords(records: readonly SymbolRecord[], scope: string | null): SymbolRecord[] {
@@ -91,9 +117,10 @@ function scopedRecords(records: readonly SymbolRecord[], scope: string | null): 
 function classDiagram(graph: KnowledgeGraph, records: readonly SymbolRecord[], scope: string | null, composite: boolean): Diagram {
     const local = scopedRecords(records, scope);
     const owners = new Map(records.filter((record) => TYPES.has(record.kind)).map((record) => [bare(record.ref), record]));
-    const selected = scope && owners.has(bare(scope)) ? owners.get(bare(scope)) : undefined;
-    const ids = new Set((selected ? [selected] : local.filter((record) => TYPES.has(record.kind))).map((record) => record.ref));
     const refs = new Map(records.map((record) => [bare(record.ref), record]));
+    // A method or field selects the class that owns it, not the whole file.
+    const selected = scope ? owners.get(bare(scope)) ?? owners.get(bare(refs.get(bare(scope))?.parent ?? '')) : undefined;
+    const ids = new Set((selected ? [selected] : local.filter((record) => TYPES.has(record.kind))).map((record) => record.ref));
     const rels: DiagramEdge[] = [];
     const bind = (from: string, to: string, kind: string) => {
         if (!ASSOCIATIONS.has(kind) || composite && kind !== 'composes' && kind !== 'uses') return;
@@ -134,18 +161,24 @@ function classDiagram(graph: KnowledgeGraph, records: readonly SymbolRecord[], s
     return { nodes, edges };
 }
 
-function packageDiagram(graph: KnowledgeGraph, stations: readonly Station[], kind: 'package' | 'component' | 'system'): Diagram {
+const directoryOf = (path: string): string => path.slice(0, Math.max(0, path.lastIndexOf('/')));
+
+function componentOf(node: KNode, apps: ReadonlyMap<string, string>): string {
+    return apps.get(node.ref) || systemOfNode(node) || directoryOf(pathOf(node.ref) ?? '');
+}
+
+function packageDiagram(graph: KnowledgeGraph, stations: readonly Station[], kind: 'package' | 'component' | 'system', filter?: (ref: string) => boolean): Diagram {
     const visible = new Set(stations.flatMap((s) => s.refs));
     const apps = modulesOfFiles(graph);
     const refs = new Map<string, string>();
     const nodes = new Map<string, DiagramNode>();
     for (const n of fileNodesOf(graph)) {
-        if (!visible.has(n.ref) || !isArchitectureFile(n)) continue;
+        if (!visible.has(n.ref) || !isArchitectureFile(n) || filter && !filter(n.ref)) continue;
         const path = pathOf(n.ref);
         if (!path) continue;
-        const dir = path.slice(0, Math.max(0, path.lastIndexOf('/')));
-        const id = kind === 'system' ? systemOfNode(n) : kind === 'component' ? apps.get(n.ref) || appOfNode(n) || systemOfNode(n) || dir : dir;
-        const key = `${kind}:${id}`;
+        const system = systemOfNode(n);
+        const id = kind === 'system' ? system : kind === 'component' ? componentOf(n, apps) : directoryOf(path);
+        const key = kind === 'component' && system ? `${kind}:${JSON.stringify([system, id])}` : `${kind}:${id}`;
         if (!nodes.has(key)) {
             if (nodes.size >= MAX_NODES) continue;
             nodes.set(key, { id: key, label: id || graph.scope.rootId, kind, ref: n.ref });
@@ -233,12 +266,19 @@ function interactions(diagram: Diagram): Diagram {
     return { nodes, edges: diagram.edges.filter((edge) => edge.from !== edge.to && byCaller.has(edge.to)) };
 }
 
-function c4Scope(graph: KnowledgeGraph, stations: readonly Station[], scope: string | null, module: boolean): readonly Station[] {
-    if (!scope) return stations;
-    const owner = stations.find((station) => station.refs.includes(fileRefOf(scope)));
-    if (!owner) return stations;
-    const app = modulesOfFiles(graph).get(fileRefOf(scope));
-    return stations.filter((station) => station.system === owner.system && (!module || !app || station.app === app));
+function c4Scope(graph: KnowledgeGraph, scope: string | null, module: boolean): ((ref: string) => boolean) | undefined {
+    if (!scope) return undefined;
+    const ownerRef = fileRefOf(scope);
+    const files = new Map(fileNodesOf(graph).map((node) => [node.ref as string, node]));
+    const owner = files.get(ownerRef);
+    if (!owner) return undefined;
+    const apps = modulesOfFiles(graph);
+    const system = systemOfNode(owner);
+    const app = componentOf(owner, apps);
+    return (ref) => {
+        const node = files.get(ref);
+        return !!node && systemOfNode(node) === system && (!module || componentOf(node, apps) === app);
+    };
 }
 
 /** Model derivation only uses indexed facts and scope. Other views accept authored or runtime evidence. */
@@ -247,14 +287,14 @@ export function sourceDiagram(id: DiagramId, graph: KnowledgeGraph, records: rea
         case 'classDiagram': case 'c4Code': return classDiagram(graph, records, scope, false);
         case 'compositeDiagram': return classDiagram(graph, records, scope, true);
         case 'packageDiagram': case 'dsm': return packageDiagram(graph, stations, 'package');
-        case 'componentDiagram': case 'codeCity': return packageDiagram(graph, stations, 'component');
-        case 'c4Containers': return packageDiagram(graph, c4Scope(graph, stations, scope, false), 'component');
-        case 'c4Components': return packageDiagram(graph, c4Scope(graph, stations, scope, true), 'package');
+        case 'componentDiagram': return packageDiagram(graph, stations, 'component');
+        case 'c4Containers': return packageDiagram(graph, stations, 'component', c4Scope(graph, scope, false));
+        case 'c4Components': return packageDiagram(graph, stations, 'package', c4Scope(graph, scope, true));
         case 'c4Context': return packageDiagram(graph, stations, 'system');
         case 'deploymentDiagram': return deployment(graph);
         case 'useCaseDiagram': case 'openapi': return endpoints(graph);
         case 'interactionDiagram': return interactions(calls(graph, records, scope));
-        case 'sequenceDiagram': case 'communicationDiagram': case 'callGraph': case 'msc':
+        case 'communicationDiagram': case 'callGraph':
             return calls(graph, records, scope);
         case 'dfd': case 'dfdGane': case 'lineage': return dataFlow(graph);
         case 'hotspots': return {

@@ -14,6 +14,7 @@
 import { readdir } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { tryResolveInsideRootReal } from "@builderforce/agent-tools/node-path.js";
+import { scrubRoot } from "@builderforce/agent-tools/node-workspace";
 import { WorkspaceError, type WorkspaceEntry, type WorkspaceFs, type WorkspaceRead } from "@builderforce/agent-tools/workspace";
 import type { SandboxFsBridge } from "./fs-bridge.js";
 
@@ -35,12 +36,11 @@ const messageOf = (e: unknown): string => (e instanceof Error ? e.message : Stri
 export function sandboxWorkspaceFs(bridge: SandboxFsBridge, root: string, options: SandboxWorkspaceOptions = {}): WorkspaceFs {
   const rootResolved = resolve(root);
   const unconfined = options.scope === "unconfined";
-  const rootPosix = rootResolved.split("\\").join("/");
 
   /** A raw error as a `WorkspaceError` whose message has the host mount path taken out (the model sees root-relative paths only). */
   const fail = (e: unknown): WorkspaceError => {
     if (e instanceof WorkspaceError) return e;
-    return new WorkspaceError("io", messageOf(e).split(rootResolved).join(".").split(rootPosix).join("."));
+    return new WorkspaceError("io", scrubRoot(messageOf(e), rootResolved));
   };
 
   const confined = async (p: string): Promise<string> => {

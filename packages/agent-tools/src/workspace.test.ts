@@ -116,13 +116,18 @@ describe("createRepoCapabilities - write / read / list / edit / delete", () => {
       await repoWrite.editFile("../escape.txt", "a", "b"),
       await repoWrite.deleteFile("../escape.txt"),
       await repoRead.readFile("../../etc/passwd"),
-      await repoRead.readFile("/etc/passwd"),
     ];
     for (const r of results) {
       expect(r.ok).toBe(false);
       expect(r.error).toMatch(/outside the workspace/);
       expect(r.code).toBe("outside_root");
     }
+  });
+
+  it("an adapter without toRelative treats a leading / as repo-rooted", async () => {
+    const { repoRead } = fresh({ "src/a.ts": "x" });
+    expect(await repoRead.readFile("/src/a.ts")).toMatchObject({ ok: true, content: "x" });
+    expect(await repoRead.readFile("/etc/passwd")).toMatchObject({ ok: false, code: "not_found" });
   });
 
   it("calls onWrite for a landed write, edit and delete only", async () => {

@@ -9,9 +9,10 @@
  * "nothing remembered", never a failure.
  */
 
-import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { writeFileAtomically } from "../localFirst/localFirstAtomicFile";
 import type { KnowledgeGraph } from "@seanhogg/builderforce-memory/knowledge";
 import type { KnowledgeScopeRow } from "./knowledgeProtocol";
 
@@ -42,7 +43,6 @@ const fileFor = (storageDir: string, key: string): string =>
 
 /** The tail of each file's write chain: writes to ONE key run strictly in order, never interleaved. */
 const chains = new Map<string, Promise<unknown>>();
-let tempCounter = 0;
 
 /** How a write ended, for the log: never silent (a skip says why, with sizes). */
 export interface LastSeenWriteReport {
@@ -97,8 +97,6 @@ export function writeLastSeen(storageDir: string, key: string, record: LastSeenR
 }
 
 async function writeOnce(storageDir: string, file: string, record: LastSeenRecord, report?: (r: LastSeenWriteReport) => void): Promise<boolean> {
-  // Unique per write: pid + counter + random, so two writers never share (or clobber) a temp file.
-  const temp = `${file}.${process.pid}.${++tempCounter}.${randomBytes(4).toString("hex")}.tmp`;
   const t0 = Date.now();
   let bytes = 0;
   try {
@@ -106,12 +104,10 @@ async function writeOnce(storageDir: string, file: string, record: LastSeenRecor
     if ("over" in out) { report?.({ outcome: "oversize", bytes: out.over, ms: Date.now() - t0 }); return false; }
     bytes = Buffer.byteLength(out.json);
     await mkdir(join(storageDir, "knowledge-last-seen"), { recursive: true });
-    await writeFile(temp, out.json, "utf8");
-    await rename(temp, file);
+    await writeFileAtomically(file, out.json);
     report?.({ outcome: "written", bytes, ms: Date.now() - t0 });
     return true;
   } catch (error) {
-    await rm(temp, { force: true }).catch(() => undefined);
     report?.({ outcome: "error", bytes, ms: Date.now() - t0, error: error instanceof Error ? error.message : String(error) });
     return false;
   }

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { renewWebSession, type RenewContext } from '../../application/auth/renewWebSession';
+import { getClientIp, getUserAgent } from '../middleware/requestClaims';
 
 /**
  * `POST /api/auth/web/renew` — swap the current web token for a fresh short-lived one.
@@ -27,8 +28,8 @@ export function createWebRenewRoutes(db: Db, isSuperadmin: RenewContext['isSuper
     }
     const result = await renewWebSession(db, c.env, header.slice(7), {
       isSuperadmin,
-      userAgent: c.req.header('User-Agent')?.slice(0, 1024) ?? null,
-      ipAddress: c.req.header('CF-Connecting-IP')?.trim() ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null,
+      userAgent: getUserAgent(c),
+      ipAddress: getClientIp(c),
     });
     if (!result.ok) return c.json({ error: result.error, code: result.code }, 401);
     return c.json({ token: result.token, expiresIn: result.expiresIn, sessionExpiresAt: result.sessionExpiresAt });

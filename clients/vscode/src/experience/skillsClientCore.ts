@@ -69,8 +69,8 @@ function liveCard() {
     a ? h('div', { class: 'stack' },
       h('strong', {}, L.approvalTitle),
       h('p', {}, a.description),
-      row(button(L.approve, function () { post({ type: 'approval.answer', approved: true }); }),
-          button(L.deny, function () { post({ type: 'approval.answer', approved: false }); }, 'secondary'))) : null,
+      row(button(L.approve, function () { post({ type: 'approval.answer', runId: l.runId, idx: a.idx, approved: true }); }),
+          button(L.deny, function () { post({ type: 'approval.answer', runId: l.runId, idx: a.idx, approved: false }); }, 'secondary'))) : null,
     row(button(L.stop, function () { post({ type: 'run.stop' }); }, 'danger')));
 }
 

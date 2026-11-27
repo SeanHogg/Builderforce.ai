@@ -99,6 +99,7 @@ import { shutdownKnowledge } from "./knowledge/folderKnowledge";
 import { bindPlatformPolicy, platformPolicy, platformPolicyResolved, withPlatformAuthentication, outboxSendPermission as platformOutboxSendPermission } from "./platform/platformPolicy";
 import { runNetworkDenialSelfCheck } from "./platform/networkDenialSelfCheck";
 import { localBrainApplication } from "./localFirst/localFirstStore";
+import { isTokenLimitError, showTokenLimitNotice } from "./dispatch/tokenLimitNotice";
 import { installChatSync } from "./chat/chatSyncHost";
 import { configurePolicyGatesPersistence } from "./platform/policyGates";
 import { createPolicyGatesPersistence } from "./platform/policySnapshots";
@@ -223,7 +224,7 @@ export function activate(context: vscode.ExtensionContext): BuilderforceApi {
   // localFirstStore mints — read it, never mint a second one here.
   const localFirst = localBrainApplication(context);
   configurePolicyGatesPersistence(createPolicyGatesPersistence(localFirst.store, {
-    deviceId: context.globalState.get<string>("builderforce.localDeviceId") ?? "",
+    deviceId: localFirst.deviceId,
   }));
   context.subscriptions.push({ dispose: platformPolicy().subscribe(() => refreshWorkspaceSurfaces()) });
   // PRD 36: once sync is turned on, this device's chats, transcripts and local-model
@@ -1170,22 +1171,8 @@ async function runTask(
       await handlePlanLimit("BuilderForce: your plan's run limit is reached. Upgrade your workspace to dispatch more runs.");
       return;
     }
-    // Token budget exhausted (HTTP 429). Show the API's plan-tailored reason (e.g.
-    // "Plan daily token limit reached (10,000 tokens)…") with a direct upgrade path,
-    // instead of dumping the raw dispatch error — the whole point of this branch.
-    const isTokenLimit =
-      dispatchErr?.code === "plan_token_limit_exceeded" ||
-      dispatchErr?.code === "plan_monthly_token_limit_exceeded" ||
-      dispatchErr?.httpStatus === 429;
-    if (isTokenLimit) {
-      const reason = dispatchErr?.serverMessage ?? "Your workspace has reached its plan token limit for now.";
-      const action = await vscode.window.showErrorMessage(
-        `BuilderForce: can't run ${label} — ${reason}`,
-        "Upgrade to Pro",
-        "View Usage",
-      );
-      if (action === "Upgrade to Pro") void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/pricing`));
-      else if (action === "View Usage") void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/settings`));
+    if (isTokenLimitError(dispatchErr)) {
+      await showTokenLimitNotice(label, dispatchErr?.serverMessage);
       return;
     }
     if (message.includes(NOT_SIGNED_IN)) {

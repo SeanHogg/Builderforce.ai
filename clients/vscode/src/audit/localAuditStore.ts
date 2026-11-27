@@ -40,13 +40,15 @@ import {
   type LocalAuditDefinition,
 } from "./auditDefinitions";
 
+import { LOCAL_DEVICE_ID_KEY } from "../localFirst/localDeviceId";
+
 export const LOCAL_AUDIT_SCHEMA_VERSION = 1;
 
 /**
  * Same key `localFirstStore` mints (`builderforce.localDeviceId`). Audit writes
  * must stamp that id, not a second one minted here.
  */
-export const LOCAL_AUDIT_DEVICE_KEY = "builderforce.localDeviceId";
+export const LOCAL_AUDIT_DEVICE_KEY = LOCAL_DEVICE_ID_KEY;
 
 /** Read the durable device id, minting it into global state before any audit write. */
 export async function ensureLocalAuditDeviceId(state: {

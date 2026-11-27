@@ -11,6 +11,7 @@ import { clearLocalProviderCredentials } from "./localProviderCredentials";
 import { getScopedToken, invalidateScopedTokens, setScopedTokenErrorSink, type ScopedAudience } from "../bfApi/scopedToken";
 import { logLine } from "../diagnostics/errorReporter";
 import { messageOf } from "../shared/messageOf";
+import { sleep } from "../shared/sleep";
 import { BUILDERFORCE_AUTH_PROVIDER_ID } from "./providerId";
 
 /**
@@ -24,7 +25,7 @@ function deviceAuthDeps(): DeviceAuthDeps {
     openTab: async (url) => {
       await vscode.env.openExternal(vscode.Uri.parse(url));
     },
-    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    sleep,
     now: () => Date.now(),
     client: "vscode",
   };

@@ -4,9 +4,10 @@ import { TICK_MS, createRoutineScheduler } from "./routineScheduler";
 
 const skill = (id: string) => ({ id }) as Skill;
 
-function setup(over: { enabled?: boolean; active?: boolean; due?: Skill[]; start?: () => Promise<{ ok: boolean; error?: string }> } = {}) {
+function setup(over: { enabled?: boolean; active?: boolean; supported?: boolean; blocked?: boolean; due?: Skill[]; start?: () => Promise<{ ok: boolean; error?: string }> } = {}) {
   const runner = {
     active: over.active ?? false,
+    blockedElsewhere: vi.fn(async () => over.blocked ?? false),
     start: vi.fn(over.start ?? (async () => ({ ok: true, runId: "r", done: Promise.resolve() }))),
   };
   const due = vi.fn(async () => over.due ?? [skill("a"), skill("b")]);
@@ -19,7 +20,7 @@ function setup(over: { enabled?: boolean; active?: boolean; due?: Skill[]; start
     }),
     clearInterval: vi.fn(),
   };
-  const s = createRoutineScheduler({ enabled: () => over.enabled ?? true, runner: runner as never, due, report, timers });
+  const s = createRoutineScheduler({ enabled: () => over.enabled ?? true, runner: runner as never, supported: async () => over.supported ?? true, due, report, timers });
   return { s, runner, due, report, timers, fire: () => tickFn() };
 }
 
@@ -49,6 +50,24 @@ describe("routineScheduler", () => {
     await t.s.tick();
     expect(t.due).not.toHaveBeenCalled();
     expect(t.runner.start).not.toHaveBeenCalled();
+  });
+
+  it("does nothing where the helper is unsupported, or while another window is running a skill", async () => {
+    const unsupported = setup({ supported: false });
+    await unsupported.s.tick();
+    expect(unsupported.due).not.toHaveBeenCalled();
+    const blocked = setup({ blocked: true });
+    await blocked.s.tick();
+    expect(blocked.due).not.toHaveBeenCalled();
+    expect(blocked.runner.start).not.toHaveBeenCalled();
+  });
+
+  it("reports the same failure repeating every tick only once", async () => {
+    const t = setup({ start: async () => ({ ok: false, error: "helper missing" }) });
+    await t.s.tick();
+    await t.s.tick();
+    await t.s.tick();
+    expect(t.report).toHaveBeenCalledTimes(1);
   });
 
   it("does nothing when nothing is due", async () => {

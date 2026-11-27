@@ -14,7 +14,7 @@ import type { TransitionActorInput } from '../../application/task/taskLifecycle'
 import { updateRequestScope } from '../../application/shared/requestScope';
 import { isDeviceClient } from '@builderforce/creation-canvas-contract';
 import { audienceAllowsPath } from '../../application/auth/scopedTokenAudiences';
-import { resolveEditorKeySession } from '../../application/llm/gatewayAccess';
+import { assertLiveEditorKey } from '../../application/llm/editorKeyGate';
 
 /**
  * JWT authentication middleware.
@@ -95,8 +95,8 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   // A scoped token minted from an editor session carries that session's key id: revoking the
   // key (including VS Code sign-out) must kill every scoped copy of it, not just future mints.
   if (payload.aud != null && payload.kid) {
-    const key = await resolveEditorKeySession(db, payload.kid, payload.sub);
-    if (!key.valid) return c.json({ error: 'Invalid or revoked API key' }, 401);
+    const gate = await assertLiveEditorKey(db, { keyId: payload.kid, userId: payload.sub, missingKey: 'allow' });
+    if (!gate.ok) return c.json({ error: gate.message }, gate.status);
   }
 
   // Machine tokens (sub `agentHost:<id>` / `embed:<keyId>`) are minted server-to-server
