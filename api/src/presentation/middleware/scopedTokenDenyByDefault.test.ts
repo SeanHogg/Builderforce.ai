@@ -1,5 +1,5 @@
 /**
- * SEC-SYN-001: a scoped (`aud`) token is refused by webAuthMiddleware, optionalWebUserId and
+ * SEC-G017: a scoped (`aud`) token is refused by webAuthMiddleware, optionalWebUserId and
  * superAdminMiddleware (and so by every route behind them, e.g. POST /api/auth/editor-key and
  * POST /api/auth/tenant-token). Uses the REAL JwtService so the verifier itself is under test.
  */

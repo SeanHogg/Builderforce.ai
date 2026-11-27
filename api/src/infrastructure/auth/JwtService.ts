@@ -116,7 +116,7 @@ async function verifyClaims<T extends { exp: number }>(
 ): Promise<T> {
   const verdict = await verifyHs256<T>(token, requireSecret(secret), { nowSeconds: options?.nowSeconds });
   if (!verdict.ok) throw new Error(FAILURE_MESSAGE[verdict.reason]);
-  // DENY BY DEFAULT (SEC-SYN-001): an audience-bound (scoped) token is refused by every
+  // DENY BY DEFAULT (SEC-G017): an audience-bound (scoped) token is refused by every
   // verifier unless the caller opts in. Only authMiddleware opts in, and then enforces the
   // audience's method + path list.
   if (!options?.allowAudience && hasAudience(verdict.claims)) throw new Error(AUDIENCE_REFUSED_MESSAGE);

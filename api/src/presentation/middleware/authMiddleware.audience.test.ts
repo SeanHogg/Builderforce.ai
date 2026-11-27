@@ -1,5 +1,5 @@
 /**
- * SEC-SYN-001: an audience-bound (scoped) token reaches only the paths its audience lists;
+ * SEC-G017: an audience-bound (scoped) token reaches only the paths its audience lists;
  * a token without `aud` behaves exactly as before.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';

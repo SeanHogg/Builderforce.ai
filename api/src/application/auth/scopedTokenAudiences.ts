@@ -1,5 +1,5 @@
 /**
- * Audience-scoped tenant tokens (SEC-SYN-001).
+ * Audience-scoped tenant tokens (SEC-G017).
  *
  * A scoped token is a short-lived copy of the caller's tenant JWT carrying `aud`. It lets a
  * sibling extension (Spawn) act for the signed-in user on a fixed list of routes WITHOUT ever

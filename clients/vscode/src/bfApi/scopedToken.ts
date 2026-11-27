@@ -3,7 +3,7 @@ import { getBaseUrl } from "../gateway/gateway";
 import { getTenantJwt, onSessionChange, refreshTenantJwt } from "./session";
 
 /**
- * Audience-scoped tokens (SEC-SYN-001). A sibling extension (Spawn) never receives the
+ * Audience-scoped tokens (SEC-G017). A sibling extension (Spawn) never receives the
  * tenant JWT or the editor key: it asks the `builderforce` auth provider for a session
  * scoped to `spawn`, whose `accessToken` is a 15-minute token from
  * `POST /api/auth/scoped-token` that the server accepts only on that audience's routes.

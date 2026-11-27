@@ -59,7 +59,7 @@ async function verifySessionToken(token: string, secret: string): Promise<Worker
   try {
     const verdict = await verifyHs256<WorkerJwtPayload & { exp: number }>(token, secret);
     if (!verdict.ok) return null;
-    // Deny by default (SEC-SYN-001): an audience-bound (scoped) token is never a session here.
+    // Deny by default (SEC-G017): an audience-bound (scoped) token is never a session here.
     if (verdict.claims.aud !== undefined && verdict.claims.aud !== null) return null;
     return verdict.claims;
   } catch {

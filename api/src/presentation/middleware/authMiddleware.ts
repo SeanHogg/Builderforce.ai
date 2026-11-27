@@ -74,7 +74,7 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   let payload;
   try {
     // The ONLY verifier call that opts in to scoped (`aud`) tokens; every other verifier
-    // refuses them (SEC-SYN-001).
+    // refuses them (SEC-G017).
     payload = await verifyJwt(token, c.env.JWT_SECRET, { allowAudience: true });
   } catch {
     throw new UnauthorizedError('Invalid or expired token');

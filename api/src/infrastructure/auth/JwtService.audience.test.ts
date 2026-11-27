@@ -1,5 +1,5 @@
 /**
- * SEC-SYN-001: deny by default. Every verifier refuses a token carrying `aud` unless the
+ * SEC-G017: deny by default. Every verifier refuses a token carrying `aud` unless the
  * caller passes `{ allowAudience: true }` (only authMiddleware does); ordinary tokens are
  * unaffected.
  */

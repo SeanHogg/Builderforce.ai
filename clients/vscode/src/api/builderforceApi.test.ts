@@ -40,7 +40,7 @@ describe("createBuilderforceApi", () => {
     expect(api.getWebUrl()).toBe("https://web.example");
   });
 
-  it("regression: exports no credential and no sign-in (SEC-SYN-001)", () => {
+  it("regression: exports no credential and no sign-in (SEC-G017)", () => {
     const api = createBuilderforceApi(fakes().deps) as unknown as Record<string, unknown>;
     expect(api.getTenantToken).toBeUndefined();
     expect(api.signIn).toBeUndefined();

@@ -119,7 +119,7 @@ describe('requireAuth', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('401s an audience-bound (scoped) token without asking the api (SEC-SYN-001)', async () => {
+  it('401s an audience-bound (scoped) token without asking the api (SEC-G017)', async () => {
     const res = await request(env, await bearer({ sub: 'u1', exp: FUTURE, jti: 'j1', aud: 'spawn' }));
     expect(res.status).toBe(401);
     expect(fetchMock).not.toHaveBeenCalled();

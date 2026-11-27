@@ -79,7 +79,7 @@ export class BuilderForceAuthProvider implements vscode.AuthenticationProvider {
   }
 
   /**
-   * Sessions are scope-aware (SEC-SYN-001). `spawn` yields a short-lived audience-scoped
+   * Sessions are scope-aware (SEC-G017). `spawn` yields a short-lived audience-scoped
    * token (never the tenant JWT or the editor key); every other scope yields an opaque
    * marker session with an EMPTY `accessToken` — the raw editor key stays in SecretStorage
    * and no caller of this provider can read it.

@@ -8,7 +8,7 @@ import type * as vscode from "vscode";
  * It exports NO credential and no sign-in. A consumer that needs to act for the user asks
  * the `builderforce` authentication provider: `vscode.authentication.getSession("builderforce",
  * ["spawn"], { createIfNone: true })` returns a session whose `accessToken` is a short-lived
- * token scoped to the Spawn routes only (SEC-SYN-001).
+ * token scoped to the Spawn routes only (SEC-G017).
  */
 export interface BuilderforceApi {
   readonly version: 2;

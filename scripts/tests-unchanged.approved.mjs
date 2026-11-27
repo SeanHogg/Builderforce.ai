@@ -43,9 +43,16 @@ export const APPROVED_PERMANENT = [
   },
   {
     file: 'brain-embedded/src/hostModelStream.test.ts',
-    blob: '726564e0efe4e55e697db66e87f95ba7ad5f2ae0',
-    changed: "Ten account mocks change from `async () => [kimi]` to `async () => ({ accounts: [kimi] })`; the import gains `ByoOrderQuery`; cases are added for lead/trail placement, free-first and the Hybrid Auto account-first order. Every original routing outcome is asserted as before.",
-    reason: "Intended change (6e6911185, BYO role routing, chat #153027): the accounts port now returns the server-ordered `{ accounts, freeFirst }` so a host-called account takes its place in the tenant's order instead of always leading.",
+    blob: 'e4a4348ddf5dccad350628e40b750f80f912220b',
+    changed: "Ten account mocks change from `async () => [kimi]` to `async () => ({ accounts: [kimi] })`; the import gains `ByoOrderQuery`; cases are added for lead/trail placement, free-first and the Hybrid Auto account-first order. Every original routing outcome is asserted as before. 2026-11-27: the local-engine fixtures' runtime id and model refs change from `synapse` / `local/synapse/…` to `bfi-serve` / `local/bfi-serve/…`; no assertion changes.",
+    reason: "Intended change (6e6911185, BYO role routing, chat #153027): the accounts port now returns the server-ordered `{ accounts, freeFirst }` so a host-called account takes its place in the tenant's order instead of always leading. Re-approved 2026-11-27 for INF-G012 push 1: the `bfi serve` runtime id was renamed from `synapse` to `bfi-serve` (the typed registry no longer lists `synapse`; legacy refs are covered by alias tests in local-inference).",
+    approvedBy: APPROVED_BY,
+  },
+  {
+    file: 'brain-embedded/src/localFirstTransport.test.ts',
+    blob: '8beb1f7bf4a925e1917a6682bfe6db80e7beb49d',
+    changed: "The local-engine fixtures' runtime id and model refs change from `synapse` / `local/synapse/…` to `bfi-serve` / `local/bfi-serve/…` (10 lines). Every assertion is otherwise unchanged.",
+    reason: "INF-G012 push 1 (2026-11-27): the `bfi serve` runtime id was renamed from `synapse` to `bfi-serve`; the typed runtime registry no longer accepts `synapse`, so fixtures use the canonical id. Legacy `synapse` refs are covered by alias tests in packages/local-inference and clients/chrome.",
     approvedBy: APPROVED_BY,
   },
   {

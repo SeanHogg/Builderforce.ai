@@ -1,14 +1,9 @@
 import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
+import type { DbHandle as Db } from '../../application/shared/dbHandle';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { resolveEditorKeySession } from '../../application/llm/gatewayAccess';
-import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
-import {
-  isScopedTokenAudience,
-  SCOPED_TOKEN_AUDIENCES,
-  SCOPED_TOKEN_TTL_SECONDS,
-} from '../../application/auth/scopedTokenAudiences';
+import { mintScopedToken } from '../../application/auth/mintScopedToken';
+import { isScopedTokenAudience, SCOPED_TOKEN_AUDIENCES } from '../../application/auth/scopedTokenAudiences';
 import { parseBody, z } from './requestBody';
 
 const ScopedTokenBody = z.object({ audience: z.string().nullish() });
@@ -39,28 +34,21 @@ export function createScopedTokenRoute(db: Db): Hono<HonoEnv> {
     if (!isScopedTokenAudience(audience)) {
       return c.json({ error: 'Unknown audience', allowed: Object.keys(SCOPED_TOKEN_AUDIENCES) }, 400);
     }
-    const userId = c.get('userId') as string;
-    // An editor session is derived from a bfk_* key: a revoked / unknown / foreign key must
-    // not keep minting (same check as the workspace switch in vscodeRoutes).
-    const keyId = c.get('apiKeyId');
-    if (keyId) {
-      const key = await resolveEditorKeySession(db, keyId, userId);
-      if (!key.valid) return c.json({ error: 'Invalid or revoked API key' }, 401);
-    }
-    const { token, expiresIn } = await mintTenantSessionToken(db, c.env.JWT_SECRET, {
-      userId,
-      // Linked to the parent login session so signing out / revoking it revokes this too.
-      ...(c.get('sessionId') ? { sessionId: c.get('sessionId') } : {}),
-      tenantId: c.get('tenantId') as number,
-      role: c.get('role'),
+    const result = await mintScopedToken(db, c.env, {
+      claims: {
+        userId: c.get('userId') as string,
+        tenantId: c.get('tenantId') as number,
+        role: c.get('role'),
+        clientSurface: c.get('clientSurface'),
+        userAgent: c.req.header('User-Agent') ?? null,
+        ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+      },
       audience,
-      expiresIn: SCOPED_TOKEN_TTL_SECONDS,
-      clientSurface: c.get('clientSurface'),
-      ...(keyId ? { keyId } : {}),
-      userAgent: c.req.header('User-Agent') ?? null,
-      ipAddress: c.req.header('CF-Connecting-IP') ?? null,
+      sessionId: c.get('sessionId'),
+      apiKeyId: c.get('apiKeyId'),
     });
-    return c.json({ token, expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString() });
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json({ token: result.token, expiresAt: result.expiresAt });
   });
   return router;
 }
