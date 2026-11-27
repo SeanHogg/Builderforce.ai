@@ -17,6 +17,7 @@ import {
     OUTLINE_BADGE_KEYS, OUTLINE_FLAG_CYCLE, OUTLINE_VERDICTS, outlineOf, outlineRef,
     type GraphOutline, type KEdge, type KNode, type KnowledgeGraph,
 } from '@seanhogg/builderforce-memory/knowledge';
+import { extensionCategory, fileCategory } from '../fileCategory';
 
 export interface OutlineView {
     /** The full graph's files as nodes (kind `file`): the graph's own where it kept them, else built from the outline. */
@@ -64,11 +65,15 @@ function decode(outline: GraphOutline): Decoded {
         // The outline's 12-character hash is not a sourceHash (it never equals a real one), so it is not carried.
         // Built field by field (no spread per file or per link): 16k files and 150k links are decoded here.
         const node: Mutable<KNode> = {
-            ref: outlineRef(outline, f), kind: 'file', label: tailOf(f.path), pack: 'code', importance: f.importance, origin: 'extracted',
+            ref: outlineRef(outline, f), kind: 'file', label: tailOf(f.path), pack: 'docs', importance: f.importance, origin: 'extracted',
         };
         if (f.area !== undefined && outline.areas[f.area] !== undefined) node.area = outline.areas[f.area]!;
         if (f.partition !== undefined && outline.partitions[f.partition] !== undefined) node.partition = outline.partitions[f.partition]!;
         if (badges) node.badges = badges;
+        // Legacy compact outlines omit the pack. Use the code analyzer's placement badge
+        // when available, then recognize source extensions even when the path is a test or config.
+        if (badges?.asset !== 1 && (badges?.layerRule !== undefined || badges?.entry !== undefined
+            || (extensionCategory(f.path) === 'source' && fileCategory(node) !== 'other'))) node.pack = 'code';
         addTags(node, outline, f);
         return node;
     });
@@ -104,6 +109,9 @@ export function outlineView(graph: KnowledgeGraph): OutlineView | null {
     viewBy.set(graph, view);
     return view;
 }
+
+/** Files with source or deployment analysis belong to the code map and architecture tree. */
+export const isArchitectureFile = (node: KNode): boolean => node.pack === 'code' && node.badges?.asset !== 1;
 
 /** The files the map reads: the outline's on a truncated graph, else the graph's own file nodes. */
 export function fileNodesOf(graph: KnowledgeGraph): KNode[] {

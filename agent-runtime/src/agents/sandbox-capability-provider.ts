@@ -52,19 +52,8 @@ import type {
   RepoReadResult,
   RepoWriteResult,
 } from "@builderforce/agent-tools";
+import { isListedDirName } from "@builderforce/agent-tools/skip-dirs";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
-
-/** Directories never walked by `list_files` — the SAME ignore set the on-prem disk
- *  provider uses, mirrored here so the two surfaces agree on what a walk skips. */
-const LIST_IGNORED_DIRS = new Set([
-  "node_modules",
-  ".git",
-  "dist",
-  "build",
-  "coverage",
-  ".next",
-  ".cache",
-]);
 
 const LIST_MAX_FILES = 5_000;
 
@@ -123,7 +112,7 @@ async function walkFiles(
     for (const entry of entries) {
       const full = resolve(dir, entry.name);
       if (entry.isDirectory()) {
-        if (LIST_IGNORED_DIRS.has(entry.name)) {
+        if (!isListedDirName(entry.name)) {
           continue;
         }
         const childRel = toPosix(relative(root, full));

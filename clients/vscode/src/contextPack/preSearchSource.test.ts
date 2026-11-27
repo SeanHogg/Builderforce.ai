@@ -3,9 +3,9 @@ import { preSearchBlock } from "./preSearchSource";
 
 const { searches } = vi.hoisted(() => ({ searches: [] as AbortSignal[] }));
 vi.mock("../tools/ripgrep", () => ({ findRipgrep: async () => "rg" }));
-vi.mock("../workspace/workspaceSearch", async (importOriginal) => ({
-  // The module's constants (SKIP_DIRS, read by the symbol index at import) stay real.
-  ...(await importOriginal<typeof import("../workspace/workspaceSearch")>()),
+vi.mock("@builderforce/agent-tools/node-text-search", async (importOriginal) => ({
+  // The module's other exports stay real.
+  ...(await importOriginal<typeof import("@builderforce/agent-tools/node-text-search")>()),
   // A search that never finishes on its own — only its signal ends it, as rg's kill does.
   searchWorkspace: (opts: { query: string; signal?: AbortSignal }) => new Promise((resolve) => {
     if (opts.signal) searches.push(opts.signal);

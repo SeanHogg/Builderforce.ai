@@ -1,7 +1,7 @@
 /**
  * The host's embedder for the knowledge index (DONE.md, deterministic knowledge index archive,
- * "Where it runs"): Synapse (`bfi-node`) first, then the Evermind CPU embed, then a
- * resident Ollama embedding model — the FIRST that is warm right now. None warm ⇒ no
+ * "Where it runs"): the Evermind CPU embed first, then a resident Ollama embedding
+ * model — the FIRST that is warm right now. None warm ⇒ no
  * embedder: the index serves exact + lexical and says so (`tiers`), and never mixes
  * vectors of two fingerprints.
  *
@@ -13,8 +13,8 @@
 import type { EmbedderPort } from '@seanhogg/builderforce-memory/knowledge';
 import type { IdleScheduler, WarmEmbedderSource } from './contract.js';
 
-/** The order the design fixes: Synapse, then Evermind, then Ollama. */
-export const EMBEDDER_ORDER: ReadonlyArray<WarmEmbedderSource['id']> = ['synapse', 'evermind', 'ollama'];
+/** The order the design fixes: Evermind, then Ollama. */
+export const EMBEDDER_ORDER: ReadonlyArray<WarmEmbedderSource['id']> = ['evermind', 'ollama'];
 
 /** The first warm source's port, in {@link EMBEDDER_ORDER}; undefined when none is warm. */
 export async function resolveWarmEmbedder(sources: readonly WarmEmbedderSource[]): Promise<EmbedderPort | undefined> {

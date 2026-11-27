@@ -1,6 +1,6 @@
 /**
  * Tier 3: a local SLM's logprob classifier, through the host's {@link LogprobPort}
- * (`@builderforce/local-inference` `createLogprobPort`: Synapse → WebLLM → Ollama last).
+ * (`@builderforce/local-inference` `createLogprobPort`: `bfi serve` → WebLLM → Ollama last).
  *
  * This side builds the prompt (the request and what each candidate action is for) and
  * turns the port's per-label log-probabilities into probabilities over the label set.

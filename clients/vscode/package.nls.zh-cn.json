@@ -57,7 +57,6 @@
   "command.editWorkspaceHooks": "BuilderForce：编辑工作区钩子",
   "command.pickModel": "BuilderForce：选择模型",
   "command.setInferenceMode": "BuilderForce：选择推理模式",
-  "command.installSynapseModel": "BuilderForce：安装 Synapse 模型",
   "command.openSettings": "BuilderForce：打开设置",
   "command.editorChat": "BuilderForce：对话",
   "command.openBrain": "BuilderForce：打开 Brain 对话",

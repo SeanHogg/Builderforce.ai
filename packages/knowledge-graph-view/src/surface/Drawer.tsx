@@ -4,7 +4,7 @@
  * body below. Act's body is the root's (`act`, the ActPanel with its children); every other body is its registry component. At or under the sheet width
  * (`layout.drawerSheet`) it is a bottom sheet over the stage: full width, 55% tall, a top border instead of a left one.
  *
- * It is controlled by `useDrawer` (the open flag and tab), so a card's `onOpenPanel` opens it at that tab and the header's Panels button toggles it.
+ * It is controlled by `useDrawer` (the open flag and tab), so a card's `onOpenPanel` opens it at that tab and its edge chevrons reopen and collapse it.
  */
 
 import type { ReactNode } from 'react';
@@ -61,7 +61,10 @@ export function drawerTabs(graph: KnowledgeGraph, env: SurfaceEnv, panels: reado
 
 export function Drawer(p: DrawerProps) {
     const { labels, drawer, graph, env } = p;
-    if (!drawer.open) return null;
+    if (!drawer.open) return (
+        <PanelChevron testId="kg-panels-button" open={false} side="right" label={labels.surface.panelsLabel} onClick={drawer.toggle}
+            style={{ position: 'absolute', insetInlineEnd: 4, top: '50%', transform: 'translateY(-50%)', zIndex: 5 }} />
+    );
     const tabs = drawerTabs(graph, env, p.panels);
     const open = tabs.find((t) => t.id === drawer.tab) ?? null;
     // A panel this graph does not offer (asked for by id from elsewhere) shows the Act tab rather than an empty body.
@@ -89,10 +92,12 @@ export function Drawer(p: DrawerProps) {
             onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); drawer.close(); } }}
             style={{ ...placement, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0, boxSizing: 'border-box', background: cssVar('panel'), color: cssVar('text'), maxWidth: '100%' }}
         >
-            <div role="tablist" aria-label={labels.surface.panelsLabel} style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px', borderBottom: `1px solid ${cssVar('border')}`, overflowX: 'auto', scrollbarWidth: 'none', flex: 'none' }}>
-                {tab(ACT_TAB, labels.surface.header.drawerTabAct, tabId === ACT_TAB)}
-                {tabs.map((t) => tab(t.id, nameOf(t), t.id === tabId))}
-                <PanelChevron testId="kg-drawer-close" open side={p.sheet ? 'bottom' : 'right'} label={labels.close} onClick={drawer.close} style={{ marginInlineStart: 'auto' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px', borderBottom: `1px solid ${cssVar('border')}`, flex: 'none' }}>
+                <PanelChevron testId="kg-drawer-close" open side="right" label={labels.close} onClick={drawer.close} />
+                <div role="tablist" aria-label={labels.surface.panelsLabel} style={{ display: 'flex', gap: 2, minWidth: 0, overflowX: 'auto', scrollbarWidth: 'none' }}>
+                    {tab(ACT_TAB, labels.surface.header.drawerTabAct, tabId === ACT_TAB)}
+                    {tabs.map((t) => tab(t.id, nameOf(t), t.id === tabId))}
+                </div>
             </div>
             <div
                 id="kg-drawer-body" role="tabpanel" aria-labelledby={`kg-drawer-tab-${tabId}`}

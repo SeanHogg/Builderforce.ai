@@ -10,12 +10,10 @@ const source = (id: WarmEmbedderSource['id'], warm: boolean, port = bucketEmbedd
 });
 
 describe('embedder chain — order', () => {
-    it('is Synapse → Evermind → Ollama, whatever order the host offers them in', async () => {
-        expect(EMBEDDER_ORDER).toEqual(['synapse', 'evermind', 'ollama']);
-        const synapse = bucketEmbedder('synapse');
+    it('is Evermind → Ollama, whatever order the host offers them in', async () => {
+        expect(EMBEDDER_ORDER).toEqual(['evermind', 'ollama']);
         const evermind = bucketEmbedder('evermind');
         const ollama = bucketEmbedder('ollama');
-        expect(await resolveWarmEmbedder([source('ollama', true, ollama), source('evermind', true, evermind), source('synapse', true, synapse)])).toBe(synapse);
         expect(await resolveWarmEmbedder([source('ollama', true, ollama), source('evermind', true, evermind)])).toBe(evermind);
         expect(await resolveWarmEmbedder([source('ollama', true, ollama), source('evermind', false, evermind)])).toBe(ollama);
     });

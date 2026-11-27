@@ -20,9 +20,9 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isIndexedDirName } from "@builderforce/agent-tools/skip-dirs";
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".md", ".json"]);
-const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".cache", "coverage"]);
 const MAX_SCAN_FILES = 800;
 const MAX_EXCERPT_CHARS = 600;
 const DEFAULT_TOP_K = 3;
@@ -44,7 +44,7 @@ async function walkSourceFiles(dir: string, files: string[] = []): Promise<strin
       break;
     }
     if (entry.isDirectory()) {
-      if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith(".")) {
+      if (isIndexedDirName(entry.name)) {
         await walkSourceFiles(path.join(dir, entry.name), files);
       }
     } else if (entry.isFile() && SOURCE_EXTENSIONS.has(path.extname(entry.name))) {

@@ -12,13 +12,11 @@ setDesktopClientName("vscode");
 export {
   type DesktopDiscovery,
   type MissingReference,
-  type DesktopModelsEndpoint,
   setDesktopFetchForTests,
   setDesktopClientName,
   catalogDesktopSemantic,
   discoveryFilePath,
   forgetDesktopProbe,
-  readDesktopModelsEndpoint,
   liveDesktop,
   desktopSemanticCapability,
   desktopBackedTools,

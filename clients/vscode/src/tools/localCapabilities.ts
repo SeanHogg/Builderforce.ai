@@ -36,7 +36,8 @@ import type {
 import type { LocalResearchCapability, RepoSemanticCapability, RepoSymbolsCapability } from "@builderforce/agent-tools";
 import { desktopSemanticCapability } from "../context/desktopContext";
 import { createLocalShell } from "./localShell";
-import { SKIP_DIRS, searchWorkspace } from "../workspace/workspaceSearch";
+import { searchWorkspace } from "@builderforce/agent-tools/node-text-search";
+import { isListedDirName } from "@builderforce/agent-tools/skip-dirs";
 import { workspaceSymbolIndex } from "../workspace/workspaceSymbols";
 import { messageOf } from "../shared/messageOf";
 
@@ -51,8 +52,8 @@ const LIST_MAX_FILES = 5_000;
 // listing). Over this many files we collapse the result to a deduped directory summary
 // + truncated flag, so the model narrows with a subdir or search_code instead.
 const LIST_RETURN_MAX = 400;
-// search_code lives in `workspaceSearch.ts` (ripgrep first, in-process walk as the
-// fallback); the skip list is shared from there so listing and searching agree.
+// search_code lives in `@builderforce/agent-tools/node-text-search` (ripgrep first, in-process
+// walk as the fallback); the ignore policy is `@builderforce/agent-tools/skip-dirs`.
 
 /** The capabilities the editor surface can physically back: read/search/write/edit/
  *  delete the open folder, plus a real shell (so `run_command` + the `git_*` tools
@@ -146,7 +147,7 @@ async function walkFiles(start: string, root: string, glob?: string, scope?: str
     }
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        if (SKIP_DIRS.has(entry.name) || entry.name.startsWith(".")) continue;
+        if (!isListedDirName(entry.name)) continue;
         const childRel = path.relative(root, path.join(dir, entry.name)).split(path.sep).join("/");
         // Prune directories the glob cannot reach so the match budget is not
         // spent walking unrelated trees (and a truncated miss is not a miss).
@@ -239,7 +240,7 @@ export function buildLocalCapabilityProvider(root: string, options: LocalProvide
     async searchCode(query: string, scope?: string, searchOpts?: { signal?: AbortSignal }): Promise<RepoSearchResult> {
       // Optional scope: a subdirectory OR a single file inside the workspace. Resolved
       // here (the containment guard is the provider's job); the search itself — ripgrep
-      // when the editor has one, the bounded walk otherwise — lives in workspaceSearch.
+      // when the editor has one, the bounded walk otherwise — lives in node-text-search.
       let start = rootResolved;
       const scopeDir = normalizeScopeDir(scope);
       if (scopeDir) {

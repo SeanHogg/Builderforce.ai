@@ -3,16 +3,13 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as crypto from "crypto";
 import { gitIgnoredMatcher } from "@builderforce/agent-tools/node-git-ignore";
+import { isIndexedDirName } from "@builderforce/agent-tools/skip-dirs";
 import { routeComplete, type ModelRoute } from "../models/modelRouting";
 
-const SKIP_DIRS = new Set([
-  ".git", "node_modules", "dist", "out", "build", ".next", "coverage", ".turbo",
-  ".vscode-test", "vendor", ".venv", "venv", "__pycache__", ".cache", "target", ".idea",
-  // Sibling checkouts that sit beside the product tree when the parent folder is
-  // opened. They are not this repo, and their manifests were landing in the map
-  // as if they were sub-projects.
-  "bf-verify-fdc", "_cubecl_src",
-]);
+// Sibling checkout that sits beside the product tree when the parent folder is
+// opened. It is not this repo, and its manifests were landing in the map as if they
+// were sub-projects. (Vendored `_*_src` trees are covered by the shared policy.)
+const HOST_EXTRA_SKIP_DIRS: ReadonlySet<string> = new Set(["bf-verify-fdc"]);
 const MANIFEST_FILES = new Set([
   "package.json", "pyproject.toml", "requirements.txt", "Cargo.toml", "go.mod",
   "pom.xml", "build.gradle", "Gemfile", "composer.json", "wrangler.toml",
@@ -119,7 +116,7 @@ async function scanTree(root: string): Promise<ScanData> {
     for (const e of entries) {
       const childRel = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) {
-        if (SKIP_DIRS.has(e.name) || e.name.startsWith(".") || isIgnored(childRel)) continue;
+        if (!isIndexedDirName(e.name) || HOST_EXTRA_SKIP_DIRS.has(e.name) || isIgnored(childRel)) continue;
         dirs.push(childRel);
         if (depth < MAX_DEPTH) await rec(path.join(abs, e.name), childRel, depth + 1);
       } else if (e.isFile()) {

@@ -88,7 +88,7 @@ export interface KnowledgeIndexFiles {
  * host has on disk is loaded on idle first, `idleLoadedEmbedder`).
  */
 export interface WarmEmbedderSource {
-    id: 'synapse' | 'evermind' | 'ollama';
+    id: 'evermind' | 'ollama';
     warm(): boolean;
     /** The port over the resident model; undefined when it went cold since `warm()`. */
     port(): EmbedderPort | undefined | Promise<EmbedderPort | undefined>;

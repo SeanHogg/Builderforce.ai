@@ -15,12 +15,11 @@
 import * as path from "path";
 import {
   sharedSymbolIndex,
-  SYMBOL_INDEX_SKIP_DIRS,
   treeSitterSymbolExtractor,
   type SymbolExtractor,
   type WorkspaceSymbolIndex,
 } from "@builderforce/agent-tools/node-symbols";
-import { SKIP_DIRS } from "./workspaceSearch";
+import { WORKSPACE_SKIP_DIRS } from "@builderforce/agent-tools/skip-dirs";
 
 /** Watcher-backed, so the full re-walk is a 10-minute backstop rather than per query. */
 const FULL_REFRESH_MS = 10 * 60_000;
@@ -29,11 +28,13 @@ const FULL_REFRESH_MS = 10 * 60_000;
  * Sibling checkouts and vendored trees that sit beside this product when the open
  * folder is the parent workspace. They are not this repo. The map scan skips them
  * (`codebaseScan`); the symbol index must too, or grounding re-emits them as a
- * wall of unrelated definitions.
+ * wall of unrelated definitions. Vendored `_*_src` trees (e.g. `_cubecl_src`) are
+ * already covered by the shared policy's name rule; only this host-specific
+ * checkout name needs naming here.
  */
-const NOISY_ROOTS = ["bf-verify-fdc", "_cubecl_src"] as const;
+const HOST_EXTRA_SKIP_DIRS = ["bf-verify-fdc"] as const;
 
-const skipDirs: ReadonlySet<string> = new Set([...SYMBOL_INDEX_SKIP_DIRS, ...SKIP_DIRS, ...NOISY_ROOTS]);
+const skipDirs: ReadonlySet<string> = new Set([...WORKSPACE_SKIP_DIRS, ...HOST_EXTRA_SKIP_DIRS]);
 
 /** Where the bundle ships the tree-sitter wasm (`out/tree-sitter`), set at activation.
  *  Unset (tests, the harness) ⇒ the grammars resolve from the installed packages. */

@@ -97,12 +97,12 @@ describe('host knowledge index — fingerprints', () => {
         expect(r.hits.every((h) => h.tier !== 'dense')).toBe(true);
     });
 
-    it('the chain takes Synapse before Evermind, and only a warm one', async () => {
-        const synapse = bucketEmbedder('synapse');
+    it('the chain takes Evermind before Ollama, and only a warm one', async () => {
+        const ollama = bucketEmbedder('ollama');
         const evermind = bucketEmbedder('evermind');
         const ev = { id: 'evermind' as const, warm: () => true, port: () => evermind };
-        expect(await resolveWarmEmbedder([ev, { id: 'synapse', warm: () => true, port: () => synapse }])).toBe(synapse);
-        expect(await resolveWarmEmbedder([ev, { id: 'synapse', warm: () => false, port: () => synapse }])).toBe(evermind);
+        expect(await resolveWarmEmbedder([{ id: 'ollama', warm: () => true, port: () => ollama }, ev])).toBe(evermind);
+        expect(await resolveWarmEmbedder([{ ...ev, warm: () => false }, { id: 'ollama', warm: () => true, port: () => ollama }])).toBe(ollama);
         expect(await resolveWarmEmbedder([{ ...ev, warm: () => false }])).toBeUndefined();
     });
 });

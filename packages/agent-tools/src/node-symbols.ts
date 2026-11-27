@@ -42,11 +42,8 @@ export interface SymbolExtractor {
 /** The dependency-free line-regex extractor (`symbols.ts`) — the default and the fallback. */
 export const REGEX_SYMBOL_EXTRACTOR: SymbolExtractor = { id: "regex", extract: extractSymbols };
 
-/** Directories never indexed — build output, dependencies, VCS and tool caches. */
-export const SYMBOL_INDEX_SKIP_DIRS: ReadonlySet<string> = WORKSPACE_SKIP_DIRS;
-
 export interface SymbolIndexOptions {
-  /** Directory names to skip (dot-directories are always skipped). */
+  /** Directory names to skip instead of {@link WORKSPACE_SKIP_DIRS} (dot-directories are always skipped). */
   skipDirs?: ReadonlySet<string>;
   /** Files indexed before the index reports itself partial. */
   maxFiles?: number;
@@ -131,7 +128,7 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
 
   constructor(root: string, options: SymbolIndexOptions = {}) {
     this.root = path.resolve(root);
-    this.skipDirs = options.skipDirs ?? SYMBOL_INDEX_SKIP_DIRS;
+    this.skipDirs = options.skipDirs ?? WORKSPACE_SKIP_DIRS;
     this.maxFiles = options.maxFiles ?? 40_000;
     this.maxFileBytes = options.maxFileBytes ?? 1_000_000;
     this.cachePath = options.cachePath;

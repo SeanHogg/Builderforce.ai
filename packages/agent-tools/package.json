@@ -14,6 +14,7 @@
     "./gate-lowering": "./src/gate-lowering.ts",
     "./glob": "./src/glob.ts",
     "./sampling": "./src/sampling.ts",
+    "./edit": "./src/edit.ts",
     "./documents": "./src/documents.ts",
     "./knowledge-index": "./src/knowledge-index.ts",
     "./prefetch": "./src/prefetch/index.ts",

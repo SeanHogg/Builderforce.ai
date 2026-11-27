@@ -6,7 +6,7 @@
  * serve, which model may take this turn, and when do we fall back to the cloud" is
  * answered once:
  *
- *  - the runtime REGISTRY (Synapse/bfi, Ollama, FreeToken, the page engines — WebGPU
+ *  - the runtime REGISTRY (`bfi serve`, Ollama, FreeToken, the page engines — WebGPU
  *    `bfi`, WebLLM, the browser's built-in model — and Kimi Code) and the
  *    `local/<runtime>/<model>` ref grammar;
  *  - the page engines' model CATALOG (WebLLM's rows generated from the library), the

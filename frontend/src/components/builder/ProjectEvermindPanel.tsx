@@ -16,7 +16,7 @@ import { useEvermindValidation } from './EvermindValidationContext';
  * ProjectEvermindPanel — the web host of the shared <EvermindConsole> (the SAME
  * component the VS Code sidebar renders, so the inspect-and-train surface is one
  * source of truth: [[evermind-learning-architecture]]). This wrapper supplies only
- * the two host seams: the shared REST adapter (the same one VS Code and Synapse use)
+ * the two host seams: the shared REST adapter (the same one VS Code uses)
  * over the web's authenticated request, and a next-intl label bundle. Manager-gating rides the
  * `canManage` prop (the console disables — never hides — the write controls).
  */

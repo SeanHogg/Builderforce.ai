@@ -546,8 +546,6 @@ RESOLVED 2026-11-01 (commit 67f461953): the pending-turn wiring and `servedBy` a
 - `AVR-G013` **Local tool turns answered in prose are accepted.** `answered` in `localFirstTransport.ts`; the 0-tool case scores healthy. *Blocker: product decision on holding the first delta.*
 - `AVR-G014` **Ollama loaded at a larger `num_ctx` overstates our window.** *Blocker: move to `/api/chat` or an upstream route.*
 - `AVR-G015` **Windows command routed to bash loses backslashes** (`packages/agent-tools/src/node-posix-shell.ts`). *Blocker: a trace of the routing decision.*
-- `AVR-G016` **Self-Directed Agents are Windows-only.** *Blocker: a Mac; an X11 session.*
-- `AVR-G017` **Installers unsigned, no updater.** Windows and macOS signing are wired; Tauri updater signing isn't. *Blocker: signing secrets in both repos.* Then delete `SpawnDownloadButton`'s first-run hints.
 - `AVR-G018` **~3.3 GB after indexing one small package.** Profiled and the dominant retention fixed (2026-11-01): host `meta.text` kept the full card text per node; now clipped to a 256-char excerpt, full text stays in the engine. See DONE.md.
 - `AVR-G019` **Phase 3 browser/VM host.** *Blocker: prompt-injection defence first.*
 - `AVR-G020` **pi-tui is the last `@mariozechner/pi-*` dep.** 23 importers left; migrate to Ink.
@@ -587,7 +585,7 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
   - Canvas and build tools execute in the frontend (`canvasAiToolExecution.ts`), so MCP, REST and CLI cannot call them.
   - `/sdk` is an LLM gateway client only, and there is no event bus.
 - `UP-G010` **The Idea → Reach lifecycle exists only on the web.**
-  - VS Code and Synapse have no stage model.
+  - VS Code has no stage model.
 - `UP-G011` **The run target registry is too narrow and lives in the wrong place.**
   - It has only `browser` and `container`, with no `cloudflare` or `native`.
   - It lives in `frontend/src/lib/runTarget`, not in a package.
@@ -601,18 +599,11 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
   - They are Rust `bfi-*`, `bfi-web`/`bfi-node` (copied into Builderforce.ai/packages), webcontainers `src/inference` + `kvcache`, and `packages/local-inference` + `model-catalog`.
   - KV/prefix-cache logic exists in both TS and Rust.
   - Fix: one engine and one catalog.
-- `UP-G015` **Synapse has no editor and cannot host the VSIX.**
-  - Direction: use VS Code with the Builderforce extension as the editor. The extension provides Workspace MCP and can use the separate native inference and context services. Move Spawn to a Roblox project type.
-  - First-slice done-checks:
-    - WebView2 service-worker and webview behaviour;
-    - bundle size;
-    - marketplace licensing.
 - `UP-G016` **Consistency debt across the repos.**
   - Package scope stays `@seanhogg/*` (user, 2026-11-26), so no rename is planned.
-  - Spawn pins `bf-cloud` to git `main`. This becomes moot once Spawn becomes a project type.
-  - The Synapse console links `brain-ui` by relative path into the Builderforce.ai monorepo.
-  - Synapse and Spawn have duplicate Tauri shells.
   - The Builderforce.ai root holds stray logs and probe files (`_tsc_*.log`, `tsgo-*.log`, `_probe_sqlite.cjs`, a file named `-p`).
+- `UP-G017` **Roblox is not yet a project type in the editor.** The Spawn app was retired on 2026-11-27. The `bf-roblox` bridge in `builderforce-spawn/crates/bf-roblox` is the reference for a Roblox starter kit and runtime adapter in the starter-kit registry (`UP-G002`). *Blocker: the starter-kit registry (`UP-G002`) does not exist yet.*
+- `UP-G018` **Features that existed only in Synapse have no host since its retirement (2026-11-27).** They are Teach-once desktop automation (`bf-teach`), Self-Directed Agents with their scheduler and run history, and phone approvals for self-owned `synapse.step` steps. The API keeps the existing `synapse.step` rows private. The memory-mcp `experience_*` tools remain. *Blocker: a product decision on whether to rebuild them in the VS Code extension (desktop UI automation needs a native helper).*
 
 ### MCP consolidation `[platform]` `[agents]`
 
@@ -661,14 +652,14 @@ Gaps:
 - `CIX-G002` **Workspace cutover complete.** `workspace__find` and the saved `codebase_semantic_search` call use the shared TypeScript index and a warm local embedder when available. The saved call uses lexical search for extension-filtered queries.
 - `CIX-G003` **Workspace exact search shared.** VS Code and headless Workspace MCP expose `workspace__search` through the same `search_code` tool. Other host search adapters remain part of the index audit.
 - `CIX-G004` **5 symbol parsers exist**: native tree-sitter (11 languages), WASM tree-sitter (7), regex, the TS compiler API and regex relations.
-- `CIX-G005` **3 chunkers exist, and only Synapse embeds code bodies.** The editor index holds cards only.
+- `CIX-G005` **3 chunkers exist, and only the native `bf-index` embeds code bodies.** The editor index holds cards only.
 - `CIX-G006` **repo-map is a hand-kept TS mirror of the Rust `graph.rs`/`repo_map.rs`, fed by regex.** `symbolRepoMap.ts` is a third, graph-less map.
 - `CIX-G007` **6 lexical engines and 5 tokenizers exist.**
 - `CIX-G008` **4 RRF/fusion copies exist.**
 - `CIX-G009` **7 ignore lists disagree with each other.**
 - `CIX-G010` **Path normalisation is done case by case.**
 - `CIX-G011` **One repo gets three indexes, in two dot-dirs** (`.builderforce` and `.builderForceAgents`).
-- `CIX-G012` **4 embedding models are in use, with no shared fingerprint policy.** The editor's embedder chain lists a Synapse embedder that is never offered.
+- `CIX-G012` **4 embedding models are in use, with no shared fingerprint policy.** The never-offered Synapse embedder slot was removed on 2026-11-27.
 - `CIX-G013` **3 change-detection schemes exist**: a watcher plus blake3, an mtime snapshot, and a 5-minute staleness window.
 - `CIX-G014` **Workspace cutover complete.** VS Code and headless Workspace MCP expose the shared TypeScript `workspace__references` tool.
 - `CIX-G015` **Result caps and file caps disagree.**
@@ -699,20 +690,18 @@ Gaps:
 - `INF-G003` **webcontainers `kvcache/*` has no engine feeding it.**
 - `INF-G004` **webcontainers `adaptive/` and `learning/` have no consumer found.** They duplicate the fit and routing logic.
 - `INF-G005` **About 9 model catalogs exist**, and agent-runtime hard-codes context windows and prices (`models-config.providers.ts`, `*-models.ts`).
-- `INF-G006` **Synapse's Rust `bf-local/hub.rs` local catalog (Ollama tags) is disjoint from the TS `local-inference` catalog.**
-- `INF-G007` **4 fit/hardware-budget implementations exist.**
+- `INF-G007` **3 fit/hardware-budget implementations exist** (Rust `bfi-runtime` fit and `kv_plan`, TS `local-inference/fit.ts`, webcontainers `adaptive/`). The `bf-local` copy was deleted with Synapse.
 - `INF-G008` **About 10 model pickers exist.** The api pickers (`pickCloudModel`, `byo*`, `poolRouting`, `proxySeed`) sit outside `model-router`.
 - `INF-G009` **3 response-cache implementations exist**: the api `*Cache.ts` files, and the memory `ResponseCache`/`SemanticCache`.
 - `INF-G010` **6 Ollama clients exist.**
 - `INF-G011` **8 weight stores exist on one machine.**
   - The same Bonsai GGUF can be stored up to 3×.
-  - The Rust `models_dir()` is coded twice.
-- `INF-G012` **One engine has two runtime ids**: `synapse` and `bfi`, both on port 11434.
+  - VS Code `globalStorage/local-models` duplicates the machine store `~/.builderforce/models`.
+- `INF-G012` **One engine has two runtime ids**: `synapse` (now labelled `bfi serve`, the HTTP engine) and `bfi` (the in-page engine). Rename the `synapse` wire id, the `local/synapse/…` model ids and the `localModels.synapseUrl` and Chrome `synapseUrl` settings with an expand/contract migration.
 - `INF-G013` **Model ids and context defaults drift.**
   - Bonsai is `bonsai-1.7b-q1_0` in one place and `Bonsai-1.7B-q4-ONNX` in another.
   - Context-window defaults are 128000, 32768, and 1024–4096 in different places.
 - `INF-G014` **agent-runtime uses node-llama-cpp as a second native GGUF engine**, beside `bfi-node`.
-- `INF-G015` **The `bfi` CLI User-Agent is hard-coded** as `bfi/2026.10.4`.
 - `INF-G016` **The memory-engine GGUF export cannot be run by llama.cpp**, and the docs may imply that it can.
 
 ### Agent memory consolidation `[agents]`
@@ -729,8 +718,6 @@ Gaps:
 - `MEM-G104` **agent-runtime keeps a second memory index.**
   - It uses sqlite-vec with provider embedders, and exposes `memory_search`/`memory_get`.
   - Location: `agent-runtime/src/memory/*`.
-- `MEM-G105` **The experience types are hand-mirrored in Rust** (`bf-teach/model.rs`), with no contract test.
-- `MEM-G106` **Synapse reads `memory.json` directly** (`facts_list`), bypassing memory-mcp.
 - `MEM-G107` **"Skill" means three unrelated things**: the Train-Once procedure, SKILL.md, and the Claude plugin skill.
 - `MEM-G108` **There are 4 run ledgers with unrelated ids**: experience runs, `runOutcomes`, `runDelta` and `brain_chat_steps`.
 - `MEM-G109` **There are 4 compaction paths**: memory-mcp, `working/consolidate`, `brainMemory` and `memory-flush`.
@@ -738,7 +725,7 @@ Gaps:
 - `MEM-G111` **There are two live memory file locations**: `~/.builderforce-memory` and the legacy `~/.claude/builderforce-memory`. Whichever is newest wins, which risks a split brain.
 - `MEM-G112` **Fact key prefixes have no registry**: `team:`, `run-outcome:`, `codemap:` and `[absorbed→…]`.
 - `MEM-G113` **There are 5 incompatible embedding spaces**, and cloud memory is pinned to one vendor with no failover.
-- `MEM-G114` **There are 3 brain-map UIs**: the Synapse JS map, `EvermindBrainMap` and `EvermindBrain3D`.
+- `MEM-G114` **There are 2 brain-map UIs**: `EvermindBrainMap` and `EvermindBrain3D`. Merge them onto the shared 3D stage (`AE-G059`).
 - `MEM-G115` **Names collide:**
   - "memory" means RAM in webcontainers but facts elsewhere;
   - "Evermind" means the model, the facts or the console;
@@ -758,15 +745,13 @@ Details, paths and migration order: `docs/specs/tasks/platform-duplication-audit
 - `CHAT-G007` **Model pickers are rendered in three hosts** (Chrome, VS Code, web). Keep only data adapters feeding `ModelPane`.
 - `CHAT-G008` **Starter and work-mode tiles are built per host.** Make them data for `StarterTiles`, with modes from `chatMode.ts`.
 - `CHAT-G009` **There are six label paths, plus hand-written key-mapping tables.** Use one brain-ui `labelCatalog` with a `t()` adapter per host.
-- `CHAT-G010` **Chat limits are copied per host:** Synapse constants and VS Code `attachmentLimits.ts`. Export one limits module.
+- `CHAT-G010` **Chat limits are copied per host:** VS Code `attachmentLimits.ts` mirrors the API by comment. Export one limits module.
 - `CHAT-G011` **The TUI's `commands.ts` and `auto-reply/commands-registry.ts` are a third and fourth slash-command registry,** with hand-written help.
 - `CHAT-G012` **There is no shared run-event vocabulary** across the gateway WebSocket, Tauri, SSE and the VS Code bridge. Define `RunEvent` with one adapter per transport.
 - `CHAT-G013` **The Control UI (Lit) has its own message normalizer, tool cards and copy-as-markdown.**
 - `CHAT-G014` **Agent-host chat (`chatRoutes.ts`) uses a second message store.** Fold it into `brain_chat_*` with an expand/contract migration.
-- `CHAT-G015` **Synapse chat is a full vanilla-JS fork:** composer, transcript, approval and `brain.rs` streaming with polling. It is removed by the Synapse IDE rebuild.
-- `CHAT-G016` **`useVoiceDictation` is copied into Synapse `dictation.js`** (and into Spawn, UNVERIFIED).
 - `CHAT-G017` **brain-embedded `ui/PromptInput.tsx` may be dead code.** Verify its references and delete it if unused.
-- `CHAT-G018` **Synapse chat, Chrome diagnostics and the shared limits have no tests.**
+- `CHAT-G018` **Chrome diagnostics and the shared limits have no tests.**
 
 ### Shell and file tools consolidation `[platform]`
 
@@ -791,17 +776,16 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §6. 
 
 Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §7. The server side and the TypeScript device flow are shared; the client session code is not.
 
-- `AUTH-G001` **The Rust device flow (`bf-cloud/device.rs`) duplicates `packages/device-auth`,** with no shared contract fixture.
-- `AUTH-G002` **There are three copies of the editor-key session** (VS Code `bfApi/session.ts`, Chrome `auth/session.ts`, Rust `bf-cloud/session.rs`). Extract a host-neutral `packages/editor-session`.
+- `AUTH-G002` **There are two copies of the editor-key session** (VS Code `bfApi/session.ts` and Chrome `auth/session.ts`; the Rust copy was deleted with Synapse). Extract a host-neutral `packages/editor-session`.
 - `AUTH-G003` **The Chrome client has no 401 forced-refresh retry.**
 - `AUTH-G004` **The Chrome client has no workspace switch.**
 - `AUTH-G005` **agent-runtime has about 56 hand-built Bearer fetches and about 18 `BUILDERFORCE_URL` fallbacks.** Replace them with one `builderforceClient`.
-- `AUTH-G006` **The default base URL is split:** `api.builderforce.ai` (web, agent-runtime, SDK) vs `builderforce.ai/gateway` (VS Code, Chrome, Synapse).
+- `AUTH-G006` **The default base URL is split:** `api.builderforce.ai` (web, agent-runtime, SDK) vs `builderforce.ai/gateway` (VS Code, Chrome).
 - `AUTH-G007` **Configuration names and aliases are inconsistent** across hosts. Keep one documented table and deprecate the aliases.
-- `AUTH-G008` **Error flattening is copied four times,** and Rust `CloudError` misses the nested `{error:{message,code}}` form.
-- `AUTH-G009` **The fallback when the server omits `expiresIn` differs:** 3600 s in TypeScript, 900 s in Rust.
-- `AUTH-G012` **Auth-client test gaps:** Chrome `apiClient.test.ts` is 11 lines, Rust has 6 tests, agent-runtime has none.
-- `AUTH-G013` **Rust and VS Code derive the web origin from the API URL by hand.**
+- `AUTH-G008` **Error flattening is copied three times** (web, Chrome, SDK).
+- `AUTH-G009` **Each TypeScript host keeps its own fallback for an omitted `expiresIn`.** Share one constant.
+- `AUTH-G012` **Auth-client test gaps:** Chrome `apiClient.test.ts` is 11 lines, and agent-runtime has none.
+- `AUTH-G013` **VS Code derives the web origin from the API URL by hand.**
 - `AUTH-G014` **Not yet audited:** Chrome SettingsView sign-in, webcontainers `aiGateway`/`hostRelay`, `knowledge-client`, `provider-connect`.
 - `AUTH-G016` **Security-sensitive client and credential findings.** The local security findings file also covers `AUTH-G017` through `AUTH-G019`. See DONE.md for the resolution of `AUTH-G015` and `AUTH-G018`.
 - `AUTH-G021` **15-minute web and workspace tokens write about 2 `auth_tokens` rows every 11 minutes per active session,** each kept 7 days by the expired-credential sweep. Neon core storage was last noted at 504/512 MB.
@@ -820,7 +804,7 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §8. 
 - `SECP-G007` **There are three prompt-injection pattern sets** (`external-content.ts`, `instruction-firewall.ts`, M `cognition/sanitize.ts`).
 - `SECP-G008` **The W credential scrubber has no parity test with `secret-redaction`.** Fix in progress.
 - `SECP-G009` **Egress has six mechanisms and no single registry.**
-- `SECP-G010` **The inference host (builderforce-inference) has no scanner or egress policy.** Under the Synapse IDE rebuild it inherits the VS Code extension's.
+- `SECP-G010` **The inference host (builderforce-inference) has no scanner or egress policy.** Synapse was retired on 2026-11-27. The remaining `bfi serve` and `bf-context serve` binaries bind to loopback with a token. Decide whether they need a scanner or egress policy of their own.
 - `SECP-G013` **Security-sensitive defaults and coverage gaps.** The local security findings file also covers `SECP-G014` and `SECP-G015`.
 
 ### Data model — PRD 20 `[platform]`

@@ -1,13 +1,10 @@
 /**
  * The editor's embedder for the knowledge index (DONE.md, deterministic knowledge index archive,
- * "Where it runs"): Synapse (`bfi-node`) → the Evermind CPU embed → a resident Ollama
- * embedding model, the first that is WARM — judged the way the PreFetch logprob port
- * judges its engine (a model is resident now), never by loading one on a request's path.
+ * "Where it runs"): the Evermind CPU embed → a resident Ollama embedding model, the
+ * first that is WARM — judged the way the PreFetch logprob port judges its engine (a
+ * model is resident now), never by loading one on a request's path.
  * The order and the "never mix fingerprints" rule are the shared `resolveWarmEmbedder`'s.
  *
- *   - Synapse: a part of the editor that holds an embedding model OFFERS it here while it
- *     is resident (`offerWarmEmbedder`). The host `bfi` worker serves chat only today, so
- *     nothing offers one yet.
  *   - Evermind: the checkpoint the memory server embeds recall with
  *     (`BUILDERFORCE_MEMORY_MODEL`, memory-mcp's `MODEL_FILE_ENV`), only when that file is
  *     present — loaded on idle (`idleLoadedEmbedder`, its own scheduler), cold until then.
@@ -39,17 +36,6 @@ import { globalFetch, type LocalModelsConfig } from "../../models/localModels";
 /** memory-mcp's `MODEL_FILE_ENV` / `TOKENIZER_FILE_ENV` — the ONE place a local checkpoint is named. */
 const EVERMIND_MODEL_ENV = "BUILDERFORCE_MEMORY_MODEL";
 const EVERMIND_TOKENIZER_ENV = "BUILDERFORCE_MEMORY_TOKENIZER";
-
-
-const offered = new Map<WarmEmbedderSource["id"], WarmEmbedderSource>();
-
-/** Offer a resident embedder (Synapse). Returns the withdrawal. */
-export function offerWarmEmbedder(source: WarmEmbedderSource): () => void {
-  offered.set(source.id, source);
-  return () => {
-    if (offered.get(source.id) === source) offered.delete(source.id);
-  };
-}
 
 /** The Evermind checkpoint on disk now, as `<path>@<save time>`; undefined when none. */
 export function evermindCheckpointStamp(env: Record<string, string | undefined> = process.env): string | undefined {
@@ -114,10 +100,10 @@ function ollamaSource(): WarmEmbedderSource | undefined {
   return source;
 }
 
-/** The warm embedder right now, Synapse first; undefined ⇒ exact + lexical only. */
+/** The warm embedder right now, Evermind first; undefined ⇒ exact + lexical only. */
 export function editorEmbedder(): Promise<EmbedderPort | undefined> {
   // Its own idle scheduler: the index's coalescing one would drop a pending pass for it.
   evermind ??= evermindEmbedderSource(debouncedIdle(KNOWLEDGE_IDLE_MS));
   const ollama = ollamaSource();
-  return resolveWarmEmbedder([...offered.values(), evermind, ...(ollama ? [ollama] : [])]);
+  return resolveWarmEmbedder([evermind, ...(ollama ? [ollama] : [])]);
 }

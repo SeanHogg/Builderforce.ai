@@ -1,9 +1,10 @@
 import { watch, type FSWatcher } from "node:fs";
 import { lstat, readFile, realpath } from "node:fs/promises";
-import { extname, relative, sep } from "node:path";
+import { extname } from "node:path";
 import type { RepoReadCapability, SemanticSearchResult } from "@builderforce/agent-tools";
+import { toPosixPath } from "@builderforce/agent-tools/glob";
 import { gitIgnoredMatcher } from "@builderforce/agent-tools/node-git-ignore";
-import { resolveInsideRoot, resolveInsideRootReal } from "@builderforce/agent-tools/node-path";
+import { resolveInsideRoot, resolveInsideRootReal, toPosixRel } from "@builderforce/agent-tools/node-path";
 import { treeSitterSymbolExtractor } from "@builderforce/agent-tools/node-tree-sitter";
 import { DEFAULT_REPO_MAP_LIMITS, isMapCandidate } from "@builderforce/repo-map";
 import {
@@ -54,7 +55,6 @@ interface WarmCodeSnapshot extends CodeSnapshot {
   binding: string;
 }
 
-const relativePath = (root: string, path: string): string => relative(root, path).split(sep).join("/");
 const chunkId = (record: CodeFileRecord, chunk: CodeChunk): string =>
   JSON.stringify([record.path, record.hash, chunk.startLine, chunk.endLine, chunk.symbol ?? ""]);
 const snippetOf = (lines: readonly string[], chunk: CodeChunk): string =>
@@ -75,7 +75,7 @@ async function sourceFile(root: string, path: string) {
   // The caller has already canonicalized the root. Comparing the target's real
   // relative path to the listed path rejects symlinks without re-resolving the root.
   const resolved = resolveInsideRoot(root, path);
-  if (!resolved || relativePath(root, await realpath(resolved)) !== path) return undefined;
+  if (!resolved || toPosixRel(root, await realpath(resolved)) !== path) return undefined;
   const stats = await lstat(resolved);
   if (!stats.isFile() || !isMapCandidate(path, stats.size)) return undefined;
   return {

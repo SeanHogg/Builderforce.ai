@@ -6,7 +6,7 @@
  *   PackRetrievalPort   — a QUERY function: pack root ids + a question → the top cards;
  *   withPacks           — a host's own index recall merged with the loaded packs' recall.
  *
- * This is the ONE interface Synapse (through the editor's prefetch / context pack) and the
+ * This is the ONE interface the editor (through its prefetch / context pack) and the
  * Canvas composer call. There is one retrieval implementation (the host knowledge index's
  * `recall`, per pack root), one embedding policy (a pack ships cards, never vectors: the
  * index re-embeds by card hash) and one dedupe rule ({@link mergeRecalls}). Nothing else is

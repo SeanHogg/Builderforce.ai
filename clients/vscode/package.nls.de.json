@@ -57,7 +57,6 @@
   "command.editWorkspaceHooks": "BuilderForce: Workspace-Hooks bearbeiten",
   "command.pickModel": "BuilderForce: Modell auswählen",
   "command.setInferenceMode": "BuilderForce: Inferenzmodus wählen",
-  "command.installSynapseModel": "BuilderForce: Synapse-Modell installieren",
   "command.openSettings": "BuilderForce: Einstellungen öffnen",
   "command.editorChat": "BuilderForce: Chat",
   "command.openBrain": "BuilderForce: Brain-Chat öffnen",

@@ -36,7 +36,7 @@ const MAX_EXCERPT_CHARS = 400;
 const MAX_RECENT = 10;
 const MAX_FINDINGS = 20;
 
-const SURFACE: Record<EvermindHost, string> = { web: 'web console', vscode: 'VS Code sidebar', synapse: 'Synapse desktop' };
+const SURFACE: Record<EvermindHost, string> = { web: 'web console', vscode: 'VS Code sidebar' };
 
 export interface EvermindDiagnosticsInput {
   /** Head state — null when the console never loaded (itself worth reporting). */

@@ -16,7 +16,6 @@ import { ghostButtonStyle, Seg } from './surface/ui';
 import { chromeGlyph } from './surface/ui/glyphs';
 import { DiagnosticsButton } from './surface/DiagnosticsButton';
 import { TYPE } from './surface/ui/type';
-import { PanelChevron } from './surface/ui/PanelChevron';
 import type { QuestionId } from './surface/questions';
 
 export interface ToolbarProps {
@@ -36,13 +35,10 @@ export interface ToolbarProps {
     /** The review status button: the right group. */
     action?: ReactNode;
     /** The Panels button: whether the drawer is open, and its toggle. */
-    drawerOpen: boolean;
-    onToggleDrawer(): void;
     /**
      * Whether the drawer can open at all: it holds graph panels, so it exists only once a graph is drawn. Without one the Panels
      * button would do nothing, so it hides itself (the component decides its own visibility). Absent ⇒ available.
      */
-    drawerAvailable?: boolean | undefined;
     /** The text "Copy diagnostics" copies, taken when pressed; present ⇒ the button shows in every state. */
     diagnostics?: (() => string | Promise<string>) | undefined;
     /**
@@ -63,7 +59,7 @@ export interface ToolbarProps {
 
 const icon = (id: string): ReactNode => chromeGlyph(id);
 
-export function Toolbar({ labels, onSearch, question, askName, wrapped, outTo, onOut, spine, action, drawerOpen, onToggleDrawer, drawerAvailable = true, diagnostics, panes, askWrap, linesToggle, headerTools }: ToolbarProps) {
+export function Toolbar({ labels, onSearch, question, askName, wrapped, outTo, onOut, spine, action, diagnostics, panes, askWrap, linesToggle, headerTools }: ToolbarProps) {
     // null = nothing typed. The input is in the row only while asking (the search button expands it), except where the row wraps: the button is gone there, so the input stays.
     const [typed, setTyped] = useState<string | null>(null);
     const [asking, setAsking] = useState(false);
@@ -96,7 +92,6 @@ export function Toolbar({ labels, onSearch, question, askName, wrapped, outTo, o
     const right: CSSProperties = wrapped
         ? { display: 'flex', alignItems: 'center', gap: 2, flex: 1, justifyContent: 'flex-end', flexWrap: 'wrap', minWidth: 0 }
         : { display: 'flex', alignItems: 'center', gap: 2, marginInlineStart: 'auto', minWidth: 0 };
-    const panelsName = s.panelsLabel;
     const iconBtn = (label: string, on: boolean) => ({ 'aria-label': label, title: label, style: ghostButtonStyle(on, true) });
     return (
         <div data-testid="kg-header" style={{ ...row, boxSizing: 'border-box', flex: 'none', minWidth: 0, borderBottom: `1px solid ${cssVar('border')}`, background: cssVar('panel') }}>
@@ -119,9 +114,6 @@ export function Toolbar({ labels, onSearch, question, askName, wrapped, outTo, o
                     <button type="button" data-testid="kg-search-button" aria-expanded={asking} onClick={() => setAsking((v) => !v)} {...iconBtn(labels.searchLabel, asking)}>{icon('search')}</button>
                 )}
                 {action}
-                {drawerAvailable && (
-                    <PanelChevron testId="kg-panels-button" side={wrapped ? 'bottom' : 'right'} open={drawerOpen} label={panelsName} onClick={onToggleDrawer} />
-                )}
                 {diagnostics && <DiagnosticsButton labels={labels} text={diagnostics} />}
             </div>
         </div>

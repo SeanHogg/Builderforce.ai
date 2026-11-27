@@ -71,7 +71,7 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
     const drill = surface.drill;
     const ref = i.codeRef ?? selected ?? drill.view?.stations.byId.get(drill.selected ?? '')?.refs[0];
     const file = ref ? i.codeFiles.get(fileRefOf(ref)) : undefined;
-    if (file && (i.hierarchy === 'architecture' || i.hierarchy === 'filesystem')) {
+    if (file && (i.hierarchy === 'filesystem' || (i.hierarchy === 'architecture' && file.isCode))) {
         spineItems = [
             root,
             ...file[i.hierarchy].map(({ id, name }): SpineItem => ({ kind: 'folder', id, label: name })),

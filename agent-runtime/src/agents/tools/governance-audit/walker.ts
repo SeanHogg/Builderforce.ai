@@ -5,20 +5,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-
-/** Directories never worth scanning. */
-const WALK_SKIP_DIRS = new Set([
-  ".git",
-  "node_modules",
-  "dist",
-  "build",
-  "coverage",
-  ".next",
-  ".cache",
-  "vendor",
-  "target",
-  "__pycache__",
-]);
+import { isSkippedDirName } from "@builderforce/agent-tools/skip-dirs";
 
 /** Extensions that are never text-scanned (binary by nature). */
 const BINARY_EXTENSIONS = new Set([
@@ -79,7 +66,7 @@ export async function walkWorkingTree(root: string, maxFiles = MAX_WALK_FILES): 
       if (files.length >= maxFiles) break;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (WALK_SKIP_DIRS.has(entry.name)) continue;
+        if (isSkippedDirName(entry.name)) continue;
         if (entry.name.startsWith(".") && !WALKED_DOT_DIRS.has(entry.name)) continue;
         stack.push(full);
       } else if (entry.isFile()) {

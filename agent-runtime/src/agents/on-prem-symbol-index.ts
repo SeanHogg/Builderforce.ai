@@ -22,12 +22,8 @@ import {
   type SymbolExtractor,
   type WorkspaceSymbolIndex,
 } from "@builderforce/agent-tools/node-symbols.js";
-import { IGNORED_DIRS } from "../builderforce/shared-tools/node-code-tools.js";
 import { resolveBuilderForceAgentsPackageRootSync } from "../infra/builderforce-root.js";
 import { TREE_SITTER_DIST_DIR } from "./tree-sitter-dist.js";
-
-/** Directories the index never walks — the SAME ignore set the on-prem searcher uses. */
-const ON_PREM_INDEX_SKIP_DIRS: ReadonlySet<string> = new Set(IGNORED_DIRS);
 
 /**
  * The shipped wasm directory, when this install has one (`dist/tree-sitter/tree-sitter.wasm`
@@ -64,7 +60,6 @@ function onPremExtractor(): SymbolExtractor {
 export function onPremSymbolIndex(root: string): WorkspaceSymbolIndex {
   const abs = resolve(root);
   return sharedSymbolIndex(abs, {
-    skipDirs: ON_PREM_INDEX_SKIP_DIRS,
     cachePath: join(abs, ".builderForceAgents", "symbols.json"),
     extractor: onPremExtractor(),
   });

@@ -5,7 +5,7 @@
  *
  * The on-device chip carries two kinds of row (a hosted runtime reached from this machine - Kimi Code - is not one: it is the person's own
  * account, listed under BYO with a tooltip that says the model does not run here). Models a runtime on this machine already
- * serves (Ollama, Synapse…) are ordinary rows. Models a PAGE engine can run (WebGPU
+ * serves (Ollama, `bfi serve`…) are ordinary rows. Models a PAGE engine can run (WebGPU
  * `bfi`, WebLLM) come from the host's local model store with a state each — download,
  * progress, ready, unsupported — and a downloaded one joins the ordinary rows too, so
  * it is listed under All and named as the model in use once pinned. Picking either kind

@@ -5,7 +5,7 @@
  *
  * Dropped: the host's own `.builderforce/` state — `.builderforce/cache/**` (the fact store's SQLite writes would
  * otherwise wake the indexer on every write it makes) and every other state file — and the directories no review walks
- * (`KNOWLEDGE_SKIP_DIRS`: installs, builds, VCS stores). The same rules the plan walks by (`listsFile`, `isSkippedPath`).
+ * (`WORKSPACE_SKIP_DIRS` from `@builderforce/agent-tools/skip-dirs`: installs, builds, VCS stores). The same rules the plan walks by (`listsFile`, `isSkippedPath`).
  * Watchers drop events; the reconciling plan on activation and refocus catches what they miss.
  */
 

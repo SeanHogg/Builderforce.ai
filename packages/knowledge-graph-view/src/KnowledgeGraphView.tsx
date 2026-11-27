@@ -157,8 +157,12 @@ function KnowledgeGraphSurface({
     useEffect(() => {
         if (!real) return;
         const areas = new Set<string>();
-        for (const file of codeFiles.values()) for (const group of file.architecture) if (group.id.startsWith('area:')) areas.add(group.id);
-        renderTrace.record('code hierarchy ready', `root=${real.scope.rootId} files=${codeFiles.size}/${real.stats.sources} areaGroups=${areas.size} source=${real.stats.truncated && real.outline ? 'graph outline' : 'graph nodes'}`);
+        let sourceFiles = 0;
+        for (const file of codeFiles.values()) {
+            if (file.isCode) sourceFiles += 1;
+            for (const group of file.architecture) if (group.id.startsWith('area:')) areas.add(group.id);
+        }
+        renderTrace.record('code hierarchy ready', `root=${real.scope.rootId} files=${codeFiles.size}/${real.stats.sources} sourceFiles=${sourceFiles} otherFiles=${codeFiles.size - sourceFiles} areaGroups=${areas.size} source=${real.stats.truncated && real.outline ? 'graph outline' : 'graph nodes'}`);
     }, [real, codeFiles, renderTrace]);
     const selectCode = (ref: string | null) => {
         const file = ref ? codeFiles.get(fileRefOf(ref)) : undefined;
@@ -325,14 +329,14 @@ function KnowledgeGraphSurface({
         <SurfaceFrame ref={rootRef} label={labels.regionLabel}>
             <SurfaceHeader
                 kg={kg} source={source} labels={labels} graph={graph} surface={surface} env={surfaceEnv} wrapped={layout.drawerSheet} sync={sync.status}
-                run={runRead.live} onOpenReviews={openReviews} outTo={chrome.out.to} onOut={chrome.out.onOut} drawerOpen={drawer.open} onToggleDrawer={drawer.toggle}
-                panes={panes} headerTools={headerTools} drawerAvailable={!!real} diagnostics={copyDiagnostics}
+                run={runRead.live} onOpenReviews={openReviews} outTo={chrome.out.to} onOut={chrome.out.onOut}
+                panes={panes} headerTools={headerTools} diagnostics={copyDiagnostics}
                 spine={<Spine labels={labels} items={chrome.spineItems} roots={{ scopes: kg.scopes, rootId: kg.rootId, onRoot: kg.selectRoot }} onPick={chrome.onSpinePick} />}
                 askName={chrome.askName}
                 onSearch={(q) => void kg.search(q)} onSelect={select} onMatches={pinpointed} onClear={unpin} onCompose={onCompose}
             />
             {noHits !== null && <p role="status" style={{ ...muted, margin: 0, padding: '4px 12px' }}>{fillTemplate(labels.searchNoHits, { query: noHits })}</p>}
-            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
+            <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', minWidth: 0, flex: 1, minHeight: 0 }}>
                     {leftDock && (
                         <DockEdge slot="left" shown={panels.visibility.left} onToggle={panels.toggle} labels={labels}>
@@ -402,9 +406,4 @@ function KnowledgeGraphSurface({
                 graph={graph} index={index} selected={selected} tracing={tracing} labels={labels} source={source} confirm={confirm} renderPanel={renderPanel}
                 compact={layout.compact} onClose={() => { setTracing(false); kg.select(null); }} onTrace={() => setTracing((v) => !v)} onSelect={select} onChanged={kg.reload} onShow={show}
                 onResolve={surface.resolve}
-                onShowInTower={showInTower}
-            />
-        </SurfaceFrame>
-        </RetryUploadContext.Provider></RestructureContext.Provider></FlatViewContext.Provider>
-    );
-}
+                onSh

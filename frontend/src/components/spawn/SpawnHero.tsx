@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { SPAWN_ACCOUNT_ROUTE } from '@/lib/spawn/spawnLinks';
-import { SpawnDownloadButton } from './SpawnDownloadButton';
 import { SpawnPlayground } from './SpawnPlayground';
 import styles from './spawn.module.css';
 
@@ -16,7 +15,6 @@ export async function SpawnHero() {
           {t('titleLead')} <span className={styles.heroAccent}>{t('titleAccent')}</span>
         </h1>
         <p className={styles.heroLede}>{t('lede')}</p>
-        <SpawnDownloadButton />
         <div className={styles.ctaRow}>
           <Link href={SPAWN_ACCOUNT_ROUTE} className={styles.ctaGhost}>{t('start')}</Link>
           <span className={styles.fine}>{t('fine')}</span>

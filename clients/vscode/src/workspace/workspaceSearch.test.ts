@@ -2,7 +2,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { compileSearchPattern, parseRipgrepJsonLine, parseRipgrepLine, ripgrepSearch, searchWorkspace, walkSearch } from "./workspaceSearch";
+import { compileSearchPattern, parseRipgrepJsonLine, parseRipgrepLine, ripgrepSearch, searchWorkspace, walkSearch } from "@builderforce/agent-tools/node-text-search";
 import { bundledRipgrepCandidates, findRipgrep } from "../tools/ripgrep";
 
 /**

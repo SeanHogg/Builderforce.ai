@@ -52,7 +52,7 @@ import type {
 } from "@builderforce/agent-tools";
 import { onDeviceCostLeverOn } from "../infra/cost-levers.js";
 import { resolveOnPremSemantic } from "./on-prem-semantic.js";
-import { IGNORED_DIRS } from "../builderforce/shared-tools/node-code-tools.js";
+import { isListedDirName } from "@builderforce/agent-tools/skip-dirs";
 import { searchWorkspace } from "@builderforce/agent-tools/node-text-search.js";
 import { execFile } from "node:child_process";
 import { requestHumanInput, type HumanInputRequest, type HumanInputResult } from "../infra/approval-gate.js";
@@ -67,9 +67,6 @@ function findOnPathRipgrep(): Promise<string | null> {
   return onPathRipgrep;
 }
 
-/** Directories never walked by `list_files` — the SAME ignore set the on-prem searcher
- *  uses (DRY: one source in node-code-tools), as a Set for O(1) membership. */
-const LIST_IGNORED_DIRS = new Set(IGNORED_DIRS);
 const LIST_MAX_FILES = 5_000;
 
 /** The file-only capability set an on-prem disk surface backs (repo read/search/write/
@@ -117,7 +114,7 @@ async function walkFiles(
     }
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        if (LIST_IGNORED_DIRS.has(entry.name)) {
+        if (!isListedDirName(entry.name)) {
           continue;
         }
         const childRel = relative(root, join(dir, entry.name)).split(sep).join("/");

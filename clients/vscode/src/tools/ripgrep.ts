@@ -4,7 +4,7 @@
  * VS Code ships one (`@vscode/ripgrep`, the engine behind its own Search view), so on
  * every editor install there is a fast, ignore-aware searcher already on disk — the
  * extension only has to know where. A `rg` on PATH is the second choice; nothing found
- * means `search_code` falls back to walking the tree itself (see `workspaceSearch.ts`).
+ * means `search_code` falls back to walking the tree itself (see `@builderforce/agent-tools/node-text-search`).
  *
  * Resolved ONCE per extension-host session and memoised: probing the filesystem or
  * spawning `rg --version` on every search would cost more than the search.

@@ -1,7 +1,7 @@
 /**
  * The drawer's open state, in one place. A registry panel (`surface.panel`: Coverage, Fix, Reviews...) is open when it is set; the Act tab has no panel id, so
- * it keeps its own open flag. So "open the drawer at a tab" is one call from anywhere: a card action's `setPanel('coverage')` opens it on that tab, the header's
- * Panels button opens it on Act, and closing clears both.
+ * it keeps its own open flag. So "open the drawer at a tab" is one call from anywhere: a card action's `setPanel('coverage')` opens it on that tab, the edge
+ * chevron opens it on Act, and closing clears both.
  */
 
 import { useCallback, useState } from 'react';

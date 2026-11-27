@@ -13,6 +13,31 @@ Part of the [unified platform review](unified-platform-gap-review.md). Areas are
 | 7 | Auth / device sign-in / cloud client | audited (§7) |
 | 8 | Security policy (code-shield vs Shield) | audited (§8) |
 
+### Synapse and Spawn retirement (user decision, 2026-11-27)
+
+The Synapse desktop app is retired. VS Code with the Builderforce extension is the IDE, and the extension is the reusable host. Spawn is retired as a separate app; Roblox returns later as a project type in the editor (`UP-G017`). The OpenVSCode-in-Tauri shell is not being built.
+
+**Kept in `builderforce-inference`:** the `bfi-*` engine (`bfi serve` announces itself in `~/.builderforce/bfi.json`; the extension also runs it in-process through `@seanhogg/bfi-node`), plus `bf-index`, `bf-context` and `bf-compress` (`bf-context serve` still writes `~/.builderforce/desktop.json`). `bf-index` stays behind the benchmark gate in §2.5. The release workflow now publishes only the `bfi` and `bf-context` binaries.
+
+**Deleted:** `app/` (vanilla-JS UI, Tauri shell, console) and the crates `bf-local`, `bf-cloud`, `bf-teach`, `bf-memory` and `bf-vault`. In Builderforce.ai, these were removed: the never-served "Install Synapse model" flow, the `desktop.json` `models` reader, the unused Synapse embedder slot, and the Synapse and Spawn download surfaces.
+
+| Finding | Status after retirement |
+|---|---|
+| CHAT-G015, CHAT-G016 | Closed. The Synapse chat fork and both dictation copies are deleted. |
+| CHAT-G010, CHAT-G018 | The Synapse part is gone. The VS Code, brain-embedded and Chrome parts remain open. |
+| MEM-G105, MEM-G106 | Closed. `bf-teach` and the direct `memory.json` reads are deleted. |
+| MEM-G114 | Reduced to 2 brain-map UIs (`EvermindBrainMap`, `EvermindBrain3D`). |
+| INF-G006 | Closed. `hub.rs` is deleted. |
+| INF-G007, INF-G011 | The `bf-local` copies (its fit share and its `models_dir()`) are gone. The rest remains open. |
+| INF-G015 | Closed. The `bfi` User-Agent comes from the crate version. |
+| INF-G012 | Still open. The `synapse` runtime id now means `bfi serve`, is labelled `bfi serve`, and is kept as a wire id until the rename. |
+| AUTH-G001 | Closed. The Rust device flow is deleted. |
+| AUTH-G002, AUTH-G008, AUTH-G009, AUTH-G013 | The Rust copies are gone. The VS Code and Chrome parts remain open. |
+| CIX-G012 | The never-offered Synapse embedder slot is removed. The fingerprint policy remains open. |
+| UP-G015 | Closed by this decision. |
+
+**Kept on purpose:** API compatibility for existing data (`DEVICE_CLIENTS` `synapse`/`spawn`, the private `synapse.step` approvals, `CLIENT_RESULT_ENGINES` `synapse`), the one-time import of Synapse connector settings in VS Code, and the dated Synapse blog posts.
+
 ---
 
 ## 1. MCP
@@ -27,7 +52,7 @@ The original audit counted 11 server, client, catalog and host integrations. The
 | Workspace MCP | VS Code and agent-runtime use `packages/workspace-mcp` for the SDK server and catalog. The hosts supply workspace selection and HTTP authentication. Shared code provides text and indexed search, symbols, outlines, repo maps, references, git history and optional compression. |
 | Memory MCP | `builderforce-memory/packages/memory-mcp` uses the shared SDK server with stdio and loopback HTTP, and exposes the same tool catalog to the in-process Agent SDK. It reports its package version. |
 | Registered remote MCP | `mcpWireClient.ts` adapts the shared SDK-backed HTTP transport to the gateway's destination checks, session cache and legacy REST fallback. The marketplace discovery probe uses the same transport and pagination. |
-| Editor MCP | VS Code replaces Synapse as the editor and carries Workspace MCP and connector setup. The product direction moves Spawn into a Roblox project type. Legacy Synapse builds keep their private Evermind stdio client. |
+| Editor MCP | VS Code is the editor and carries Workspace MCP and connector setup. Synapse was retired on 2026-11-27, together with its private Evermind stdio client. Spawn moves into a Roblox project type (`UP-G017`). |
 | Agent-runtime MCP | The docs command searches the published sitemap through the shared in-process MCP transport. The interactive ACP client forwards a specifically selected VS Code config to ACP peers that support its transports. The Gateway-backed bridge uses Gateway-managed tools. |
 | WebContainer MCP | Browser preview execution and the environment agent host use the shared SDK with an in-process transport. Tool execution stays bound to the owning tab or the agent's environment port. Native inference receives tool definitions as model function schemas. |
 | Platform REST relay | Web, VS Code, Chrome and agent-runtime use the shared TypeScript relay. The headless connector runner uses the shared connector action codec for its fixed discovery and dispatch tools. Rust, Android and iOS use native HTTP clients with the gateway's canonical model projection and legacy response compatibility. |

@@ -651,6 +651,9 @@ export interface CapabilityProvider {
 
 // ── Result shapes (shared so both runtimes return identical tool output) ──────────
 
+/** Why a workspace operation failed, the same on every host (`workspace.ts` re-exports it). */
+export type WorkspaceErrorCode = "not_found" | "is_directory" | "outside_root" | "too_large" | "no_match" | "ambiguous" | "unsupported" | "io";
+
 /** How a listing is taken. */
 export interface RepoListOptions {
   /** Return EVERY matching file (no file-count cap). For a consumer that streams the list (the repo graph), never for a model-facing tool. A surface that cannot honour it still answers with its usual cap and `truncated: true`. */
@@ -665,6 +668,7 @@ export interface RepoListResult {
   /** Set when a glob matched nothing — an incomplete walk must say so, never "no such file". */
   note?: string;
   error?: string;
+  code?: WorkspaceErrorCode;
 }
 export interface RepoReadResult {
   ok: boolean;

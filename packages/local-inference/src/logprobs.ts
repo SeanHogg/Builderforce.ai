@@ -9,7 +9,7 @@
  * ALREADY resident — the port never loads one to answer).
  *
  * Which engines can: WebLLM (`logprobs` + `top_logprobs` ≤ 5 on a non-streaming call) and
- * Ollama (`/v1/chat/completions` returns `logprobs` since 0.12). Synapse / `bfi` is first
+ * Ollama (`/v1/chat/completions` returns `logprobs` since 0.12). `bfi serve` is first
  * in {@link LOGPROB_ENGINE_ORDER} but has no adapter: the bfi engine's chat contract
  * returns no logprobs today, so it is not in the chain until it does.
  *

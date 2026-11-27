@@ -12,6 +12,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
+import { isIndexedDirName } from "@builderforce/agent-tools/skip-dirs";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 import type {
   CodingDispatchAgent,
@@ -225,19 +226,6 @@ export function makeCodingAgent(getGateway: () => GatewayLike | null): CodingDis
  * the workspace. Binary/oversized files are skipped for the same reason the
  * server caps the tree it hands out — they are not editable text.
  */
-const SKIP_DIRS = new Set([
-  "node_modules",
-  ".git",
-  ".next",
-  "dist",
-  "build",
-  "out",
-  ".cache",
-  ".turbo",
-  "coverage",
-  ".venv",
-  "__pycache__",
-]);
 
 /** Above this a file is treated as an asset, not source, and is not sent back. */
 const MAX_SNAPSHOT_FILE_BYTES = 512 * 1024;
@@ -259,7 +247,7 @@ export function makeCodingFs(): CodingDispatchFs {
         const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
         for (const entry of entries) {
           if (entry.isDirectory()) {
-            if (SKIP_DIRS.has(entry.name)) continue;
+            if (!isIndexedDirName(entry.name)) continue;
             await walk(join(current, entry.name));
             continue;
           }

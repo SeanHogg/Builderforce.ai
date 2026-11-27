@@ -76,7 +76,7 @@ describe('registry', () => {
 
   it('names runtimes with brand tokens', () => {
     expect(Object.fromEntries(LOCAL_RUNTIMES.map((r) => [r.id, r.label]))).toEqual({
-      synapse: 'Synapse',
+      synapse: 'bfi serve',
       ollama: 'Ollama',
       freetoken: 'FreeToken',
       bfi: 'Builderforce engine',

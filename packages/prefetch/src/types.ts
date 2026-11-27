@@ -83,7 +83,7 @@ export interface GateOutcome {
   features: number[];
 }
 
-/** Local-SLM logprob classifier (tier 3) — Synapse/bfi-node → WebLLM → Ollama last. */
+/** Local-SLM logprob classifier (tier 3) — `bfi serve` / bfi-node → WebLLM → Ollama last. */
 export interface LogprobPort {
   /** True only when a local engine is warm; tier 3 is skipped otherwise. */
   warm(): boolean;

@@ -1,12 +1,11 @@
 /**
  * On-prem's embedder for the knowledge index (DONE.md, deterministic knowledge index archive,
- * "Where it runs"), through the SHARED chain (`resolveWarmEmbedder`: Synapse → Evermind →
- * Ollama, the first warm one): the Evermind embed of the runtime's ONE SSM memory service
+ * "Where it runs"), through the SHARED chain (`resolveWarmEmbedder`: Evermind → Ollama,
+ * the first warm one): the Evermind embed of the runtime's ONE SSM memory service
  * while it is warm (initialised, on its GPU) — never loaded for the index's sake — then a
  * resident Ollama embedding model on this machine (the shared `ollamaEmbedderSource` of
  * `@builderforce/local-inference`, over each loopback Ollama provider configured, else
- * Ollama's default local endpoint). There is no Synapse engine in this runtime. None warm
- * ⇒ the index serves exact + lexical. Each engine keeps its own fingerprint.
+ * Ollama's default local endpoint). None warm ⇒ the index serves exact + lexical. Each engine keeps its own fingerprint.
  *
  * The fingerprint names the checkpoint, its width and its on-disk save: the SSM adapts as
  * it learns and persists the adapted weights, and a vector from before a save is not

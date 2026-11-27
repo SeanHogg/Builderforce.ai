@@ -61,6 +61,9 @@ function extOf(path: string): string {
     return dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
 }
 
+/** The extension's category before directory and filename conventions are applied. */
+export const extensionCategory = (path: string): FileCategory | undefined => EXT_CATEGORY[extOf(path)];
+
 /**
  * The category of a FILE node, from its path. Non-file nodes are not classified here — callers
  * keep their own kind tone/shape for section / symbol / entity / claim / fact / missing / area.
@@ -86,8 +89,7 @@ export function fileCategory(n: Pick<KNode, 'ref'>): FileCategory {
     }
 
     if (MIGRATIONS_DIR.test(path)) return 'data';
-    const ext = extOf(path);
-    const byExt = EXT_CATEGORY[ext];
+    const byExt = extensionCategory(path);
     if (byExt === 'data' && /(^|\/)(tsconfig|jsconfig|package|tsup|vitest|jest)\.json$/.test(base)) return 'config';
     if (byExt) return byExt;
 

@@ -1,7 +1,7 @@
 /**
  * Localized console labels from a host's flat string bundle (`ev.*` keys → text, with
  * `{name}` placeholders in the parametric ones). The console's own defaults are English;
- * a host that translates — the VS Code extension through `vscode.l10n`, Synapse from the
+ * a host that translates — the VS Code extension through `vscode.l10n`, another host from the
  * same catalogs at build time — hands its bundle here, so the two cannot map the same
  * bundle onto different labels.
  */

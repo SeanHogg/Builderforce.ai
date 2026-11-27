@@ -39,62 +39,34 @@ So the work is mostly *unify and extract*, not *build*. The pasted roadmap's pha
 
 1. **Naming.**
    - Packages use `@builderforce/*`, while `brain-ui`, `brain-embedded`, `sdk`, the webcontainers packages and memory are still `@seanhogg/*`.
-   - "Synapse" is shipped from a repo named `builderforce-inference`.
+   - `builderforce-inference` now ships only the `bfi` engine and `bf-context`; the Synapse app it used to ship is retired.
    - "Evermind", "brain" and "Agent Memory" name one thing.
    - "Memory" in webcontainers means RAM and KV cache, not agent memory.
    - Pick one product noun per capability (see the table in §5) and rename at the next major version.
 2. **Versions.** Four CalVer streams: inference 2026.10.12, webcontainers 2026.11.29, VSIX 2026.11.224, spawn 2026.10.4. Fine as long as each is independent, but there is no compatibility matrix between them.
 3. **Build coupling.**
    - Spawn depends on `bf-cloud` from git `main`, unpinned.
-   - The Synapse console links `brain-ui`/`brain-embedded` from the Builderforce.ai monorepo by relative path, so neither desktop repo builds on its own.
-4. **Duplicated shells.** Synapse and Spawn are both Tauri apps carrying the same sign-in, account and cloud code.
+   - The relative-path console link went with the Synapse app (retired 2026-11-27).
+4. **Duplicated shells.** Resolved by retiring both Tauri apps (Synapse and Spawn) on 2026-11-27.
 5. **The UI reuse seam is aliasing, not adapters.**
    - VS Code compiles `frontend/src/components/creation-canvas/**` with Next shims.
    - Any new Next or `window` import in that closure breaks the extension build, which is also why the VSIX package takes 9.5 minutes (`AE-G061`).
 6. **Repo hygiene.** The Builderforce.ai root holds `_tsc_*.log`, `tsgo-*.log`, `_probe_sqlite.cjs` and a stray file named `-p`.
 
-## 3. Synapse → full IDE that runs the BuilderForce VSIX
+## 3. Synapse retired: VS Code is the IDE (decision, 2026-11-27)
 
-> **User, 2026-11-26:** "Synapse can be redone from the ground up; we want to make sure we have the most reuse of components."
->
-> Treat Synapse's current tray UI (vanilla-JS `app/ui`) and its Rust service crates as replaceable. Whatever survives must be shared with another host, or it gets deleted.
->
-> The detailed duplication audit, starting with MCP, lives in [platform-duplication-audit.md](platform-duplication-audit.md).
+> **User, 2026-11-27:** Synapse is replaced by VS Code, and Spawn is consolidated into it as a project type, so the VSIX is the reusable host.
 
-**Facts that decide it:**
-- The extension declares only `main`, with no `browser` entry.
-- It uses `child_process` in 33 files (including the git CLI), `worker_threads`, and the native `@seanhogg/bfi-node` addon (with a wasm fallback).
-- It needs `engines.vscode ^1.101.0` and the proposed API `chatSessionsProvider`.
-- It therefore needs a real Node extension host with proposed APIs enabled. VS Code for the Web is out.
-
-**Recommendation: an embedded OpenVSCode Server sidecar inside the Synapse Tauri shell.**
-
-- Synapse supervises a bundled `openvscode-server`, as it already supervises `bfi serve`.
-  - It binds to loopback with a per-launch connection token.
-  - It starts with `--enable-proposed-api builderforce.builderforce-ai`.
-  - It preinstalls the platform VSIX (`--install-extension`).
-- The Tauri window loads the server UI. The CSP gains `frame-src`/`connect-src` for `http://127.0.0.1:<port>` only.
-- The extension supplies Workspace MCP through the shared TypeScript package. It can use Synapse's bf-local endpoint for inference and its loopback context service for hybrid search and compression. Synapse's desktop features use a private Evermind stdio client. [MCP implementation status](platform-duplication-audit.md#1-mcp)
-- Synapse's current tray screens (models, connectors, Evermind, teach, skills, runs) become either:
-  - (a) the extension's webviews, where one already exists (Evermind), or
-  - (b) remain tray-only for headless and system-level tasks.
-
-  Nothing is implemented twice.
-- Updates: the Synapse release bundles a pinned server version and the matching VSIX. The VSIX keeps shipping separately to VS Code users from the same build.
-
-**Why not the others:**
-- A Code-OSS/VSCodium fork means a second Electron shell next to Tauri, plus upstream-merge maintenance.
-- Theia's support for the proposed chat API is unverified.
-- VS Code for the Web cannot host a Node extension.
-
-**Risks to prove first:**
-- WebView2 limits on service workers and webviews inside the Tauri webview.
-- Bundle size (Node plus server, about 100 MB).
-- Open VSX versus the Microsoft marketplace for third-party extensions (licensing).
-
-These are the done-checks of `UP-G015`'s first slice.
-
-**Spawn:** fold its shell into Synapse as a workspace type (a Roblox starter kit with the `bf-roblox` bridge), rather than keeping a second Tauri app. That needs a product decision; see §6.
+- **Superseded:** the earlier recommendation to embed an OpenVSCode Server sidecar in the Synapse Tauri shell. It is not being built, and `UP-G015` is closed by this decision.
+- **Deleted:**
+  - the Synapse app (`builderforce-inference/app`: vanilla-JS UI, Tauri shell, console);
+  - its service crates (`bf-local`, `bf-cloud`, `bf-teach`, `bf-memory`, `bf-vault`).
+- **Kept** (each serves the extension):
+  - the native engine `bfi` (`bfi serve`, plus `@seanhogg/bfi-node` in-process);
+  - the `bf-context` loopback service and the `bf-index`/`bf-compress` crates behind the benchmark gate.
+- **Spawn** is retired as an app. The `bf-roblox` bridge stays in its repo as the reference for the Roblox project type (`UP-G017`).
+- **Features that existed only in Synapse** have no host now: Teach-once desktop automation, Self-Directed Agents and their scheduler, and phone approvals for self-owned steps. Rebuilding them in the extension is a product decision (`UP-G018`).
+- Per-finding status: [duplication audit, retirement record](platform-duplication-audit.md#synapse-and-spawn-retirement-user-decision-2026-11-27).
 
 ## 4. Where the pasted roadmap should change
 
@@ -103,9 +75,9 @@ These are the done-checks of `UP-G015`'s first slice.
   - Put it over the existing TS implementation and conformance-test it.
   - Swap in a Rust/WASM implementation only where a benchmark proves a gain. Otherwise this phase rewrites working code (vision §14: "demonstrate measurable improvements and preserve current functionality").
 - **Phase 0 baseline.** The webcontainers `scripts/benchmark` measure the repo's own test and build times, not runtime performance. Add runtime benchmarks: cold/warm start, idle memory, per-language hello-world, and preview time-to-first-byte. Do this before any kernel work.
-- **Phase 1 "workspace, event bus, component contracts".** This is the real P0. It unblocks shared studios, agent/human parity and the Synapse IDE.
+- **Phase 1 "workspace, event bus, component contracts".** This is the real P0. It unblocks shared studios and agent/human parity.
 - **Phases 8 and 14 (inference, model virtualization).** These begin with *consolidating four engines into one* (`UP-G014`), not building a new one.
-- **Add an explicit phase "Synapse IDE shell"** (`UP-G015`) next to phase 6 (VS Code integration). It reuses the VSIX, so it is cheap once phase 6 holds.
+- **No separate "Synapse IDE shell" phase.** The VS Code extension is the IDE (§3), so phase 6 (VS Code integration) covers it.
 
 ## 5. Target package map (aligned to what exists)
 
@@ -131,5 +103,5 @@ These are the done-checks of `UP-G015`'s first slice.
 2. **Spawn becomes a project type.** Its Roblox bridge (`bf-roblox`) becomes a starter kit and runtime adapter, and the separate Spawn app shell is retired.
    - **A new Movie/Video editor project type is required.** It must be built on the existing video pieces (the `canvasVideoTools.ts` tool set, the canvas video surfaces), not as a new silo.
    - Both live in the starter-kit registry (`UP-G002`).
-3. **Synapse IDE extensions: both** Open VSX and manually installed VSIX files.
+3. **IDE extensions: both** Open VSX and manually installed VSIX files. Superseded on 2026-11-27: the IDE is VS Code itself.
 4. **Kernel: interface first; Rust only where a benchmark proves a gain.**

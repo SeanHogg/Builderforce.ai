@@ -1,6 +1,6 @@
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { nodeIndex, pathOf } from '../graphModel';
-import { fileNodesOf, tailOf } from './outlineGraph';
+import { fileNodesOf, isArchitectureFile, tailOf } from './outlineGraph';
 import type { Station } from './stations';
 import { appOfNode, systemName, systemOfNode, systemsOf, type SystemInfo } from './systems';
 
@@ -12,6 +12,7 @@ export interface CodeFile {
     ref: string;
     name: string;
     path: string;
+    isCode: boolean;
     filesystem: ArchitectureGroup[];
     architecture: ArchitectureGroup[];
 }
@@ -30,7 +31,11 @@ export function buildCodeHierarchy(graph: KnowledgeGraph, rootTitle: string, lay
         const folders = path.split('/').filter(Boolean);
         const name = folders.pop();
         if (!name) continue;
+        const filesystem = folders.map((folder, i) => ({ id: folders.slice(0, i + 1).join('/'), name: folder }));
         const architecture: ArchitectureGroup[] = [];
+        const isCode = isArchitectureFile(file);
+        files.set(file.ref, { ref: file.ref, name, path, isCode, filesystem, architecture });
+        if (!isCode) continue;
         const system = systemOfNode(file) || systemPaths.find((folder) => containsPath(folder, path)) || '';
         const systemLabel = systemName(systems, system);
         if (systemLabel && systemLabel !== rootTitle) architecture.push({ id: `system:${system}`, name: systemLabel });
@@ -42,13 +47,8 @@ export function buildCodeHierarchy(graph: KnowledgeGraph, rootTitle: string, lay
             const area = pathOf(file.area)?.replaceAll('\\', '/');
             if (area && containsPath(area, path)) {
                 const base = [app, system].find((folder) => containsPath(folder, area)) ?? '';
-                const segments = area.slice(base ? base.length + 1 : 0).split('/').filter(Boolean);
-                const prefix = base ? [base] : [];
-                for (const [i, segment] of segments.entries()) {
-                    prefix.push(segment);
-                    const name = i === segments.length - 1 && declared && !declared.includes('/') ? declared : segment;
-                    architecture.push({ id: `area:${prefix.join('/')}`, name });
-                }
+                const component = declared || area.slice(base ? base.length + 1 : 0);
+                if (component && component !== architecture.at(-1)?.name) architecture.push({ id: `area:${area}`, name: component });
             } else if (declared || area) {
                 const name = declared || tailOf(area!);
                 if (name !== architecture.at(-1)?.name) architecture.push({ id: `area:${file.area}`, name });
@@ -58,8 +58,6 @@ export function buildCodeHierarchy(graph: KnowledgeGraph, rootTitle: string, lay
             const label = layers[layer] ?? layers.other;
             if (label) architecture.push({ id: `layer:${layer}`, name: label });
         }
-        const filesystem = folders.map((folder, i) => ({ id: folders.slice(0, i + 1).join('/'), name: folder }));
-        files.set(file.ref, { ref: file.ref, name, path, filesystem, architecture });
     }
     return files;
 }

@@ -51,7 +51,7 @@ export {
 } from './judgement.js';
 export { HUMAN_FACT_SOURCE, humanFactBatch, humanFactKey } from './humanFact.js';
 export {
-    KNOWLEDGE_SKIP_DIRS, MAX_LISTED_FILES, createFsDirectorySource, isBuilderforceState, isSkippedPath, listsFile, normalizePath, textDocument,
+    MAX_LISTED_FILES, createFsDirectorySource, isBuilderforceState, isSkippedPath, listsFile, normalizePath, textDocument,
     type FsDirectorySource, type FsDirectorySourceOptions, type HashCache, type KnowledgeFs,
 } from './fsDirectorySource.js';
 export { deferredHashCache, memoryHashCache, reusedHash, type GitHints, type StatRow, type StatSet } from './statManifest.js';

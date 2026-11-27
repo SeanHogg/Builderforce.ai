@@ -13,7 +13,6 @@ import {
 } from "@builderforce/local-inference";
 import type { ChatContentPart } from "../chat/chatContent";
 import { type LocalModelsConfig } from "../models/localModels";
-import { readDesktopModelsEndpoint } from "../context/desktopContext";
 import { isKimiCodeInstall, kimiModelOf, loadKimiCodeInstall, type KimiCodeInstallResult, type KimiCodeModel } from "../auth/kimiCodeInstall";
 import { localCredentialSnapshot } from "../auth/localProviderCredentials";
 import { classifyQueue } from "@builderforce/write-outbox";
@@ -81,22 +80,20 @@ export function invalidateKimiInstallMemo(): void {
 }
 
 /**
- * Synapse's native engine (`bfi serve`), the third on-device runtime. Unlike Ollama and
- * FreeToken it has no fixed port — it starts at 11434 and walks upward when Ollama holds
- * it — so it is DISCOVERED, the way Kimi Code is:
+ * The native `bfi` engine served over HTTP (`bfi serve`), the third on-device runtime.
+ * Unlike Ollama and FreeToken it has no fixed port — it starts at 11434 and walks upward
+ * when Ollama holds it — so it is DISCOVERED, the way Kimi Code is:
  *
  *  1. the `builderforce.localModels.synapseUrl` setting, when set (a bfi on another
  *     machine, or a non-default bind);
- *  2. the desktop app's `desktop.json` `models.endpoint` (the app supervises `bfi serve`);
- *  3. bfi's own announcement, `~/.builderforce/bfi.json` — a bare `bfi serve` with no
- *     desktop app.
+ *  2. bfi's own announcement, `~/.builderforce/bfi.json`, written by `bfi serve`.
  *
  * The api key comes from discovery even when the URL comes from the setting, as long as
  * both name the same server: a user who typed the URL should not also have to copy a
- * key out of a file. A machine with none of the three contributes no endpoint.
+ * key out of a file. A machine with neither contributes no endpoint.
  */
 function resolveSynapseEndpoint(configuredUrl: string): LocalEndpoint | null {
-  const discovered = readDesktopModelsEndpoint() ?? readBfiDiscovery();
+  const discovered = readBfiDiscovery();
   const configured = configuredUrl.trim();
   if (!configured) return discovered;
   const token =
@@ -107,7 +104,7 @@ function resolveSynapseEndpoint(configuredUrl: string): LocalEndpoint | null {
 }
 
 /** `~/.builderforce/bfi.json` (or `$BFI_DISCOVERY`), parsed; null when absent/invalid.
- *  Synchronous like `readDesktopModelsEndpoint`, so the config read stays synchronous. */
+ *  Read synchronously so the config read stays synchronous. */
 function readBfiDiscovery(): LocalEndpoint | null {
   const override = process.env[BFI_DISCOVERY_ENV]?.trim();
   const file = override || nodePath.join(nodeOs.homedir(), ...BFI_DISCOVERY_RELATIVE_PATH.split("/"));

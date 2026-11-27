@@ -8,6 +8,8 @@
  * satisfies it as-is.
  */
 
+import { isIndexedDirName } from '@builderforce/agent-tools/skip-dirs';
+
 export interface TreeFs {
   promises: {
     readdir(path: string): Promise<string[]>;
@@ -15,9 +17,6 @@ export interface TreeFs {
     readFile(path: string): Promise<Uint8Array | string>;
   };
 }
-
-/** Never part of what a project builds from. */
-const SKIPPED_DIRECTORIES = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'coverage']);
 
 /** Past these the repo is not something to build in a browser tab; the gate declines. */
 export const TREE_LIMITS = { maxFiles: 5_000, maxBytes: 64 * 1024 * 1024, maxFileBytes: 8 * 1024 * 1024 };
@@ -50,7 +49,7 @@ export async function readWorkingTree(fs: TreeFs, dir: string, limits = TREE_LIM
       const path = relative ? `${relative}/${name}` : name;
       const stat = await fs.promises.stat(`${dir}/${path}`);
       if (stat.isDirectory()) {
-        if (!SKIPPED_DIRECTORIES.has(name)) pending.push(path);
+        if (isIndexedDirName(name)) pending.push(path);
         continue;
       }
       if (stat.size > limits.maxFileBytes) continue;

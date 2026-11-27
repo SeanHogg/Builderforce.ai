@@ -1,5 +1,5 @@
 /**
- * Synapse's native engine (`bfi serve`) announces where it listens — this reads that
+ * The native `bfi` engine (`bfi serve`) announces where it listens — this reads that
  * announcement. Parse only: READING the file is the host's job (Node `fs` in the editor;
  * a browser extension has no disk and relies on the probe instead).
  *
@@ -7,9 +7,8 @@
  * default would be wrong exactly when both are installed. After binding it writes
  * `~/.builderforce/bfi.json` = `{ port, pid, version, token }` (user-only perms; path
  * overridable with `BFI_DISCOVERY`) and withdraws it on exit — see
- * `builderforce-inference/crates/bfi-server/src/discovery.rs`. The Synapse desktop app
- * additionally mirrors the endpoint into `desktop.json` (`models.endpoint`), which hosts
- * read first; this file is what makes a bare `bfi serve` (no desktop app) discoverable.
+ * `builderforce-inference/crates/bfi-server/src/discovery.rs`. This file is the only
+ * discovery source: a bare `bfi serve` is found here, with no other app to publish it.
  */
 
 import type { LocalEndpoint } from './runtimes.js';

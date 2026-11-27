@@ -3,7 +3,7 @@
  * directly, as data.
  *
  * Membership means "the CLIENT performs this call itself", not "the weights are on this
- * disk". Six entries are on-device engines (Synapse's native `bfi`, Ollama, FreeToken,
+ * disk". Six entries are on-device engines (the native `bfi` engine over `bfi serve`, Ollama, FreeToken,
  * and three engines inside the page: our `bfi` compiled to WebAssembly over WebGPU,
  * WebLLM, and the browser's own built-in model): no account, no metering, available
  * offline, and the only ones local-first routing will try. `kimi-code` is Kimi's hosted API and belongs here anyway: its edge
@@ -74,7 +74,7 @@ export interface LocalRuntime {
   /**
    * Automatic local-first preference, lowest first. Explicit model pins never consult it.
    * The engines we ship and size ourselves come first — WebLLM and our `bfi` on WebGPU,
-   * then Synapse's native `bfi` — then the browser's built-in model. A third-party server
+   * then the native `bfi` engine (`bfi serve`) — then the browser's built-in model. A third-party server
    * the person runs (Ollama, FreeToken) is tried LAST: it is still a real local engine,
    * but only as good as the window it reports (`probe.ts` reads the one it SERVES) and
    * the tool-call dialect its model writes (`xmlToolCalls.ts` lifts the inline ones).
@@ -89,7 +89,7 @@ export interface LocalRuntime {
    *  eligible for local-first routing. */
   onDevice: boolean;
   /** Where the runtime listens out of the box, or undefined when the host must DISCOVER
-   *  it (Synapse publishes its port; Kimi's endpoint is in its install's config). */
+   *  it (`bfi serve` announces its port in `bfi.json`; Kimi's endpoint is in its install's config). */
   defaultBaseUrl?: string;
   /** `probe` = ask its OpenAI `/v1/models` route; `declared` = the host already holds the
    *  catalog (Kimi's install config), so probing would be a needless round trip. */
@@ -154,7 +154,7 @@ const KIMI_CODE_CATALOG_ALIASES: Readonly<Record<string, string>> = {
 
 /** Runtime metadata. `automaticRank`, not array position, owns automatic preference. */
 export const LOCAL_RUNTIMES: readonly LocalRuntime[] = [
-  { id: 'synapse', automaticRank: 30, label: 'Synapse', onDevice: true, catalog: 'probe', tools: 'all', reach: 'http', ownedBy: 'bfi' },
+  { id: 'synapse', automaticRank: 30, label: 'bfi serve', onDevice: true, catalog: 'probe', tools: 'all', reach: 'http', ownedBy: 'bfi' },
   {
     id: 'ollama',
     automaticRank: 50,

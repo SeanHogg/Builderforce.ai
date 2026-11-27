@@ -8382,7 +8382,7 @@
       },
       {
         "question": "Kann mein Evermind auf meinem eigenen Computer laufen?",
-        "answer": "Ja – genau dafür ist Synapse, die Builderforce-Desktop-App, da. Sie hält Ihr eigenes Evermind auf Ihrem Rechner: Die Fakten, Demonstrationen und Fähigkeiten, die Ihre KI-Werkzeuge lernen, werden dort gespeichert und trainiert, in einem Modell, das Ihnen gehört, und verlassen es nur, wenn Sie sie veröffentlichen. Synapse gibt außerdem den KI-Werkzeugen auf dem Rechner einen gemeinsamen Code-Index, führt auf unterstützten Geräten lokale Modelle aus, die zu Ihrem Arbeitsspeicher passen, und hostet MCP-Konnektoren für das Brain."
+        "answer": "Ja – die Builderforce-Erweiterung für VS Code läuft auf Ihrem eigenen Rechner, und Ihr Evermind bleibt dort: Die Fakten, Demonstrationen und Fähigkeiten, die Ihre KI-Tools lernen, werden lokal gespeichert und trainiert, in einem Modell, das Ihnen gehört, und verlassen den Rechner nur, wenn Sie sie veröffentlichen. Die native bfi-Engine betreibt lokale Modelle passend zu Ihrem Speicher, und der Dienst bf-context gibt den KI-Tools auf dem Rechner einen gemeinsamen Code-Index."
       },
       {
         "question": "Was ist Write-Through Cognition?",
@@ -32721,7 +32721,7 @@
       },
       {
         "q": "Gibt es eine Desktop-App?",
-        "a": "Ja. Synapse läuft unter Windows, macOS und Linux und hält Ihr privates Evermind auf Ihrem eigenen Rechner – Gedächtnis und Gelerntes bleiben dort, solange Sie sie nicht veröffentlichen. Außerdem chattet es mit dem Brain, führt Agenten aus, die Sie einmal anlernen (mit Freigaben, die Sie vom Handy aus beantworten können), verwaltet lokale Modelle und hostet MCP-Konnektoren."
+        "a": "Die Desktop-Oberfläche von Builderforce ist VS Code mit der Builderforce-Erweiterung. Sie chattet mit dem Brain, führt Ihre Agenten aus und arbeitet mit Ihrem privaten Evermind und lokalen Modellen auf Ihrem eigenen Rechner – Gedächtnis und Lernen, die dort bleiben, solange Sie sie nicht veröffentlichen."
       }
     ],
     "closeTitle": "Bereit, den Stack zu ersetzen?",
@@ -37081,40 +37081,6 @@
     "label": "Pro bono",
     "accessibleName": "Unentgeltlich – diese Person bietet ehrenamtliche Sitzungen an"
   },
-  "desktopApp": {
-    "eyebrow": "Desktop-App · Windows, macOS, Linux",
-    "heading": "Synapse — Ihr privates Evermind, auf Ihrem Rechner",
-    "intro": "In Synapse lebt Ihr eigenes Evermind. Alles, was Ihre KI-Tools über Sie und Ihre Arbeit lernen — Fakten, Vorführungen, Fähigkeiten —, wird auf Ihrem Computer gespeichert und in ein Modell trainiert, das Ihnen gehört. Es verlässt ihn nur, wenn Sie es veröffentlichen.",
-    "points": [
-      {
-        "title": "Ein privates Evermind",
-        "desc": "Erinnerungen, Train-Once-Fähigkeiten und die Erfahrung dahinter liegen auf Ihrem Rechner und werden in Ihr eigenes `.evermind`-Modell trainiert. Starten Sie mit einem Modell Ihres Workspace – gelernt wird nur hier."
-      },
-      {
-        "title": "Kontext für jedes KI-Tool",
-        "desc": "Ein Index pro Repository — eine Karte, geordnet nach Abhängigkeiten, plus `semantic_search` — geteilt vom Builderforce-Agenten in VS Code, Claude Code, Cursor und jedem MCP-Client. Erinnerungen, die gelöschten Code nennen, werden markiert statt befolgt."
-      },
-      {
-        "title": "Mit dem Brain chatten",
-        "desc": "Die Chats und Agenten Ihres Workspace auf dem Desktop. Antworten nutzen, woran sich Ihr Evermind erinnert, und können Plattform-Tools und Ihre Konnektoren verwenden — was etwas ändert, fragt vorher."
-      },
-      {
-        "title": "Agenten, die Sie einmal anlernen",
-        "desc": "Zeigen Sie Synapse eine Aufgabe in einer beliebigen Desktop-App; es wiederholt sie und wartet an den wichtigen Schritten auf Ihre Freigabe. Diese Schritte geben Sie auch vom Handy frei, über Ihr Builderforce-Konto."
-      },
-      {
-        "title": "Lokale Modelle, passend zu Ihrem Rechner",
-        "desc": "Synapse verwaltet Ollama, wählt Modellgröße und Quantisierung passend zu Ihrem Speicher und stellt sie im OpenAI- und Anthropic-Format bereit — damit auch Claude Code und Ihre Skripte sie nutzen."
-      },
-      {
-        "title": "Konnektoren mit einem Klick",
-        "desc": "GitHub, Slack, Playwright, Ihre Dateien und jeder MCP-Server laufen auf Ihrem Rechner, damit das Brain ihre Tools nutzen kann. Tokens bleiben im Anmeldespeicher Ihres Systems."
-      }
-    ],
-    "privacy": "Indexierung, Embeddings, Gedächtnis und Training laufen lokal. Ihr Code wird nie hochgeladen, und nichts, was Ihr Evermind lernt, verlässt den Rechner, solange Sie es nicht veröffentlichen.",
-    "download": "Für Windows, macOS oder Linux herunterladen",
-    "readMore": "So funktioniert es"
-  },
   "siteBadge": {
     "body": "Kostenlose Websites zeigen ein kleines „Made with Builderforce.ai“-Abzeichen.",
     "upgrade": "Upgrade, um es zu entfernen"
@@ -37337,22 +37303,9 @@
       "badge": "🎮 Für Roblox-Creator ab 13",
       "titleLead": "Sag es.",
       "titleAccent": "Spawn es.",
-      "lede": "Schreib das Spiel, das du willst. Spawn baut es in Roblox Studio.",
+      "lede": "Schreib das Spiel, das du willst. Roblox-Bauen kommt als Projekttyp in den Builderforce-Editor.",
       "start": "Starte deine Gratis-Woche",
       "fine": "7 Tage gratis · dann 1,99 $/Monat · ohne Karte starten"
-    },
-    "download": {
-      "windows": "Für Windows laden",
-      "mac": "Für Mac laden",
-      "any": "Spawn laden",
-      "windowsShort": "Windows",
-      "macArm": "Mac (Apple-Chip)",
-      "macIntel": "Mac (Intel)",
-      "alsoFor": "Auch für:",
-      "needsComputer": "Spawn läuft auf einem Windows-PC oder Mac mit Roblox Studio.",
-      "all": "Alle Downloads",
-      "firstRunWindows": "Windows zeigt eventuell „Der Computer wurde durch Windows geschützt“. Tipp auf Weitere Informationen, dann Trotzdem ausführen.",
-      "firstRunMac": "Zum ersten Mal auf dem Mac: Wenn es sich nicht öffnet, geh zu Systemeinstellungen → Datenschutz & Sicherheit und klick auf Dennoch öffnen."
     },
     "play": {
       "pick": "Probier’s: tipp ein Spiel an 👇",
@@ -37402,7 +37355,7 @@
       "items": [
         {
           "icon": "⬇️",
-          "label": "App holen"
+          "label": "Editor öffnen"
         },
         {
           "icon": "💬",
@@ -37474,12 +37427,12 @@
       ]
     },
     "cta": {
-      "title": "Bereit zum Bauen?"
+      "title": "Roblox-Bauen kommt als Projekttyp in den Builderforce-Editor."
     },
     "account": {
       "eyebrow": "Spawn",
       "title": "Dein Konto",
-      "signInBody": "Melde dich an, um Spawn beizutreten, Tokens zu holen und die Desktop-App zu verbinden.",
+      "signInBody": "Melde dich an, um Spawn beizutreten und Tokens zu holen.",
       "signIn": "Anmelden",
       "loading": "Dein Konto wird geladen…",
       "tooYoungTitle": "Spawn ist für Spieler ab 13",
@@ -37488,7 +37441,7 @@
         "joined": "Willkommen bei Spawn! Deine Mitgliedschaft ist aktiv.",
         "tokensAdded": "Tokens hinzugefügt. Viel Spaß beim Bauen!",
         "cancelled": "Der Checkout wurde abgebrochen. Es wurde nichts berechnet.",
-        "trialStarted": "Deine Gratis-Woche hat begonnen! Hol dir die App und leg los."
+        "trialStarted": "Deine Gratis-Woche hat begonnen! Viel Spaß beim Bauen."
       },
       "errors": {
         "generic": "Etwas ist schiefgelaufen. Bitte versuch es erneut.",
@@ -37526,7 +37479,7 @@
           "trial": "Gratis-Test",
           "trial_ended": "Test beendet"
         },
-        "activeBody": "Du bist Mitglied ({price} im Monat). Baukasten und Desktop-App sind freigeschaltet.",
+        "activeBody": "Du bist Mitglied ({price} im Monat). Der Baukasten ist freigeschaltet.",
         "body": {
           "none": "Tritt für {price} im Monat bei, um den Baukasten freizuschalten.",
           "past_due": "Deine letzte Zahlung ist nicht durchgegangen. Tritt für {price} im Monat erneut bei, um weiterzubauen.",
@@ -37548,16 +37501,6 @@
           "grant": "Tokens hinzugefügt",
           "spend": "Build"
         }
-      },
-      "desktop": {
-        "title": "Los geht's",
-        "ready": "Bereit",
-        "steps": [
-          "Lade die Spawn-App herunter und öffne sie.",
-          "Klick auf Anmelden. Dein Browser öffnet sich; bestätige den angezeigten Code.",
-          "Öffne Roblox Studio und einen beliebigen Ort. Spawn verbindet sich selbst.",
-          "Schreib, was du bauen willst, und drück dann auf Play."
-        ]
       },
       "trial": {
         "badge": "🎁 Gratis testen",
@@ -38712,7 +38655,7 @@
         "usage": "Es ist das Gedächtnis-Subsystem von Builderforce. Die Canvas trainiert Evermind im Browser auf der Engine, Cloud- und On-Prem-Agenten rufen über die Laufzeit während der Arbeit ab und speichern, und die Builderforce-Erweiterung für VS Code arbeitet mit demselben Speicher auf der Festplatte wie der MCP-Server."
       },
       "inference": {
-        "tagline": "Synapse, die Desktop-App von Builderforce, und bfi, ihre native Rust-Engine, um LLMs auf Ihrem eigenen Rechner auszuführen.",
+        "tagline": "bfi, die native Rust-Engine zum Ausführen von LLMs auf Ihrem eigenen Rechner, und bf-context, der Code-Kontext-Dienst.",
         "summary": "Laden Sie ein GGUF-Modell in der passenden Größe für Ihre Hardware und stellen Sie es über OpenAI-, Anthropic- und Ollama-kompatible APIs bereit, damit Ihre vorhandenen Clients unverändert funktionieren. Keine separate Ollama-Installation.",
         "problem": "Modelle lokal auszuführen hieß meist, die Laufzeit eines anderen Anbieters zu installieren, zu hoffen, dass sie im PATH liegt, zu raten, ob ein Modell in den Speicher passt, und mit den GGUF-Typen zu leben, die diese Laufzeit akzeptiert. Das Standard-llama.cpp lehnt die 2-Bit-Formate PQ2_0 und PTQ1_0 ab, in denen die Ternary-Bonsai-Modelle von PrismML erscheinen.",
         "gets": [
@@ -38720,24 +38663,24 @@
           "Ein HTTP-Server, der die Dialekte von OpenAI, Anthropic und Ollama spricht, standardmäßig auf Port 11434, mit optionalem Bearer-Schlüssel.",
           "bfi fit: der Speicherbedarf eines Modells im Vergleich zu diesem Rechner (Gewichte, KV-Cache, rekurrenter Zustand und Overhead), aus dem Datei-Header gelesen, bevor Sie herunterladen.",
           "Fortsetzbare Downloads von Hugging Face mit sha256-Prüfung und import-ollama, um eine vorhandene Ollama-Bibliothek ohne erneuten Download zu nutzen.",
-          "Synapse, die Desktop-App, die bfi serve überwacht und MCP-Konnektoren, ein privates Evermind-Gedächtnis und einen lokalen Code-Index bereitstellt."
+          "bf-context, ein lokaler Code-Kontext-Dienst, der der Builderforce-Erweiterung für VS Code, Claude Code und Cursor einen gemeinsamen Index Ihres Repositorys liefert."
         ],
         "status": "Der CPU-Pfad ist ausgeliefert. Die GPU-Backends (CUDA, ROCm, Metal, Vulkan) kompilieren, aber der GPU-Durchsatz im Vergleich zu llama-bench wurde nicht gemessen, und die Release-Binärdateien sind noch nicht signiert.",
         "quickStartNote": "Installieren Sie die CLI mit Cargo aus dem Quellcode, prüfen Sie, ob ein Modell auf diesen Rechner passt, laden Sie es und starten Sie den Server.",
-        "usage": "Synapse ist Builderforce auf dem Desktop. Es stellt lokale Modelle für Claude Code, Ihre Skripte und die Builderforce-Erweiterung für VS Code bereit, die sie über ~/.builderforce/desktop.json findet, und sein Kontextdienst und Code-Index versorgen die Erweiterung ebenfalls."
+        "usage": "bfi stellt lokale Modelle für Claude Code, Ihre Skripte und die Builderforce-Erweiterung für VS Code bereit, die sie über ~/.builderforce/desktop.json findet, und bf-context liefert der Erweiterung ebenfalls einen Code-Index. Die Desktop-App, die beides umhüllte, ist eingestellt; VS Code mit der Builderforce-Erweiterung ist die Desktop-Oberfläche."
       },
       "spawn": {
-        "tagline": "Roblox-Spiele durch Sprechen bauen: eine Desktop-App und eine Brücke zu Roblox Studio.",
-        "summary": "Beschreiben Sie das Spiel, und Spawn baut die Teile, das Luau und die Oberfläche in Roblox Studio. Nur eine Installation; das Studio-Plugin verbindet sich von selbst.",
+        "tagline": "Eingestellt: die Spawn-Desktop-App und die Roblox-Studio-Brücke. Roblox-Bauen kommt als Projekttyp in den Builderforce-Editor.",
+        "summary": "Spawn wird nicht mehr veröffentlicht. Das Repository bleibt als Referenz für die Studio-Brücke offen; Roblox-Bauen zieht als Projekttyp in den Builderforce-Editor um.",
         "problem": "KI-Werkzeuge für Roblox verlangen von jungen Creators, eine App herunterzuladen, ein Studio-Plugin zu installieren, einen lokalen Server zu starten und ein Sync-Werkzeug zu verbinden und alle vier am Laufen zu halten, bevor der erste Prompt möglich ist.",
         "gets": [
-          "Eine Tauri-Desktop-App, die neben Roblox Studio läuft.",
+          "Eine Tauri-Desktop-App, die neben Roblox Studio lief (eingestellt, nicht mehr veröffentlicht).",
           "bf-roblox, die Brücke: Sie installiert das Spawn-Plugin für Studio und stellt die Loopback-Brücke bereit, die das Plugin nach Builds abfragt, sodass von außerhalb des Rechners nichts erreichbar ist.",
-          "Builderforce-Anmeldung und API-Zugriff über bf-cloud, gemeinsam mit Synapse aus dem Repository builderforce-inference."
+          "Builderforce-Anmeldung und API-Zugriff über bf-cloud."
         ],
-        "status": "Die Release-Binärdateien sind noch nicht signiert.",
+        "status": "Eingestellt: Es werden keine neuen Versionen der Desktop-App mehr veröffentlicht.",
         "quickStartNote": "Klonen Sie das Repository und bauen Sie den Workspace mit Cargo.",
-        "usage": "Spawn ist der Roblox-Builder von Builderforce für Creators ab 13 Jahren und wird als eigenes Produkt angeboten. Das offene Repository enthält die Desktop-App und die Studio-Brücke; Anmeldung und Modellaufrufe laufen über Builderforce."
+        "usage": "Spawn, der Roblox-Builder von Builderforce für Creators ab 13 Jahren, ist als Desktop-App eingestellt. Das offene Repository enthält die Desktop-App und die Studio-Brücke weiterhin als Referenz."
       }
     }
   },

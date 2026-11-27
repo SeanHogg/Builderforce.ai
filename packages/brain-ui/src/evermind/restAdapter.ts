@@ -1,7 +1,7 @@
 /**
  * The Evermind console's REST adapter — ONE implementation of the gateway calls behind
  * {@link EvermindConsoleAdapter}, for every host that talks to `/api/projects/:id/evermind/*`
- * with an authenticated `request` (the VS Code sidebar's bearer fetch, Synapse's signed-in
+ * with an authenticated `request` (the VS Code sidebar's bearer fetch, the web console's signed-in
  * session). Before this, the VS Code webview held the only copy inline, and a second host
  * would have had to restate every path, method and response unwrap beside it.
  *
@@ -41,7 +41,7 @@ export type EvermindRequest = <T>(
  * What a host read from its local memory source for an import: the learnable entries,
  * each tagged with the source it came from. A JSON snapshot yields one shared `path`; a
  * Claude Code memory FOLDER yields one path per fact; a store with no files of its own
- * (Synapse's memory server) leaves `path` off every entry and the import falls back to
+ * (a memory server) leaves `path` off every entry and the import falls back to
  * the picked `path`. `null` = the person cancelled.
  */
 export interface PickedMemory {

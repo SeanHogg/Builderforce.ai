@@ -8368,7 +8368,7 @@
       },
       {
         "question": "我的 Evermind 能在我自己的电脑上运行吗？",
-        "answer": "可以——这正是 Builderforce 桌面应用 Synapse 的用途。它把你自己的 Evermind 保存在你的机器上：你的 AI 工具所学到的事实、示范和技能都在那里存储并训练，使用的是你拥有的模型，只有在你选择发布时才会离开。Synapse 还为机器上的 AI 工具提供共享的代码索引，在受支持的设备上运行与你的内存相匹配的本地模型，并为 Brain 托管 MCP 连接器。"
+        "answer": "可以——Builderforce VS Code 扩展运行在你自己的电脑上，你自己的 Evermind 也留在那里：你的 AI 工具学到的事实、演示和技能都在本地存储并训练，保存在你拥有的模型中，只有你选择发布时才会离开。原生 bfi 引擎会运行与你内存相匹配的本地模型，bf-context 服务则为电脑上的 AI 工具提供共享的代码索引。"
       },
       {
         "question": "什么是写穿认知（Write-Through Cognition）？",
@@ -32721,7 +32721,7 @@
       },
       {
         "q": "有桌面应用吗？",
-        "a": "可以。Synapse 可在 Windows、macOS 和 Linux 上运行，并把你的私有 Evermind 保存在你自己的机器上——除非你选择发布，记忆与学习成果会留在本地。它还能与 Brain 对话、运行只需教一次的智能体（审批可在手机上答复）、管理本地模型并托管 MCP 连接器。"
+        "a": "Builderforce 的桌面入口是安装了 Builderforce 扩展的 VS Code。它能与 Brain 对话、运行你的智能体，并在你自己的电脑上使用你的私有 Evermind 和本地模型——记忆和学习都留在本地，除非你选择发布。"
       }
     ],
     "closeTitle": "准备好替换整套工具了吗？",
@@ -37081,40 +37081,6 @@
     "label": "公益",
     "accessibleName": "无偿——这位顾问提供公益咨询"
   },
-  "desktopApp": {
-    "eyebrow": "桌面应用 · Windows、macOS、Linux",
-    "heading": "Synapse——你的私有 Evermind，就在你的电脑上",
-    "intro": "Synapse 是你自己的 Evermind 所在之处。你的 AI 工具学到的关于你和你工作的一切——事实、演示、技能——都保存在你的电脑上，并训练进一个属于你的模型。只有你选择发布时，它才会离开。",
-    "points": [
-      {
-        "title": "私有的 Evermind",
-        "desc": "记忆、Train Once 技能及其背后的经验都存放在你的电脑上，并训练进你自己的 `.evermind` 模型。可以从工作区的某个模型开始，它只在本机学习。"
-      },
-      {
-        "title": "为每个 AI 工具提供上下文",
-        "desc": "每个仓库一个索引——按依赖关系排序的地图，加上 `semantic_search`——由 VS Code 中的 Builderforce 智能体、Claude Code、Cursor 和任何 MCP 客户端共享。提到已删除代码的记忆会被标记，而不是被照做。"
-      },
-      {
-        "title": "与 Brain 对话",
-        "desc": "在桌面上使用工作区的聊天和智能体。回答会结合你的 Evermind 所回忆的内容，并可使用平台工具和你的连接器；任何会改动内容的操作都会先征求同意。"
-      },
-      {
-        "title": "教一次就会的智能体",
-        "desc": "在任意桌面应用中给 Synapse 演示一次任务；它会重放，并在关键步骤等待你的批准。你也可以通过 Builderforce 账户在手机上批准这些步骤。"
-      },
-      {
-        "title": "按你的电脑选型的本地模型",
-        "desc": "Synapse 管理 Ollama，按你的内存挑选合适的模型规模和量化，并以 OpenAI 和 Anthropic 格式提供服务——Claude Code 和你的脚本也能使用。"
-      },
-      {
-        "title": "一键连接器",
-        "desc": "GitHub、Slack、Playwright、你的文件以及任何 MCP 服务器都在你的电脑上运行，供 Brain 使用其工具。令牌保存在系统凭据存储中。"
-      }
-    ],
-    "privacy": "索引、嵌入、记忆和训练都在本地运行。你的代码绝不会上传，你的 Evermind 学到的任何内容，除非你发布，否则都不会离开本机。",
-    "download": "下载 Windows、macOS 或 Linux 版",
-    "readMore": "了解原理"
-  },
   "siteBadge": {
     "body": "免费网站会显示一个小的“Made with Builderforce.ai”徽章。",
     "upgrade": "升级即可移除"
@@ -37337,22 +37303,9 @@
       "badge": "🎮 适合 13 岁以上的 Roblox 创作者",
       "titleLead": "说出来，",
       "titleAccent": "就生成。",
-      "lede": "输入你想要的游戏，Spawn 就在 Roblox Studio 里把它做出来。",
+      "lede": "输入你想要的游戏。Roblox 制作功能即将作为一种项目类型加入 Builderforce 编辑器。",
       "start": "开始免费一周",
       "fine": "7 天免费 · 之后每月 1.99 美元 · 开始时无需银行卡"
-    },
-    "download": {
-      "windows": "下载 Windows 版",
-      "mac": "下载 Mac 版",
-      "any": "下载 Spawn",
-      "windowsShort": "Windows",
-      "macArm": "Mac（Apple 芯片）",
-      "macIntel": "Mac（Intel）",
-      "alsoFor": "也适用于：",
-      "needsComputer": "Spawn 需要装有 Roblox Studio 的 Windows 电脑或 Mac。",
-      "all": "全部下载",
-      "firstRunWindows": "Windows 可能会提示“Windows 已保护你的电脑”。点“更多信息”，再点“仍要运行”。",
-      "firstRunMac": "Mac 首次打开：如果打不开，请前往“系统设置 → 隐私与安全性”，点“仍要打开”。"
     },
     "play": {
       "pick": "试一试：点一个游戏 👇",
@@ -37402,7 +37355,7 @@
       "items": [
         {
           "icon": "⬇️",
-          "label": "下载应用"
+          "label": "打开编辑器"
         },
         {
           "icon": "💬",
@@ -37474,12 +37427,12 @@
       ]
     },
     "cta": {
-      "title": "准备好开始了吗？"
+      "title": "Roblox 制作功能即将作为一种项目类型加入 Builderforce 编辑器。"
     },
     "account": {
       "eyebrow": "Spawn",
       "title": "你的账户",
-      "signInBody": "登录后即可加入 Spawn、获取代币并连接桌面应用。",
+      "signInBody": "登录后即可加入 Spawn 并获取代币。",
       "signIn": "登录",
       "loading": "正在加载你的账户…",
       "tooYoungTitle": "Spawn 面向 13 岁及以上的玩家",
@@ -37488,7 +37441,7 @@
         "joined": "欢迎加入 Spawn！你的会员已生效。",
         "tokensAdded": "代币已到账，尽情创作吧！",
         "cancelled": "结账已取消，没有产生任何费用。",
-        "trialStarted": "你的免费一周开始了！下载应用，开始制作吧。"
+        "trialStarted": "你的免费一周开始了！祝你创作愉快。"
       },
       "errors": {
         "generic": "出了点问题，请重试。",
@@ -37526,7 +37479,7 @@
           "trial": "免费试用",
           "trial_ended": "试用已结束"
         },
-        "activeBody": "你是会员（每月 {price}）。制作器和桌面应用已开启。",
+        "activeBody": "你是会员（每月 {price}）。制作器已开启。",
         "body": {
           "none": "每月 {price} 加入，即可开启制作器。",
           "past_due": "你上一次付款没有成功。以每月 {price} 重新加入即可继续创作。",
@@ -37548,16 +37501,6 @@
           "grant": "代币到账",
           "spend": "生成"
         }
-      },
-      "desktop": {
-        "title": "开始创作",
-        "ready": "就绪",
-        "steps": [
-          "下载并打开 Spawn 应用。",
-          "点击登录。浏览器会打开，确认页面上显示的代码。",
-          "打开 Roblox Studio 和任意场景，Spawn 会自动连接。",
-          "写下你想做的东西，然后按 Play。"
-        ]
       },
       "trial": {
         "badge": "🎁 免费试用",
@@ -38712,7 +38655,7 @@
         "usage": "它是 Builderforce 的记忆子系统。画布借助引擎在浏览器中训练 Evermind，云端和本地部署的智能体在工作中通过运行时库调取和保存记忆，而 Builderforce 的 VS Code 扩展与 MCP 服务器使用同一个磁盘存储。"
       },
       "inference": {
-        "tagline": "Synapse，Builderforce 的桌面应用，以及 bfi，它用 Rust 编写的原生引擎，可在你自己的电脑上运行 LLM。",
+        "tagline": "bfi，用 Rust 编写、可在你自己电脑上运行 LLM 的原生引擎，以及代码上下文服务 bf-context。",
         "summary": "下载适合你硬件规格的 GGUF 模型，并通过兼容 OpenAI、Anthropic 和 Ollama 的 API 提供服务，你现有的客户端无需修改即可使用。无需另外安装 Ollama。",
         "problem": "在本地运行模型通常意味着安装别家的运行时、指望它在 PATH 中、猜测模型能否装进内存，并只能接受那个运行时支持的 GGUF 类型。标准的 llama.cpp 不支持 PrismML 的 Ternary Bonsai 模型所采用的 2 位 PQ2_0 和 PTQ1_0 格式。",
         "gets": [
@@ -38720,24 +38663,24 @@
           "一个同时支持 OpenAI、Anthropic 和 Ollama 接口规范的 HTTP 服务器，默认端口 11434，可选 Bearer 密钥。",
           "bfi fit：在下载之前读取文件头，对比模型所需内存（权重、KV 缓存、循环状态和额外开销）与本机的情况。",
           "可断点续传的 Hugging Face 下载并进行 sha256 校验，以及 import-ollama，可直接复用现有的 Ollama 模型库而无需重新下载。",
-          "Synapse，负责管理 bfi serve 的桌面应用，同时承载 MCP 连接器、私有的 Evermind 记忆和本地代码索引。"
+          "bf-context，本地代码上下文服务，为 Builderforce VS Code 扩展、Claude Code 和 Cursor 提供同一份代码仓库索引。"
         ],
         "status": "CPU 路径已发布。GPU 后端（CUDA、ROCm、Metal、Vulkan）可以编译，但尚未测量与 llama-bench 相比的 GPU 吞吐量，发布的二进制文件也尚未签名。",
         "quickStartNote": "用 Cargo 从源码安装 CLI，检查模型是否适合这台电脑，下载模型并启动服务器。",
-        "usage": "Synapse 就是桌面上的 Builderforce。它为 Claude Code、你的脚本以及 Builderforce 的 VS Code 扩展提供本地模型，扩展通过 ~/.builderforce/desktop.json 找到这些模型，而它的上下文服务和代码索引也为扩展提供支持。"
+        "usage": "bfi 为 Claude Code、你的脚本以及 Builderforce VS Code 扩展提供本地模型，扩展通过 ~/.builderforce/desktop.json 找到它们，bf-context 也为扩展提供代码索引。曾经封装它们的桌面应用已停用；VS Code 加 Builderforce 扩展就是桌面入口。"
       },
       "spawn": {
-        "tagline": "用对话制作 Roblox 游戏：一个桌面应用和一个连接 Roblox Studio 的桥接组件。",
-        "summary": "描述你想要的游戏，Spawn 就会在 Roblox Studio 中构建部件、Luau 脚本和界面。只需安装一个应用，Studio 插件会自动连接。",
+        "tagline": "已停用：Spawn 桌面应用和 Roblox Studio 桥接组件。Roblox 制作功能即将作为一种项目类型加入 Builderforce 编辑器。",
+        "summary": "Spawn 不再发布新版本。该仓库继续开源，作为 Studio 桥接组件的参考；Roblox 制作功能正在作为项目类型迁入 Builderforce 编辑器。",
         "problem": "面向 Roblox 的 AI 工具要求年轻的创作者在输入第一个提示之前，先下载一个应用、安装 Studio 插件、启动本地服务器、连接同步工具，并让这四样东西一直保持运行。",
         "gets": [
-          "一个与 Roblox Studio 并行运行的 Tauri 桌面应用。",
+          "与 Roblox Studio 并排运行的 Tauri 桌面应用（已停用，不再发布）。",
           "bf-roblox 桥接组件：它安装 Spawn 的 Studio 插件，并提供插件轮询构建结果所用的本地回环桥接，因此机器外部无法访问任何内容。",
-          "通过 bf-cloud 登录 Builderforce 并访问 API，该组件与 builderforce-inference 仓库中的 Synapse 共用。"
+          "通过 bf-cloud 登录 Builderforce 并访问 API。"
         ],
-        "status": "发布的二进制文件尚未签名。",
+        "status": "已停用：不再发布桌面应用的新版本。",
         "quickStartNote": "克隆仓库，并用 Cargo 构建整个工作区。",
-        "usage": "Spawn 是 Builderforce 面向 13 岁及以上创作者的 Roblox 游戏构建工具，作为独立产品提供。开源仓库包含桌面应用和 Studio 桥接组件；登录和模型调用都通过 Builderforce 完成。"
+        "usage": "Spawn 是 Builderforce 面向 13 岁及以上创作者的 Roblox 构建工具，其桌面应用已停用。开源仓库保留桌面应用和 Studio 桥接组件，仅供参考。"
       }
     }
   },

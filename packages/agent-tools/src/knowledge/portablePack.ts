@@ -4,7 +4,7 @@
  *
  * The snapshot is memory's canonical `KnowledgeSnapshot` (facts = judged model knowledge;
  * the extracted cache lets a consumer rebuild perception without re-reading sources), and
- * the cards are memory's `IndexDoc` retrieval layer, so any consumer — VS Code, Synapse,
+ * the cards are memory's `IndexDoc` retrieval layer, so any consumer — VS Code,
  * Canvas — queries the pack and injects top cards as context with nothing installed.
  *
  * Pure: no vscode, no fs — data in, data out. Serialization is canonical (object keys

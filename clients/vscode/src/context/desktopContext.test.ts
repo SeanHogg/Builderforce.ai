@@ -8,7 +8,6 @@ import {
   desktopRepoMapSection,
   desktopSemanticCapability,
   liveDesktop,
-  readDesktopModelsEndpoint,
   setDesktopFetchForTests,
 } from "./desktopContext";
 
@@ -104,7 +103,6 @@ describe("desktop context client", () => {
       process.env.BUILDERFORCE_DESKTOP_DISCOVERY!,
       JSON.stringify({ port: 4999, token: "tok", pid: 1, version: "x", models: { endpoint: "not-a-url" } }),
     );
-    expect(readDesktopModelsEndpoint()).toBeNull();
     setDesktopFetchForTests(fakeService({}));
     expect(await liveDesktop()).toMatchObject({ port: 4999, token: "tok" });
   });

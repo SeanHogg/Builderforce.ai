@@ -3,7 +3,7 @@
  * folder inside one, as memory's review reads it — the ONE filesystem walker
  * (`@builderforce/agent-tools/knowledge` `createFsDirectorySource`: SHA-256 per file,
  * skipped by the stat manifest when unchanged; `.builderforce/` state never listed) over `vscode.workspace.fs`
- * (`knowledgeFs.ts`), skipping the ONE list every host's review skips (`KNOWLEDGE_SKIP_DIRS`).
+ * (`knowledgeFs.ts`), skipping the ONE list every host's review skips (`WORKSPACE_SKIP_DIRS` from `@builderforce/agent-tools/skip-dirs`).
  *
  * This host hashes natively (`node:crypto`, the same lowercase-hex SHA-256) and never reads a
  * file the plan skips as too large (it needs the size only).

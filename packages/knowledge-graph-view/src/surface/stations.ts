@@ -13,12 +13,13 @@
 import { COCHANGE_HIDDEN_BADGE, fileRefOf as memoryFileRefOf, type Finding, type KnowledgeGraph, type KNode, type NodeRef } from '@seanhogg/builderforce-memory/knowledge';
 import { nodeIndex, pathOf } from '../graphModel';
 import { cmp } from '../order';
+import { fileCategory } from '../fileCategory';
 import { dataCoverage, hasMeasuredCoverage } from './dataCoverage';
 import { LAYER_ORDER, layerRank, type Provenance } from './layers';
 import type { Group } from './areaRollup';
 import { communityNamer, foldGroups, REPO_CONFIG_STATION_ID, type CommunityName } from './communityGroups';
 import { communityIdOf, communityKey } from '../placement';
-import { fileNodesOf, outlineView } from './outlineGraph';
+import { fileNodesOf, isArchitectureFile, outlineView } from './outlineGraph';
 import { reachOf, staticReach } from './staticReach';
 import { isRepoConfigFile, REPO_CONFIG_NAME, stationNames } from './stationName';
 import { appOfNode, copyMap, foldedSystem, systemOfNode, systemsOf } from './systems';
@@ -171,37 +172,43 @@ function baseGroups(files: KNode[], index: ReadonlyMap<string, KNode>, repoConfi
 const byImportance = (a: KNode, b: KNode): number => b.importance - a.importance || cmp(a.ref, b.ref);
 
 /**
- * Entry files of a mixed group stand as their own station, named after its most important entry FILE — never after the
- * group it was split from. (It used to take the group's name when it held several entry files, so a line read
- * "data-manager.ts → data-manager.ts": the entry station and the rest of its community under one name.)
+ * Give each entry point its own station and line, even when several entry files share an area.
+ * Keep the ID and label of a group already consisting of one entry file.
  */
 function splitEntry(groups: Map<string, Group>): Group[] {
     const out: Group[] = [];
+    const parents = new Map<string, string>();
     for (const g of groups.values()) {
-        const entry = g.nodes.filter((n) => n.partition === 'entry');
-        if (entry.length === 0 || entry.length === g.nodes.length) { out.push(g); continue; }
-        const rest = g.nodes.filter((n) => n.partition !== 'entry');
-        const lead = [...entry].sort(byImportance)[0]!;
-        out.push({ ...g, nodes: rest });
-        out.push({ id: `${g.id}#entry`, name: tail(lead.ref), kind: g.kind, nodes: entry });
+        const entry = g.nodes.filter((n) => n.partition === 'entry' && isArchitectureFile(n));
+        if (entry.length === 0 || g.nodes.length === 1) { out.push(g); continue; }
+        const entryRefs = new Set(entry.map((node) => node.ref));
+        const rest = g.nodes.filter((n) => !entryRefs.has(n.ref));
+        if (rest.length) out.push({ ...g, nodes: rest });
+        for (const node of entry) {
+            const id = entry.length === 1 ? `${g.id}#entry` : `${g.id}#entry:${node.ref}`;
+            parents.set(id, g.name);
+            out.push({ id, name: tail(node.ref), kind: g.kind, nodes: [node] });
+        }
     }
-    return distinctEntryNames(out);
+    return distinctEntryNames(out, parents);
 }
 
 /**
  * An entry station that would read the same as another station (two `index.ts` in different areas, or a file named like
  * its own group) is named group › file; when even that is its own name, the entry file's path. A stop reads once on a line.
  */
-function distinctEntryNames(groups: Group[]): Group[] {
+function distinctEntryNames(groups: Group[], parents: ReadonlyMap<string, string>): Group[] {
     const taken = new Map<string, number>();
     for (const g of groups) taken.set(g.name, (taken.get(g.name) ?? 0) + 1);
-    const parent = new Map(groups.filter((g) => !g.id.endsWith('#entry')).map((g) => [g.id, g.name] as const));
-    return groups.map((g) => {
-        if (!g.id.endsWith('#entry') || (taken.get(g.name) ?? 0) < 2) return g;
-        const group = parent.get(g.id.slice(0, -'#entry'.length));
-        if (group && group !== g.name) return { ...g, name: `${group} › ${g.name}` };
-        const lead = [...g.nodes].sort(byImportance)[0];
-        return lead ? { ...g, name: pathOf(lead.ref) ?? lead.label } : g;
+    const qualified = groups.map((g) => {
+        const group = parents.get(g.id);
+        return group && group !== g.name && (taken.get(g.name) ?? 0) > 1 ? { ...g, name: `${group} › ${g.name}` } : g;
+    });
+    taken.clear();
+    for (const g of qualified) taken.set(g.name, (taken.get(g.name) ?? 0) + 1);
+    return qualified.map((g) => {
+        const node = g.nodes[0];
+        return parents.has(g.id) && node && (taken.get(g.name) ?? 0) > 1 ? { ...g, name: pathOf(node.ref) ?? node.label } : g;
     });
 }
 
@@ -232,10 +239,17 @@ export function quantileLevels(values: ReadonlyMap<string, number>): Map<string,
     return out;
 }
 
+function isMapDocument(node: KNode): boolean {
+    return node.badges?.asset !== 1 && (node.pack === 'documents' || fileCategory(node) === 'doc');
+}
+
 export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}): StationModel {
     const index = nodeIndex(graph);
     // A truncated graph's stations come from its outline (every file of the full graph), badges limited to the outline's keys.
-    const files = fileNodesOf(graph);
+    const allFiles = fileNodesOf(graph);
+    const files = allFiles.some(isArchitectureFile)
+        ? allFiles.filter((node) => isArchitectureFile(node) || isMapDocument(node))
+        : allFiles;
     // Past MAX_STATIONS, files group by community when those fit, else areas fold into their parent directory.
     const communityName = communityNamer(graph, opts.communityFallback);
     const groups = splitEntry(foldGroups(baseGroups(files, index, opts.repoConfigName ?? REPO_CONFIG_NAME, communityName), (id) => index.get(id)?.label ?? tail(id), communityName));
@@ -329,7 +343,7 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
         }
         const station: Station = {
             id: g.id, name: shortNames.get(g.id) ?? g.name, path: g.name, kind: g.kind,
-            entry: g.nodes.some((n) => n.partition === 'entry'),
+            entry: g.nodes.some((n) => n.partition === 'entry' && isArchitectureFile(n)),
             // Most important first: Show focuses the first 200 and selects the first.
             refs: [...g.nodes].sort((a, b) => b.importance - a.importance || cmp(a.ref, b.ref)).map((n) => n.ref), files: g.nodes.length,
             anti: antiLevel(score.get(g.id) ?? 0), findingIds: found.get(g.id) ?? [],
@@ -366,13 +380,4 @@ export function buildStations(graph: KnowledgeGraph, opts: StationOptions = {}):
 }
 
 /** File refs whose source differs from the baseline's (or that the baseline lacks). */
-export function changedRefs(current: Pick<KnowledgeGraph, 'nodes'>, baseline: Pick<KnowledgeGraph, 'nodes'> | null | undefined): Set<string> {
-    const out = new Set<string>();
-    if (!baseline) return out;
-    const before = new Map(baseline.nodes.filter((n) => n.kind === 'file').map((n) => [n.ref, n.sourceHash] as const));
-    for (const n of current.nodes) {
-        if (n.kind !== 'file') continue;
-        if (!before.has(n.ref) || before.get(n.ref) !== n.sourceHash) out.add(n.ref);
-    }
-    return out;
-}
+export function changedRefs(current: Pick<KnowledgeGraph, 'nodes'>, baseline: Pick<KnowledgeGraph, 'nodes'> | null | undefined): Set<str

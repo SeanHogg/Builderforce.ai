@@ -33,10 +33,7 @@ export interface SurfaceHeaderProps {
     outTo: string | null;
     onOut(): void;
     /** The drawer: open, and its toggle (the Panels button). */
-    drawerOpen: boolean;
-    onToggleDrawer(): void;
     /** False while no graph is drawn: the drawer cannot open, so the Panels button hides. */
-    drawerAvailable?: boolean | undefined;
     /** Copy diagnostics (header, every status). */
     diagnostics?: (() => string | Promise<string>) | undefined;
     /** The Code | Picture switch of the wrapped header. */
@@ -71,7 +68,7 @@ export function SurfaceHeader(p: SurfaceHeaderProps) {
     return (
         <Toolbar
             labels={labels} wrapped={wrapped} onSearch={p.onSearch} question={surface.question} askName={p.askName} outTo={p.outTo} onOut={p.onOut}
-            spine={p.spine} linesToggle={p.linesToggle} headerTools={p.headerTools} drawerOpen={p.drawerOpen} onToggleDrawer={p.onToggleDrawer} drawerAvailable={p.drawerAvailable} diagnostics={p.diagnostics} panes={p.panes}
+            spine={p.spine} linesToggle={p.linesToggle} headerTools={p.headerTools} diagnostics={p.diagnostics} panes={p.panes}
             action={<ReviewAction labels={labels} narrow={wrapped} pill={pill} {...(reviewsOpen ? { onOpen: p.onOpenReviews } : {})} />}
             askWrap={(bar) => (
                 <PinpointInput

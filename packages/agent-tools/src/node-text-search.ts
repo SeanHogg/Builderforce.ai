@@ -345,7 +345,7 @@ function spawnRipgrepSearch(root: string, start: string, query: string, ripgrep:
     // the walk always agree on what a query matches.
     "--json", smartCaseSensitive(query) ? "--case-sensitive" : "--ignore-case", "--max-columns", "400", "--max-filesize", RG_MAX_FILESIZE,
     // Mirror the walker's skip list so the two backends agree on what "the repo" is.
-    ...[...SKIP_DIRS].flatMap((dir) => ["--glob", `!**/${dir}/**`]),
+    ...[...WORKSPACE_SKIP_DIRS].flatMap((dir) => ["--glob", `!**/${dir}/**`]),
     // The JS engine's escaping rule, expressed as ripgrep's own flag: a query that is not
     // a regex is a literal, never a refused search.
     ...(isValidRegex(query) ? [] : ["--fixed-strings"]),
@@ -445,7 +445,7 @@ export async function walkSearch(root: string, start: string, query: string, run
       if (matches.length >= SEARCH_MAX_MATCHES || filesScanned >= WALK_MAX_FILES) { truncated = true; break outer; }
       const abs = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (SKIP_DIRS.has(entry.name) || entry.name.startsWith(".")) continue;
+        if (!isIndexedDirName(entry.name)) continue;
         queue.push(abs);
       } else if (entry.isFile()) {
         const stat = await fs.stat(abs).catch(() => null);

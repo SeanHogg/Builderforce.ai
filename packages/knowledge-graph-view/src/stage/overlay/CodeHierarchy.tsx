@@ -14,6 +14,7 @@ const folder = (): Folder => ({ folders: new Map(), files: [] });
 function fileTree(files: ReadonlyMap<string, CodeFile>, view: FileView): Folder {
     const root = folder();
     for (const file of files.values()) {
+        if (view === 'architecture' && !file.isCode) continue;
         let current = root;
         for (const part of file[view]) {
             let branch = current.folders.get(part.id);

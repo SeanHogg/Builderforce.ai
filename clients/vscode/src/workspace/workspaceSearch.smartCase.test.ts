@@ -3,7 +3,7 @@ import * as os from "os";
 import * as path from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { findRipgrep } from "../tools/ripgrep";
-import { compileSearchPattern, ripgrepSearch, searchWorkspace, smartCaseSensitive, walkSearch } from "./workspaceSearch";
+import { compileSearchPattern, ripgrepSearch, searchWorkspace, smartCaseSensitive, walkSearch } from "@builderforce/agent-tools/node-text-search";
 
 describe("smart case", () => {
   it("is case-sensitive exactly when the query has an upper-case letter", () => {

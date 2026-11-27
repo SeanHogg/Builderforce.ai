@@ -308,8 +308,8 @@ async function probeRuntime(
  * runtime (the browser's built-in model) has no HTTP surface to ask. Never throws.
  *
  * One de-duplication: a model whose `owned_by` names ANOTHER configured runtime is that
- * runtime's, not this one's — `bfi serve` on the Ollama port must not list each Synapse
- * model twice (once as `local/ollama/…`, once as `local/synapse/…`). When the owner is
+ * runtime's, not this one's — `bfi serve` on the Ollama port must not list each `bfi`
+ * model twice (once as `local/ollama/…`, once as `local/synapse/…`; the id is kept for data compatibility). When the owner is
  * not configured the row stays where it was found, so it remains servable.
  */
 export async function probeLocalRuntimes(

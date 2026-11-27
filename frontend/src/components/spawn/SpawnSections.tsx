@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { getTranslations } from 'next-intl/server';
-import { SpawnDownloadButton } from './SpawnDownloadButton';
 import styles from './spawn.module.css';
 
 /**
@@ -81,7 +80,6 @@ export async function SpawnGetStarted() {
   return (
     <section id="download" className={styles.ctaBand} aria-labelledby="download-title">
       <h2 id="download-title" className={styles.h2}>{t('title')}</h2>
-      <SpawnDownloadButton />
     </section>
   );
 }

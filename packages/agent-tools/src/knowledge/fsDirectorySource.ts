@@ -12,7 +12,7 @@
  *   watch  — the port's watcher, reporting root-relative paths of listed files only.
  *
  * Install and build trees, VCS stores, `.worktrees/`, `*.local/`, vendored `_*_src/` and nested git
- * checkouts ({@link KNOWLEDGE_SKIP_DIRS}, the ONE list every
+ * checkouts ({@link WORKSPACE_SKIP_DIRS}, the ONE list every
  * host walks by — the browser's sources test paths with {@link isSkippedPath}) are never walked. Inside
  * `.builderforce/` only the review's own inputs are listed (the ignore file, the layer
  * override) — snapshots and indexes are never sources. `.gitignore` /
@@ -22,27 +22,25 @@
 import { CONTENT_HASH_RULE, contentHash, mediaTypeOfPath, type DirectorySource } from '@seanhogg/builderforce-memory/knowledge';
 import type { SourceDocument } from '@seanhogg/builderforce-memory/ingest';
 import { isSkippedDirName, isVcsMetadataName, skippedDirReason, WORKSPACE_SKIP_DIRS, type SkippedFolder } from '../skipDirs.js';
+import { toPosixPath } from '../glob.js';
 import { slashPath } from './rootRelative.js';
 import { memoryHashCache, msToNs, type GitHints, type HashCache } from './statManifest.js';
 import { StatWalk } from './statWalk.js';
 import { withDocumentText } from './documents/withDocumentText.js';
 
-/** Directory names no review walks, on any host (the definition index's list). */
-export const KNOWLEDGE_SKIP_DIRS: ReadonlySet<string> = WORKSPACE_SKIP_DIRS;
-
 /** Root-relative, forward slashes, no leading `./` or `/`, no trailing slash. */
 export function normalizePath(path: string): string {
-    return path.replace(/\\/g, '/').replace(/^\.?\/+/, '').replace(/\/+$/, '');
+    return toPosixPath(path).replace(/^\.?\/+/, '').replace(/\/+$/, '');
 }
 
 /** Whether a root-relative path sits under a skipped directory (a trailing `/` names a directory). */
 export function isSkippedPath(
     path: string,
-    skipDirs: ReadonlySet<string> = KNOWLEDGE_SKIP_DIRS,
+    skipDirs: ReadonlySet<string> = WORKSPACE_SKIP_DIRS,
     /** Nested checkouts a walk found (see `skippedFolders()`): everything under one is skipped too. */
     nestedCheckouts?: ReadonlySet<string>,
 ): boolean {
-    const dirs = path.replace(/\\/g, '/').split('/').slice(0, -1);
+    const dirs = toPosixPath(path).split('/').slice(0, -1);
     if (dirs.some((name) => isSkippedDirName(name, skipDirs) || isVcsMetadataName(name))) return true;
     return !!nestedCheckouts && dirs.some((_, i) => nestedCheckouts.has(dirs.slice(0, i + 1).join('/')));
 }
@@ -86,7 +84,7 @@ export interface FsDirectorySourceOptions {
     rootPath: string;
     rootId: string;
     title: string;
-    /** Directory NAMES never walked; default {@link KNOWLEDGE_SKIP_DIRS}. */
+    /** Directory NAMES never walked; default {@link WORKSPACE_SKIP_DIRS}. */
     skipDirs?: ReadonlySet<string>;
     /** The stat manifest, loaded and saved once per walk; default an in-memory one for this source ({@link memoryHashCache}). */
     hashCache?: HashCache;
@@ -142,7 +140,7 @@ export type FsDirectorySource = DirectorySource & {
 };
 
 export function createFsDirectorySource(opts: FsDirectorySourceOptions): FsDirectorySource {
-    const { fs, rootId, title, skipDirs = KNOWLEDGE_SKIP_DIRS } = opts;
+    const { fs, rootId, title, skipDirs = WORKSPACE_SKIP_DIRS } = opts;
     const root = slashPath(opts.rootPath);
     const cache: HashCache = opts.hashCache ?? memoryHashCache();
     const now = opts.now ?? Date.now;
