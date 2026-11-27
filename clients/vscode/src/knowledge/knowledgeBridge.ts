@@ -249,13 +249,16 @@ export class KnowledgeBridge implements vscode.Disposable {
     try {
       graph = pack
         ? await traced.timer.phase("pack", () => packRootGraph(pack, query))
-        : await loadGraph(this.secrets, call.rootId, query, traced.timer, undefined, { signal: build.signal, view: true });
+        : await loadGraph(this.secrets, call.rootId, query, traced.timer, (pairs) => traced.set({ nearDuplicates: pairs }), { signal: build.signal, view: true });
     } finally {
       build.end();
     }
-    this.rights.loaded(call.rootId, graph?.scope.digest);
-    // Only a FULL load is what the next open paints first (a focus load is a partial picture), and what the sync status counts.
-    if (graph && !call.focus) { this.built.note(call.rootId, graph); void this.rememberLastSeen(call.rootId, graph); }
+    // `hostState`: the host-thread steps after the build (rights, counts, the last-seen kick-off), each named in the trace.
+    traced.timer.phase("hostState", () => {
+      this.rights.loaded(call.rootId, graph?.scope.digest);
+      // Only a FULL load is what the next open paints first (a focus load is a partial picture), and what the sync status counts.
+      if (graph && !call.focus) { this.built.note(call.rootId, graph); void this.rememberLastSeen(call.rootId, graph); }
+    });
     // No local review of an open root: the typed "not reviewed on this machine", never the server's cut.
     if (graph || pack) return graph;
     // A root listed from the project that no folder here holds (a teammate's, an uploaded pack): no local tree to

@@ -54,7 +54,8 @@ const emphasisOf = (label: string) => {
     const labelSpan = row.querySelectorAll('span')[1] as HTMLElement;
     return row.style.opacity === '0.55' ? 'dim' : labelSpan.style.fontWeight === '700' ? 'strong' : 'normal';
 };
-const aside = () => document.querySelector('aside[aria-label="' + L.findingsTitle + '"]')!;
+// The lens-scoped Findings list: the Findings section inside the Act tab's Details (the Act cards above it carry a Findings region of their own).
+const aside = () => document.getElementById(document.querySelector('[data-testid="kg-act-details-toggle"]')?.getAttribute('aria-controls') ?? '')?.querySelector('section[aria-label="' + L.findingsTitle + '"]') as Element;
 const asideKinds = () => {
     expandAllFindings({ fireEvent }, aside());
     return [...aside().querySelectorAll('[data-finding]')].map((el) => el.getAttribute('data-finding')).sort();
@@ -119,15 +120,16 @@ describe('lens effects on the drawn set and its tones', () => {
   });
 
   it('surfaces each lens\' insights in the aside', async () => {
-    // The per-lens scoped Findings aside lives in the Act rail and is drawn only when the List is
+    // The per-lens scoped Findings list lives in the Act drawer's Details and is drawn only when the List is
     // not the active camera (the List lists every finding itself). Stay on the opening camera.
     render(
         <StageFactoryContext.Provider value={() => createNoopStage()}>
             <div style={{ height: 600 }}><KnowledgeGraphView source={fixtureSource([graph])} /></div>
         </StageFactoryContext.Provider>,
     );
-    await waitFor(() => expect(aside()).toBeTruthy(), MOUNT_WAIT);
+    await waitFor(() => expect(document.querySelector('[data-testid="kg-panels-button"]')).toBeTruthy(), MOUNT_WAIT);
     openDetails(deps);
+    expect(aside()).toBeTruthy();
     const expected: Partial<Record<LensId, string[]>> = {
       structure: ['cycle', 'stale'],
       partitions: ['cycle', 'partition-violation', 'partition-violation'],

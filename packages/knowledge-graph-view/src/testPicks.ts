@@ -63,7 +63,8 @@ const menu = () => document.querySelector<HTMLElement>('[role="menu"]');
 /** The More questions trigger: it reads "More questions", or the picked question's name while one under it is active. */
 function moreTrigger(labels: KnowledgeGraphLabels): HTMLElement {
     const names = new Set<string>([labels.surface.moreQuestions, ...Object.values(labels.surface.questions), ...Object.values(labels.lenses)]);
-    const found = all('button[aria-haspopup="menu"]').find((b) => names.has((b.textContent ?? '').replace(/\s*▾$/, '').trim()));
+    // The trigger is an icon button named by its aria-label (the picked question's name while one under it is active).
+    const found = all('button[aria-haspopup="menu"]').find((b) => names.has((b.getAttribute('aria-label') ?? '').trim()));
     if (!found) throw new Error('the More questions menu is not on screen');
     return found;
 }
@@ -73,14 +74,15 @@ function openMore({ fireEvent }: PickDeps, labels: KnowledgeGraphLabels): void {
 }
 
 const item = (id: string) => document.querySelector<HTMLElement>(`[role="menuitem"][data-item="${id}"]`);
-const pill = (q: string) => document.querySelector<HTMLElement>(`button[data-question="${q}"]`);
+/** A primary question's button: a `Seg` item in the questions group (not the cameras' group: ids could collide). */
+const pill = (labels: KnowledgeGraphLabels, q: string) => document.querySelector<HTMLElement>(`[role="group"][aria-label="${labels.surface.questionsLabel}"] button[data-seg="${q}"]`);
 const isPrimary = (q: ReturnType<typeof questionForLens>): q is NonNullable<typeof q> => q !== undefined && PRIMARY_QUESTIONS.some((p) => p.id === q);
 
 /** Does what the old lens chip did: picks the lens through its question pill, or its More-menu item. */
 export function pickLens(deps: PickDeps, labels: KnowledgeGraphLabels, id: LensId): void {
     const q = questionForLens(id);
     if (isPrimary(q)) {
-        const el = pill(q);
+        const el = pill(labels, q);
         if (!el) throw new Error(`no pill for question ${q}`);
         deps.fireEvent.click(el);
         return;
@@ -94,7 +96,7 @@ export function pickLens(deps: PickDeps, labels: KnowledgeGraphLabels, id: LensI
 /** Whether the lens is the one picked: its question pill is pressed, or its More item is the selected one. */
 export function lensIsPicked(deps: PickDeps, labels: KnowledgeGraphLabels, id: LensId): boolean {
     const q = questionForLens(id);
-    if (isPrimary(q)) return pill(q)?.getAttribute('aria-pressed') === 'true';
+    if (isPrimary(q)) return pill(labels, q)?.getAttribute('aria-pressed') === 'true';
     openMore(deps, labels);
     const picked = item(q ?? `lens:${id}`)?.getAttribute('data-selected') === 'true';
     const open = menu();

@@ -29,6 +29,7 @@ import type { CodeGraphFindings } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgeGraph } from "@seanhogg/builderforce-memory/knowledge";
 import { assembleBounded, PartsReceiver, postBounded } from "../workers/boundedTransfer";
 import { folderKnowledge } from "./folderKnowledge";
+import { UNTIMED, type LoadTimer } from "./knowledgeLoadTrace";
 import {
   EXTRACTED_REQUEST_ARRAYS, GRAPH_RESULT_ARRAYS, CODE_GRAPH_RESULT_ARRAYS,
   type GraphBuildRequest, type GraphWorkerMessage, type GraphWorkerReply, type StoredGraphRequest,
@@ -100,6 +101,8 @@ interface QueueEntry {
   request: GraphBuildRequest;
   signal?: AbortSignal;
   parts: PartsReceiver;
+  /** Times the host-side steps of this build (`send`, `assemble`) into the load's trace. */
+  trace?: LoadTimer;
   resolve(result: KnowledgeGraph | CodeGraphFindings | null): void;
   reject(error: unknown): void;
   settled: boolean;
@@ -114,12 +117,15 @@ const resultArraysOf = (request: GraphBuildRequest): readonly string[] => (reque
 /** Sends a request: an `extracted` array goes as bounded parts first, then `build` completes it. */
 function sendRequest(worker: ActiveWorker, entry: QueueEntry): void {
   const send: (message: GraphWorkerMessage) => void = (m) => worker.handle.postMessage(m);
-  if (entry.request.kind === "extracted") {
-    const head = postBounded(send, entry.request, [...EXTRACTED_REQUEST_ARRAYS]);
-    send({ type: "build", id: entry.id, request: head });
-  } else {
-    send({ type: "build", id: entry.id, request: entry.request });
-  }
+  // `send`: the host-thread cost of cloning the request (partitions, near-duplicate pairs) into the worker.
+  (entry.trace ?? UNTIMED).phase("send", () => {
+    if (entry.request.kind === "extracted") {
+      const head = postBounded(send, entry.request, [...EXTRACTED_REQUEST_ARRAYS]);
+      send({ type: "build", id: entry.id, request: head });
+    } else {
+      send({ type: "build", id: entry.id, request: entry.request });
+    }
+  });
 }
 
 /** Spawns the reused worker and wires its replies to the queue. */
@@ -135,7 +141,8 @@ function attachWorker(): ActiveWorker {
     if (!entry || pool.worker !== active) return;
     if (entry.parts.accept(message)) return; // a slice of the result: kept until `done` completes it
     if (message.type === "done" && message.id === entry.id) {
-      entry.settle(() => entry.resolve(assembleBounded(message.result, entry.parts, [...resultArraysOf(entry.request)])));
+      // `assemble`: the host-thread cost of putting the bounded parts back together.
+      entry.settle(() => entry.resolve((entry.trace ?? UNTIMED).phase("assemble", () => assembleBounded(message.result, entry.parts, [...resultArraysOf(entry.request)]))));
     } else if (message.type === "error" && message.id === entry.id) {
       entry.settle(() => entry.reject(Object.assign(new Error(message.error), message.code ? { code: message.code } : {})));
     } else {
@@ -208,6 +215,7 @@ function drain(): void {
 export async function buildOffThread<R extends GraphBuildRequest>(
   request: R,
   signal?: AbortSignal,
+  timer?: LoadTimer,
 ): Promise<(R extends { kind: "extracted" } ? CodeGraphFindings : KnowledgeGraph | null)> {
   const file = seams.file === undefined ? workerFile() : seams.file;
   if (!file) {
@@ -218,7 +226,7 @@ export async function buildOffThread<R extends GraphBuildRequest>(
 
   return new Promise<KnowledgeGraph | CodeGraphFindings | null>((resolve, reject) => {
     const entry: QueueEntry = {
-      id: nextId++, request, signal, parts: new PartsReceiver(), settled: false,
+      id: nextId++, request, signal, ...(timer ? { trace: timer } : {}), parts: new PartsReceiver(), settled: false,
       resolve: (r) => { resolve(r); }, reject: (e) => { reject(e); },
       settle(finish) {
         if (this.settled) return;
@@ -253,6 +261,7 @@ export function storedGraphOffThread(
   },
   _store?: unknown,
   signal?: AbortSignal,
+  timer?: LoadTimer,
 ): Promise<KnowledgeGraph | null> {
   const { folderPath, rootId, partitions, nearDuplicates, focus, maxNodes, hashOverrides, view } = args;
   const request: StoredGraphRequest = {
@@ -264,5 +273,5 @@ export function storedGraphOffThread(
     ...(maxNodes ? { maxNodes } : {}),
     ...(hashOverrides ? { hashOverrides: new Map(hashOverrides) } : {}),
   };
-  return buildOffThread(request, signal) as Promise<KnowledgeGraph | null>;
+  return buildOffThread(request, signal, timer) as Promise<KnowledgeGraph | null>;
 }

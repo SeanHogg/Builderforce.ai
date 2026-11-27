@@ -26,6 +26,7 @@ import { useContainerSize } from '../../environment';
 import { cssVar, useThemeColors } from '../../scene/themeColors';
 import { EdgesCapped } from '../../surface/CapNote';
 import { LayingOut } from '../../surface/LayingOut';
+import { ScaleFoot } from '../../surface/ScaleFoot';
 import type { SceneProps } from '../../surface/registry';
 import { codeCompareOf, paintDiffEntries, type CompareView } from '../../surface/compareModel';
 import { showsTowers } from '../../surface/useShowInTower';
@@ -95,7 +96,7 @@ export default function StageHost({ fallback: Fallback, ...p }: StageHostProps) 
     const renderer = useStageRenderer(factory);
     const [lost, setLost] = useState(false);
     const onLost = useCallback(() => setLost(true), []);
-    if (renderer === false || lost) return <Fallback {...p} />;
+    if (renderer === false || lost) return <><Fallback {...p} /><ScaleFoot>{p.scale}</ScaleFoot></>;
     return renderer ? <StageBody {...p} renderer={renderer} onLost={onLost} /> : <div style={BOX} data-stage-host />;
 }
 

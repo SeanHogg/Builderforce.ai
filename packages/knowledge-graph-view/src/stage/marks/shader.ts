@@ -111,22 +111,21 @@ ${FLAG_GLSL}
 uniform vec2 uOutline[${MAX_OUTLINE}];
 uniform int uCount; uniform float uDashed; uniform vec3 uBg; uniform float uDpr;
 uniform float uTime; uniform float uMotion;
-uniform vec3 uPalette[${PALETTE_SIZE}];
-uniform float uTextTone; uniform float uViolationTone; uniform float uChangedTone; uniform float uWallTone;
-uniform float uForm; uniform float uHoverTone; uniform float uEdgeTone; uniform float uNodeTopTone; uniform float uStoreTopTone;
+// The theme colours the fragment reads are resolved on the CPU (fixedColours.ts): NO palette array and no uniform-indexed lookup here.
+uniform vec3 uText; uniform vec3 uViolation; uniform vec3 uChanged; uniform vec3 uHover; uniform vec3 uEdge; uniform vec3 uNodeTop; uniform vec3 uStoreTop;
+uniform float uForm;
 in float vFade;
 in float vLight; in float vY; in float vHover;
 in vec2 vUv; in float vPart; in vec3 vColor; in vec3 vColor2; in float vFill; in float vFlags; in float vPx;
 out vec4 fragColor;
 const float PI = 3.14159265;
 bool bit(float flags, float b) { return mod(floor(flags / b), 2.0) > 0.5; }
-vec3 toneOf(float t) { return uPalette[int(t + 0.5)]; }
 // A cap is the lighter top of its body, toward the theme's top tone (the design's --s-node-top / --s-store-top): a box and
 // a drum a clear step, a prism a hint, a slab and a puck none.
 vec3 capOf(vec3 b) {
     bool drum = uForm > 2.5 && uForm < 3.5;
     float k = (uForm > 0.5 && uForm < 1.5) || drum ? 0.45 : (uForm < 0.5 ? 0.15 : 0.0);
-    return mix(b, toneOf(drum ? uStoreTopTone : uNodeTopTone), k);
+    return mix(b, drum ? uStoreTop : uNodeTop, k);
 }
 // The hover tint: the lit accent as emissive, on top of the lighting.
 vec3 shaded(vec3 base) { return mix(clamp(base * vLight, 0.0, 1.0), toneOf(uHoverTone), 0.4 * vHover); }

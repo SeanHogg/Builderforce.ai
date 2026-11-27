@@ -294,7 +294,7 @@ export async function loadGraph(
   const nearDuplicates = index ? timer.phase("nearDuplicates", () => index.nearDuplicates()) : undefined;
   if (nearDuplicates) onNearDuplicates?.(nearDuplicates.length);
   // The worker reads the folder's file itself: a legacy import must have landed first.
-  await open.migrated;
+  await timer.phase("migrate", () => open.migrated);
   // The build runs in the graph worker (`graphWorker.ts`), never on this thread: the extension host is the webview bridge.
   // Its findings are memory's and the code pack's rules over the whole graph, computed by the build itself.
   const graph = await timer.phase("build", () => storedGraphOffThread({
@@ -303,8 +303,8 @@ export async function loadGraph(
     ...(q.focus ? { focus: q.focus } : {}),
     ...(q.maxNodes ? { maxNodes: q.maxNodes } : {}),
     ...(options?.view ? { view: true } : {}),
-  }, open.local, options?.signal));
-  // What the bound cut (graphBudget.ts) goes in the load's trace entry, so Copy diagnostics says why edges/findings are fewer.
+  }, open.local, options?.signal, timer));
+  // What the bound cut (graphBudget.ts, applied IN the worker) goes in the load's trace entry, so Copy diagnostics says why edges/findings are fewer.
   const bounds = graph ? boundsOf(graph) : undefined;
   if (bounds) timer.note?.({ bounds: boundsLine(bounds), boundReasons: bounds.reasons });
   return graph;

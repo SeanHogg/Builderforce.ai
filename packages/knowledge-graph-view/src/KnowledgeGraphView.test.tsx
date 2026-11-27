@@ -5,7 +5,7 @@ import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { DEFAULT_KNOWLEDGE_GRAPH_LABELS as L } from './labels';
 import { LENSES, lensesFor } from './lenses';
 import { codeFixture, docsFixture, fixtureSource, mixedFixture, openList } from './testing';
-import { lensIsPicked, openDetails, pickLens } from './testPicks';
+import { lensIsPicked, openDetails, openSearch, pickLens } from './testPicks';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 
 // jsdom has no WebGL: the stage cameras draw with the no-op renderer (`vitest.setup.ts`).
@@ -54,7 +54,7 @@ describe('KnowledgeGraphView', () => {
 
     it('focuses the first search hit and opens its panel', async () => {
         await mount([docsFixture()]);
-        const box = screen.getByRole('searchbox', { name: L.searchLabel });
+        const box = openSearch({ fireEvent }, L);
         fireEvent.change(box, { target: { value: 'termination' } });
         fireEvent.submit(box.closest('form')!);
         const panel = await screen.findByRole('dialog');
@@ -136,7 +136,7 @@ describe('KnowledgeGraphView', () => {
         render(<KnowledgeGraphView source={source} />);
         fireEvent.click(await screen.findByRole('button', { name: L.reviewFolder }));
         const panel = await screen.findByTestId('kg-review-start');
-        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: L.close }));
+        fireEvent.click(within(screen.getByTestId('kg-drawer')).getByRole('button', { name: L.close }));
         await waitFor(() => expect(source.confirmed).toEqual([false]));
         expect(panel.isConnected).toBe(false);
 

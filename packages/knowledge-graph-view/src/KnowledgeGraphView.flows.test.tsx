@@ -9,7 +9,7 @@ import { packLabel } from './names';
 import { PHONE_FOCUS_NODES } from './graphModel';
 import { codeFixture, docsFixture, fixtureSource, openList } from './testing';
 import { startReviewing } from './testReviews';
-import { openDetails, openSearch } from './testPicks';
+import { openSearch } from './testPicks';
 import type { KnowledgeGraphSource, KnowledgeSearchHit } from './types';
 
 
@@ -136,11 +136,9 @@ describe('a recreated source (another project)', () => {
 
 describe('finding rows', () => {
   // Findings are nested and lazy: a group's rows render only once the group is expanded.
-  // The Findings list lives inside the Act rail's collapsed Details (each finding is an action card at the top of the rail, named "Show: …",
-  // "Prompt: …"), so open Details and look for the group header within the Findings region only.
+  // These mount in the List camera, which carries its own Findings list (the Act drawer's Details list is not shown over the List), so the group header is looked up there.
   const expandGroup = (name: RegExp) => {
-    openDetails({ fireEvent });
-    fireEvent.click(within(screen.getByRole('region', { name: L.findingsTitle })).getByRole('button', { name }));
+    fireEvent.click(within(within(screen.getByTestId('kg-list')).getByRole('region', { name: L.findingsTitle })).getByRole('button', { name }));
   };
 
   it('names the sections a contradiction sets against each other', async () => {

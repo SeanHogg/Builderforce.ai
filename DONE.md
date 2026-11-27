@@ -51,9 +51,16 @@
   - The agent-runtime, VS Code and harness typechecks are clean.
   - The source-package-graph guard passes.
 
-## ✅ RESOLVED 2026-11-26 — The Visualizer no longer crashes VS Code on large repos and opens on the last review (AE-G063, AE-G062; VSIX 2026.11.225)
+## ✅ RESOLVED 2026-11-26 — VSIX 2026.11.226 activates again (AE-G065)
 
-- **Crash (AE-G063).** On hired.video (6315 files) a finished load sent 123,843 edges and 24,674 per-edge `partition-violation` findings from the worker to the host, into `lastSeen` and on to the webview. The host stalled for up to 10 s, then crashed.
+- `.225` failed on activation with `Cannot find module './impl/format'`. `packages/builderforce-mcp/src/config.ts` imports `jsonc-parser`, and esbuild bundled its UMD `main`, which `require`s `./impl/*` at runtime.
+- `clients/vscode/esbuild.mjs` now resolves `jsonc-parser` to its ESM build through the `jsoncParserEsmResolve` plugin. `assertNoUmdRelativeRequires()` fails a build when `out/extension.js` or any worker bundle keeps a runtime relative `require`.
+- Verified live: after the reload, `.226` activated and ran a full hired.video review (knowledge log, 2026-11-27T00:58Z).
+
+## ✅ RESOLVED 2026-11-26 — The Visualizer bounds what a large repo sends and opens on the last review (AE-G063, AE-G062; VSIX 2026.11.225)
+
+- **Payload (AE-G063).** On hired.video (6315 files) a finished load sent 123,843 edges and 24,674 per-edge `partition-violation` findings from the worker to the host, into `lastSeen` and on to the webview. The host stalled for up to 10 s.
+  - The window crash that followed turned out to be a separate GPU-process shader-compiler overflow; it is tracked as `AE-G066`.
   - `clients/vscode/src/knowledge/graphBudget.ts` now bounds graphs that are drawn: the view load, live pushes and pack roots, each marked `view: true`.
     - Only edges between kept nodes survive. Parallel edges merge into one weighted edge, capped at 12,000, structural kinds first.
     - Violations are grouped per area pair, keeping up to 3 real findings each with true counts.

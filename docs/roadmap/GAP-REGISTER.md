@@ -420,9 +420,20 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
   - The journey then starts at `frontend/lib/data-manager.ts` and lists it twice.
   - Fix: extend the one manifest seam (HTML module script, wrangler main, literal Vite input), ignore config-file targets, de-duplicate path stops, and add a regression test per case.
   - Fixing this makes every line start where the app really starts. [make.md › PRD 43](../../docs/specs/make.md)
-- `AE-G065` **VSIX 2026.11.225 fails to activate: `Cannot find module './impl/format'`** (user, 2026-11-26).
-  - Cause: `packages/builderforce-mcp/src/config.ts` imports `jsonc-parser`, and esbuild bundles its UMD `main`, which `require`s `./impl/*` at runtime.
-  - Fix (in progress, `.226`): resolve `jsonc-parser` to its ESM build, plus a post-build guard that fails the build when a bundle keeps a runtime relative `require`. The typecheck and the content check that `.225` passed could not catch this.
+- `AE-G066` **The Visualizer takes down VS Code's GPU process after a graph paints** (user, 2026-11-26, "still crashing" on `.226`).
+  - Evidence: 8 gpu-process minidumps since 11:02, the first one 4 minutes after `.223` was installed and none before it. Each is `0xC00000FD` (stack overflow) at `D3DCompiler_47.dll`+0x335C8, which is ANGLE's Direct3D 11 shader compile. The extension host stays up: the knowledge log shows the run finishing and `lastSeen` written.
+  - So the `.224` payload bound (AE-G063) was needed, but it was not the crash.
+  - Suspects: the `.223` shader changes (`1958de654..e56a790e6`):
+    - the marks fragment shader gained palette lookups through `capOf`/`shaded`/`toneOf` and runs `sdPolygon` in two branches;
+    - the hall fragment shader gained a dynamic `uDash` index, and the ball fragment shader a palette lookup.
+  - Fix (in progress): reproduce each stage program under Chromium ANGLE D3D11 on the affected machine. Then move uniform-indexed palette lookups out of the fragment shaders into CPU-resolved `vec3` uniforms through one resolver, and add a guard test.
+- `AE-G067` **A bounded hired.video load still stalls the extension host for 8.3 s** (knowledge log, 2026-11-27T00:58Z: `build=23614ms … payload~8583KB lagMax=8284ms`).
+  - The 2,763-node / 12,000-edge result is still about 8.6 MB of JSON. It is posted to the webview and written as a 6.7 MB `lastSeen`, and something on the host thread runs for seconds.
+  - Diagnosed (2026-11-26): not the load itself.
+    - Bounding runs in the worker (`graphBuildJob` → `postBounded`), and the host spends about 58 ms of the 24 s load outside the worker phases.
+    - The stall overlaps work running at the same time in the same window: `syncStatus` 5.9 s, `symbols` 12.2 s, or the request clone into the worker.
+  - Instrumented (ships in `.227`): the load line gains `send`, `assemble`, `migrate`, `hostState` and `nearDuplicates=<pairs>`. Regression test: `graphWorker.bounded.test.ts`.
+  - Blocker: a live load trace from the `.227` reload, to name the step. Next step after that: per-call stall attribution if the step is still unnamed, then move it off the host thread.
 - `AE-G064` **7 knowledge-view tests are stale after the Visualizer header change** (`1958de654`, 2026-11-26).
   - `KnowledgeGraphView.header.test.tsx` (2 tests) expects the synced status chip to open the Review tab. It now opens Runs (`syncPill` `upToDate` → `'runs'`), and that stays.
   - `KnowledgeGraphView.run.test.tsx` (5 tests) uses `testing.ts` `openList`/`pickCamera`, which look for a "List" radio the camera bar no longer renders.

@@ -9,6 +9,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { CAMERAS } from './surface/cameras';
 import { LayingOut } from './surface/LayingOut';
 import type { CameraDef, SceneProps } from './surface/registry';
+import { ScaleFoot } from './surface/ScaleFoot';
 import { SurfaceErrorBoundary } from './surface/SurfaceErrorBoundary';
 import type { StageCodeProps, StageCompareProps, StageFlatProps } from './stage/host/StageHost';
 
@@ -35,7 +36,7 @@ export function ViewSurface({ scale, ...p }: ViewSurfaceProps) {
                         <StageHost {...p} camera={camera.placement} scale={scale} fallback={FALLBACK.component!} />
                     </Suspense>
                 )
-                : <camera.component {...p} />}
+                : <><camera.component {...p} /><ScaleFoot>{scale}</ScaleFoot></>}
         </SurfaceErrorBoundary>
     );
 }
