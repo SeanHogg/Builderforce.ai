@@ -1,3 +1,22 @@
+## ✅ RESOLVED 2026-11-27 — Synapse batch 1: scoped Spawn tokens, extension API v2, `bfi-serve` runtime id (SEC-G017, INF-G012 push 1)
+
+- **SEC-G017:** the VS Code extension exported the tenant JWT, its sign-in sessions exposed the raw editor key, and a workspace could redirect the gateway. All three are fixed:
+  - Every JWT verifier in `api` and `worker` refuses tokens that carry `aud`, unless the caller opts in. Only `authMiddleware` opts in, and it allows exactly `GET /api/spawn/account` and `POST /api/spawn/build`.
+  - `POST /api/auth/scoped-token` (`application/auth/mintScopedToken.ts`) issues a 15-minute `aud:spawn` token. It refuses machine, agent, emulation and scoped callers, and it validates the editor key. A revoked key or a sign-out cuts these tokens off at once, through a key check in `authMiddleware`.
+  - Rate limiting is keyed by the token's tenant.
+  - Sessions from the extension's `builderforce` auth provider never carry the raw key. API v2 exposes no credential. The URL settings are application-scoped.
+  - Spawn takes its token through VS Code's per-extension consent, which Synapse pre-approves with `trustedExtensionAuthAccess`.
+- **INF-G012 push 1:** the runtime id is now `bfi-serve`, still labelled "Synapse" for users. One normalizer (`normalizeLocalRuntimeId` / `LEGACY_RUNTIME_IDS`) maps legacy settings, refs, Chrome storage, API engine values and cost grouping. The contract step is `INF-G019`.
+- **Shipped as:**
+  - Builderforce.ai `b549e4563` and `44e467632`;
+  - builderforce-inference `5c92f54`, the Synapse build recipe, unverified until its first CI run;
+  - builderforce-spawn `1f6a10b`, the Spawn extension.
+- **Verified:**
+  - targeted tests: API 144+, worker 11, VS Code 34+, Chrome 24 and the Spawn extension's 28;
+  - typechecks of api, worker, vscode and frontend;
+  - the i18n keys and pre-push guards.
+- **Release order:** the API deploys with this push. Release the VSIX, Chrome and the npm `brain-embedded` after the API is live.
+
 ## ✅ RESOLVED 2026-11-27 — The Tauri Synapse app's source leaves builderforce-inference (INF-G006, INF-G015, MEM-G105, MEM-G106, CHAT-G015, AVR-G016)
 
 - **Decision (user):** the Synapse desktop app is rebuilt as a fork of VS Code. The fork runs the unchanged Builderforce extension and the Spawn extension, and adds Scratch, Existing and Knowledge-pack AI-model project types (`UP-G015`). For end users the product stays "Synapse, the desktop app". Copy, labels and download sections are unchanged.
