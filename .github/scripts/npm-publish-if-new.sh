@@ -11,7 +11,10 @@ package_name="$1"
 shift
 
 version=$(node -p "require('./package.json').version")
-published() { npm view "$package_name@$version" version >/dev/null 2>&1; }
+published() {
+  local visible_version
+  visible_version=$(npm view "$package_name@$version" version --prefer-online 2>/dev/null) && [ "$visible_version" = "$version" ]
+}
 
 if published; then
   echo "$package_name@$version already exists; skipping publish."
@@ -23,7 +26,7 @@ fi
 # tag instead and `latest` stays where it is. `sort -V` orders dotted versions (semver and calver) numerically;
 # a package that is not on npm yet has no latest to protect and publishes as before.
 # fail-open by design: an unreadable latest (new package, registry hiccup) means "nothing to protect".
-latest=$(npm view "$package_name" version 2>/dev/null || true)
+latest=$(npm view "$package_name" version --prefer-online 2>/dev/null || true)
 publish_tag=()
 if [ -n "$latest" ] && [ "$version" != "$latest" ] \
   && [ "$(printf '%s\n%s\n' "$version" "$latest" | sort -V | head -n1)" = "$version" ]; then
@@ -57,4 +60,7 @@ for _ in 1 2 3 4 5 6; do
   published && exit 0
   sleep 10
 done
+if grep -Fq 'Cannot stage previously published version' "$log"; then
+  echo "::error::npm reserves $package_name@$version, but the public registry does not serve it. Check the existing staged release in npm before retrying."
+fi
 exit 1
