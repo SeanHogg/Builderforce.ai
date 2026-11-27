@@ -14,17 +14,16 @@
  * No host absolute path reaches the model: a missing directory or file is `not_found` naming only
  * the root-relative path, and any other filesystem error has the root prefix stripped.
  *
- * Search ({@link searchWorkspace}) is ripgrep first, then the ONE neutral scan (`scanFiles` over this
- * same filesystem) - so a `.gz` is inflated by `read`, and ripgrep and the scan share one file
- * policy (see `node-text-search`).
+ * Search ({@link searchWorkspace}) uses ripgrep or the neutral scan. The search reader decodes
+ * gzip separately from ordinary file operations, which preserve the bytes for `read_file`.
  */
 
 import { mkdir, open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { RepoSearchResult } from "./capabilities.js";
-import { isGzipPath, readGzipText } from "./gzipText.js";
+import { isGzipPath, latin1Bytes, readGzipText } from "./gzipText.js";
 import { resolveInsideRoot, toPosixRel, tryResolveInsideRootReal } from "./node-path.js";
-import { SEARCH_STOPPED, ripgrepSearch, type RgSemaphore } from "./node-text-search.js";
+import { SEARCH_STOPPED, isGeneratedSearchPath, ripgrepSearch, type RgSemaphore } from "./node-text-search.js";
 import { scanFiles, type SearchMatch } from "./text-scan.js";
 import { WorkspaceError, type SearchFound, type WorkspaceEntry, type WorkspaceFs, type WorkspaceRead } from "./workspace.js";
 
@@ -66,6 +65,7 @@ export async function searchWorkspace(opts: WorkspaceSearchOptions): Promise<Rep
   const { root, start, query } = opts;
   const t0 = Date.now();
   const stamp = (r: RepoSearchResult, backend: "rg" | "walk"): RepoSearchResult => Object.assign(r, { backend, ms: Date.now() - t0 });
+  if (!query || !query.trim()) return stamp({ ok: false, query, error: "query is required", code: "invalid" }, "walk");
   const info = await stat(start).catch(() => null);
   const scope = toPosixRel(root, start);
   if (!info) return stamp({ ok: false, query, error: `path not found: ${scope || "."}` }, "walk");
@@ -75,7 +75,20 @@ export async function searchWorkspace(opts: WorkspaceSearchOptions): Promise<Rep
     if (r) return stamp(r, "rg");
   }
   // A file scope searches that file (the old directory walk threw on it and reported "not referenced").
-  const scanned = await scanFiles(nodeWorkspaceFs(resolve(root)), query, scope, opts.signal ? { signal: opts.signal } : {});
+  const fs = nodeWorkspaceFs(resolve(root));
+  const scanned = await scanFiles({
+    ...fs,
+    async read(path, readOptions) {
+      const result = await fs.read(path, readOptions);
+      if (!isGzipPath(path) || result.status !== "ok" || result.truncated) return result;
+      try {
+        const content = await readGzipText(latin1Bytes(result.content));
+        return { status: "ok", content, truncated: Buffer.byteLength(content) > readOptions.maxBytes };
+      } catch {
+        return { status: "ok", content: "", truncated: false };
+      }
+    },
+  }, query, scope, { ...(opts.signal ? { signal: opts.signal } : {}), skipFile: isGeneratedSearchPath });
   return stamp(scanned.error === "search stopped" ? { ...scanned, error: SEARCH_STOPPED } : scanned, "walk");
 }
 
@@ -123,9 +136,9 @@ export function nodeWorkspaceFs(root: string, options: NodeWorkspaceOptions = {}
     try {
       const info = await stat(abs);
       if (info.isDirectory()) return { status: "is_directory" };
+      const encoding = isGzipPath(p) ? "latin1" : "utf8";
       if (info.size <= maxBytes) {
-        // A `.gz` is inflated through the one gzip reader; a corrupt archive is "no text", like an unreadable file.
-        const content = isGzipPath(abs) ? await readFile(abs).then((bytes) => readGzipText(bytes)).catch(() => "") : await readFile(abs, "utf-8");
+        const content = await readFile(abs, encoding);
         return { status: "ok", content, truncated: false };
       }
       // Oversized: a bounded prefix marked truncated; the read tool pages from there.
@@ -133,7 +146,7 @@ export function nodeWorkspaceFs(root: string, options: NodeWorkspaceOptions = {}
       try {
         const buf = Buffer.alloc(maxBytes);
         const { bytesRead } = await handle.read(buf, 0, maxBytes, 0);
-        return { status: "ok", content: buf.subarray(0, bytesRead).toString("utf-8"), truncated: true };
+        return { status: "ok", content: buf.subarray(0, bytesRead).toString(encoding), truncated: true };
       } finally {
         await handle.close();
       }

@@ -1015,7 +1015,7 @@ Actions:
 
 ### `docs [query...]`
 
-Search the live docs index.
+Find published documentation pages by name and URL path. [Docs command reference](/docs/cli/docs)
 
 ## TUI
 

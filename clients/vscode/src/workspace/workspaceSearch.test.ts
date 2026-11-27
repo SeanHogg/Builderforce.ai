@@ -149,6 +149,22 @@ describe("searchWorkspace on a workspace tree", () => {
     const literal = await ripgrepSearch(root, root, "listBrainChats(", rg);
     expect(literal?.matches?.map((m) => m.path)).toEqual(["clients/vscode/src/bfApi.ts"]);
   });
+
+  it("uses the same file size and Git ignore policy in both search modes", async () => {
+    const rg = await findRipgrep(undefined);
+    if (!rg) return;
+    await fs.mkdir(path.join(root, ".git"));
+    await fs.writeFile(path.join(root, ".gitignore"), "ignored.txt\n");
+    await fs.writeFile(path.join(root, "ignored.txt"), "policyMarker\n");
+    await fs.writeFile(path.join(root, "medium.txt"), `policyMarker\n${"x".repeat(1_100_000)}`);
+    await fs.writeFile(path.join(root, "large.txt"), `policyMarker\n${"x".repeat(2_100_000)}`);
+
+    const walk = await searchWorkspace({ root, start: root, query: "policyMarker", ripgrep: null });
+    const native = await searchWorkspace({ root, start: root, query: "policyMarker", ripgrep: rg });
+    expect(native).toMatchObject({ backend: "rg" });
+    expect(native.matches).toEqual(walk.matches);
+    expect(walk.matches?.map((match) => match.path)).toEqual(["ignored.txt", "medium.txt"]);
+  });
 });
 
 /**

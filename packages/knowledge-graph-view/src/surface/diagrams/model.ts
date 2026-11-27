@@ -233,14 +233,23 @@ function interactions(diagram: Diagram): Diagram {
     return { nodes, edges: diagram.edges.filter((edge) => edge.from !== edge.to && byCaller.has(edge.to)) };
 }
 
+function c4Scope(graph: KnowledgeGraph, stations: readonly Station[], scope: string | null, module: boolean): readonly Station[] {
+    if (!scope) return stations;
+    const owner = stations.find((station) => station.refs.includes(fileRefOf(scope)));
+    if (!owner) return stations;
+    const app = modulesOfFiles(graph).get(fileRefOf(scope));
+    return stations.filter((station) => station.system === owner.system && (!module || !app || station.app === app));
+}
+
 /** Model derivation only uses indexed facts and scope. Other views accept authored or runtime evidence. */
 export function sourceDiagram(id: DiagramId, graph: KnowledgeGraph, records: readonly SymbolRecord[], scope: string | null, stations: readonly Station[]): Diagram {
     switch (id) {
         case 'classDiagram': case 'c4Code': return classDiagram(graph, records, scope, false);
         case 'compositeDiagram': return classDiagram(graph, records, scope, true);
         case 'packageDiagram': case 'dsm': return packageDiagram(graph, stations, 'package');
-        case 'componentDiagram': case 'c4Containers': case 'codeCity': return packageDiagram(graph, stations, 'component');
-        case 'c4Components': return packageDiagram(graph, stations.filter((station) => !scope || station.refs.some((ref) => ref === fileRefOf(scope))), 'package');
+        case 'componentDiagram': case 'codeCity': return packageDiagram(graph, stations, 'component');
+        case 'c4Containers': return packageDiagram(graph, c4Scope(graph, stations, scope, false), 'component');
+        case 'c4Components': return packageDiagram(graph, c4Scope(graph, stations, scope, true), 'package');
         case 'c4Context': return packageDiagram(graph, stations, 'system');
         case 'deploymentDiagram': return deployment(graph);
         case 'useCaseDiagram': case 'openapi': return endpoints(graph);

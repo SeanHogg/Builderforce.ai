@@ -24,7 +24,8 @@ vi.mock("./planLimit", () => ({ handlePlanLimit: (message: string) => handlePlan
 
 import { createProjectInteractive } from "./createProjectInteractive";
 
-const context = { secrets: {} } as never;
+const secrets = {};
+const context = { secrets } as never;
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -33,7 +34,7 @@ describe("createProjectInteractive", () => {
     showInputBox.mockResolvedValue("  Demo ");
     createProject.mockResolvedValue({ id: 9, name: "Demo" });
     const project = await createProjectInteractive(context, { modality: "evermind" });
-    expect(createProject).toHaveBeenCalledWith(context.secrets, "Demo", "evermind");
+    expect(createProject).toHaveBeenCalledWith(secrets, "Demo", "evermind");
     expect(setSelectedProject).toHaveBeenCalledWith({ id: 9, name: "Demo" });
     expect(showInformationMessage).toHaveBeenCalled();
     expect(project).toEqual({ id: 9, name: "Demo" });

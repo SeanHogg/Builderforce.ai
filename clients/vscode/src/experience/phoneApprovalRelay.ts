@@ -49,7 +49,7 @@ export interface PhoneApprovalRelay {
 export interface RelayDeps {
   http: ApprovalsHttp;
   /** Signed in and phone approvals on. */
-  isActive(): boolean;
+  isActive(): boolean | Promise<boolean>;
   now(): number;
   /** Resolves after `ms`, or early when `signal` aborts. */
   sleep(ms: number, signal: AbortSignal): Promise<void>;
@@ -59,7 +59,7 @@ export interface RelayDeps {
 export function createPhoneApprovalRelay(deps: RelayDeps): PhoneApprovalRelay {
   return {
     async open(req) {
-      if (!deps.isActive()) return undefined;
+      if (!(await deps.isActive())) return undefined;
       try {
         const r = await deps.http.create({
           actionType: "synapse.step",

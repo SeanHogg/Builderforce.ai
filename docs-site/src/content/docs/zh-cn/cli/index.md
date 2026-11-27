@@ -1011,7 +1011,7 @@ builderforce models status
 
 ### `docs [query...]`
 
-搜索在线文档索引。
+按页面名称和 URL 路径查找已发布的文档。[命令参考](/docs/zh-cn/cli/docs)
 
 ## TUI
 

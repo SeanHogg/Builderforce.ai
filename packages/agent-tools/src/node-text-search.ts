@@ -11,8 +11,8 @@
  * `isIndexedDirName` admits it (a skip-list name, `.worktrees`, `*.local` and `_*_src` are out;
  * a hidden directory is out except `.github`). ripgrep therefore runs with `--hidden` plus the
  * matching exclude globs, and every match is post-filtered through `isIndexedDirName` on each
- * directory segment below the search target. The one difference left is ripgrep honouring
- * `.gitignore`, which the scan does not read.
+ * directory segment below the search target. Both backends use the shared size cap and directory
+ * policy, including for files that a Git ignore file would hide.
  *
  * Every path returned is repo-relative, POSIX-separated, and the same shape whichever backend
  * produced it. Host-neutral: Node `child_process` plus a root path. Locating the ripgrep binary,
@@ -24,15 +24,16 @@ import type { RepoSearchResult } from "./capabilities.js";
 import { toPosixRel } from "./node-path.js";
 import { WORKSPACE_SKIP_DIRS, isIndexedDirName } from "./skipDirs.js";
 import { SEARCH_MAX_MATCHES } from "@builderforce/tool-output-policy";
-import { isValidRegex, orderMatches, smartCaseSensitive, type SearchMatch } from "./text-scan.js";
+import { isValidRegex, MATCH_TEXT_MAX, orderMatches, SCAN_MAX_FILE_BYTES, smartCaseSensitive, type SearchMatch } from "./text-scan.js";
 
 /** Wall-clock bound on a ripgrep run; what it has found by then is returned as truncated. */
 const RIPGREP_TIMEOUT_MS = 20_000;
-/** ripgrep skips files over this (`--max-filesize 1M`): generated bundles and data dumps
- *  are not source, and reading them is what made a whole-root scan take 15s (chat #168571). */
-const RG_MAX_FILESIZE = "1M";
-/** Characters of a matching line kept — enough to read, not enough to flood the window. */
-const MATCH_TEXT_MAX = 200;
+/** VS Code's packaged webview bundle, which can otherwise drown out its source matches. */
+const GENERATED_WEBVIEW = "media/webview/";
+
+export function isGeneratedSearchPath(path: string): boolean {
+  return path.startsWith(GENERATED_WEBVIEW) || path.includes(`/${GENERATED_WEBVIEW}`);
+}
 
 /**
  * Parse one ripgrep output line (`path:line:text`, as `--line-number --no-heading
@@ -213,6 +214,7 @@ function policyGlobs(target: string): string[] {
     "--glob", "!**/.worktrees/**",
     "--glob", "!**/*.local/**",
     "--glob", "!**/_*_src/**",
+    "--glob", `!**/${GENERATED_WEBVIEW}**`,
     ...(targetIsHidden ? [] : ["--glob", "!**/.[!g]*/**"]),
   ];
 }
@@ -228,9 +230,9 @@ function spawnRipgrepSearch(root: string, start: string, query: string, ripgrep:
     // drive letters and a directory search silently reported total:0 (chat #111).
     // The case rule (smart case) is decided HERE and passed explicitly, so ripgrep and
     // the neutral scan always agree on what a query matches.
-    "--json", smartCaseSensitive(query) ? "--case-sensitive" : "--ignore-case", "--max-columns", "400", "--max-filesize", RG_MAX_FILESIZE,
+    "--json", smartCaseSensitive(query) ? "--case-sensitive" : "--ignore-case", "--max-columns", "400", "--max-filesize", String(SCAN_MAX_FILE_BYTES),
     // ONE file policy with the scan: hidden entries are walked (a `.github` tree and dotfiles are source), then the policy excludes.
-    "--hidden",
+    "--hidden", "--no-ignore",
     ...policyGlobs(target),
     // The JS engine's escaping rule, expressed as ripgrep's own flag: a query that is not
     // a regex is a literal, never a refused search.
@@ -266,7 +268,7 @@ function spawnRipgrepSearch(root: string, start: string, query: string, ripgrep:
     }, RIPGREP_TIMEOUT_MS);
     const take = (line: string): boolean => {
       const match = parseRipgrepJsonLine(line, root);
-      if (!match || !underIndexedPolicy(match.path, target)) return false;
+      if (!match || isGeneratedSearchPath(match.path) || !underIndexedPolicy(match.path, target)) return false;
       matches.push(match);
       return true;
     };

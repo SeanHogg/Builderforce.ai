@@ -8,7 +8,7 @@ import {
   WORKSPACE_MCP_INFO,
   type WorkspaceMcpTool,
 } from "@builderforce/workspace-mcp";
-import { nodeWatchPort } from "@builderforce/agent-tools/node-watch-port.js";
+import { nodeWatchPort } from "@builderforce/agent-tools/node-watch-port";
 import { advertiseName, normalizeInputSchema, toMcp } from "@seanhogg/builderforce-mcp";
 import { protectToolOutput } from "@seanhogg/builderforce-mcp/policy";
 import { ErrorCode, mcpRejection, safeToolError } from "@seanhogg/builderforce-mcp/protocol";

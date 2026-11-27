@@ -14,9 +14,9 @@ x-i18n:
 
 # `builderforce docs`
 
-搜索实时文档索引。
+按页面名称和 URL 路径查找已发布的文档。CLI 读取公开的文档站点地图，并通过共享的进程内 MCP 传输执行搜索。
 
 ```bash
 builderforce docs browser extension
-builderforce docs sandbox allowHostControl
+builderforce docs gateway mcp
 ```

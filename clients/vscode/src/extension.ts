@@ -37,6 +37,7 @@ import { watchToolManifests } from "./prefetch/detectTools";
 import { PERMISSION_MODE_SETTING } from "./platform/permissionMode";
 import { InsightsController } from "./diagnostics/insights";
 import { EvermindViewProvider } from "./panels/evermindView";
+import { registerExperience } from "./experience/registerExperience";
 import { VoiceMarketplaceViewProvider } from "./panels/voiceMarketplaceView";
 import { DiagnosticsController } from "./diagnostics/diagnostics";
 import { clearPlatformToolsCache } from "./platform/platformTools";
@@ -425,6 +426,8 @@ export function activate(context: vscode.ExtensionContext): BuilderforceApi {
     }),
     vscode.commands.registerCommand("builderforce.refreshEvermind", () => evermindView?.triggerRefresh()),
   );
+
+  registerExperience(context); // Teach-once skills, routines, phone approvals (src/experience)
 
   // Voice marketplace sidebar — browse published voices and add one to your workspace
   // (the SAME <VoiceMarketplace> component the web mounts at /marketplace/voices).

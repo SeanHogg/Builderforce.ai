@@ -24,5 +24,8 @@ describe('Map systems', () => {
         expect(filtered.cacheKey).not.toBe(map.cacheKey);
         expect(filtered.scale).toHaveLength(map.scale.length);
         for (const id of hiddenStations) expect(filtered.scale[model.stationSlot.get(id)!]).toBe(0);
+        const empty = placeMap(model, { ...request, hiddenStations: model.stations.stations.map((station) => station.id) }, graph);
+        expect(empty.planes).toHaveLength(0);
+        expect(empty.a11y).toHaveLength(0);
     });
 });

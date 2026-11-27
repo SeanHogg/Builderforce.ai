@@ -20,7 +20,7 @@ import {
   type HostKnowledgeIndexCore,
   type KnowledgeIndexRegistry,
 } from "@builderforce/agent-tools/knowledge-index.js";
-import { nodeIndexFiles } from "@builderforce/agent-tools/node-index-layout.js";
+import { nodeIndexFiles } from "@builderforce/agent-tools/node-index-layout";
 import { logDebug } from "../../../logger.js";
 import { onPremSymbolIndex } from "../../on-prem-symbol-index.js";
 import { onPremEmbedder } from "./onPremEmbedder.js";

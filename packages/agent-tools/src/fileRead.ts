@@ -106,7 +106,14 @@ export async function readOneFile(
   const r = (await caps.repoRead!.readFile(path)) as RepoReadResult;
   if (!r.ok) return r as unknown as Record<string, unknown>;
   const gzip = isGzipPath(r.path ?? path) && typeof r.content === "string" && r.content.length > 0;
-  if (gzip) r.content = await readGzipText(latin1Bytes(r.content!));
+  if (gzip) {
+    if (r.truncated) return { ok: false, path, code: "too_large", error: "gzip file exceeds the read limit" };
+    try {
+      r.content = await readGzipText(latin1Bytes(r.content!));
+    } catch {
+      return { ok: false, path, code: "io", error: "could not decompress gzip file" };
+    }
+  }
   if (opts.key) return { ...readFileKey(r.path ?? path, r, opts.key), ...(gzip ? { decompressed: true } : {}) };
   const content = r.content ?? "";
 

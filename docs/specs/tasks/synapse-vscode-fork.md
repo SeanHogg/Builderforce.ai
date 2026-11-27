@@ -2,7 +2,7 @@
 
 Decisions (user, 2026-11-27):
 - Synapse, the desktop app, is rebuilt as a fork of Code-OSS. Its source lives in `builderforce-inference/app`.
-- It runs the unchanged Builderforce extension (agent runtime and code visualizer) and ships the Spawn extension.
+- It runs the Builderforce extension (agent runtime and code visualizer) and packages the Spawn extension. Spawn is the target Roblox project type.
 - It offers three AI-model project types: Scratch, Existing and Knowledge pack.
 - The features only the Tauri app had are rebuilt (`UP-G018`).
 - The `synapse` runtime id is renamed with a migration (`INF-G012`).
@@ -64,6 +64,8 @@ export interface BuilderforceApi {
 The API is built only from `bfApi/session.ts`, `gateway/gateway.ts` and `auth/auth.ts`. No session logic is copied.
 
 ## 3. Spawn extension (`UP-G017`), in `builderforce-spawn/extension`
+
+The extension implementation is present. Registering the Roblox project type and distributing the extension with Synapse remain rollout work.
 
 - **Manifest:** id `builderforce.spawn`, with `extensionDependencies: ["builderforce.builderforce-ai"]`.
 - **Sign-in and API calls:** made through `BuilderforceApi`, against `/api/spawn/account` and `/api/spawn/build`, which are host-neutral.

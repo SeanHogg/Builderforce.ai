@@ -17,21 +17,21 @@ Part of the [unified platform review](unified-platform-gap-review.md). Areas are
 
 The Tauri Synapse app is removed. Synapse returns as a fork of VS Code (Code-OSS) (`UP-G015`):
 - it runs the unchanged Builderforce extension (agent runtime and code visualizer);
-- it ships the Spawn extension (`UP-G017`; the `builderforce-spawn` repo stays);
+- it packages the Spawn extension (`UP-G017`; the `builderforce-spawn` repo stays), with Spawn moving to a Roblox project type;
 - it adds project types for three AI-model scenarios: Scratch, Existing model and Knowledge pack.
 
 The OpenVSCode-in-Tauri shell is not being built. Until the fork ships, the editor is VS Code with the Builderforce extension.
 
 **Kept in `builderforce-inference`:** the `bfi-*` engine (`bfi serve` announces itself in `~/.builderforce/bfi.json`; the extension also runs it in-process through `@seanhogg/bfi-node`), plus `bf-index`, `bf-context` and `bf-compress` (`bf-context serve` still writes `~/.builderforce/desktop.json`). `bf-index` stays behind the benchmark gate in §2.5. The release workflow now publishes only the `bfi` and `bf-context` binaries.
 
-**Deleted:** `app/` (vanilla-JS UI, Tauri shell, console) and the crates `bf-local`, `bf-teach` and `bf-memory`. `bf-cloud` and `bf-vault` moved to `builderforce-spawn`, their only remaining consumer. In Builderforce.ai, these were removed: the never-served "Install Synapse model" flow, the `desktop.json` `models` reader, the unused Synapse embedder slot. End-user copy, labels and download sections are unchanged: users still get the Synapse desktop app and Spawn. `/api/spawn/downloads` now returns the Synapse installers, because Spawn ships inside Synapse.
+**Retired:** the vanilla-JS UI, Tauri shell, console, `bf-local`, and the private `bf-memory` client. The replacement Code-OSS build recipe lives in `app/`, and `bf-teach` contains the native Teach-once helper. `bf-cloud` and `bf-vault` moved to `builderforce-spawn`. Builderforce.ai removed the old model install flow, the `desktop.json` `models` reader, and the unused Synapse embedder slot. `/api/spawn/downloads` resolves Synapse installers during the rollout.
 
 | Finding | Status after retirement |
 |---|---|
 | CHAT-G015 | Closed. The Synapse chat fork is deleted. |
 | CHAT-G016 | Reduced to the Spawn copy of dictation. |
 | CHAT-G010, CHAT-G018 | The Synapse part is gone. The VS Code, brain-embedded and Chrome parts remain open. |
-| MEM-G105, MEM-G106 | Closed. `bf-teach` and the direct `memory.json` reads are deleted. |
+| MEM-G105, MEM-G106 | The former Tauri experience integration and its direct `memory.json` reads were removed. The native Teach-once helper remains in `bf-teach`. |
 | MEM-G114 | Reduced to 2 brain-map UIs (`EvermindBrainMap`, `EvermindBrain3D`). |
 | INF-G006 | Closed. `hub.rs` is deleted. |
 | INF-G007, INF-G011 | The `bf-local` copies (its fit share and its `models_dir()`) are gone. The rest remains open. |
@@ -57,7 +57,7 @@ The original audit counted 11 server, client, catalog and host integrations. The
 | Workspace MCP | VS Code and agent-runtime use `packages/workspace-mcp` for the SDK server and catalog. The hosts supply workspace selection and HTTP authentication. Shared code provides text and indexed search, symbols, outlines, repo maps, references, git history and optional compression. |
 | Memory MCP | `builderforce-memory/packages/memory-mcp` uses the shared SDK server with stdio and loopback HTTP, and exposes the same tool catalog to the in-process Agent SDK. It reports its package version. |
 | Registered remote MCP | `mcpWireClient.ts` adapts the shared SDK-backed HTTP transport to the gateway's destination checks, session cache and legacy REST fallback. The marketplace discovery probe uses the same transport and pagination. |
-| Editor MCP | The Builderforce VS Code extension carries Workspace MCP and connector setup, in VS Code today and in the Synapse VS Code fork later (`UP-G015`). The Tauri Synapse app and its private Evermind stdio client were removed on 2026-11-27. Spawn becomes an extension in the fork (`UP-G017`). |
+| Editor MCP | The Builderforce VS Code extension carries Workspace MCP and connector setup for VS Code and the Synapse Code-OSS build (`UP-G015`). The Tauri Synapse app and its private Evermind stdio client were removed on 2026-11-27. Spawn has a VS Code extension and is moving to a Roblox project type (`UP-G017`). |
 | Agent-runtime MCP | The docs command searches the published sitemap through the shared in-process MCP transport. The interactive ACP client forwards a specifically selected VS Code config to ACP peers that support its transports. The Gateway-backed bridge uses Gateway-managed tools. |
 | WebContainer MCP | Browser preview execution and the environment agent host use the shared SDK with an in-process transport. Tool execution stays bound to the owning tab or the agent's environment port. Native inference receives tool definitions as model function schemas. |
 | Platform REST relay | Web, VS Code, Chrome and agent-runtime use the shared TypeScript relay. The headless connector runner uses the shared connector action codec for its fixed discovery and dispatch tools. Rust, Android and iOS use native HTTP clients with the gateway's canonical model projection and legacy response compatibility. |
@@ -71,7 +71,7 @@ The original audit counted 11 server, client, catalog and host integrations. The
 | Platform write tools | The agent-runtime Workspace catalog advertises Workspace tools. Platform ticket creation, review recording and security finding tools come from the Platform catalog. |
 | Code search and git history | `workspace__search` provides text search using the shared `search_code` implementation. `workspace__find` and the callable `codebase_*` aliases use the same Workspace index and embedder policy. The aliases retain their filters and response format. MCP and REST share Workspace tool resolution. Canonical and legacy git history share one Git reader and parser. Platform `knowledge.search` queries tenant knowledge. |
 | Memory | Evermind hosted facts use `MemoryCapability`. Workspace Markdown uses `WorkspaceMemoryCapability`, including saved `memory_search` and `memory_get` calls. Memory MCP serves Evermind's memory and experience tools. |
-| Connector registration and config | Tenant HTTP registrations live in the tenant store. Native stdio installations use host config. The VS Code chooser uses the shared connector catalog, and web and VS Code now share the remote URL-shape check. The API validates public destinations. Memory's installer provides the launch data consumed by Synapse. |
+| Connector registration and config | Tenant HTTP registrations live in the tenant store. Native stdio installations use host config. The VS Code chooser uses the shared connector catalog, and web and VS Code share the remote URL-shape check. The API validates public destinations. Memory's installer supplies the native launch config. |
 | Workflow naming | The API and runtime use data-provider handlers. The unused API `mcpNode.ts` shim was removed. Saved workflow nodes with kind `mcp` still dispatch through the data-provider handler. |
 
 The remaining compatibility surfaces include agent-runtime's legacy GET manifest and POST `/mcp/call`, the gateway's REST aliases, and native fallbacks for older gateway responses. A client that combines native editor and Platform catalogs would need verified server and account identity to deduplicate across those sources. Builderforce's former combined Synapse catalog was retired.
@@ -673,7 +673,7 @@ The real duplication is in four places:
   - the composer-command registry, which the TUI also reads.
 - **One run-event vocabulary.** Define `RunEvent` once (`run.start`, `run.delta`, `run.step`, `run.confirm`, `run.final`, `run.error`). Adapters translate gateway WebSocket, Tauri and SSE into it, so every host shows the same states and diagnostics.
 - **One label catalog.** Use brain-ui `labelCatalog` keys; hosts provide a `t(key)` adapter only and delete their key-mapping tables.
-- **Synapse.** Under the IDE rebuild, the chat is the VS Code extension's webview chat running inside OpenVSCode Server, so the vanilla-JS chat, the `brain.rs` chat and `dictation.js` are deleted rather than ported. Until then, share the limits.
+- **Synapse.** The Code-OSS build uses the Builderforce extension's webview chat. The former Tauri chat and dictation sources were retired with the standalone shell.
 - **TUI and Control UI.** These stay separate renderers (terminal and Lit), but they consume the shared registry, `RunEvent` and the message normalizer.
 
 ### 5.6 Migration order

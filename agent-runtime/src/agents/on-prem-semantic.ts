@@ -13,7 +13,7 @@
 
 import type { RepoSemanticCapability } from "@builderforce/agent-tools";
 import { catalogDesktopSemantic, setDesktopClientName } from "@builderforce/agent-tools/node-desktop.js";
-import { nodeWatchPort } from "@builderforce/agent-tools/node-watch-port.js";
+import { nodeWatchPort } from "@builderforce/agent-tools/node-watch-port";
 import { workspaceSemantic } from "@builderforce/workspace-mcp";
 import { onPremRootId } from "./knowledge/index/onPremRootId.js";
 import { buildNodeCapabilityProvider } from "./node-capability-provider.js";

@@ -120,29 +120,31 @@ describe('the workspace helper protocol', () => {
 
   it('summarises a big plain listing to directories and marks a read of a huge file truncated', async () => {
     const w = ws();
+    type Reply = { ok: boolean; truncated?: boolean; paths: string[]; content: string };
+    const ask = (req: Record<string, unknown>) => w.handle(req) as Promise<Reply>;
     await w.handle({ op: 'init' });
+    // Parallel seeding: 450 sequential creates are slow on a real (Windows) filesystem.
     for (let d = 0; d < 5; d++) {
       await mkdir(join(workdir, `pkg${d}`, 'src'), { recursive: true });
-      for (let f = 0; f < 90; f++) await writeFile(join(workdir, `pkg${d}`, 'src', `f${f}.ts`), 'x');
+      await Promise.all(Array.from({ length: 90 }, (_, f) => writeFile(join(workdir, `pkg${d}`, 'src', `f${f}.ts`), 'x')));
     }
-    const big = await w.handle({ op: 'list' });
+    const big = await ask({ op: 'list' });
     expect(big.ok).toBe(true);
     expect(big.truncated).toBe(true);
-    assert(Array.isArray(big.paths));
     expect(big.paths.length).toBeLessThan(40);
     expect(big.paths.every((p: string) => p.endsWith('/'))).toBe(true);
-    const globbed = await w.handle({ op: 'list', glob: '**/*.ts' });
+    const globbed = await ask({ op: 'list', glob: '**/*.ts' });
     expect(globbed.paths).toHaveLength(450);
 
     await writeFile(join(workdir, 'huge.txt'), 'y'.repeat(2 * 1024 * 1024 + 10));
-    const huge = await w.handle({ op: 'read', path: 'huge.txt' });
+    const huge = await ask({ op: 'read', path: 'huge.txt' });
     expect(huge.ok).toBe(true);
     expect(huge.truncated).toBe(true);
     expect(huge.content).toHaveLength(2 * 1024 * 1024);
     const small = await w.handle({ op: 'read', path: 'pkg0/src/f0.ts' });
     expect(small).toMatchObject({ ok: true, content: 'x' });
     expect(small.truncated).toBeUndefined();
-  });
+  }, 30_000);
 
   it.skipIf(!posix)('keeps a file\'s mode on write, and replaces a read-only file through a temp file', async () => {
     const w = ws();

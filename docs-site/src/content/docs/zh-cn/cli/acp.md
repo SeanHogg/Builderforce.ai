@@ -45,12 +45,15 @@ builderforce acp --session agent:main:main --reset-session
 ```bash
 builderforce acp client
 
-# Point the spawned bridge at a remote Gateway
-builderforce acp client --server-args --url wss://gateway-host:18789 --token <token>
-
-# Override the server command (default: builderforce)
-builderforce acp client --server "node" --server-args builderforce.mjs acp --url ws://127.0.0.1:19001
+# 使用 VS Code MCP 配置运行自定义 ACP 服务端
+builderforce acp client --server /path/to/acp-agent --mcp-config .vscode/mcp.json
 ```
+
+客户端相对于 `--cwd` 查找 MCP 配置，并将其转发给选定的服务端。请使用可信的配置文件，并直接填写配置值。
+服务端必须声明支持 HTTP 或 SSE 才能接收对应类型的 MCP 服务器。stdio 服务器在会话目录中运行。
+可以用 `--server-args` 向自定义 ACP 服务端传递参数。
+
+内置桥接器使用 Gateway 网关管理的工具。创建或加载桥接会话时，桥接器会拒绝请求附带的 MCP 服务器定义。
 
 ## 如何使用
 

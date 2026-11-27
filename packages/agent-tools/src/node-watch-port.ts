@@ -46,7 +46,7 @@ function watchKey(root: string): string {
 function rebase(key: string, root: string, abs: string): string {
   const rel = path.relative(key, abs);
   if (!rel) return root;
-  if (rel.startsWith("..") || path.isAbsolute(rel)) return abs;
+  if (rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) return abs;
   return path.join(root, rel);
 }
 

@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { SymbolRecord } from '../../types';
-import { stationOfRef, type StationModel } from '../stations';
+import { fileRefOf, stationOfRef, type StationModel } from '../stations';
 import { tailOf } from '../outlineGraph';
 import { buildDrillView, hasSymbols, type DrillFrame, type DrillLevel, type DrillView } from './drillView';
 import { anchorFilesOf, reanchorDrill } from './reanchorDrill';
@@ -122,7 +122,7 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
 
     const hasMembers = useCallback((ref: string) => {
         if (!full) return false;
-        const symbols = symbolsOfFile(symbolsOf(full), ref.includes('#') ? ref.slice(0, ref.indexOf('#')) : ref);
+        const symbols = symbolsOfFile(symbolsOf(full), fileRefOf(ref));
         const parent = symbols.find((node) => node.ref === ref);
         return !!parent && isClassLike(symbolSort(parent)) && membersOfClass(symbols, parent).length > 0;
     }, [full]);

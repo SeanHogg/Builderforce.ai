@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, rmdir, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -10,7 +10,6 @@ import { handleMcpHttpRequest } from "./mcp-server-http.js";
 it("serves the SDK workspace catalog and searches only the requested file", async () => {
   const root = await mkdtemp(join(tmpdir(), "bf-workspace-mcp-"));
   vi.stubEnv("BUILDERFORCE_DESKTOP_DISCOVERY", join(root, "absent-desktop.json"));
-  const data = ["match.ts", "excluded.ts"];
   const server = createServer((req, res) => {
     void handleMcpHttpRequest(req, res, {
       auth: { mode: "token", token: "workspace-test-token", allowTailscale: false },
@@ -119,10 +118,6 @@ it("serves the SDK workspace catalog and searches only the requested file", asyn
   } finally {
     vi.unstubAllEnvs();
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
-    await Promise.all(data.map((file) => rm(join(root, file), { force: true })));
-    await rm(join(root, ".builderForceAgents", "symbols.json"), { force: true });
-    await rmdir(join(root, ".builderForceAgents")).catch(() => undefined);
-    await rm(join(root, ".git"), { recursive: true, force: true });
-    await rmdir(root);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
 });

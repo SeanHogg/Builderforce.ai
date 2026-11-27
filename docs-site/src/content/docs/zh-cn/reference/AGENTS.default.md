@@ -103,7 +103,6 @@ git commit -m "Add BuilderForce Agents workspace"
 
 ## 核心 Skills（在设置 → Skills 中启用）
 
-- **mcporter** — 用于管理外部 Skill 后端的工具服务器运行时/CLI。
 - **Peekaboo** — 快速 macOS 截图，可选 AI 视觉分析。
 - **camsnap** — 从 RTSP/ONVIF 安防摄像头捕获帧、片段或运动警报。
 - **oracle** — 支持 OpenAI 的智能体 CLI，具有会话回放和浏览器控制。

@@ -10,7 +10,7 @@
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { isOutputDirName } from "@builderforce/agent-tools/skip-dirs";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
@@ -278,7 +278,7 @@ export function makeCodingFs(): CodingDispatchFs {
       const gone = new Set<string>();
       for (const p of paths) {
         try {
-          await stat(join(dir, p));
+          await lstat(join(dir, p));
         } catch (err) {
           // Only a path that is really absent counts; any other failure leaves the file alone.
           const code = (err as NodeJS.ErrnoException | undefined)?.code;

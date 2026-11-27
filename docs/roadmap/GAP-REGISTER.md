@@ -603,7 +603,7 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
 - `UP-G016` **Consistency debt across the repos.**
   - Package scope stays `@seanhogg/*` (user, 2026-11-26), so no rename is planned.
   - The Builderforce.ai root holds stray logs and probe files (`_tsc_*.log`, `tsgo-*.log`, `_probe_sqlite.cjs`, a file named `-p`).
-- `UP-G015` **Synapse as a VS Code fork does not exist yet.** The Tauri Synapse app was removed on 2026-11-27. Its replacement is a Code-OSS fork that:
+- `UP-G015` **Synapse Code-OSS rollout is open.** The Tauri Synapse app was removed on 2026-11-27. The build recipe is in `builderforce-inference/app`. The replacement targets these capabilities.
   - runs the unchanged Builderforce VSIX (agent runtime and code visualizer), with the proposed API `chatSessionsProvider` enabled for it;
   - ships the Spawn extension (`UP-G017`);
   - offers three AI-model project types: Scratch, Existing model and Knowledge pack (as starter kits, `UP-G002`);
@@ -611,18 +611,18 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
   - Downloads: the Synapse links use `builderforce-inference` `releases/latest`, and headless `bfi`/`bf-context` releases are published with `--latest=false` so that link stays on the last installer release. Spawn's button (`/api/spawn/downloads`, a stub) resolves the newest release that has installers. Repoint both when the fork ships. The product name and copy stay "Synapse".
   - Design: [synapse-vscode-fork.md](../specs/tasks/synapse-vscode-fork.md). Repo `builderforce-inference/app` (user, 2026-11-27). Batch 1 is in progress: the build recipe, the extension API, the Spawn extension and the runtime-id rename.
   - Batch 2 (§4): the project-type registry (`packages/ide-templates/src/projectTypes.ts`), the `builderforce.newAiProject` command (`clients/vscode/src/projects/`) and the "Start an AI project" walkthrough are implemented, pending review.
-- `UP-G017` **Spawn is still a Tauri desktop app.** The `builderforce-spawn` repo stays and now owns `bf-cloud` and `bf-vault`. Spawn becomes an extension shipped in the Synapse fork (`UP-G015`), with `bf-roblox` as the Roblox Studio bridge. Its download button is a stub that serves the Synapse installers.
+- `UP-G017` **Spawn's VS Code extension is implemented.** The Roblox project-type registration and distribution through Synapse remain open. The `builderforce-spawn` repo owns `bf-roblox` and keeps `bf-cloud`, `bf-vault`, and the Tauri shell during the transition. The Spawn download route currently resolves Synapse installers.
 - `UP-G018` **Features that existed only in the Tauri Synapse app have no host since its source was removed (2026-11-27).** They are Teach-once desktop automation (`bf-teach`), Self-Directed Agents with their scheduler and run history, and phone approvals for self-owned `synapse.step` steps. The API keeps the existing `synapse.step` rows private. The memory-mcp `experience_*` tools remain. **Decision (user, 2026-11-27): rebuild them in Synapse**, inside the Builderforce extension ([design §5](../specs/tasks/synapse-vscode-fork.md#5-features-only-the-tauri-app-had-up-g018)). *Blocker: the §5 design pass is scheduled after the project types (batch 3). Teach-once needs a native desktop-automation helper.*
 
 ### MCP consolidation `[platform]` `[agents]`
 
 Source: [platform duplication audit §1](../specs/tasks/platform-duplication-audit.md#1-mcp).
 
-**Closed 2026-11-27.** All 24 MCP consolidation findings are accounted for. Platform, Workspace and Memory use the shared `@seanhogg/builderforce-mcp` package. Synapse's Rust Workspace MCP server and connector host are retired. Its desktop features retain a private Evermind stdio client. [Synapse retirement record](../../DONE.md#-resolved-2026-11-26--synapse-rust-workspace-mcp-retirement)
+**Closed 2026-11-27.** All 24 MCP consolidation findings are accounted for. Platform, Workspace and Memory use the shared `@seanhogg/builderforce-mcp` package. The former Rust Workspace MCP server, connector host, and private Evermind client were retired with the Tauri Synapse stack. The Builderforce extension hosts editor MCP. [Synapse retirement record](../../DONE.md#-resolved-2026-11-26--synapse-rust-workspace-mcp-retirement)
 
 | Gaps | Status |
 |---|---|
-| MCP-G001–G002 | **Resolved.** Platform and Workspace use the shared SDK server. Tenant HTTP calls and the marketplace probe share the SDK-backed transport and client protocol helpers. Synapse’s private Evermind stdio client uses the official Rust SDK. |
+| MCP-G001–G002 | **Resolved.** Platform and Workspace use the shared SDK server. Tenant HTTP calls and the marketplace probe share the SDK-backed transport and client protocol helpers. |
 | MCP-G003 | **Resolved.** The TypeScript relay consumers share the package's tool contract. |
 | MCP-G004–G006 | **Resolved.** OpenAI and Anthropic share the tool converters. Web Brain, Canvas, Chrome, and VS Code use the gateway's canonical provider names for built-in tools, connected actions, and tenant MCP tools. Unambiguous legacy IDs still drive dispatch, saved calls, review, and approval. Tools with colliding aliases use their canonical IDs. Local runtime tools keep their host names. |
 | MCP-G007 | **Resolved.** Platform, Workspace, and Memory apply shared output limits and redaction. Memory MCP `2026.10.86` pins the published `0.1.1` and is available on npm and the MCP Registry. |
@@ -632,7 +632,7 @@ Source: [platform duplication audit §1](../specs/tasks/platform-duplication-aud
 | MCP-G017 | **Resolved.** TypeScript consumers share the relay, catalog projection, cache helper, and connector action codec. Rust and mobile use the gateway’s canonical tool schema, approval decision, and protected result text. Native HTTP transports and old-server response compatibility remain. |
 | MCP-G018 | **Resolved.** One VS Code chooser consumes the shared Platform connector catalog for HTTP setup and native stdio installation. |
 | MCP-G019 | **Resolved.** VS Code discovers VS Code, Claude Code, and Cursor configs, including the active Claude project, and imports legacy Synapse settings through native review. Local credentials stay in their host config. The released Memory installer uses the shared codec. |
-| MCP-G020 | **Resolved.** Memory's installer defines the launch spec. The Claude plugin manifest and Synapse's Windows and POSIX launch data are generated from it. Synapse retains the explicit executable override. |
+| MCP-G020 | **Resolved.** Memory's installer defines the launch spec and generates the Claude plugin manifest. The Builderforce extension uses native editor config for local MCP registrations. |
 | MCP-G021 | **Resolved.** VS Code and the headless runtime share the persisted TypeScript index and search policy. Both legacy `codebase_*` calls use that policy with their original result format, and the REST and MCP routes resolve their aliases through the same catalog lookup. Canonical and legacy git history share a reader and parser. |
 | MCP-G022 | **Headless Markdown cutover implemented.** Hosted fact recall and writes use `MemoryCapability`. Headless Markdown uses the shared `WorkspaceMemoryCapability`. Canonical search returns run-scoped chunk references for `workspace__memory_read`, with path and line citations preserved in results. Saved `memory_search` and `memory_get` calls keep their existing dispatch IDs and inputs. |
 | MCP-G023 | **Closed for Builderforce catalogs.** The combined Synapse catalog was retired. Platform and the native editor advertise independently. Combining tools from both in another client would require verified server and account identity. |

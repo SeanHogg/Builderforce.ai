@@ -28,6 +28,7 @@ import type {
 } from "./capabilities.js";
 import { applyStringEdit, conformToExistingEol, editFacts } from "./edit.js";
 import { toPosixPath } from "./glob.js";
+import { isGzipPath } from "./gzipText.js";
 import { isListedDirName } from "./skipDirs.js";
 import { orderMatches, scanFiles, type SearchMatch } from "./text-scan.js";
 import { listingResult, walkWorkspace } from "./workspaceList.js";
@@ -68,7 +69,10 @@ export interface WorkspaceFs {
   /**
    * An optional resolver for ABSOLUTE paths (a drive letter or a leading "/"): the root-relative
    * POSIX path, "" for the root itself, or undefined when the path is outside the root.
-   * Without a resolver, absolute paths are refused. Receives the already-normalised path.
+   * Convention: an adapter WITHOUT a resolver (cloud, canvas, git remote) treats a leading "/" as
+   * repo-rooted ("/src/a.ts" is "src/a.ts") and refuses a drive-letter path; an adapter WITH one (a
+   * host disk) treats an absolute path as a HOST path and refuses it as `outside_root` when it is
+   * outside the root. Receives the already-normalised path.
    *
    * Remote adapters: `list` of a prefix that does not exist may yield nothing rather than throw;
    * the provider reports that as an empty listing, not as `not_found`.
@@ -128,6 +132,9 @@ const isAbsolutePath = (posix: string): boolean => posix.startsWith("/") || /^[A
 
 /** Trim, POSIX separators, no leading "./": the ONE normalisation every path takes before anything looks at it. */
 const normalisePath = (raw: string): string => toPosixPath(raw).trim().replace(/^(?:\.\/+)+/, "");
+
+/** A `.gz` is a binary archive: a text write or edit would destroy it, so both are refused. */
+const GZ_UNSUPPORTED = { ok: false, error: "gzip (.gz) archives are binary and cannot be written or edited as text", code: "unsupported" } as const;
 
 type Resolved = { path: string } | { bad: { ok: false; error: string; code: "outside_root" } };
 
@@ -249,6 +256,7 @@ export function createRepoCapabilities(fs: WorkspaceFs, opts: RepoCapabilityOpti
     async editFile(p: string, oldString: string, newString: string, replaceAll?: boolean): Promise<RepoEditResult> {
       const r0 = resolvePath(p);
       if ("bad" in r0) return r0.bad;
+      if (isGzipPath(r0.path)) return GZ_UNSUPPORTED;
       try {
         const cur = await fs.read(r0.path, { maxBytes: maxEdit });
         if (cur.status === "not_found") return { ok: false, error: "file not found", code: "not_found" };

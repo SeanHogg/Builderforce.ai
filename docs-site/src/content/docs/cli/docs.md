@@ -7,9 +7,10 @@ title: "docs"
 
 # `builderforce docs`
 
-Search the live docs index.
+Find published documentation pages by their names and URL paths. The CLI reads the
+public docs sitemap and searches it through the shared in-process MCP transport.
 
 ```bash
 builderforce docs browser extension
-builderforce docs sandbox allowHostControl
+builderforce docs gateway mcp
 ```

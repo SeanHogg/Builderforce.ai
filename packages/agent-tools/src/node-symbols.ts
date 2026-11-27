@@ -272,6 +272,8 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
 
   private async fullRefresh(): Promise<void> {
     this.fullPending = false;
+    // Changes reported during this walk need another pass.
+    this.dirty.clear();
     await this.ensureSnapshot();
     const { paths, truncated } = await this.walk();
     this.partial = truncated;
@@ -287,7 +289,6 @@ export class WorkspaceSymbolIndex implements RepoSymbolsCapability {
       const results = await Promise.all(paths.slice(i, i + PARSE_BATCH).map((rel) => this.update(rel)));
       if (results.some(Boolean)) changed = true;
     }
-    this.dirty.clear();
     this.lastFullRefresh = Date.now();
     if (changed) void this.saveSnapshot();
   }

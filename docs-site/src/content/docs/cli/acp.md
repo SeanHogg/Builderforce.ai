@@ -39,12 +39,17 @@ It spawns the ACP bridge and lets you type prompts interactively.
 ```bash
 builderforce acp client
 
-# Point the spawned bridge at a remote Gateway
-builderforce acp client --server-args --url wss://gateway-host:18789 --token <token>
-
-# Override the server command (default: builderforce)
-builderforce acp client --server "node" --server-args builderforce.mjs acp --url ws://127.0.0.1:19001
+# Run a custom ACP peer with a VS Code MCP configuration
+builderforce acp client --server /path/to/acp-agent --mcp-config .vscode/mcp.json
 ```
+
+The client resolves the MCP configuration relative to `--cwd` and forwards it to
+the selected peer. Use a trusted config with literal values. The peer must advertise
+support for HTTP or SSE servers. Stdio servers run in the session directory. Use
+`--server-args` for arguments to a custom ACP peer.
+
+The built-in bridge uses Gateway-managed tools. It rejects MCP server definitions
+supplied when creating or loading a bridged session.
 
 ## How to use this
 

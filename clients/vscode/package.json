@@ -144,6 +144,11 @@
           "when": "builderforce.capability.evermind"
         },
         {
+          "id": "builderforce.skills",
+          "type": "webview",
+          "name": "%view.skills%"
+        },
+        {
           "id": "builderforce.voiceMarketplace",
           "type": "webview",
           "name": "%view.voiceMarketplace%",
@@ -194,6 +199,26 @@
       }
     ],
     "commands": [
+      {
+        "command": "builderforce.skills.open",
+        "title": "%command.skills.open%",
+        "category": "BuilderForce"
+      },
+      {
+        "command": "builderforce.skills.enable",
+        "title": "%command.skills.enable%",
+        "category": "BuilderForce"
+      },
+      {
+        "command": "builderforce.skills.stop",
+        "title": "%command.skills.stop%",
+        "category": "BuilderForce"
+      },
+      {
+        "command": "builderforce.agents.trainPrivateModel",
+        "title": "%command.agents.trainPrivateModel%",
+        "category": "BuilderForce"
+      },
       {
         "command": "builderforce.pipelineRouteReport",
         "title": "%command.pipelineRouteReport%",
@@ -939,6 +964,22 @@
       ],
       "commandPalette": [
         {
+          "command": "builderforce.skills.open",
+          "when": "builderforce.agents.supported"
+        },
+        {
+          "command": "builderforce.skills.enable",
+          "when": "builderforce.agents.supported"
+        },
+        {
+          "command": "builderforce.skills.stop",
+          "when": "builderforce.agents.supported"
+        },
+        {
+          "command": "builderforce.agents.trainPrivateModel",
+          "when": "builderforce.agents.supported"
+        },
+        {
           "command": "builderforce.newAiProject",
           "when": "builderforce.capability.account"
         },
@@ -1364,6 +1405,24 @@
             "%config.sessionTabs.perSession%"
           ],
           "description": "%config.sessionTabs.desc%"
+        },
+        "builderforce.agents.enabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "markdownDescription": "%config.agents.enabled.desc%"
+        },
+        "builderforce.agents.phoneApprovals": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "markdownDescription": "%config.agents.phoneApprovals.desc%"
+        },
+        "builderforce.agents.modelFile": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "%config.agents.modelFile.desc%"
         },
         "builderforce.reportErrors": {
           "type": "boolean",

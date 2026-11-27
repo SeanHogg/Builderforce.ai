@@ -3,22 +3,18 @@
  * has no ripgrep: a breadth-first walk over a {@link WorkspaceFs}, smart case, regex with a
  * literal fallback, binary skip, per-file byte cap, bounded files and matches. Extracted from
  * `node-text-search.ts` `walkSearch` so the cloud, the browser canvas and the tests scan the
- * same way the editor does. Pure: no node builtins (the Worker imports it).
- *
- * text-scan.ts is the one runtime-neutral line scanner and owns the regex/smart-case helpers
- * (`isValidRegex` / `compileSearchPattern` / `smartCaseSensitive`); the Node ripgrep backend
- * (`node-text-search.ts`) imports them from here.
+ * same way the editor does. The Node ripgrep backend imports the pattern helpers from here.
  */
 
 import type { RepoSearchResult } from "./capabilities.js";
-import { SEARCH_MAX_MATCHES } from "@builderforce/tool-output-policy";
+import { READ_MAX_BYTES, SEARCH_MAX_MATCHES } from "@builderforce/tool-output-policy";
 import { isIndexedDirName } from "./skipDirs.js";
 import type { WorkspaceFs } from "./workspace.js";
 
 /** Files a scan reads before it stops and reports `truncated` (never "absent"). */
 export const SCAN_MAX_FILES = 4_000;
 /** Largest file a scan reads; a bigger one is skipped, like the node searcher. */
-export const SCAN_MAX_FILE_BYTES = 2 * 1024 * 1024;
+export const SCAN_MAX_FILE_BYTES = READ_MAX_BYTES;
 /** Characters of a matching line kept - enough to read, not enough to flood the window. */
 export const MATCH_TEXT_MAX = 200;
 

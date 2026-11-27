@@ -35,6 +35,13 @@ const messageOf = (e: unknown): string => (e instanceof Error ? e.message : Stri
 export function sandboxWorkspaceFs(bridge: SandboxFsBridge, root: string, options: SandboxWorkspaceOptions = {}): WorkspaceFs {
   const rootResolved = resolve(root);
   const unconfined = options.scope === "unconfined";
+  const rootPosix = rootResolved.split("\\").join("/");
+
+  /** A raw error as a `WorkspaceError` whose message has the host mount path taken out (the model sees root-relative paths only). */
+  const fail = (e: unknown): WorkspaceError => {
+    if (e instanceof WorkspaceError) return e;
+    return new WorkspaceError("io", messageOf(e).split(rootResolved).join(".").split(rootPosix).join("."));
+  };
 
   const confined = async (p: string): Promise<string> => {
     const r = await tryResolveInsideRootReal(rootResolved, p);
@@ -49,7 +56,7 @@ export function sandboxWorkspaceFs(bridge: SandboxFsBridge, root: string, option
     const entries = await readdir(abs, { withFileTypes: true }).catch((e: unknown) => {
       const code = (e as NodeJS.ErrnoException | undefined)?.code;
       if (code === "ENOENT" || code === "ENOTDIR") throw new WorkspaceError("not_found", `directory not found: ${dir}`);
-      throw e;
+      throw fail(e);
     });
     for (const entry of entries) {
       const path = dir === "" ? entry.name : `${dir}/${entry.name}`;
@@ -68,7 +75,7 @@ export function sandboxWorkspaceFs(bridge: SandboxFsBridge, root: string, option
       const kind = classify(messageOf(e));
       if (kind === "not_found") return { status: "not_found" };
       if (kind === "is_directory") return { status: "is_directory" };
-      throw e;
+      throw fail(e);
     }
   }
 
@@ -76,13 +83,28 @@ export function sandboxWorkspaceFs(bridge: SandboxFsBridge, root: string, option
     list: (dir) => list(dir),
     read,
     async write(p, content) {
-      await bridge.writeFile({ filePath: await fileAbs(p), cwd: rootResolved, data: content });
+      const abs = await fileAbs(p);
+      try {
+        await bridge.writeFile({ filePath: abs, cwd: rootResolved, data: content });
+      } catch (e) {
+        throw fail(e);
+      }
     },
     async remove(p) {
       const abs = await fileAbs(p);
-      const stat = await bridge.stat({ filePath: abs, cwd: rootResolved }).catch(() => null);
-      if (!stat) return "missing";
-      await bridge.remove({ filePath: abs, cwd: rootResolved });
+      try {
+        const stat = await bridge.stat({ filePath: abs, cwd: rootResolved });
+        if (!stat) return "missing";
+      } catch (e) {
+        // Only a not-found classification means "already gone"; any other failure is real.
+        if (classify(messageOf(e)) === "not_found") return "missing";
+        throw fail(e);
+      }
+      try {
+        await bridge.remove({ filePath: abs, cwd: rootResolved });
+      } catch (e) {
+        throw fail(e);
+      }
       return "deleted";
     },
   };
