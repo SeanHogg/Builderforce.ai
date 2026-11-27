@@ -1,11 +1,10 @@
-import { createMcpRelay, createMcpCatalogCache, readMcpRelayCatalog, type RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
+import { createMcpRelay, createMcpCatalogCache, requiresWriteApproval, type RelayToolEntry as McpToolEntry } from "@seanhogg/builderforce-mcp";
 import type * as vscode from "vscode";
 import { getApiKey, getBaseUrl } from "../gateway/gateway";
 import { GATEWAY_WORKSPACE_HEADER, gatewayAuthHeaders, gatewayWorkspaceHeaders, observeGatewayResponse } from "../auth/gatewayAuth";
 import type { ToolDef } from "../tools/fileTools";
 import { hostLog } from "../host/hostLog";
 import { namesRunChat } from "../tickets/localTicketScope";
-import { toolMutating } from "../tools/toolMutating";
 import { describeNetworkError, retryOnConnectFailure } from "@seanhogg/builderforce-brain-embedded";
 import { messageOf } from "../shared/messageOf";
 
@@ -147,11 +146,7 @@ export async function listPlatformTools(
   const catalogKey = JSON.stringify([url, gatewayWorkspaceHeaders()[GATEWAY_WORKSPACE_HEADER], key]);
   let entries: McpToolEntry[];
   try {
-    entries = await catalogCache.get(catalogKey, async () => {
-      const headers = gatewayAuthHeaders(key, { "content-type": "application/json" });
-      const response = observeGatewayResponse(await retryOnConnectFailure(() => fetch(`${url}/llm/v1/mcp/tools`, { headers })), headers);
-      return readMcpRelayCatalog(response);
-    });
+    entries = await catalogCache.get(catalogKey, () => platformRelay(url, key).list());
   } catch {
     return [];
   }
@@ -162,7 +157,7 @@ export async function listPlatformTools(
     parameters: e.parameters ?? { type: "object", properties: {} },
     // Fail safe: only a tool that explicitly advertises mutates=false skips the
     // write-confirm gate; anything else (incl. external tools that omit it) asks.
-    mutating: toolMutating(e.name, { mutates: e.mutates }),
+    mutating: requiresWriteApproval(e),
     remote: true,
     execute: async (args) => {
       const translated = await chatIdForServer(identity, args);

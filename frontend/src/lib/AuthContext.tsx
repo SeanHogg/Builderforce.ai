@@ -19,6 +19,7 @@ import {
   isSessionStorageKey,
   persistSession,
   persistTenantSession,
+  SESSION_RENEWED_EVENT,
 } from './auth';
 import {
   getTenantToken,
@@ -29,7 +30,6 @@ import {
   type AuthStepResult,
 } from './auth/credentials';
 import { profileApi } from './auth/session';
-import { SESSION_RENEWED_EVENT, startTokenRenewal } from './auth/tokenRenewal';
 import { signInWithPasskey } from './passkeys';
 
 // ---------------------------------------------------------------------------
@@ -132,7 +132,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // token changes (sign-in, a renewal here, a renewal in another tab).
   useEffect(() => {
     if (!initialized || !webToken) return;
-    return startTokenRenewal();
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    void import('./auth/tokenRenewal').then(({ startTokenRenewal }) => {
+      if (!disposed) stop = startTokenRenewal();
+    }).catch((error) => console.warn('Could not start session renewal', error));
+    return () => {
+      disposed = true;
+      stop?.();
+    };
   }, [initialized, webToken]);
 
   // The voice-embedding cache registers its per-user wipe on sign-out when it loads. Loaded

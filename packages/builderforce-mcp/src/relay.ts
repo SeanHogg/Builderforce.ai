@@ -32,9 +32,14 @@ export interface RelayCallResult {
 }
 
 /** Optional projection for hosts consuming the relay from a native runtime. */
-export function toRelayModelTool(entry: RelayToolEntry) {
-  const { extensionId, tool, name } = entry;
-  return { extensionId, tool, name, modelTool: toOpenAI(entry), approvalRequired: requiresWriteApproval(entry) };
+export function toRelayModelTool(entry: RelayToolEntry & { legacyName?: string }) {
+  const { extensionId, tool, name, legacyName } = entry;
+  return {
+    extensionId, tool, name,
+    ...(legacyName && legacyName !== name ? { legacyName } : {}),
+    modelTool: toOpenAI(entry),
+    approvalRequired: requiresWriteApproval(entry),
+  };
 }
 
 export function relayModelText(value: unknown): string {

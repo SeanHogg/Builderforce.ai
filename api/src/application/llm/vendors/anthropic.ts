@@ -1,4 +1,5 @@
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
+import { toAnthropic } from '@seanhogg/builderforce-mcp';
 /**
  * Direct Anthropic (Claude) vendor module — the last-resort reliability FLOOR for
  * cloud CODING runs. Calls Anthropic's native Messages API
@@ -277,15 +278,15 @@ function toAnthropicTool(t: unknown): Record<string, unknown> | null {
   if (!tool) return null;
   const fn = tool.function;
   if (fn?.name) {
-    return {
+    return toAnthropic({
       name: fn.name,
       ...(fn.description ? { description: fn.description } : {}),
-      input_schema: fn.parameters ?? { type: 'object', properties: {} },
-    };
+      inputSchema: fn.parameters ?? { type: 'object', properties: {} },
+    });
   }
   // Already Anthropic-shaped (defensive — callers send OpenAI shape).
   if (tool.name) {
-    return { name: tool.name, ...(tool.input_schema ? { input_schema: tool.input_schema } : { input_schema: { type: 'object', properties: {} } }) };
+    return toAnthropic({ name: tool.name, inputSchema: tool.input_schema || { type: 'object', properties: {} } });
   }
   return null;
 }

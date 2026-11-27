@@ -19,7 +19,7 @@ data class PlatformTool(
   val extensionId: String,
   /** Its name on that server; sent back on the call. */
   val tool: String,
-  /** The flat name the model sees (`builtin_tasks_create`). */
+  /** The name the model sees, for example `platform__tasks_create`. */
   val name: String,
   val description: String,
   val parameters: JsonElement?,
@@ -27,6 +27,7 @@ data class PlatformTool(
   val mutates: Boolean?,
   private val modelTool: JsonObject? = null,
   private val approvalRequired: Boolean? = null,
+  val legacyName: String? = null,
 ) {
   /** Whether running it needs the person's go-ahead. */
   val writes: Boolean
@@ -61,7 +62,7 @@ fun toolLabel(name: String): String = name.removePrefix("builtin_").replace('_',
 class PlatformTools(private val session: CloudSession) {
   /** The tools of one catalog surface (`delivery`, `readonly`, …). */
   suspend fun list(surface: String): List<PlatformTool> {
-    val v = readJson(session.gateway("GET", "/mcp/tools?surface=$surface&format=openai", null, CloudHttp.client))
+    val v = readJson(session.gateway("GET", "/mcp/tools?surface=$surface&format=openai&names=canonical", null, CloudHttp.client))
     return v.objOrNull()?.get("tools").arrOrEmpty().mapNotNull { el ->
       val o = el.objOrNull() ?: return@mapNotNull null
       val modelTool = o["modelTool"].objOrNull()
@@ -75,6 +76,7 @@ class PlatformTools(private val session: CloudSession) {
         mutates = o["mutates"].boolOrNull(),
         modelTool = modelTool,
         approvalRequired = o["approvalRequired"].boolOrNull(),
+        legacyName = o["legacyName"].textOrNull(),
       )
     }
   }

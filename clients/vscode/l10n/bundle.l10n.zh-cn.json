@@ -12,7 +12,7 @@
   "Unavailable until it recovers: cloud models and sync (your changes are queued and sent later).": "恢复前不可用：云端模型和同步（您的更改将排队，稍后发送）。",
   "$(add) Register external MCP server…": "$(add) 注册外部 MCP 服务器…",
   "$(gear) Manage local MCP servers": "$(gear) 管理本地 MCP 服务器",
-  "Add a local MCP server": "添加本地 MCP 服务器",
+  "Browse MCP connectors": "浏览 MCP 连接器",
   "Import a Synapse connector": "导入 Synapse 连接器",
   "$(credit-card) Add a card to unlock premium models": "$(credit-card) 添加银行卡以解锁高级模型",
   "$(rocket) Upgrade to unlock premium models": "$(rocket) 升级以解锁高级模型",

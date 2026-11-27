@@ -11,7 +11,6 @@
 
 import type { BrainConfig, BrainStreamFn, BrainTransport } from '@seanhogg/builderforce-brain-embedded';
 import { AUTH_API_URL, getStoredTenantToken, checkUnauthorizedAndRedirect } from '../auth';
-import { renewInBackgroundAfterUnauthorized } from '../auth/tokenRenewal';
 import { brain, parseLlmError } from '../builderforceApi';
 import { getModality } from '../modality';
 
@@ -34,7 +33,16 @@ const transport: BrainTransport = {
   // A stream is not resent: renew so the next turn carries a fresh token, and sign out
   // only when the renewal is refused. Without a web session (embed) the 401 signs out.
   onUnauthorized: (res, hadToken) => {
-    if (!hadToken || !renewInBackgroundAfterUnauthorized()) checkUnauthorizedAndRedirect(res, hadToken);
+    if (!hadToken) {
+      checkUnauthorizedAndRedirect(res, hadToken);
+      return;
+    }
+    void import('../auth/tokenRenewal').then(({ renewInBackgroundAfterUnauthorized }) => {
+      if (!renewInBackgroundAfterUnauthorized()) checkUnauthorizedAndRedirect(res, hadToken);
+    }, (error) => {
+      console.warn('Could not load session renewal for the Brain', error);
+      checkUnauthorizedAndRedirect(res, hadToken);
+    });
   },
   mapError: parseLlmError,
 };

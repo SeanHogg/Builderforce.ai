@@ -12,7 +12,7 @@
   "Unavailable until it recovers: cloud models and sync (your changes are queued and sent later).": "Indisponible jusqu’au rétablissement : modèles cloud et synchronisation (vos modifications sont mises en file d’attente et envoyées plus tard).",
   "$(add) Register external MCP server…": "$(add) Enregistrer un serveur MCP externe…",
   "$(gear) Manage local MCP servers": "$(gear) Gérer les serveurs MCP locaux",
-  "Add a local MCP server": "Ajouter un serveur MCP local",
+  "Browse MCP connectors": "Parcourir les connecteurs MCP",
   "Import a Synapse connector": "Importer un connecteur Synapse",
   "$(credit-card) Add a card to unlock premium models": "$(credit-card) Ajoutez une carte pour débloquer les modèles premium",
   "$(rocket) Upgrade to unlock premium models": "$(rocket) Passez à un forfait supérieur pour débloquer les modèles premium",

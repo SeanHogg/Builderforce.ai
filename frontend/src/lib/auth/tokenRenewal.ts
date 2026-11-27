@@ -31,6 +31,7 @@ import {
   isEmbedMode,
   persistTenantSession,
   persistWebToken,
+  SESSION_RENEWED_EVENT,
 } from '../auth';
 import { getTenantToken, renewWebToken } from './credentials';
 import { decodeTokenClaims } from '../tokenClaims';
@@ -41,8 +42,7 @@ export const RENEW_AT_FRACTION_OF_REMAINING = 0.75;
 export const MIN_RENEW_DELAY_MS = 30_000;
 /** Retry delay after a renewal that could not be reached. */
 export const RENEW_RETRY_MS = 30_000;
-/** Fired on `window` in THIS tab after the stored session tokens were replaced. */
-export const SESSION_RENEWED_EVENT = 'bf:session-renewed';
+export { SESSION_RENEWED_EVENT } from '../auth';
 
 const LOCK_KEY = 'bf_renew_lock';
 /** A lock this old belongs to a tab that died mid-renewal. */

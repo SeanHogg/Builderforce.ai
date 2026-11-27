@@ -17,9 +17,11 @@ const readTool = {
   mutates: false,
 };
 const externalTool = { ...readTool, extensionId: 'external', tool: 'run', name: 'external_run', mutates: undefined };
+const canonicalReadTool = { ...readTool, name: 'platform__tasks_get', legacyName: readTool.name };
 
 vi.mock('../../../application/llm/mcpGateway', () => ({
-  listGatewayMcpTools: async () => [readTool, externalTool],
+  listGatewayMcpTools: async (context: { names?: 'canonical' }) =>
+    context.names === 'canonical' ? [canonicalReadTool] : [readTool, externalTool],
   callGatewayMcpTool: async () => ({ id: 12, password: 'secret-fixture' }),
   UnknownToolSurfaceError: class extends Error {},
 }));
@@ -52,6 +54,19 @@ describe('the native MCP relay projection', () => {
     expect(body.tools[0]).not.toHaveProperty('parameters');
     const legacy = await app().request('/v1/mcp/tools', {}, env);
     expect((await legacy.json() as { tools: unknown[] }).tools).toEqual([readTool, externalTool]);
+  });
+
+  it('advertises the canonical name and carries the old name separately on opt-in model catalogs', async () => {
+    const response = await app().request('/v1/mcp/tools?format=openai&names=canonical', {}, env);
+    const body = await response.json();
+    expect(body).toMatchObject({ tools: [{
+      extensionId: 'builtin',
+      tool: 'tasks.get',
+      name: 'platform__tasks_get',
+      legacyName: 'builtin_tasks_get',
+      approvalRequired: false,
+      modelTool: { function: { name: 'platform__tasks_get' } },
+    }] });
   });
 
   it('formats the protected reply before returning it to a native host', async () => {

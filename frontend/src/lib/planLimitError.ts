@@ -102,7 +102,14 @@ export function isPurchaseRequiredError(e: unknown): e is PurchaseRequiredError 
 export async function planLimitErrorFromResponse(
   res: Response,
 ): Promise<PlanLimitError | PurchaseRequiredError> {
-  const body = (await res.json().catch(() => ({}))) as PlanLimitPayload & PurchaseRequiredPayload;
+  let body: PlanLimitPayload & PurchaseRequiredPayload;
+  try {
+    body = await res.json() ?? {};
+  } catch (cause) {
+    const fallback = new PlanLimitError({});
+    fallback.cause = cause;
+    return fallback;
+  }
   if (body.checkoutRequired) return new PurchaseRequiredError(body);
   return new PlanLimitError(body);
 }

@@ -47,7 +47,7 @@ public struct BrainReplyRunner: Sendable {
     static let systemPrompt = """
     You are the Brain in the Builderforce app on the person's phone or computer. Answer directly and \
     concisely. You can see the conversation. You have the workspace's platform tools \
-    (`builtin_<domain>_<method>`: projects, tickets, boards, specs, OKRs, and the workspace's connectors). \
+    (projects, tickets, boards, specs, OKRs, and the workspace's connectors). \
     Resolve names to ids with the list/get tools before acting. Read-only tools run at once; a tool that \
     changes something is shown to the person to approve, so call it directly when you have the details — \
     if they decline you get `{"cancelled": true}`, so adjust rather than retry. Never say you did something \
@@ -169,7 +169,9 @@ public struct BrainReplyRunner: Sendable {
         approve: @escaping @Sendable (BrainToolApproval) async -> Bool,
         onEvent: @escaping @Sendable (BrainReplyEvent) async -> Void) async throws -> String
     {
-        guard let tool = loop.catalog.first(where: { $0.name == call.name }) else {
+        let aliases = loop.catalog.filter { $0.legacyName == call.name }
+        guard let tool = loop.catalog.first(where: { $0.name == call.name })
+            ?? (aliases.count == 1 ? aliases.first : nil) else {
             loop.failures += 1
             return Self.errorJSON("there is no tool named \(call.name)")
         }

@@ -29,9 +29,31 @@ export function pickCamera({ fireEvent }: PickDeps, name: string): void {
     fireEvent.click(button);
 }
 
-/** Opens the Act rail's Details section (Insights and the Lens panel) so its contents are visible to role queries. */
+/** The ask input (a `type=search` box): the header's search icon button reveals it (where the header does not wrap). Returns the input. */
+export function openSearch({ fireEvent }: PickDeps, labels: KnowledgeGraphLabels): HTMLInputElement {
+    const boxNow = () => document.querySelector<HTMLInputElement>(`input[type="search"][aria-label="${labels.searchLabel}"]`);
+    if (!boxNow()) {
+        const button = document.querySelector<HTMLElement>('[data-testid="kg-search-button"]');
+        if (button) fireEvent.click(button);
+    }
+    const box = boxNow();
+    if (!box) throw new Error('the search box is not on screen');
+    return box;
+}
+
+/**
+ * Opens the drawer on its Act tab (the header's Panels button, or the Act tab when the drawer is open on another panel) and then its Details section
+ * (Insights and the Lens panel), so the contents are visible to role queries.
+ */
 export function openDetails({ fireEvent }: PickDeps): void {
-    const toggle = document.querySelector<HTMLElement>('[data-testid="kg-act-details-toggle"]');
+    const toggleNow = () => document.querySelector<HTMLElement>('[data-testid="kg-act-details-toggle"]');
+    if (!toggleNow()) {
+        const actTab = document.querySelector<HTMLElement>('[data-testid="kg-drawer"] [role="tab"][data-tab="act"]');
+        const panels = document.querySelector<HTMLElement>('[data-testid="kg-panels-button"]');
+        const opener = actTab ?? panels;
+        if (opener) fireEvent.click(opener);
+    }
+    const toggle = toggleNow();
     if (!toggle) throw new Error('the Act rail has no Details section');
     if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
 }

@@ -1,16 +1,11 @@
 /**
- * Codebase search tool — competes with Cursor @codebase and Continue.dev context.
- * Ripgrep/grep keyword ranking over the working tree.
- *
- * Legacy pi (`AgentTool`) wrapper — the implementation lives once in the pi-free
- * `shared-tools/node-code-tools.ts` (`runCodebaseSearch`), shared with the native
- * `ToolDefinition` (DRY). Removed when the pi loop is retired.
+ * Legacy keyword-search tool backed by the shared Workspace index.
  */
 
 import type { AgentTool, AgentToolResult } from "../model/agent-types.js";
 import { Type } from "@sinclair/typebox";
 import { jsonResult } from "../../agents/tools/common.js";
-import { runCodebaseSearch } from "../shared-tools/node-code-tools.js";
+import { searchWorkspace } from "./workspace-search.js";
 
 const CodebaseSearchSchema = Type.Object({
   projectRoot: Type.String({ description: "Root directory of the project to search" }),
@@ -40,12 +35,6 @@ export const codebaseSearchTool: AgentTool<typeof CodebaseSearchSchema, string> 
     "Continue.dev @codebase. Returns ranked results with file paths and representative snippets.",
   parameters: CodebaseSearchSchema,
   async execute(_toolCallId: string, params: CodebaseSearchParams): Promise<AgentToolResult<string>> {
-    return jsonResult(
-      await runCodebaseSearch(params.projectRoot, {
-        query: params.query,
-        topK: params.topK,
-        language: params.language,
-      }),
-    ) as AgentToolResult<string>;
+    return jsonResult(await searchWorkspace(params, true)) as AgentToolResult<string>;
   },
 };

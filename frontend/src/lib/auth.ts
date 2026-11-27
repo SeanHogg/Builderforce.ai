@@ -23,6 +23,8 @@ import { API_ORIGIN } from './apiOrigin';
 import { isSafeRelativePath } from './safeRedirect';
 
 export const AUTH_API_URL = API_ORIGIN;
+/** Fired in the tab that replaced the stored session tokens. */
+export const SESSION_RENEWED_EVENT = 'bf:session-renewed';
 
 // ---------------------------------------------------------------------------
 // Storage helpers (localStorage)

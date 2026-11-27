@@ -37,6 +37,7 @@ vi.mock("../bfApi", () => ({
   listMcpConnectorCatalog: stubs.listCatalog,
 }));
 vi.mock("../platform/platformTools", () => ({ clearPlatformToolsCache: vi.fn() }));
+vi.mock("../gateway/gateway", () => ({ getWebBaseUrl: () => "https://builderforce.example" }));
 
 import { manageMcpServers } from "./mcpServers";
 
@@ -73,6 +74,28 @@ it("opens the native MCP manager when the tenant catalog is unavailable", async 
   expect(stubs.command).toHaveBeenCalledWith("workbench.mcp.listServer");
 });
 
+it("lists HTTP configurations without merging credential contexts or including their credentials in the picker", async () => {
+  stubs.readFile.mockImplementation(async (uri) => {
+    if (!uri.endsWith("/.mcp.json") && !uri.endsWith("/.claude.json")) throw new Error("file not found");
+    return Buffer.from(JSON.stringify({
+      mcpServers: {
+        crm: { type: "http", url: "https://crm.example/mcp", headers: { Authorization: "Bearer ${input:token}" } },
+      },
+    }));
+  });
+  stubs.pick.mockImplementationOnce(async (picks: Array<{ action: string }>) => picks.find((pick) => pick.action === "local"));
+
+  const ensureSignedIn = vi.fn();
+  await manageMcpServers({} as never, ensureSignedIn);
+
+  const picks = stubs.pick.mock.calls[0]?.[0] as Array<{ action: string; label: string }>;
+  expect(picks.filter((pick) => pick.action === "local").map((pick) => pick.label)).toEqual(["$(plug) crm", "$(plug) crm"]);
+  expect(JSON.stringify(picks)).not.toContain("${input:token}");
+  expect(stubs.open).toHaveBeenCalledWith("/workspace/.mcp.json");
+  expect(stubs.openExternal).not.toHaveBeenCalled();
+  expect(ensureSignedIn).not.toHaveBeenCalled();
+});
+
 it("passes the chosen connector to native review with environment references", async () => {
   stubs.listCatalog.mockResolvedValueOnce([{
     id: "github",
@@ -98,6 +121,22 @@ it("passes the chosen connector to native review with environment references", a
     env: { GITHUB_PERSONAL_ACCESS_TOKEN: "${env:GITHUB_PERSONAL_ACCESS_TOKEN}" },
   });
   expect(stubs.command).not.toHaveBeenCalled();
+});
+
+it("opens Platform setup for the chosen HTTP offer from the same connector catalog", async () => {
+  stubs.listCatalog.mockResolvedValueOnce([{
+    id: "http:github",
+    name: "GitHub",
+    transports: [{ transport: "http", connectorKey: "github" }],
+  }]);
+  stubs.pick
+    .mockImplementationOnce(async (picks: Array<{ action: string }>) => picks.find((pick) => pick.action === "catalog"))
+    .mockImplementationOnce(async (picks: unknown[]) => picks[0]);
+
+  await manageMcpServers({} as never, async () => true);
+
+  expect(stubs.openExternal).toHaveBeenCalledWith("https://builderforce.example/settings/integrations?connector=github");
+  expect(stubs.openDialog).not.toHaveBeenCalled();
 });
 
 it("imports the selected Synapse launch into native review without asking for credentials", async () => {

@@ -30,7 +30,6 @@ import {
   getStoredTenantToken,
   getStoredWebToken,
 } from './auth';
-import { renewAfterUnauthorized } from './auth/tokenRenewal';
 import { tenantIdFromToken } from './tokenClaims';
 import { planLimitErrorFromResponse } from './planLimitError';
 import { dispatchApiError } from './errors/apiErrorEvent';
@@ -499,9 +498,11 @@ async function sendRequest(
   // A lapsed token is renewed in the background; ONE retry with the fresh token before
   // the 401 is treated as a real sign-out. Never for a caller-supplied credential or a
   // body that cannot be sent twice.
-  if (res.status === 401 && hadToken && !optHeaders?.Authorization && !(typeof ReadableStream !== 'undefined' && init.body instanceof ReadableStream)
-    && await renewAfterUnauthorized(authHeaders.Authorization)) {
-    res = await send(getAuthHeaders(wantsJson ? { 'Content-Type': 'application/json' } : {}, auth));
+  if (res.status === 401 && hadToken && !optHeaders?.Authorization && !(typeof ReadableStream !== 'undefined' && init.body instanceof ReadableStream)) {
+    const { renewAfterUnauthorized } = await import('./auth/tokenRenewal');
+    if (await renewAfterUnauthorized(authHeaders.Authorization)) {
+      res = await send(getAuthHeaders(wantsJson ? { 'Content-Type': 'application/json' } : {}, auth));
+    }
   }
 
   checkUnauthorizedAndRedirect(res, hadToken);

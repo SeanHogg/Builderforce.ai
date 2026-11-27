@@ -18,7 +18,7 @@ import {
   type BrainAction,
   type BrainTransport,
 } from '@seanhogg/builderforce-brain-embedded';
-import { createMcpCatalogCache, MCP_CATALOG_TTL_MS } from '@seanhogg/builderforce-mcp';
+import { createMcpCatalogCache, MCP_CATALOG_TTL_MS, requiresWriteApproval } from '@seanhogg/builderforce-mcp';
 import type { RunCatalog } from '../host/rovrRunHost';
 import { ADD_TASK_TOOL, BROWSER_TOOL } from './toolNames';
 
@@ -74,7 +74,7 @@ export function createPlatformCatalog(deps: PlatformCatalogDeps): PlatformCatalo
 
 /** Does this call of a platform action write? (Advertised flag; mcpActionsFrom fails safe.) */
 function writes(action: BrainAction, args: unknown): boolean {
-  return typeof action.mutates === 'function' ? action.mutates(args) : action.mutates === true;
+  return requiresWriteApproval({ mutates: typeof action.mutates === 'function' ? action.mutates(args) : action.mutates });
 }
 
 /**

@@ -71,7 +71,11 @@ const labelStyle: React.CSSProperties = {
 
 type PanelTab = 'connect' | 'actions' | 'activity';
 
-export function ConnectorsGallery({ search = '', viewMode = 'card' }: { search?: string; viewMode?: 'card' | 'table' }) {
+export function ConnectorsGallery({ search = '', viewMode = 'card', initialConnectorKey = null }: {
+  search?: string;
+  viewMode?: 'card' | 'table';
+  initialConnectorKey?: string | null;
+}) {
   const t = useTranslations('connectors');
   const confirm = useConfirm();
   const role = getStoredTenant()?.role;
@@ -79,7 +83,7 @@ export function ConnectorsGallery({ search = '', viewMode = 'card' }: { search?:
 
   const [catalog, setCatalog] = useState<ConnectorSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [activeKey, setActiveKey] = useState(initialConnectorKey);
   const [detail, setDetail] = useState<ConnectorDetail | null>(null);
   const [panelTab, setPanelTab] = useState<PanelTab>('connect');
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -93,18 +97,20 @@ export function ConnectorsGallery({ search = '', viewMode = 'card' }: { search?:
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  const active = catalog.find((c) => c.key === activeKey) ?? null;
+  const visibleConnectorKey = active?.key;
 
   // The panel needs the FULL manifest (actions, auth fields); the catalog row only
   // carries a summary, so the detail is fetched on open rather than up front for
   // every card.
   useEffect(() => {
-    if (!activeKey) { setDetail(null); return; }
+    if (!visibleConnectorKey) { setDetail(null); return; }
     let cancelled = false;
-    connectorsApi.get(activeKey)
+    connectorsApi.get(visibleConnectorKey)
       .then((d) => { if (!cancelled) setDetail(d); })
       .catch(() => { if (!cancelled) setDetail(null); });
     return () => { cancelled = true; };
-  }, [activeKey]);
+  }, [visibleConnectorKey]);
 
   const grouped = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -118,8 +124,6 @@ export function ConnectorsGallery({ search = '', viewMode = 'card' }: { search?:
     for (const list of map.values()) list.sort((a, b) => a.name.localeCompare(b.name));
     return map;
   }, [catalog, search]);
-
-  const active = catalog.find((c) => c.key === activeKey) ?? null;
 
   const disconnect = async (c: ConnectorSummary) => {
     const ok = await confirm({
@@ -209,7 +213,7 @@ export function ConnectorsGallery({ search = '', viewMode = 'card' }: { search?:
 
       {active && (
         <SlideOutPanel
-          open={!!activeKey}
+          open
           onClose={() => setActiveKey(null)}
           title={active.name}
           widthStorageKey="connector-detail"

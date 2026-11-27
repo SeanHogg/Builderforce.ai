@@ -10,6 +10,7 @@ public struct PlatformTool: Decodable, Sendable, Equatable {
     public let tool: String
     /// The flat name the model sees (`builtin_tasks_create`).
     public let name: String
+    public let legacyName: String?
     public let description: String
     public let parameters: AnyCodable?
     /// Whether it changes anything. Absent (a tenant's own MCP server) counts as yes.
@@ -21,6 +22,7 @@ public struct PlatformTool: Decodable, Sendable, Equatable {
         case extensionId
         case tool
         case name
+        case legacyName
         case description
         case parameters
         case mutates
@@ -39,6 +41,7 @@ public struct PlatformTool: Decodable, Sendable, Equatable {
         self.extensionId = extensionId
         self.tool = tool
         self.name = name
+        self.legacyName = nil
         self.description = description
         self.parameters = parameters
         self.mutates = mutates
@@ -51,6 +54,7 @@ public struct PlatformTool: Decodable, Sendable, Equatable {
         self.extensionId = try container.decode(String.self, forKey: .extensionId)
         self.tool = try container.decode(String.self, forKey: .tool)
         self.name = try container.decode(String.self, forKey: .name)
+        self.legacyName = try container.decodeIfPresent(String.self, forKey: .legacyName)
         let modelTool = try container.decodeIfPresent(CompletionTool.self, forKey: .modelTool)
         self.description = try container.decodeIfPresent(String.self, forKey: .description)
             ?? modelTool?.function.description ?? ""
@@ -68,7 +72,7 @@ public struct PlatformTool: Decodable, Sendable, Equatable {
 
     /// A tool's name as a person reads it: `builtin_tasks_create` → `tasks create`.
     public var label: String {
-        Self.label(for: self.name)
+        Self.label(for: self.legacyName ?? self.name)
     }
 
     public static func label(for name: String) -> String {
@@ -98,7 +102,7 @@ struct PlatformToolsClient: Sendable {
         struct Listing: Decodable { let tools: [PlatformTool]? }
         let request = try self.session.gatewayRequest(
             method: "GET",
-            path: "/mcp/tools?surface=\(surface)&format=openai",
+            path: "/mcp/tools?surface=\(surface)&format=openai&names=canonical",
             body: nil,
             timeout: CloudSession.apiTimeout)
         let data = try await Self.body(self.session.http.send(request))

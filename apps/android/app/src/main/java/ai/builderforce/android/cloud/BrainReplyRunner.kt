@@ -118,10 +118,12 @@ class BrainReplyRunner(
   }
 
   private suspend fun runTool(catalog: List<PlatformTool>, call: ToolCall, progress: ReplyProgress): Outcome {
-    val tool = catalog.firstOrNull { it.name == call.name } ?: return Outcome.Failed("there is no tool named ${call.name}")
+    val tool = catalog.firstOrNull { it.name == call.name }
+      ?: catalog.singleOrNull { it.legacyName == call.name }
+      ?: return Outcome.Failed("there is no tool named ${call.name}")
     val raw = call.arguments.ifBlank { "{}" }
     val args = parseCloudBody(raw) as? JsonObject ?: return Outcome.Failed("the arguments for ${call.name} are not a JSON object")
-    val label = toolLabel(tool.name)
+    val label = toolLabel(tool.legacyName ?: tool.name)
     if (tool.writes && !progress.approve(label, args.toString())) return Outcome.Declined
     progress.activity(label)
     return try {
@@ -157,7 +159,7 @@ class BrainReplyRunner(
     const val SYSTEM =
       "You are the Brain in Builderforce for Android, the person's phone app. Answer directly and " +
         "concisely — they are reading on a phone. You can see the conversation. You have the workspace's " +
-        "platform tools (`builtin_<domain>_<method>`: projects, tickets, boards, specs, OKRs, and the " +
+        "platform tools (projects, tickets, boards, specs, OKRs, and the " +
         "workspace's connectors). Resolve names to ids with the list/get tools before acting. Read-only tools " +
         "run at once; a tool that changes something is shown to the person to approve, so call it directly " +
         "when you have the details — if they decline you get `{\"cancelled\": true}`, so adjust rather than " +

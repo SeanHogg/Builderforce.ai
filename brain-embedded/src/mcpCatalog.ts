@@ -45,8 +45,8 @@ export interface McpToolResultInfo {
 
 // Short-window dedupe of identical create-like tool calls. The Brain occasionally
 // emits the SAME create call twice in one turn (it "plans" then "creates"), which
-// would double-write. Collapsing an identical create (same extension+tool+args)
-// within the window to the first call's promise makes a double-fire idempotent.
+// would double-write. Collapsing an identical authenticated relay create within
+// the same scope to the first call's promise makes a double-fire idempotent.
 // Module-scoped so it survives the per-render actions rebuild. NOT a data cache —
 // results aren't retained past the window and errors are dropped so a genuine
 // retry isn't blocked.
@@ -108,19 +108,20 @@ export function mcpActionsFrom(
     // read-only. Undefined (external servers) ⇒ mutating, so the host's
     // confirm-before-mutate gate fires (fail safe).
     mutates: requiresWriteApproval(entry),
-    run: (args: unknown) => {
+    run: async (args: unknown) => {
       const mutating = requiresWriteApproval(entry);
+      const local = localTools?.(entry);
+      const token = local ? null : transport.getToken();
       const exec = async (): Promise<unknown> => {
         // A tool the HOST can answer where the work lives (a browser run's `runtime.*`
         // tools, answered in the tab that holds the run) is routed there; the host's
         // router falls back to the gateway itself when it cannot.
-        const local = localTools?.(entry);
         if (local) {
           const out = await local(args);
           onToolResult?.({ name: entry.name, tool: entry.tool, extensionId: entry.extensionId, mutating, ok: !isErrorResult(out) });
           return out;
         }
-        const relay = createMcpRelay({ baseUrl: transport.baseUrl, token: transport.getToken() });
+        const relay = createMcpRelay({ baseUrl: transport.baseUrl, token });
         const res = await relay.call({ extensionId: entry.extensionId, tool: entry.tool, arguments: args });
         const body = (await res.json().catch(() => ({}))) as RelayCallResult;
         const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : (body.result ?? body);
@@ -132,8 +133,8 @@ export function mcpActionsFrom(
         return out;
       };
       // Idempotency guard: collapse a duplicated create within the window.
-      if (mutating && isCreateTool(entry.name, entry.tool)) {
-        const key = `${entry.extensionId}:${entry.tool}:${stableStringify(args)}`;
+      if (token && mutating && isCreateTool(entry.name, entry.tool)) {
+        const key = JSON.stringify([transport.baseUrl, token, entry.extensionId, entry.tool, stableStringify(args)]);
         const now = nowMs();
         const prior = recentCreates.get(key);
         if (prior && now - prior.at < CREATE_DEDUPE_MS) return prior.result;
@@ -141,7 +142,8 @@ export function mcpActionsFrom(
         recentCreates.set(key, { at: now, result });
         for (const [k, v] of recentCreates) if (now - v.at >= CREATE_DEDUPE_MS) recentCreates.delete(k);
         // Drop on error so a genuine retry isn't blocked by the window.
-        result.then((out) => { if (isErrorResult(out)) recentCreates.delete(key); }).catch(() => recentCreates.delete(key));
+        const drop = () => { if (recentCreates.get(key)?.result === result) recentCreates.delete(key); };
+        result.then((out) => { if (isErrorResult(out)) drop(); }).catch(drop);
         return result;
       }
       return exec();

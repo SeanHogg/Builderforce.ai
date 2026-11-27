@@ -3,6 +3,7 @@ import { join } from "node:path";
 import * as vscode from "vscode";
 import { readMcpConfig, readSynapseConnectors, type LaunchSpec, type McpConfigHost } from "@seanhogg/builderforce-mcp/config";
 import * as bfApi from "../bfApi";
+import { getWebBaseUrl } from "../gateway/gateway";
 import { clearPlatformToolsCache } from "../platform/platformTools";
 import { messageOf } from "../shared/messageOf";
 
@@ -24,6 +25,10 @@ const WORKSPACE_MCP_CONFIGS = [
   { host: "claude-code", segments: [".mcp.json"] },
   { host: "cursor", segments: [".cursor", "mcp.json"] },
 ] as const satisfies readonly { host: McpConfigHost; segments: readonly string[] }[];
+const USER_MCP_CONFIGS = [
+  { host: "claude-code", segments: [".claude.json"] },
+  { host: "cursor", segments: [".cursor", "mcp.json"] },
+] as const satisfies readonly { host: McpConfigHost; segments: readonly string[] }[];
 
 type McpServerPick = vscode.QuickPickItem & (
   | { action: "register" | "native" | "catalog" | "import" }
@@ -31,50 +36,71 @@ type McpServerPick = vscode.QuickPickItem & (
   | { action: "local"; config: vscode.Uri }
 );
 
-async function workspaceMcpPicks(): Promise<McpServerPick[]> {
+type ConfigLocation = { host: McpConfigHost; segments: readonly string[] };
+
+async function configuredMcpPicks(root: vscode.Uri, locations: readonly ConfigLocation[], sharedWorkspaceRoot = false): Promise<McpServerPick[]> {
   const decoder = new TextDecoder("utf-8");
-  const workspacePicks = await Promise.all((vscode.workspace.workspaceFolders ?? []).map(async (folder) => {
-    const configs = await Promise.all(WORKSPACE_MCP_CONFIGS.map(async ({ host, segments }) => {
-      const config = vscode.Uri.joinPath(folder.uri, ...segments);
-      try {
-        const document = decoder.decode(await vscode.workspace.fs.readFile(config));
-        return { config, servers: readMcpConfig(document, host) };
-      } catch {
-        return null;
-      }
-    }));
-    const seen = new Set<string>();
-    const picks: McpServerPick[] = [];
-    for (const file of configs) {
-      if (!file) continue;
-      for (const [name, server] of file.servers) {
-        if (server.transport !== "stdio") continue;
-        const env = Object.entries(server.env ?? {}).sort(([a], [b]) => a.localeCompare(b));
-        const identity = JSON.stringify([server.command, server.args ?? [], server.cwd, env]);
-        if (seen.has(identity)) continue;
-        seen.add(identity);
-        picks.push({
-          action: "local",
-          label: `$(terminal) ${name}`,
-          description: vscode.workspace.asRelativePath(file.config),
-          config: file.config,
-        });
-      }
+  const configs = await Promise.all(locations.map(async ({ host, segments }) => {
+    const config = vscode.Uri.joinPath(root, ...segments);
+    try {
+      const document = decoder.decode(await vscode.workspace.fs.readFile(config));
+      return { config, servers: readMcpConfig(document, host) };
+    } catch {
+      return null;
     }
-    return picks;
   }));
-  return workspacePicks.flat();
+  const seen = new Set<string>();
+  const picks: McpServerPick[] = [];
+  for (const file of configs) {
+    if (!file) continue;
+    for (const [name, server] of file.servers) {
+      // Remote credentials and host-resolved variables cannot prove two configurations are the same.
+      // Only coalesce identical literal launches within one workspace root.
+      if (sharedWorkspaceRoot && server.transport === "stdio" && !Object.keys(server.env ?? {}).length) {
+        const identity = JSON.stringify([server.command, server.args ?? [], server.cwd]);
+        if (!identity.includes("${")) {
+          if (seen.has(identity)) continue;
+          seen.add(identity);
+        }
+      }
+      picks.push({
+        action: "local",
+        label: `${server.transport === "stdio" ? "$(terminal)" : "$(plug)"} ${name}`,
+        description: vscode.workspace.asRelativePath(file.config),
+        config: file.config,
+      });
+    }
+  }
+  return picks;
 }
 
-async function installCatalogServer(secrets: vscode.SecretStorage): Promise<void> {
+async function localMcpPicks(): Promise<McpServerPick[]> {
+  const groups = await Promise.all([
+    ...(vscode.workspace.workspaceFolders ?? []).map(({ uri }) => configuredMcpPicks(uri, WORKSPACE_MCP_CONFIGS, true)),
+    configuredMcpPicks(vscode.Uri.file(homedir()), USER_MCP_CONFIGS),
+  ]);
+  return groups.flat();
+}
+
+async function browseConnectorCatalog(secrets: vscode.SecretStorage, canInstallLocally: boolean): Promise<void> {
   const catalog = await bfApi.listMcpConnectorCatalog(secrets);
-  const options = catalog.flatMap((offer) => offer.transports.flatMap((transport) =>
-    transport.transport === "stdio" ? [{ label: offer.name, id: offer.id, transport }] : [],
-  ));
-  const pick = await vscode.window.showQuickPick(options, {
-    title: vscode.l10n.t("Add a local MCP server"),
+  const options = catalog.flatMap((offer) => {
+    // Offer local launch and Platform setup separately so each keeps its own credential scope.
+    const local = offer.transports.find((transport) => transport.transport === "stdio");
+    const platform = offer.transports.find((transport) => transport.transport === "http");
+    return [
+      ...(canInstallLocally && local ? [{ label: `$(terminal) ${offer.name}`, id: offer.id, transport: local }] : []),
+      ...(platform ? [{ label: `$(globe) ${offer.name}`, id: offer.id, transport: platform }] : []),
+    ];
   });
+  const pick = await vscode.window.showQuickPick(options, { title: vscode.l10n.t("Browse MCP connectors") });
   if (!pick) return;
+  if (pick.transport.transport === "http") {
+    const url = new URL("/settings/integrations", getWebBaseUrl());
+    url.searchParams.set("connector", pick.transport.connectorKey);
+    await vscode.env.openExternal(vscode.Uri.parse(url.href));
+    return;
+  }
 
   const args = ["-y", ...pick.transport.npx];
   const env: Record<string, string> = {};
@@ -187,16 +213,19 @@ export async function manageMcpServers(
       (servers) => ({ ok: true as const, servers }),
       (error: unknown) => ({ ok: false as const, error }),
     ),
-    workspaceMcpPicks(),
+    localMcpPicks(),
     vscode.commands.getCommands(true),
   ]);
   const picks: McpServerPick[] = [...local];
-  if (commands.includes(NATIVE_MCP_LIST)) {
+  const hasNativeManager = commands.includes(NATIVE_MCP_LIST);
+  if (hasNativeManager) {
     picks.unshift(
-      { action: "catalog", label: `$(add) ${vscode.l10n.t("Add a local MCP server")}` },
       { action: "import", label: `$(import) ${vscode.l10n.t("Import a Synapse connector")}` },
       { action: "native", label: vscode.l10n.t("$(gear) Manage local MCP servers") },
     );
+  }
+  if (hasNativeManager || remote.ok) {
+    picks.unshift({ action: "catalog", label: `$(add) ${vscode.l10n.t("Browse MCP connectors")}` });
   }
   if (!remote.ok) {
     const message = messageOf(remote.error);
@@ -238,7 +267,7 @@ export async function manageMcpServers(
       return;
     }
     if (pick.action === "catalog") {
-      if (await ensureSignedIn()) await installCatalogServer(secrets);
+      if (await ensureSignedIn()) await browseConnectorCatalog(secrets, hasNativeManager);
       return;
     }
     if (pick.action === "import") {

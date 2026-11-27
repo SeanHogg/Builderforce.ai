@@ -1,9 +1,9 @@
 import { watch, type FSWatcher } from "node:fs";
 import { lstat, readFile, realpath } from "node:fs/promises";
-import { relative, sep } from "node:path";
+import { extname, relative, sep } from "node:path";
 import type { RepoReadCapability, SemanticSearchResult } from "@builderforce/agent-tools";
 import { gitIgnoredMatcher } from "@builderforce/agent-tools/node-git-ignore";
-import { resolveInsideRootReal } from "@builderforce/agent-tools/node-path";
+import { resolveInsideRoot, resolveInsideRootReal } from "@builderforce/agent-tools/node-path";
 import { treeSitterSymbolExtractor } from "@builderforce/agent-tools/node-tree-sitter";
 import { DEFAULT_REPO_MAP_LIMITS, isMapCandidate } from "@builderforce/repo-map";
 import {
@@ -24,7 +24,10 @@ interface SearchInput {
   files: RepoReadCapability;
   query: string;
   scope?: string;
+  extension?: string;
   limit: number;
+  rebuild?: boolean;
+  lexicalOnly?: boolean;
   wasmDir?: string;
   embedder?: EmbedderPort;
   waitForIndexMs?: number;
@@ -68,7 +71,9 @@ function parser(wasmDir: string | undefined) {
 }
 
 async function sourceFile(root: string, path: string) {
-  const resolved = await resolveInsideRootReal(root, path, { mustExist: true, allowRoot: false });
+  // The caller has already canonicalized the root. Comparing the target's real
+  // relative path to the listed path rejects symlinks without re-resolving the root.
+  const resolved = resolveInsideRoot(root, path);
   if (!resolved || relativePath(root, await realpath(resolved)) !== path) return undefined;
   const stats = await lstat(resolved);
   if (!stats.isFile() || !isMapCandidate(path, stats.size)) return undefined;
@@ -120,8 +125,10 @@ async function refresh(input: SearchInput, root: string, old?: StoredCodeIndex) 
   if (!listing.ok) throw new Error("Workspace files could not be listed");
 
   const ignored = await gitIgnoredMatcher(root);
+  const extension = input.extension?.replace(/^\./, "").toLowerCase();
   const paths = [...new Set((listing.paths ?? []).map((path) => path.replace(/\\/g, "/")))]
     .filter((path) => (!selected || path === selected || path.startsWith(`${selected}/`))
+      && (!extension || extname(path).slice(1).toLowerCase() === extension)
       && isMapCandidate(path, 0) && !ignored(path)).sort();
   const records: CodeFileRecord[] = [];
   const newDocs: IndexDoc[] = [];
@@ -193,7 +200,7 @@ async function sharedSnapshot(input: SearchInput, root: string) {
   }
   try {
     const previous = await storage.read();
-    const { snapshot } = await refresh(input, root, previous);
+    const { snapshot } = await refresh(input, root, input.rebuild ? undefined : previous);
     const stillOwner = () => lock.isFresh?.() ?? true;
     if (snapshot !== previous) await storage.write(snapshot, stillOwner);
     return { snapshot, fresh: stillOwner() };
@@ -210,7 +217,7 @@ function evictWarm(root: string) {
 async function readSharedIndex(input: SearchInput, root: string): Promise<CodeSnapshot | undefined | null> {
   const existing = warm.get(root);
   const binding = embedderId(input.embedder);
-  if (existing && existing.deadline > Date.now() && existing.binding === binding) {
+  if (!input.rebuild && existing && existing.deadline > Date.now() && existing.binding === binding) {
     warm.delete(root);
     warm.set(root, existing);
     return existing;
@@ -270,17 +277,20 @@ async function sharedIndexForQuery(input: SearchInput, root: string) {
 }
 
 /** Both Node hosts read the same root snapshot, with one writer across processes. */
-export async function searchWorkspaceCodeIndex(input: SearchInput): Promise<SemanticSearchResult> {
+export async function searchWorkspaceCodeIndex(input: SearchInput): Promise<SemanticSearchResult & { indexedFiles?: number }> {
   if (input.query.length > 10_000) throw new Error("The workspace search query exceeds 10000 characters");
   const root = await realpath(input.root);
-  const stored = !input.scope ? await sharedIndexForQuery(input, root) : undefined;
+  const stored = !input.scope && !input.extension ? await sharedIndexForQuery(input, root) : undefined;
   if (stored === null) return { ok: true, query: input.query, results: [], total: 0, indexing: true };
   // A scoped search builds its candidate set from the scope before ranking, so
   // global matches cannot crowd out an in-scope hit. It never replaces the root snapshot.
   const { snapshot, active: prepared } = stored ?? await refresh(input, root);
   const active = prepared ?? load(snapshot, snapshot.fingerprint === embedderId(input.embedder) ? input.embedder : undefined);
   if (!active) throw new Error("The workspace code index could not be read");
-  const hits = await active.search(input.query, { k: input.limit }).catch(() =>
+  const hits = await active.search(input.query, {
+    k: input.limit,
+    ...(input.lexicalOnly ? { tiers: ["exact", "lexical"] } : {}),
+  }).catch(() =>
     active.search(input.query, { k: input.limit, tiers: ["exact", "lexical"] }),
   );
   const rows = new Map(snapshot.records.flatMap((record) =>
@@ -306,5 +316,6 @@ export async function searchWorkspaceCodeIndex(input: SearchInput): Promise<Sema
       source: hit.tier === "dense" ? "embedding" as const : "keyword" as const,
     });
   }
-  return { ok: true, query: input.query, results, total: results.length, partial: snapshot.partial || results.length !== hits.length };
+  return { ok: true, query: input.query, results, total: results.length, indexedFiles: snapshot.records.length,
+    partial: snapshot.partial || results.length !== hits.length };
 }

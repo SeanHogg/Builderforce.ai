@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { type ViewMode } from '@/components/ViewToggle';
@@ -37,10 +38,15 @@ const CATEGORIES: Array<{ id: Category; icon: string }> = [
 const sectionHeading: React.CSSProperties = { fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 12px' };
 
 export default function SettingsIntegrationsPage() {
+  return <Suspense><SettingsIntegrations /></Suspense>;
+}
+
+function SettingsIntegrations() {
   const t = useTranslations('integrations.page');
   const isOwner = getStoredTenant()?.role === 'owner';
+  const connectorKey = useSearchParams().get('connector');
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState<Category>('all');
+  const [category, setCategory] = useState<Category>(connectorKey ? 'connectors' : 'all');
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [priorityOpen, setPriorityOpen] = useState(false);
   // The LABEL of whatever leads the BYO precedence list — a connected provider OR a named
@@ -83,7 +89,7 @@ export default function SettingsIntegrationsPage() {
       </CatalogToolbar>
 
       {show('models') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.models')}</h2><CloudFundingPreference /><ProviderKeysSettings search={search} viewMode={viewMode} priorityOpen={priorityOpen} onPriorityClose={() => setPriorityOpen(false)} onLeaderChange={setPriorityLeader} /></section>}
-      {show('connectors') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.connectors')}</h2><ConnectorsGallery search={search} viewMode={viewMode} />{/* Bring-your-own MCP servers sit with connectors: both are "an external
+      {show('connectors') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.connectors')}</h2><ConnectorsGallery search={search} viewMode={viewMode} initialConnectorKey={connectorKey} />{/* Bring-your-own MCP servers sit with connectors: both are "an external
           system this workspace may call". The gallery gates itself to owners. */}
         <McpServersGallery search={search} viewMode={viewMode} /></section>}
       {show('apps') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.apps')}</h2><MailboxIntegrations search={search} viewMode={viewMode} /><IntegrationsGallery search={search} viewMode={viewMode} /></section>}

@@ -26,6 +26,8 @@
  * within the window we stop auto-reloading and surface a manual retry instead.
  */
 
+import { readSession, writeSession } from './storage';
+
 const RELOAD_AT_KEY = 'bf-chunk-reload-at';
 /** How long a just-happened auto-reload suppresses another one (loop guard). */
 const RELOAD_WINDOW_MS = 30_000;
@@ -58,12 +60,8 @@ export function isChunkLoadError(err: unknown): boolean {
  * naturally lapses, so a genuinely-new chunk error minutes later still heals.
  */
 export function chunkRecoveryAlreadyAttempted(): boolean {
-  try {
-    const at = Number(sessionStorage.getItem(RELOAD_AT_KEY) || '0');
-    return at > 0 && Date.now() - at < RELOAD_WINDOW_MS;
-  } catch {
-    return false;
-  }
+  const at = Number(readSession(RELOAD_AT_KEY));
+  return at > 0 && Date.now() - at < RELOAD_WINDOW_MS;
 }
 
 /** Purge the SW caches + registrations so the next load fetches fresh JS. */
@@ -73,16 +71,16 @@ async function purgeStaleAssets(): Promise<void> {
       const keys = await caches.keys();
       await Promise.all(keys.map((k) => caches.delete(k)));
     }
-  } catch {
-    /* cache API unavailable — non-fatal */
+  } catch (error) {
+    console.warn('Chunk recovery could not clear browser caches', error);
   }
   try {
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
       await Promise.all(regs.map((r) => r.unregister()));
     }
-  } catch {
-    /* SW API unavailable — non-fatal */
+  } catch (error) {
+    console.warn('Chunk recovery could not unregister the service worker', error);
   }
 }
 
@@ -94,11 +92,7 @@ async function purgeStaleAssets(): Promise<void> {
 export async function recoverFromChunkError(force = false): Promise<void> {
   if (typeof window === 'undefined') return;
   if (!force && chunkRecoveryAlreadyAttempted()) return;
-  try {
-    sessionStorage.setItem(RELOAD_AT_KEY, String(Date.now()));
-  } catch {
-    /* private mode — proceed to reload anyway */
-  }
+  writeSession(RELOAD_AT_KEY, String(Date.now()));
   await purgeStaleAssets();
   window.location.reload();
 }

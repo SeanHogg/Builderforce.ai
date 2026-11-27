@@ -96,6 +96,10 @@ export function toOpenAI<Schema>(
   };
 }
 
-export function toAnthropic(tool: McpToolEntry) {
-  return { name: tool.name, description: tool.description, input_schema: tool.inputSchema };
+export function toAnthropic<Schema>(tool: { name: string; description?: string; inputSchema: Schema }) {
+  return {
+    name: tool.name,
+    ...(tool.description === undefined ? {} : { description: tool.description }),
+    input_schema: tool.inputSchema,
+  };
 }

@@ -1,15 +1,11 @@
 /**
- * Semantic codebase search — TF-IDF/BM25 ranking + symbol extraction over a local index.
- *
- * Legacy pi (`AgentTool`) wrapper — the implementation lives once in the pi-free
- * `shared-tools/node-code-tools.ts` (`runSemanticSearch`), shared with the native
- * `ToolDefinition` (DRY). Removed when the pi loop is retired.
+ * Legacy semantic-search tool backed by the shared Workspace index.
  */
 
 import type { AgentTool, AgentToolResult } from "../model/agent-types.js";
 import { Type } from "@sinclair/typebox";
 import { jsonResult } from "../../agents/tools/common.js";
-import { runSemanticSearch } from "../shared-tools/node-code-tools.js";
+import { searchWorkspace } from "./workspace-search.js";
 
 const SemanticSearchSchema = Type.Object({
   projectRoot: Type.String({ description: "Root directory of the project to search" }),
@@ -39,19 +35,10 @@ export const semanticSearchTool: AgentTool<typeof SemanticSearchSchema, string> 
   name: "codebase_semantic_search",
   label: "Semantic Codebase Search",
   description:
-    "Semantically search the project source code using a TF-IDF ranked index of all exported " +
-    "symbols (functions, classes, types, interfaces) plus file content. Returns ranked files " +
-    "and representative snippets. Builds a local index on first use (.builderForceAgents/search-index.json). " +
-    "Better than keyword search for natural language queries and symbol lookups.",
+    "Search the Workspace code index for definitions and matching code. Returns ranked paths and " +
+    "representative snippets, with semantic ranking when a local embedder is ready.",
   parameters: SemanticSearchSchema,
   async execute(_toolCallId: string, params: SemanticSearchParams): Promise<AgentToolResult<string>> {
-    return jsonResult(
-      await runSemanticSearch(params.projectRoot, {
-        query: params.query,
-        topK: params.topK,
-        language: params.language,
-        rebuild: params.rebuild,
-      }),
-    ) as AgentToolResult<string>;
+    return jsonResult(await searchWorkspace(params, false)) as AgentToolResult<string>;
   },
 };

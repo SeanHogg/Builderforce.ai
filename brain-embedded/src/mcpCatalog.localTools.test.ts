@@ -29,4 +29,21 @@ describe('mcpActionsFrom — host-routed tools', () => {
     expect(await action!.run({})).toEqual({ ok: true });
     expect(fetchSpy).toHaveBeenCalledWith('https://api.test/llm/v1/mcp/call', expect.objectContaining({ method: 'POST' }));
   });
+
+  it('collapses duplicate creates only inside the same authenticated relay scope', async () => {
+    const fetchSpy = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Response(JSON.stringify({
+      result: { tenant: new Headers(init?.headers).get('Authorization')?.endsWith('fixture-a') ? 'a' : 'b' },
+    })));
+    vi.stubGlobal('fetch', fetchSpy);
+    const tool = { ...entry('tasks.create'), mutates: true };
+    let token = 'fixture-a';
+    const [action] = mcpActionsFrom([tool], { ...transport, getToken: () => token });
+    const args = { title: 'Identical task details' };
+
+    expect(await action!.run(args)).toEqual({ tenant: 'a' });
+    expect(await action!.run(args)).toEqual({ tenant: 'a' });
+    token = 'fixture-b';
+    expect(await action!.run(args)).toEqual({ tenant: 'b' });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
 });
