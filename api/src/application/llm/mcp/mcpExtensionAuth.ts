@@ -24,6 +24,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
 import { tenantMcpExtensions } from '../../../infrastructure/database/schema';
+import { scopedToTenant } from '../../../infrastructure/database/tenantScope';
 import { decryptSecretFromStorage } from '../../../infrastructure/auth/MfaService';
 import { credentialSecret, decryptCredentials, encryptCredentials } from '../../integrations/credentialCrypto';
 import {
@@ -41,9 +42,11 @@ type AuthorizationSnapshot = Pick<ExtensionRow, 'id' | 'tenantId' | 'serverUrl' 
 
 /** Retain a grant only if neither its endpoint nor the authorization it replaces changed. */
 export function unchangedMcpAuthorization(row: AuthorizationSnapshot) {
+  return and(eq(tenantMcpExtensions.id, row.id), scopedToTenant(tenantMcpExtensions, row.tenantId, authorizationSnapshotMatches(row)));
+}
+
+function authorizationSnapshotMatches(row: AuthorizationSnapshot) {
   return and(
-    eq(tenantMcpExtensions.id, row.id),
-    eq(tenantMcpExtensions.tenantId, row.tenantId),
     eq(tenantMcpExtensions.serverUrl, row.serverUrl),
     row.oauthEnc == null ? isNull(tenantMcpExtensions.oauthEnc) : eq(tenantMcpExtensions.oauthEnc, row.oauthEnc),
     row.tokenEnc == null ? isNull(tenantMcpExtensions.tokenEnc) : eq(tenantMcpExtensions.tokenEnc, row.tokenEnc),
@@ -111,7 +114,10 @@ export async function storeGrant(
       oauthConnectedAt: new Date(),
       ...(args.registration ? { oauthEnc: args.registration.enc, oauthIv: args.registration.iv } : {}),
     })
-    .where(unchangedMcpAuthorization(args.current))
+    .where(and(
+      eq(tenantMcpExtensions.id, args.current.id),
+      scopedToTenant(tenantMcpExtensions, args.current.tenantId, authorizationSnapshotMatches(args.current)),
+    ))
     .returning({ id: tenantMcpExtensions.id });
   return updated !== undefined;
 }

@@ -36,7 +36,8 @@ const PROGRAMS = {
   UX: 'execution-experience',
   COM: 'commercialization',
 };
-const GAP_PREFIXES = [...Object.keys(PROGRAMS), 'MAINT', 'DEFER'];
+const AUDIT_GAP_PREFIXES = ['UP', 'MCP', 'CIX', 'INF', 'CHAT', 'SHELL', 'AUTH', 'SECP'];
+const GAP_PREFIXES = [...Object.keys(PROGRAMS), 'MAINT', 'DEFER', ...AUDIT_GAP_PREFIXES];
 const PRIORITIES = new Set(['P0', 'P1', 'P2']);
 const STATUSES = new Set(['planned', 'in-progress', 'blocked', 'done']);
 

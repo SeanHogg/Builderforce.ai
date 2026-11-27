@@ -194,6 +194,7 @@ export type { LocalToolRouter, McpToolEntry } from './mcpCatalog';
 // Action → advertised tool spec. The single mapping, so a headless runner shows the
 // model exactly what the React registry would.
 export { toolSpecsFor } from './toolSpecs';
+export { modelToolNames } from './run/modelToolNames';
 // The inline tool-call dialect filter the streaming client runs over every content
 // delta. Exported so a harness standing in for the gateway applies the SAME lifting,
 // rather than testing a transport that is kinder than the real one.

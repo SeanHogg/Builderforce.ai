@@ -573,9 +573,9 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
 
 Source: [platform-duplication-audit.md §1](../specs/tasks/platform-duplication-audit.md) (2026-11-26).
 
-- **The problem:** 11 MCP implementations across 3 repos, of which only memory-mcp uses the official SDK.
-- **The target:** one `@seanhogg/builderforce-mcp` package (protocol, tool, naming, policy, server, client, relay and config modules) with three servers: platform, memory and workspace.
-- **The steps:** follow the migration order in §1.6. Each step's existing tests are the parity oracle.
+The audit found 11 MCP implementations across three repositories. Only Memory used the official SDK at the start of the audit.
+
+The target is one `@seanhogg/builderforce-mcp` package with three servers for Platform, Memory, and Workspace. The migration in §1.6 uses the existing tests to check parity.
 
 **Implementation status as of 2026-11-26.** Synapse's Rust Workspace MCP server and connector host are retired. Platform and Workspace use the shared SDK package. Synapse still uses a private Evermind stdio client for desktop memory. See [DONE.md](../../DONE.md#-resolved-2026-11-26--synapse-rust-workspace-mcp-retirement).
 
@@ -643,8 +643,9 @@ Findings from the original audit:
 
 Source: [platform-duplication-audit.md §2](../specs/tasks/platform-duplication-audit.md) (2026-11-26).
 
-- **The problem:** 13 implementations, and one repo is indexed 3× on one machine.
-- **The target:** one TS `@seanhogg/builderforce-code-index`, built from:
+The audit found 13 implementations. On a single machine, three hosts could index the same repository.
+
+The TypeScript `@seanhogg/builderforce-code-index` combines the following components.
   - agent-tools WASM tree-sitter, extended to 11 languages;
   - a port of the bf-index chunk rules;
   - packages/repo-map as the graph and map;
@@ -715,8 +716,7 @@ Gaps:
 
 Source: [platform-duplication-audit.md §4](../specs/tasks/platform-duplication-audit.md) (2026-11-26).
 
-- **Already shared:** the fact engine, memory-mcp, the experience model, the `EvermindConsole` and the `memory_*` contract.
-- **Still divergent:** the stores, ranking, tool names, run ledgers, the meaning of "skill", and sync.
+The fact engine, Memory MCP, experience model, `EvermindConsole`, and `memory_*` contract are shared. The stores, ranking, tool names, run ledgers, definition of a skill, and sync still differ.
 
 Gaps:
 
@@ -800,7 +800,7 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §7. 
 - `AUTH-G012` **Auth-client test gaps:** Chrome `apiClient.test.ts` is 11 lines, Rust has 6 tests, agent-runtime has none.
 - `AUTH-G013` **Rust and VS Code derive the web origin from the API URL by hand.**
 - `AUTH-G014` **Not yet audited:** Chrome SettingsView sign-in, webcontainers `aiGateway`/`hostRelay`, `knowledge-client`, `provider-connect`.
-- `AUTH-G016`–`AUTH-G019` **Security-sensitive client and credential findings.** Details are in the local security findings file. (`AUTH-G015` and `AUTH-G018` are resolved; see DONE.md.)
+- `AUTH-G016` **Security-sensitive client and credential findings.** The local security findings file also covers `AUTH-G017` through `AUTH-G019`. See DONE.md for the resolution of `AUTH-G015` and `AUTH-G018`.
 - `AUTH-G021` **15-minute web and workspace tokens write about 2 `auth_tokens` rows every 11 minutes per active session,** each kept 7 days by the expired-credential sweep. Neon core storage was last noted at 504/512 MB.
   - Fix: a shorter sweep grace for superseded rows (`superseded_by IS NOT NULL`), keeping just enough for reuse detection, plus a row-count check on the storage dashboard.
 - `AUTH-G020` **The workspace-switch route `/api/vscode/tenants/:id/token` is VS Code-named but used by every editor host.** Alias it host-neutrally (expand/contract).
@@ -818,7 +818,7 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §8. 
 - `SECP-G008` **The W credential scrubber has no parity test with `secret-redaction`.** Fix in progress.
 - `SECP-G009` **Egress has six mechanisms and no single registry.**
 - `SECP-G010` **The inference host (builderforce-inference) has no scanner or egress policy.** Under the Synapse IDE rebuild it inherits the VS Code extension's.
-- `SECP-G013`–`SECP-G015` **Security-sensitive defaults and coverage gaps.** Details are in the local security findings file.
+- `SECP-G013` **Security-sensitive defaults and coverage gaps.** The local security findings file also covers `SECP-G014` and `SECP-G015`.
 
 ### Data model — PRD 20 `[platform]`
 

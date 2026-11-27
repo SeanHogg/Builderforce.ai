@@ -128,7 +128,7 @@ vec3 capOf(vec3 b) {
     return mix(b, drum ? uStoreTop : uNodeTop, k);
 }
 // The hover tint: the lit accent as emissive, on top of the lighting.
-vec3 shaded(vec3 base) { return mix(clamp(base * vLight, 0.0, 1.0), toneOf(uHoverTone), 0.4 * vHover); }
+vec3 shaded(vec3 base) { return mix(clamp(base * vLight, 0.0, 1.0), uHover, 0.4 * vHover); }
 // Exact signed distance to the outline polygon (negative inside).
 float sdPolygon(vec2 p) {
     float d = dot(p - uOutline[0], p - uOutline[0]);
@@ -155,15 +155,17 @@ float dashAt(float c, vec2 pattern) {
 }
 void main() {
     bool dim = bit(vFlags, F_DIM);
+    // The polygon SDF (a 40-iteration loop) is computed ONCE per fragment, here, for the shadow and the cap alike; a wall needs none.
+    float d = vPart > 0.5 ? sdPolygon(vUv) * vPx : 0.0;     // device px from the outline
     if (vPart > 1.5) {
-        float sd = sdPolygon(vUv) * vPx;
+        float sd = d;
         float a = (1.0 - smoothstep(-0.15 * vPx, 0.5 * vPx, sd)) * (dim ? 0.12 : 0.32);
         vec4 o = vec4(0.0, 0.0, 0.0, a);
         if (bit(vFlags, F_CAGE)) {
             // The cage's foot: a dashed red ring on the floor round the mark (its top ring is the cap's).
             float aa2 = max(fwidth(sd), 0.0001) * 0.5;
             float ring = band(sd, ${f1(CAP_PX.outline)} * uDpr, ${f1(CAP_PX.outlineWidth / 2)} * uDpr, aa2) * dashAt(${f1(CAP_PX.outline)} * uDpr, vec2(2.0, 3.0));
-            if (ring > a) o = vec4(toneOf(uViolationTone), ring);
+            if (ring > a) o = vec4(uViolation, ring);
         }
         if (o.a <= 0.004) discard;
         fragColor = vec4(o.rgb, o.a * vFade);
@@ -178,7 +180,6 @@ void main() {
         return;
     }
     float dpr = uDpr;
-    float d = sdPolygon(vUv) * vPx;              // device px from the outline
     float aa = max(fwidth(d), 0.0001) * 0.5;
     bool inter = bit(vFlags, F_INTERCHANGE), shellFlag = bit(vFlags, F_SHELL), outlined = bit(vFlags, F_OUTLINE) || bit(vFlags, F_CAGE), pulse = bit(vFlags, F_PULSE);
     bool ring = vFill > 0.0 || shellFlag;
@@ -215,10 +216,10 @@ void main() {
         float b = band(d, -0.75 * dpr, ${f1(CAP_PX.shell)} * dpr, aa);
         body = mix(uBg, vColor, b * on);
     }
-    if (uForm > 1.5 && uForm < 2.5) body = mix(body, toneOf(uEdgeTone), 0.85 * band(d, -1.0 * dpr, 1.0 * dpr, aa)); // a slab: its edges outlined
+    if (uForm > 1.5 && uForm < 2.5) body = mix(body, uEdge, 0.85 * band(d, -1.0 * dpr, 1.0 * dpr, aa)); // a slab: its edges outlined
     body = shaded(body);
     vec3 c = mix(body, uBg, smoothstep(-aa, aa, d));
-    if (inter) c = mix(c, toneOf(uTextTone), smoothstep(back - aa, back + aa, d));
+    if (inter) c = mix(c, uText, smoothstep(back - aa, back + aa, d));
     if (ring) {
         float inBand = smoothstep(${f1(CAP_PX.ringIn)} * dpr - aa, ${f1(CAP_PX.ringIn)} * dpr + aa, d) * (1.0 - smoothstep(${f1(CAP_PX.ringOut)} * dpr - aa, ${f1(CAP_PX.ringOut)} * dpr + aa, d));
         float a = atan(vUv.x, -vUv.y) / (2.0 * PI);
@@ -226,7 +227,7 @@ void main() {
         float on = vFill > 0.0 ? step(f, vFill) : dashAt(4.0 * dpr, vec2(3.0, 3.0));
         c = mix(c, vColor2, inBand * on);
     }
-    c = mix(c, toneOf(uViolationTone), outlineA * (1.0 - edge));
+    c = mix(c, uViolation, outlineA * (1.0 - edge));
     c = mix(c, toneOf(uChangedTone), pulseBand);
     fragColor = vec4(dim ? mix(c, uBg, 0.7) : c, alpha);
 }`;

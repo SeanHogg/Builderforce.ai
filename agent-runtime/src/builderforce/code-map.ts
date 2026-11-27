@@ -4,8 +4,11 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createSubsystemLogger } from "../logging/subsystem.js";
 import { parseTypeScriptFile, extractImportsAndExports } from "./ast-parser.js";
 import type { CodeMap, DependencyNode, ExportInfo, ImportInfo, FileInfo } from "./types.js";
+
+const log = createSubsystemLogger("workspace/code-map");
 
 /**
  * Build a semantic code map for a project
@@ -57,7 +60,7 @@ export async function buildCodeMap(projectRoot: string, filePatterns: string[]):
         dependencies.set(file, deps);
       } catch (error) {
         // Skip files that can't be parsed
-        console.warn(`Failed to parse ${file}:`, error);
+        log.warn(`Failed to parse ${file}: ${String(error)}`);
       }
     }
   }

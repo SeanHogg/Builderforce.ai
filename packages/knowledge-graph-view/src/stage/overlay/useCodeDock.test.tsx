@@ -20,7 +20,7 @@ function scene(readSource?: SceneProps['surface']['readSource']) {
     const graph = surfaceFixture();
     const model = buildStageModel(graph);
     const drill = { stack: [], view: null, canOut: false, parent: null, selected: null, select: vi.fn(), canEnter: () => ({ can: false, reason: 'noSymbols' as const }), enter: vi.fn(), out: vi.fn(), loading: false, notice: null, symbols: [], reanchored: { seq: 0, moves: new Map() } };
-    return { graph, p: { graph, labels: L, onSelect: vi.fn(), surface: { stations: model.stations, drill, line: null, selectLine: vi.fn(), selectStation: vi.fn(), setQuestion: vi.fn(), openPanel: vi.fn(), readSource } } as unknown as SceneProps };
+    return { graph, p: { graph, labels: L, onSelect: vi.fn(), surface: { stations: model.stations, drill, line: null, selectLine: vi.fn(), selectStation: vi.fn(), question: 'where', lit: null, setQuestion: vi.fn(), openPanel: vi.fn(), readSource } } as unknown as SceneProps };
 }
 
 describe('the docked pane is not the reading pane', () => {

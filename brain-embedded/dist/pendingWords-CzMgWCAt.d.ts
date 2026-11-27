@@ -1,5 +1,5 @@
-import { a as BrainTraceEvent, U as UsageSurface, B as BrainMessage, P as PackageDirProbe } from './brainTriage-CpMG35_T.cjs';
-import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-DkPrGnWT.cjs';
+import { a as BrainTraceEvent, U as UsageSurface, B as BrainMessage, P as PackageDirProbe } from './brainTriage-CpMG35_T.js';
+import { L as LocalRuntimeId, b as LocalEndpoint, a as LocalRuntimeProbe, c as LocalModel } from './probe-DkPrGnWT.js';
 import { EvermindRecallResult } from '@seanhogg/builderforce-memory/evermind';
 import { ConsolidateOptions, ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 
@@ -2570,6 +2570,11 @@ interface BrainRunRequest {
      */
     knowledge?: RunKnowledgeLog;
     tools?: BrainToolSpec[];
+    /** Stable catalog names with a different model-facing wire spelling. */
+    wireToolNames?: readonly {
+        name: string;
+        wireName: string;
+    }[];
     model?: string;
     /** Hard-pin a deliberate user-selected model. */
     modelStrict?: boolean;

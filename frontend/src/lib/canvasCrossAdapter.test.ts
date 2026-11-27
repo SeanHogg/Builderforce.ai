@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTranslator } from 'next-intl';
 import en from '@/i18n/messages/en.json';
 import { canvasNoticesFrom, type CanvasNoticeTranslator } from './canvasNotices';
 import type { RunEvent, RunOutcome } from '@builderforce/agent-run';
+import type { McpToolEntry } from '@seanhogg/builderforce-brain-embedded';
 
 /**
  * The Creation Canvas under the ONE scripted task (PRD 35 §3.3). `runCreationCanvasAi` builds the canvas's own ports (its
@@ -13,18 +14,18 @@ import type { RunEvent, RunOutcome } from '@builderforce/agent-run';
 
 const mocks = vi.hoisted(() => ({
   streamChatCompletion: vi.fn(),
+  fetchMcpToolEntries: vi.fn(async (): Promise<McpToolEntry[]> => []),
   events: [] as RunEvent[],
   outcome: undefined as RunOutcome | undefined,
 }));
 
 vi.mock('@seanhogg/builderforce-brain-embedded', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@seanhogg/builderforce-brain-embedded')>()),
-  fetchMcpToolEntries: vi.fn(async () => []),
-  mcpActionsFrom: vi.fn(() => []),
+  fetchMcpToolEntries: mocks.fetchMcpToolEntries,
   streamChatCompletion: mocks.streamChatCompletion,
   resolveBrainStream: (config: { stream?: unknown }) => config.stream ?? mocks.streamChatCompletion,
 }));
-vi.mock('@/lib/brain/runtime', () => ({ brainConfig: { transport: {} } }));
+vi.mock('@/lib/brain/runtime', () => ({ brainConfig: { transport: { baseUrl: 'https://canvas.test', getToken: () => 'fixture' } } }));
 vi.mock('@/lib/brain/guestRuntime', () => ({ guestBrainConfig: { transport: {} } }));
 vi.mock('@/lib/guestRoomApi', () => ({ ensureGuestToken: vi.fn(async () => true) }));
 // The one call every adapter makes: the agent runs exactly as it would, with the adapter's own event sink wrapped to copy what
@@ -50,9 +51,13 @@ const NOTICES = canvasNoticesFrom(((key, values) => translateNotice(key as never
 describe('the Creation Canvas under the shared scripted task', () => {
   beforeEach(() => {
     mocks.streamChatCompletion.mockReset();
+    mocks.fetchMcpToolEntries.mockReset();
+    mocks.fetchMcpToolEntries.mockResolvedValue([]);
     mocks.events.length = 0;
     mocks.outcome = undefined;
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it('emits the shared RunEvent trace and the shared answer', async () => {
     for (const c of CONFORMANCE_SCRIPT) {
@@ -71,5 +76,28 @@ describe('the Creation Canvas under the shared scripted task', () => {
     expect(conformanceTrace(mocks.events)).toEqual(CONFORMANCE_ENTRY_TRACE);
     expect(mocks.outcome).toMatchObject({ kind: 'finished', output: CONFORMANCE_ANSWER });
     expect(answer).toBe(CONFORMANCE_ANSWER);
+  });
+
+  it.each([false, true])('checks tenant approval before a canonical relay call issues a request (%s)', async (approved) => {
+    const create = { extensionId: 'builtin', tool: 'tasks.create', name: 'builtin_tasks_create', description: 'Create a Platform task', parameters: { type: 'object' }, mutates: true };
+    mocks.fetchMcpToolEntries.mockResolvedValue([create, { ...create, tool: 'runtime.preview_status', name: 'builtin_runtime_preview_status', mutates: false }]);
+    mocks.streamChatCompletion.mockResolvedValueOnce({
+      text: '', finishReason: 'tool_calls',
+      toolCalls: [{ id: 'create', name: 'platform__tasks_create', args: '{"title":"Follow up"}' }],
+    }).mockResolvedValue({ text: 'I handled the Platform request.', finishReason: 'stop', toolCalls: [] });
+    const relay = vi.fn(async () => new Response(JSON.stringify({ result: { id: 12 } })));
+    vi.stubGlobal('fetch', relay);
+    const confirmAction = vi.fn(async () => approved);
+    await runCreationCanvasAi({ prompt: 'File a follow-up in the Platform backlog.', canvasSnapshot: '{"objects":[]}', persistence: 'server', canvasActions: [], notices: NOTICES, confirmAction });
+
+    const [request] = mocks.streamChatCompletion.mock.calls[0]!;
+    expect(request.tools.map((tool: { function: { name: string } }) => tool.function.name)).toEqual(expect.arrayContaining(['platform__tasks_create', 'builtin_runtime_preview_status']));
+    expect(confirmAction).toHaveBeenCalledExactlyOnceWith({ name: 'builtin_tasks_create', args: { title: 'Follow up' } });
+    expect(relay).toHaveBeenCalledTimes(approved ? 1 : 0);
+    if (approved) {
+      expect(relay).toHaveBeenCalledWith('https://canvas.test/llm/v1/mcp/call', expect.objectContaining({
+        method: 'POST', body: JSON.stringify({ extensionId: 'builtin', tool: 'tasks.create', arguments: { title: 'Follow up' } }),
+      }));
+    }
   });
 });

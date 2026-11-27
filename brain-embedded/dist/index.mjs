@@ -8211,12 +8211,16 @@ function BrainActionsProvider({ children }) {
     const entry = registry2.current.get(name);
     return entry ? isBrainActionMutating(entry.action, args) : isMutatingTool(name);
   }, []);
-  const toolSpecs = useMemo2(() => {
-    return toolSpecsFor([...registry2.current.values()].map((e) => e.action));
+  const { toolSpecs, wireToolNames } = useMemo2(() => {
+    const actions = [...registry2.current.values()].map(({ action }) => action);
+    return {
+      toolSpecs: toolSpecsFor(actions),
+      wireToolNames: actions.flatMap(({ name, wireName }) => wireName ? [{ name, wireName }] : [])
+    };
   }, [version2]);
   const value = useMemo2(
-    () => ({ toolSpecs, runTool, isMutating, register }),
-    [toolSpecs, runTool, isMutating, register]
+    () => ({ toolSpecs, wireToolNames, runTool, isMutating, register }),
+    [toolSpecs, wireToolNames, runTool, isMutating, register]
   );
   return /* @__PURE__ */ jsx2(BrainRegistrarContext.Provider, { value: register, children: /* @__PURE__ */ jsx2(BrainActionsContext.Provider, { value, children }) });
 }
@@ -8230,7 +8234,7 @@ function useBrainActions() {
 function declarationSignature(actions) {
   try {
     return JSON.stringify(
-      actions.map((a) => [a.name, a.description, a.parameters, typeof a.mutates === "function" ? "fn" : a.mutates ?? false])
+      actions.map((a) => [a.name, a.wireName, a.description, a.parameters, typeof a.mutates === "function" ? "fn" : a.mutates ?? false])
     );
   } catch {
     return actions.map((a) => a.name).join(",");
@@ -8240,6 +8244,9 @@ function liveAction(name, latest) {
   const current = () => latest.current.find((a) => a.name === name);
   return {
     name,
+    get wireName() {
+      return current()?.wireName;
+    },
     get description() {
       return current()?.description ?? "";
     },
@@ -8313,25 +8320,27 @@ async function fetchMcpToolEntries(transport, skipExtensionIds = []) {
   const skip = new Set(skipExtensionIds);
   return tools.filter((t) => !skip.has(t.extensionId));
 }
-function mcpActionsFrom(entries, transport, onToolResult, localTools) {
+function mcpActionsFrom(entries, transport, onToolResult, localTools, toolWireName) {
   return entries.map((entry) => ({
     name: entry.name,
+    wireName: toolWireName?.(entry),
     description: entry.description,
     parameters: entry.parameters,
     // Gate writes off the advertised flag; only an explicit mutates=false is
     // read-only. Undefined (external servers) ⇒ mutating, so the host's
     // confirm-before-mutate gate fires (fail safe).
     mutates: requiresWriteApproval(entry),
-    run: (args) => {
+    run: async (args) => {
       const mutating = requiresWriteApproval(entry);
+      const local = localTools?.(entry);
+      const token = local ? null : transport.getToken();
       const exec = async () => {
-        const local = localTools?.(entry);
         if (local) {
           const out2 = await local(args);
           onToolResult?.({ name: entry.name, tool: entry.tool, extensionId: entry.extensionId, mutating, ok: !isErrorResult(out2) });
           return out2;
         }
-        const relay = createMcpRelay({ baseUrl: transport.baseUrl, token: transport.getToken() });
+        const relay = createMcpRelay({ baseUrl: transport.baseUrl, token });
         const res = await relay.call({ extensionId: entry.extensionId, tool: entry.tool, arguments: args });
         const body = await res.json().catch(() => ({}));
         const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : body.result ?? body;
@@ -8344,17 +8353,20 @@ function mcpActionsFrom(entries, transport, onToolResult, localTools) {
         });
         return out;
       };
-      if (mutating && isCreateTool(entry.name, entry.tool)) {
-        const key = `${entry.extensionId}:${entry.tool}:${stableStringify(args)}`;
+      if (token && mutating && isCreateTool(entry.name, entry.tool)) {
+        const key = JSON.stringify([transport.baseUrl, token, entry.extensionId, entry.tool, stableStringify(args)]);
         const now = nowMs();
         const prior = recentCreates.get(key);
         if (prior && now - prior.at < CREATE_DEDUPE_MS) return prior.result;
         const result = exec();
         recentCreates.set(key, { at: now, result });
         for (const [k, v] of recentCreates) if (now - v.at >= CREATE_DEDUPE_MS) recentCreates.delete(k);
+        const drop = () => {
+          if (recentCreates.get(key)?.result === result) recentCreates.delete(key);
+        };
         result.then((out) => {
-          if (isErrorResult(out)) recentCreates.delete(key);
-        }).catch(() => recentCreates.delete(key));
+          if (isErrorResult(out)) drop();
+        }).catch(drop);
         return result;
       }
       return exec();
@@ -8374,6 +8386,7 @@ function useMcpExtensions(options) {
   onToolResultRef.current = options?.onToolResult;
   const localToolsRef = useRef3(options?.localTools);
   localToolsRef.current = options?.localTools;
+  const toolWireName = options?.toolWireName;
   useEffect4(() => {
     let cancelled = false;
     fetchMcpToolEntries(transport, skipKey ? skipKey.split(",") : []).then((tools) => {
@@ -8392,8 +8405,8 @@ function useMcpExtensions(options) {
     };
   }, [transport, skipKey]);
   const actions = useMemo3(
-    () => mcpActionsFrom(entries, transport, (info) => onToolResultRef.current?.(info), (entry) => localToolsRef.current?.(entry)),
-    [entries, transport]
+    () => mcpActionsFrom(entries, transport, (info) => onToolResultRef.current?.(info), (entry) => localToolsRef.current?.(entry), toolWireName),
+    [entries, transport, toolWireName]
   );
   useRegisterBrainActions(actions);
   useEffect4(() => {
@@ -14997,14 +15010,15 @@ function toCompletion(result, requested) {
   };
 }
 function brainModelTransport(deps) {
-  const { turn, stream, call: call2, windows } = deps;
+  const { turn, stream, call: call2, windows, mapTailSection } = deps;
   return {
     async complete(request, signal) {
       if (signal?.aborted) throw new Error("run stopped");
       const tools = request.tools && request.tools.length > 0 ? request.tools : void 0;
       const session = turn.open(request);
       const attempt = async (req) => {
-        const wire = withTail(req.messages.map(wireRowOf), session.tail);
+        const tail = mapTailSection ? session.tail?.map(mapTailSection) : session.tail;
+        const wire = withTail(req.messages.map(wireRowOf), tail);
         const messages = session.fit ? await session.fit(wire, req.model) : wire;
         const maxTokens = session.maxTokens;
         const ask2 = () => stream(
@@ -15930,12 +15944,86 @@ function brainHumanChannel() {
   };
 }
 
+// src/run/modelToolNames.ts
+var TOOL_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+function counts(names) {
+  const result = /* @__PURE__ */ new Map();
+  for (const name of names) result.set(name, (result.get(name) ?? 0) + 1);
+  return result;
+}
+function mapRouterTarget(tool, args, mapName) {
+  const key = tool === TOOL_ROUTER_FIND ? "query" : tool === TOOL_ROUTER_DESCRIBE || tool === TOOL_ROUTER_INVOKE ? "name" : void 0;
+  if (!key) return args;
+  try {
+    const value = JSON.parse(args);
+    const target2 = value?.[key];
+    if (typeof target2 !== "string") return args;
+    const next = mapName(target2);
+    return next === target2 ? args : JSON.stringify({ ...value, [key]: next });
+  } catch {
+    return args;
+  }
+}
+function modelToolNames(req) {
+  const { stream, tools, wireToolNames } = req;
+  if (!wireToolNames?.length) return { stream };
+  const catalog = counts(tools?.map((tool) => tool.function.name) ?? []);
+  const candidates = wireToolNames.filter(({ name, wireName }) => TOOL_NAME.test(name) && TOOL_NAME.test(wireName) && catalog.get(name) === 1 && !catalog.has(wireName));
+  const names = counts(candidates.map(({ name }) => name));
+  const wireNames = counts(candidates.map(({ wireName }) => wireName));
+  const mappings = candidates.filter(({ name, wireName }) => names.get(name) === 1 && wireNames.get(wireName) === 1);
+  if (!mappings.length) return { stream };
+  const outgoing = new Map(mappings.map(({ name, wireName }) => [name, wireName]));
+  const incoming = new Map(mappings.map(({ name, wireName }) => [wireName, name]));
+  const mentioned = new RegExp(`(?<![A-Za-z0-9_-])(?:${[...outgoing.keys()].join("|")})(?![A-Za-z0-9_-])`, "g");
+  const toWire = (name) => outgoing.get(name) ?? name;
+  const fromWire = (name) => incoming.get(name) ?? name;
+  const mapPrompt = (text2) => text2.replace(mentioned, toWire);
+  const wired2 = async (options, handlers) => {
+    const onToolCallDelta = handlers?.onToolCallDelta;
+    const result = await stream({
+      ...options,
+      ...options.tools ? { tools: options.tools.map((tool) => {
+        const name = toWire(tool.function.name);
+        return name === tool.function.name ? tool : { ...tool, function: { ...tool.function, name } };
+      }) } : {},
+      messages: options.messages.map((message) => {
+        const content = message.role === "system" && typeof message.content === "string" ? mapPrompt(message.content) : message.content;
+        const calls = message.tool_calls?.map((call2) => {
+          const name = toWire(call2.function.name);
+          const args = mapRouterTarget(call2.function.name, call2.function.arguments, toWire);
+          return name === call2.function.name && args === call2.function.arguments ? call2 : {
+            ...call2,
+            function: { ...call2.function, name, arguments: args }
+          };
+        });
+        if (content === message.content && !calls?.some((call2, index) => call2 !== message.tool_calls?.[index])) return message;
+        return {
+          ...message,
+          content,
+          ...calls ? { tool_calls: calls } : {}
+        };
+      })
+    }, onToolCallDelta ? {
+      ...handlers,
+      onToolCallDelta: (index, delta) => onToolCallDelta(index, delta.name ? { ...delta, name: fromWire(delta.name) } : delta)
+    } : handlers);
+    return { ...result, toolCalls: result.toolCalls.map((call2) => {
+      const name = fromWire(call2.name);
+      return { ...call2, name, args: mapRouterTarget(name, call2.args, fromWire) };
+    }) };
+  };
+  return { stream: wired2, mapPrompt };
+}
+
 // src/run/webAdapter.ts
 function buildBrainRunPorts(b) {
   const { req } = b;
+  const names = modelToolNames(req);
   return {
     model: brainModelRules(brainModelTransport({
-      stream: req.stream,
+      stream: names.stream,
+      mapTailSection: names.mapPrompt,
       turn: b.turn,
       call: {
         ...req.routingMode ? { routingMode: req.routingMode } : {},

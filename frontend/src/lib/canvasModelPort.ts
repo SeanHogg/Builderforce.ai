@@ -1,5 +1,6 @@
 import {
   RepetitionLoopError,
+  modelToolNames,
   providerFailureEvent,
   providerFailureTrace,
   streamSummaryCompletion,
@@ -18,6 +19,7 @@ import { servedOnDevice, servedRef } from '@builderforce/local-inference';
 import { cachedModelWindow } from '@/lib/llmModelWindow';
 import { toChatMessages } from '@/lib/canvasRunMessages';
 import { browserOnDeviceTasks } from '@/lib/brain/onDeviceTasks';
+import { specsFor } from '@/lib/canvasAiToolExecution';
 
 /** The gateway's usage report as the agent's `ModelUsage` (prompt/completion → input/output). */
 function modelUsageOf(usage: NonNullable<CanvasTurn['usage']>): ModelUsage {
@@ -102,7 +104,9 @@ function classifyStreamError(run: CanvasRun, error: unknown, askedModel: string 
  * the arc stage, the guest-turn metadata — and reports each completion for diagnostics.
  */
 export function canvasModelTransport(run: CanvasRun): ModelTransport {
-  const { options, stream, guestTurnId } = run;
+  const { options, stream, guestTurnId, actions } = run;
+  const wireToolNames = actions.flatMap(({ name, wireName }) => wireName ? [{ name, wireName }] : []);
+  const providerStream = wireToolNames.length ? modelToolNames({ stream, tools: specsFor(actions), wireToolNames }).stream : stream;
   let completions = 0;
   return {
     // The window the page already knows (the gateway catalog's rows, the on-device runtime
@@ -143,7 +147,7 @@ export function canvasModelTransport(run: CanvasRun): ModelTransport {
       run.finalText = '';
       let result: CanvasTurn;
       try {
-        result = await stream({
+        result = await providerStream({
           // THE stream client's silence rule (no headers, or no bytes, for this long)
           // at the canvas's own budget — there is no second watchdog.
           idleTimeoutMs: CANVAS_STREAM_IDLE_MS,
