@@ -29779,6 +29779,8 @@
     },
     "blankCanvasTagline": "一块空白画板。说出你的需求，它便成形。",
     "startersLabel": "开始方式",
+    "starterKitLabel": "应用入门套件",
+    "starterKitPlaceholder": "选择套件",
     "runtimeObject": {
       "projectHealth": "{title} 健康度",
       "projectRoadmap": "{title} 路线图",

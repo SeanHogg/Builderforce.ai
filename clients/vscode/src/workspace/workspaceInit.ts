@@ -53,6 +53,8 @@ export async function buildWorkspaceInit(
     session?: WorkspaceCanvasSession;
     surface: "chat" | "graph";
     boardBeside?: boolean;
+    /** The sidebar's first frame uses only the editor's current state. */
+    initial?: boolean;
     /** A step (the definition index, the token, the model route…) was still pending at its
      *  deadline and has now landed: re-push init. Fires at most once per build. */
     onLate?: () => void;
@@ -71,16 +73,14 @@ export async function buildWorkspaceInit(
   // degrades to a safe value and re-pushes init when it lands (`onLate`).
   const budget = createInitBudget(opts.onLate);
   const fallbackRoute = pickedRoute();
-  // Grounding starts with the rest (its own budget): not queued behind them.
-  const groundingP = stableGroundingWithin(root, INIT_GROUNDING_BUDGET_MS, { onLate: budget.late });
-  // The `/` menu's Actions tab (PRD 31 §W11): local only (the registry + one read of each folder's manifest).
-  const composerCommandsP = composerCommandHost(ctx).init();
-  const [token, editorContext, projectNames, personalityBlock, modelChoice, localModels, pendingChanges] = await Promise.all([
+  const editorSnapshot = getEditorContext();
+  const emptyCommands = { help: { entries: [] } };
+  const enrich = () => Promise.all([
     // Null while signed in is tolerated: the webview mints its own (`WorkspaceApp.mintToken`).
     budget.step("token", signedIn && online ? getTenantJwt(ctx.secrets).then(boundToken) : Promise.resolve(null), null, (t) => t !== null),
     // Awaited (not peeked) so the FIRST turn already knows the repo — the whole
     // point of shipping this: the agent must not open a chat asking where the code is.
-    budget.step("editorContext", getEditorContextLive(), getEditorContext()),
+    budget.step("editorContext", getEditorContextLive(), editorSnapshot),
     // `projectId → name` for every project, so the header can name the project an
     // existing chat belongs to (best-effort; falls back to "No project").
     budget.step("projectNames", signedIn && online ? projectNamesOf(ctx) : Promise.resolve({}), {} as Record<string, string>, (names) => Object.keys(names).length > 0),
@@ -104,9 +104,12 @@ export async function buildWorkspaceInit(
     // opened after the edits still says they are waiting; refreshed via
     // `pendingChanges` messages.
     budget.step("pendingChanges", detectPendingChanges(), EMPTY_CHANGE_SET),
+    stableGroundingWithin(root, INIT_GROUNDING_BUDGET_MS, { onLate: budget.late }),
+    budget.step("composerCommands", composerCommandHost(ctx).init(), emptyCommands, (commands) => commands.help.entries.length > 0),
   ]);
-  const grounding = await groundingP;
-  const composerCommands = await composerCommandsP;
+  const [token, editorContext, projectNames, personalityBlock, modelChoice, localModels, pendingChanges, grounding, composerCommands] = opts.initial
+    ? [null, editorSnapshot, {}, "", fallbackRoute, [], EMPTY_CHANGE_SET, undefined, emptyCommands] as const
+    : await enrich();
   opts.onBuilt?.(budget.hadLate());
   return {
     type: "init",

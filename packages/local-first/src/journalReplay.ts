@@ -146,7 +146,11 @@ function* foldFrom(bytes: Uint8Array, bounds: readonly JournalFrameBound[], from
   return { state, applied, baseEnd: closedAt ?? lastBase, baseClosed: lastBase < 0 || closedAt !== undefined, generation };
 }
 
-function* scanSteps(bytes: Uint8Array): Generator<void, JournalOpenScan> {
+export interface JournalStateScan extends Omit<JournalOpenScan, 'latest'> {
+  readonly state: CommittedState | undefined;
+}
+
+function* scanSteps(bytes: Uint8Array): Generator<void, JournalStateScan> {
   const bounds: JournalFrameBound[] = [];
   for (const bound of walkFrames(bytes)) {
     bounds.push(bound);
@@ -155,7 +159,7 @@ function* scanSteps(bytes: Uint8Array): Generator<void, JournalOpenScan> {
   const walkedTo = bounds.length === 0 ? 0 : bounds[bounds.length - 1]!.end;
   const damaged = walkedTo < bytes.byteLength && damagedAfterStop(bytes, walkedTo);
   if (bounds.length === 0) {
-    return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, generation: undefined, corrupt: damaged ? 'damaged-frame' : undefined, baseClosed: !damaged };
+    return { state: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, generation: undefined, corrupt: damaged ? 'damaged-frame' : undefined, baseClosed: !damaged };
   }
   let start = 0;
   for (let index = bounds.length - 1; index >= 0; index -= 1) {
@@ -173,14 +177,14 @@ function* scanSteps(bytes: Uint8Array): Generator<void, JournalOpenScan> {
   // A crc-valid frame that fails to parse leaves committed < bounds.length: that is damage too, never truncated.
   const corrupt = damaged || committed < bounds.length ? 'damaged-frame' : folded.baseClosed ? undefined : 'unclosed-base';
   const baseClosed = folded.baseClosed;
-  if (!folded.state || folded.applied === 0) return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, generation: undefined, corrupt, baseClosed: false };
+  if (!folded.state || folded.applied === 0) return { state: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, generation: undefined, corrupt, baseClosed: false };
   const committedBytes = bounds[committed - 1]!.end;
   const tailFrames = Math.max(0, committed - 1 - folded.baseEnd);
   const tailBytes = folded.baseEnd >= 0 ? committedBytes - bounds[folded.baseEnd]!.end : committedBytes;
-  return { latest: folded.state.view(), frames: committed, committedBytes, tailFrames, tailBytes, generation: folded.generation, corrupt, baseClosed };
+  return { state: folded.state, frames: committed, committedBytes, tailFrames, tailBytes, generation: folded.generation, corrupt, baseClosed };
 }
 
-function drive(steps: Generator<void, JournalOpenScan>): JournalOpenScan {
+function drive(steps: Generator<void, JournalStateScan>): JournalStateScan {
   for (;;) {
     const next = steps.next();
     if (next.done) return next.value;
@@ -192,12 +196,18 @@ function drive(steps: Generator<void, JournalOpenScan>): JournalOpenScan {
  * committed bytes end. Only the frames from the last base onward are parsed.
  */
 export function scanJournal(bytes: Uint8Array): JournalScan {
-  const { latest, frames, committedBytes } = drive(scanSteps(bytes));
-  return { latest, frames, committedBytes };
+  const { state, frames, committedBytes } = drive(scanSteps(bytes));
+  return { latest: state?.view(), frames, committedBytes };
 }
 
 /** `scanJournal` for a host's open: gives the thread back (`pause`) between frames. */
 export async function scanJournalAsync(bytes: Uint8Array, pause: () => Promise<void>): Promise<JournalOpenScan> {
+  const { state, ...scan } = await scanJournalStateAsync(bytes, pause);
+  return { ...scan, latest: state?.view() };
+}
+
+/** Open a store from the replayed state without indexing the same rows twice. */
+export async function scanJournalStateAsync(bytes: Uint8Array, pause: () => Promise<void>): Promise<JournalStateScan> {
   const steps = scanSteps(bytes);
   for (;;) {
     const next = steps.next();

@@ -174,6 +174,17 @@ describe('the app surface', () => {
     expect(screen.queryByRole('button', { name: /Evermind/ })).toBeNull();
   });
 
+  it('passes the selected starter kit to the workspace creator', async () => {
+    const actions = session([]);
+    renderSurface(<CanvasAppSurface nodes={[]} session={actions} persistence="local" onExit={vi.fn()} />);
+    const picker = screen.getByRole('combobox', { name: 'App starter kit' });
+    fireEvent.change(picker, { target: { value: 'react-node' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(actions.createApp).toHaveBeenCalledWith({
+      title: 'React (Vite) + Node.js (Express)', modality: 'designer', kitId: 'react-node',
+    }));
+  });
+
   it('starts a movie on the current board through the shared starter registry', async () => {
     const actions = session([]);
     const onStartProject = vi.fn();

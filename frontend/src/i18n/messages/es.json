@@ -29781,6 +29781,8 @@
     },
     "blankCanvasTagline": "Un tablero vacío. Di lo que quieres y toma forma.",
     "startersLabel": "Formas de empezar",
+    "starterKitLabel": "Kit inicial de aplicaciones",
+    "starterKitPlaceholder": "Elige un kit",
     "runtimeObject": {
       "projectHealth": "Salud de {title}",
       "projectRoadmap": "Hoja de ruta de {title}",

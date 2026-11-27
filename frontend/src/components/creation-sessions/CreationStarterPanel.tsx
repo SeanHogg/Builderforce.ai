@@ -5,6 +5,7 @@ import { useCanvasProjectStarters } from '@/lib/useCanvasProjectStarters';
 import { useLocalizedModalities } from '@/lib/useModalityCopy';
 import { Icon } from '@/components/ui/Icon';
 import { useCreateCanvas } from './useCreateCanvas';
+import { StarterKitPicker } from './StarterKitPicker';
 import styles from './CreationLibrary.module.css';
 
 /**
@@ -116,6 +117,7 @@ export function CreationStarterPanel() {
         ))}
       </div>
 
+      <StarterKitPicker disabled={create.creating || create.limitReached} onStart={({ value }) => router.push(`/create/new?kit=${encodeURIComponent(value)}`)} />
       {create.limitReached && <p role="alert" className={styles.quotaWarning}>{t('sessionLimitReached')}</p>}
     </section>
   );

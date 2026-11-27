@@ -14,7 +14,7 @@
  *     frames there; the store applies them and `advance`s. Only a different FILE (another
  *     window compacted: new inode/birth time) or a base frame in the tail forces a full
  *     `load`.
- *   - OPEN IS ASYNC AND CHUNKED. `load` reads the file and folds it with `scanJournalAsync`,
+ *   - OPEN IS ASYNC AND CHUNKED. `load` reads the file and folds it with `scanJournalStateAsync`,
  *     giving the thread back between frames; a store of many small frames never blocks the
  *     host for more than one frame's work.
  *   - COMPACTION IS A STREAM. `compact` writes a sequence of bounded frames to a temp file,
@@ -38,8 +38,9 @@ import {
   mintJournalGeneration,
   readJournalTail,
   snapshotFrames,
-  scanJournalAsync,
+  scanJournalStateAsync,
   type JournalOpenScan,
+  type JournalStateScan,
   type LocalFirstDelta,
   type LocalFirstSnapshot,
 } from "@builderforce/local-first";
@@ -92,6 +93,8 @@ export interface JournalOpen {
 
 /** A journal read in full; nothing is tracked until it is `adopt`ed. */
 export interface LoadedJournal extends JournalOpen {
+  /** The indexed state available for a store's first open. */
+  state?: JournalStateScan["state"];
   committedBytes: number;
   tailFrames: number;
   tailBytes: number;
@@ -219,10 +222,11 @@ export function createNodeJournalIo(directory: string, options: NodeJournalIoOpt
       return { latest: undefined, frames: 0, committedBytes: 0, tailFrames: 0, tailBytes: 0, identity: identityOf(stat) };
     }
     const decodeStarted = onStageTiming ? Date.now() : 0;
-    const scan = await scanJournalAsync(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength), pause);
+    const scan = await scanJournalStateAsync(raw, pause);
     if (onStageTiming) onStageTiming({ stage: "import.decode", ms: Date.now() - decodeStarted, detail: `${scan.frames} frames` });
     return {
-      latest: scan.latest,
+      get latest() { return scan.state?.view(); },
+      state: scan.state,
       frames: scan.frames,
       committedBytes: scan.committedBytes,
       tailFrames: scan.tailFrames,

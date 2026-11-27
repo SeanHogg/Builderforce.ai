@@ -100,6 +100,8 @@ export interface MemoryLocalFirstStore extends LocalFirstStore {
    * transaction is in flight: the host applies foreign commits only between its own.
    */
   applyDelta(delta: LocalFirstDelta): void;
+  /** Install a replayed state before the store is first published to readers. */
+  adoptInitialState(state: CommittedState): void;
   /**
    * The committed state as arrays WITHOUT cloning the rows: read-only, valid until the next
    * commit. A compaction streams it to disk; `export()` is the cloning, caller-owned form.
@@ -111,7 +113,7 @@ export function createMemoryLocalFirstStore(
   initial?: Partial<LocalFirstSnapshot>,
   options: MemoryLocalFirstStoreOptions = {},
 ): MemoryLocalFirstStore {
-  const state = CommittedState.from(initial);
+  let state = CommittedState.from(initial);
   let tail: Promise<unknown> = Promise.resolve();
   let transacting = false;
   const listeners = new Set<LocalFirstListener>();
@@ -145,6 +147,9 @@ export function createMemoryLocalFirstStore(
     applyDelta(delta) {
       if (transacting) throw new Error('local_first_apply_during_transaction');
       notify(state.applyDelta(delta));
+    },
+    adoptInitialState(replayed) {
+      state = replayed;
     },
     view: () => state.view(),
     export: async () => clone(state.view()),

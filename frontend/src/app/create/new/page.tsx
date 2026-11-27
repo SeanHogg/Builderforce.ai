@@ -14,6 +14,8 @@ import { modelComparisonCanvasHref, readModelComparison } from '@/lib/modelCompa
 import { CANVAS_PROMPT_MAX } from '@/lib/canvasIntent';
 import { projectTypeById, type ProjectTypeEntry } from '@builderforce/ide-templates/project-types';
 import { startMovieStarter } from '@/lib/canvas/startMovieStarter';
+import { canvasKitById, startAppKit } from '@/lib/canvas/startAppKit';
+import { reportStudioFailure } from '@/lib/pendingWork';
 
 export const runtime = 'edge';
 
@@ -39,6 +41,7 @@ export default function NewCreationSessionPage() {
   const [checkedInvite, setCheckedInvite] = useState(false);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
   const [starter, setStarter] = useState<ProjectTypeEntry>();
+  const [kit, setKit] = useState<ReturnType<typeof canvasKitById>>();
   const [projectId, setProjectId] = useState<number>();
 
   // Read the invite BEFORE deciding what this page is: a room link must not be
@@ -56,6 +59,7 @@ export default function NewCreationSessionPage() {
       setInitialPrompt(params.get('prompt')?.trim().slice(0, CANVAS_PROMPT_MAX) || '');
       setModelComparisonIds(readModelComparison(params));
       setStarter(projectTypeById(params.get('starter')));
+      setKit(canvasKitById(params.get('kit')));
       const id = Number(params.get('projectId'));
       if (Number.isSafeInteger(id) && id > 0) setProjectId(id);
     } catch {
@@ -74,9 +78,20 @@ export default function NewCreationSessionPage() {
     if (!authReady || !checkedInvite || inviteCode || started.current) return;
     started.current = true;
     setMessage(t('creatingCanvas'));
+    const starterFailed = (error: unknown) => {
+      void reportStudioFailure('canvas.startStarter', error);
+      setMessage(t('surface.app.start.failed'));
+    };
     if (starter?.canvasStarter?.kind === 'video') {
       void startMovieStarter(projectTypeText(starter.labelKey), hasTenant ? projectId : undefined)
-        .then(({ sessionId, videoId }) => router.replace(`/create/${sessionId}?surface=timeline&focus=${videoId}`));
+        .then(({ sessionId, videoId }) => router.replace(`/create/${sessionId}?surface=timeline&focus=${videoId}`))
+        .catch(starterFailed);
+      return;
+    }
+    if (kit) {
+      void startAppKit(kit)
+        .then(({ sessionId, nodeId }) => router.replace(`/create/${sessionId}?surface=app&focus=${nodeId}`))
+        .catch(starterFailed);
       return;
     }
     // THE one start-a-session use case (`lib/canvas/startCreationSession.ts`): the board is
@@ -90,7 +105,7 @@ export default function NewCreationSessionPage() {
         if (isPlanLimitError(error)) setPlanError(error);
         setMessage('');
       });
-  }, [authReady, checkedInvite, hasTenant, initialPrompt, inviteCode, isAuthenticated, modelComparisonIds, projectId, projectTypeText, router, starter, t]);
+  }, [authReady, checkedInvite, hasTenant, initialPrompt, inviteCode, isAuthenticated, kit, modelComparisonIds, projectId, projectTypeText, router, starter, t]);
 
   if (inviteCode) {
     return (

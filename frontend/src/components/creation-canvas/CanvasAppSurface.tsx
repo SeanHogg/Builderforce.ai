@@ -119,7 +119,12 @@ export function CanvasAppSurface({ nodes, session, persistence, sessionTitle, en
         ) : hasCodeCards || entryAppPending ? (
           <div className={styles.appEmpty} role="status"><strong>{t('preparing')}</strong></div>
         ) : (
-          <CanvasAppStart durable={persistence === 'server'} onCreate={create} onStartProject={onStartProject} />
+          <CanvasAppStart
+            durable={persistence === 'server'}
+            onCreate={create}
+            onStartProject={onStartProject}
+            onStartKit={async (kitId, kitTitle) => { await createApp({ title: kitTitle, modality: 'designer', kitId }); }}
+          />
         )}
       </div>
     </section>

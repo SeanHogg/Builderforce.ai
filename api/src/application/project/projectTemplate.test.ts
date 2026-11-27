@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { VANILLA_TEMPLATE, MOBILE_TEMPLATE, isScaffoldPath, scaffoldForModality } from '@builderforce/ide-templates';
+import { composeKit } from '@builderforce/ide-templates/kits';
 import {
   templateForProject,
   scaffoldForProject,
@@ -23,6 +24,13 @@ describe('templateForProject', () => {
   it('honours an explicit template regardless of modality/repo', () => {
     expect(templateForProject({ ...base, template: 'vanilla', modality: 'video' })).toBe(VANILLA_TEMPLATE);
     expect(templateForProject({ ...base, template: 'mobile', modality: 'designer' })).toBe(MOBILE_TEMPLATE);
+  });
+
+  it('seeds the same manifest and files as the editor for an app kit', () => {
+    const project = { ...base, template: 'kit:react-node' };
+    const files = composeKit('react-node').files;
+    expect(templateForProject(project)).toEqual(files);
+    expect(scaffoldForProject(project)).toEqual(files);
   });
 
   // A stale/unknown template id used to mean "seed nothing", which left the

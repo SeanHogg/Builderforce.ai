@@ -92,10 +92,12 @@ export async function createCanvasBuild(input: {
   title: string;
   modality: ProjectModality;
   containerProjectId?: number | null;
+  kitId?: string;
 }): Promise<IdeProject> {
   return createIdeProject({
     name: input.title.trim().slice(0, 120) || 'New build',
     modality: input.modality,
     containerProjectId: input.containerProjectId ?? null,
+    ...(input.kitId ? { template: `kit:${input.kitId}` } : {}),
   });
 }

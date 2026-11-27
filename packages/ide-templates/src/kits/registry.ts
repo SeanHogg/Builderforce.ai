@@ -54,3 +54,17 @@ const optionsOf = (kind: KitPartKind): KitPartOption[] =>
 export function listKitOptions(): KitOptions {
   return { frontends: optionsOf('frontend'), backends: optionsOf('backend'), extras: optionsOf('extra'), namedKits: NAMED_KITS };
 }
+
+/** One list for interactive pickers and command completion. */
+export function listStarterKits(): { value: string; label: string }[] {
+  const { frontends, backends } = listKitOptions();
+  const shortName = (part: KitPartOption) => part.aliases[0] ?? part.id;
+  const byId = new Map<string, string>();
+  for (const frontend of frontends) {
+    for (const backend of backends) {
+      byId.set(`${shortName(frontend)}-${shortName(backend)}`, `${frontend.label} + ${backend.label}`);
+    }
+  }
+  for (const frontend of frontends) byId.set(shortName(frontend), frontend.label);
+  return [...new Set([...NAMED_KITS, ...byId.keys()])].map((value) => ({ value, label: byId.get(value) ?? value }));
+}

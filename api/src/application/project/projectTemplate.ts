@@ -26,6 +26,7 @@ import {
   scaffoldForModality,
   templateByName,
 } from '@builderforce/ide-templates';
+import { composeKit } from '@builderforce/ide-templates/kits';
 
 export const IDE_PREFIX = 'ide/';
 
@@ -45,13 +46,19 @@ export interface TemplateObject {
   size: number;
 }
 
+function explicitTemplate(template: string | null): Record<string, string> | null {
+  if (!template?.startsWith('kit:')) return templateByName(template) ?? null;
+  const kit = composeKit(template.slice(4));
+  return kit.issues.length ? null : kit.files;
+}
+
 /**
  * The scaffold for a project's MODALITY (or explicit template), ignoring whether
  * a repo is linked. This is the "what should a runnable Mobile/Designer project
  * contain" answer; the repo-link decision belongs to the callers below.
  */
 export function scaffoldForProject(project: SeedableProject): Record<string, string> | null {
-  return templateByName(project.template) ?? scaffoldForModality(project.modality);
+  return explicitTemplate(project.template) ?? scaffoldForModality(project.modality);
 }
 
 /**
@@ -75,11 +82,11 @@ export function scaffoldForProject(project: SeedableProject): Record<string, str
  * wrote) used to mean "seed nothing", which left the workspace permanently empty.
  */
 export function templateForProject(project: SeedableProject): Record<string, string> | null {
-  const explicit = templateByName(project.template);
+  const explicit = explicitTemplate(project.template);
   if (explicit) return explicit;
   const hasRepo = !!(project.sourceControlRepoFullName || project.githubRepoUrl);
   if (hasRepo) return null;
-  return scaffoldForProject(project);
+  return scaffoldForModality(project.modality);
 }
 
 /**

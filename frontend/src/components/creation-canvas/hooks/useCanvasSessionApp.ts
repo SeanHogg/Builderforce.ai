@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { scaffoldForModality } from '@builderforce/ide-templates';
+import { composeKit } from '@builderforce/ide-templates/kits';
 import { canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
 import { appModalityFor, type BoundCanvasBuild } from '@/lib/canvasBuildTools';
 import {
   APP_STARTER_FIELD,
+  APP_KIT_FIELD,
   LOCAL_APP_KEY_FIELD,
   boundCanvasBuilds,
   canvasAppLocalKey,
@@ -47,6 +49,7 @@ export function useOpenCanvasApp({ setNodes, showApp }: {
 export interface CreateAppInput {
   title: string;
   modality: ProjectModality;
+  kitId?: string;
   /** A lens's starter, made before anyone named a platform (`APP_STARTER_FIELD`). */
   starter?: boolean;
   /** Aborted when the caller stops waiting — a starter that answers after that is dropped. */
@@ -101,21 +104,23 @@ export function useCanvasSessionApp({ nodes, nodesRef, setNodes, stage, placeApp
   useLayoutEffect(() => { buildsRef.current = builds; }, [builds]);
 
   /** The data that gives a card a workspace: a durable project, or one in this browser. */
-  const workspaceFor = useCallback(async (input: { title: string; modality: ProjectModality; containerProjectId?: number | null }): Promise<Partial<CreationNodeData>> => {
+  const workspaceFor = useCallback(async (input: { title: string; modality: ProjectModality; containerProjectId?: number | null; kitId?: string }): Promise<Partial<CreationNodeData>> => {
+    const kit = input.kitId ? composeKit(input.kitId) : undefined;
+    if (kit?.issues.length) throw new Error('Invalid starter kit.');
     if (persistence === 'server') {
-      const ide = await createCanvasBuild({ title: input.title, modality: input.modality, containerProjectId: input.containerProjectId });
+      const ide = await createCanvasBuild(input);
       return { ...canvasBuildPatch(ide), title: input.title };
     }
     const key = newLocalAppKey();
     const modality = appModalityFor(input.modality, false);
-    await seedLocalWorkspace(key, scaffoldForModality(modality) ?? scaffoldForModality(DEFAULT_MODALITY) ?? {});
-    return { title: input.title, modality, [LOCAL_APP_KEY_FIELD]: key, status: 'Workspace ready' };
+    await seedLocalWorkspace(key, kit?.files ?? scaffoldForModality(modality) ?? scaffoldForModality(DEFAULT_MODALITY) ?? {});
+    return { title: input.title, modality, [LOCAL_APP_KEY_FIELD]: key, [APP_KIT_FIELD]: input.kitId, status: 'Workspace ready' };
   }, [persistence]);
 
   const createApp = useCallback(async (input: CreateAppInput): Promise<BoundCanvasBuild> => {
     // A requested app of the starter's platform IS the starter (`claimableStarter`): claim
     // it, so the App surface runs the app the Brain then writes, not a second one beside it.
-    const starter = input.starter ? null : claimableStarter(sessionApps(nodesRef.current ?? []), input.modality);
+    const starter = input.starter || input.kitId ? null : claimableStarter(sessionApps(nodesRef.current ?? []), input.modality);
     if (starter) {
       setNodes((current) => withPrimaryApp(current.map((node) => (node.id === starter.nodeId
         ? { ...node, data: { ...node.data, title: input.title, [APP_STARTER_FIELD]: undefined } }
@@ -194,7 +199,8 @@ export function useCanvasSessionApp({ nodes, nodesRef, setNodes, stage, placeApp
       promotingRef.current.add(nodeId);
       void (async () => {
         const files = await readLocalWorkspace(localKey);
-        const ide = await createCanvasBuild({ title, modality });
+        const kit = nodesRef.current?.find((node) => node.id === nodeId)?.data[APP_KIT_FIELD];
+        const ide = await createCanvasBuild({ title, modality, kitId: typeof kit === 'string' ? kit : undefined });
         const durable = serverFileStore(ide.storageProjectId);
         await Promise.all(Object.entries(files).map(([path, content]) => durable.write(path, content)));
         setNodes((current) => current.map((node) => (node.id === nodeId
@@ -206,7 +212,7 @@ export function useCanvasSessionApp({ nodes, nodesRef, setNodes, stage, placeApp
         promotingRef.current.delete(nodeId);
       });
     }
-  }, [apps, persistence, setNodes]);
+  }, [apps, nodesRef, persistence, setNodes]);
 
   return { apps, app, buildsRef, createApp, provisionApp, selectApp, appWritten, importCards };
 }

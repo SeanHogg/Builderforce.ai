@@ -239,6 +239,7 @@ export class WorkspaceSurface implements vscode.Disposable {
   /** Re-push init (token / project / model / labels). A user- or host-initiated push starts
    *  the late re-push budget afresh; a late re-push itself goes through `sendInit` directly. */
   refresh(): void {
+    if (this.host.boardBeside && !this.ready) return;
     this.lateRepush.reset();
     void this.sendInit();
   }
@@ -294,10 +295,11 @@ export class WorkspaceSurface implements vscode.Disposable {
         // A reloaded webview abandoned any model load it was streaming.
         hooks.modelFiles?.release(this);
         this.lateRepush.reset();
-        await this.sendInit();
+        await this.sendInit(this.host.boardBeside);
         if (!live.has(this)) break;
         this.ready = true;
         for (const intent of this.pendingIntents.splice(0)) this.sendIntent(intent);
+        if (this.host.boardBeside) void this.sendInit();
         break;
       // The run verbs, forwarded to the host-owned loop. `run.start` is fire-and-forget
       // here: the host answers with `run.settled` / `run.failed` when the loop ends,
@@ -624,20 +626,21 @@ export class WorkspaceSurface implements vscode.Disposable {
 
   /** Resolves once the NEWEST init is posted — a superseded build waits on it rather than
    *  returning early, so a caller (`ready`) still posts after an init has landed. */
-  private sendInit(): Promise<void> {
+  private sendInit(initial = false): Promise<void> {
     const seq = ++this.initSeq;
     const run = (async (): Promise<void> => {
       const init = await buildWorkspaceInit(this.ctx, {
         session: this.session,
         surface: this.surfaceRequest,
         boardBeside: !!this.host.boardBeside,
+        initial,
         // Only the newest init re-pushes: a superseded build's callback would post a duplicate.
         onLate: () => { if (live.has(this) && seq === this.initSeq && this.lateRepush.allow()) void this.sendInit(); },
         // A superseded build says nothing about the newest one.
         onBuilt: (hadLate) => { if (seq === this.initSeq) this.lateRepush.built(hadLate); },
       });
       if (seq !== this.initSeq) return this.latestInit;
-      this.post(this.host.frame ? this.host.frame(init) : init);
+      if (live.has(this)) this.post(this.host.frame ? this.host.frame(init) : init);
     })();
     this.latestInit = run;
     return run;

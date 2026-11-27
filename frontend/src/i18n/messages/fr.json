@@ -29781,6 +29781,8 @@
     },
     "blankCanvasTagline": "Un tableau vide. Dites ce que vous voulez et il prend forme.",
     "startersLabel": "Façons de démarrer",
+    "starterKitLabel": "Kit de démarrage d’application",
+    "starterKitPlaceholder": "Choisir un kit",
     "runtimeObject": {
       "projectHealth": "Santé de {title}",
       "projectRoadmap": "Feuille de route de {title}",

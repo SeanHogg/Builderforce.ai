@@ -29043,6 +29043,8 @@
     },
     "blankCanvasTagline": "An empty board. Say what you want and it takes shape.",
     "startersLabel": "Ways to start",
+    "starterKitLabel": "App starter kit",
+    "starterKitPlaceholder": "Choose a kit",
     "runtimeObject": {
       "projectHealth": "{title} health",
       "projectRoadmap": "{title} roadmap",

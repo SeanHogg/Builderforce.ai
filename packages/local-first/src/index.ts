@@ -73,11 +73,13 @@ export {
   readJournalTail,
   scanJournal,
   scanJournalAsync,
+  scanJournalStateAsync,
   shouldCompactJournal,
   snapshotFrames,
   type CompactionFrameLimits,
   type JournalCompactionPolicy,
   type JournalOpenScan,
+  type JournalStateScan,
   type JournalScan,
   type JournalTail,
 } from './journalStore.js';

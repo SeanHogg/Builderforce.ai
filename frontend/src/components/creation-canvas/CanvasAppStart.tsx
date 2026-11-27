@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
+import { StarterKitPicker } from '@/components/creation-sessions/StarterKitPicker';
 import { hasCodeWorkspace } from '@/lib/canvasBuildTools';
 import { useLocalizedModalities } from '@/lib/useModalityCopy';
 import { useCanvasProjectStarters } from '@/lib/useCanvasProjectStarters';
@@ -20,11 +21,12 @@ import styles from './styles/surfaces.module.css';
  * The kinds are the modality registry's, already localized. A board with no account can
  * run code in the browser. Other starters can open a local editing surface on the board.
  */
-export function CanvasAppStart({ durable, onCreate, onStartProject }: {
+export function CanvasAppStart({ durable, onCreate, onStartProject, onStartKit }: {
   /** Whether the board has an account behind it. */
   durable: boolean;
   onCreate: (modality: ProjectModality) => Promise<void>;
   onStartProject?: (kind: CanvasProjectStarter['kind'], title: string) => void;
+  onStartKit: (kitId: string, title: string) => Promise<void>;
 }) {
   const t = useTranslations('creationCanvas.surface.app.start');
   const modalities = useLocalizedModalities().filter((modality) => !modality.comingSoon && (durable || hasCodeWorkspace(modality.id)));
@@ -40,7 +42,7 @@ export function CanvasAppStart({ durable, onCreate, onStartProject }: {
     })) : []),
   ];
 
-  const create = async (choice: (typeof choices)[number]) => {
+  const create = async (choice: { id: string; run: () => void | Promise<void> }) => {
     setCreating(choice.id);
     setFailed(false);
     try {
@@ -65,6 +67,7 @@ export function CanvasAppStart({ durable, onCreate, onStartProject }: {
           </button>
         ))}
       </div>
+      <StarterKitPicker disabled={creating !== null} onStart={({ value, label }) => void create({ id: `kit:${value}`, run: () => onStartKit(value, label) })} />
       {failed && <p role="alert" className={styles.appStartError}>{t('failed')}</p>}
       <p className={styles.appStartHint}>{t('askBrain')}</p>
     </div>

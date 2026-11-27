@@ -8,7 +8,7 @@
  * this entry. The `react-vite` part is built on `VANILLA_TEMPLATE` — one copy of those bytes.
  */
 export { composeKit, composeParts, resolveKit, KIT_README_FILE } from './compose';
-export { KIT_PARTS, NAMED_KITS, findKitPart, listKitOptions } from './registry';
+export { KIT_PARTS, NAMED_KITS, findKitPart, listKitOptions, listStarterKits } from './registry';
 export type { KitOptions, KitPartOption } from './registry';
 export { installStepId, KIT_API_PORT, KIT_WEB_PORT } from './parts/fragments';
 export type {

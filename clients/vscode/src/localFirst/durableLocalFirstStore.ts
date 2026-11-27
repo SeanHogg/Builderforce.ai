@@ -130,7 +130,8 @@ export function createDurableLocalFirstStore(
   /** Adopt a loaded journal as the store's state. `silent` for the open, which nobody is waiting on. */
   const adopt = (loaded: LoadedJournal, silent: boolean): void => {
     io.adopt(loaded);
-    replaceMemory(loaded.latest ?? EMPTY_LOCAL_FIRST_SNAPSHOT, silent);
+    if (silent && loaded.state) memory.adoptInitialState(loaded.state);
+    else replaceMemory(loaded.latest ?? EMPTY_LOCAL_FIRST_SNAPSHOT, silent);
   };
 
   const replaceMemory = (snapshot: LocalFirstSnapshot, silent: boolean): void => {
@@ -197,7 +198,7 @@ export function createDurableLocalFirstStore(
     const loaded = await io.load(yieldToEventLoop);
     if (loaded.corrupt) {
       await importLegacy();
-    } else if (loaded.latest) {
+    } else if (loaded.state) {
       adopt(loaded, true);
       // The journal is the record, so the cache is not imported — but a small corrupt cache
       // is still moved aside here. Failing to do so must not fail the open.

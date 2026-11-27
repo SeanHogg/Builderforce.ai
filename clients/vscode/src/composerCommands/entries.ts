@@ -11,7 +11,7 @@ import type {
   ComposerCommandAvailability,
   ComposerCommandChoice,
 } from "@seanhogg/builderforce-brain-embedded/composerCommands";
-import { listKitOptions, type KitPartOption } from "@builderforce/ide-templates/kits";
+import { listKitOptions, listStarterKits } from "@builderforce/ide-templates/kits";
 
 export const STARTER_KIT_COMMAND_ID = "starter-kit";
 export const MANIFEST_COMMAND_ID = "manifest";
@@ -49,27 +49,9 @@ export interface ComposerCommandContext {
   externalLabel: string;
 }
 
-/** The short name a kit id uses for a part: its first alias (`react-vite` → `react`), else its id. */
-function shortName(part: KitPartOption): string {
-  return part.aliases[0] ?? part.id;
-}
-
 /** Every kit `/starter-kit` accepts: the named kits, every frontend × backend pair, then each frontend alone. */
 export function starterKitChoices(): ComposerCommandChoice[] {
-  const { frontends, backends, namedKits } = listKitOptions();
-  const choices: ComposerCommandChoice[] = [];
-  const seen = new Set<string>();
-  const add = (value: string, label?: string): void => {
-    if (seen.has(value)) return;
-    seen.add(value);
-    choices.push(label ? { value, label } : { value });
-  };
-  for (const kit of namedKits) add(kit);
-  for (const frontend of frontends) {
-    for (const backend of backends) add(`${shortName(frontend)}-${shortName(backend)}`, `${frontend.label} + ${backend.label}`);
-  }
-  for (const frontend of frontends) add(shortName(frontend), frontend.label);
-  return choices;
+  return listStarterKits();
 }
 
 /** The extras `--with` accepts. */

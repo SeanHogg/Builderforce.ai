@@ -91,32 +91,20 @@ export function WorkspaceApp() {
   if (!init) return <div className="bf-center">{document.getElementById('root')?.dataset.bootLabel || 'Connecting…'}</div>;
 
   const t = makeT(init.labels);
-  // Token presence: prefer the init frame (React state) and fall back to the live
-  // module token (updated by `token` / `token.refresh` without a new init).
   const hasToken = !!(init.token || getToken());
-  // An on-device route needs no account — refusing to render would be gating the user
-  // out of their own hardware. Chat history is written to the extension host's local
-  // store (`createHostPersistence`) signed in or out, so the run loop's write of the user
-  // turn BEFORE it streams never needs an account. Other gateway-backed extras degrade
-  // on their own.
-  //
-  // Only `!signedIn` is the sign-in wall. `signedIn && !hasToken` is a transient
-  // (Connecting… + refreshToken above), NOT another prompt to sign in — conflating
-  // them was the Evermind "Sign in" / status "signed in" mismatch.
-  // SIGNED OUT IS NOT A WALL (offline-first): the chat renders and runs on whatever local /
-  // BYO route exists; with none, `VsCodeChatNotices` shows an inline banner offering
-  // Sign in / Connect a provider / Use a local model. See `signedOutGate.ts`.
+  // The sidebar's host-backed conversation can mount while account features connect.
   const gate = rootGate({ signedIn: init.signedIn, hasToken, localRoute: !!(init.localRoute || init.localPick), tokenFailed });
-  if (gate !== 'ready') {
+  const connectionFailure = gate === 'connect-failed' ? (
+    <>
+      <p>{t('app.connectFailed', "Couldn't reach BuilderForce. Check your connection and try again.")}</p>
+      <button className="bf-btn bf-btn--primary" onClick={() => void mintToken()}>
+        {t('app.retry', 'Retry')}
+      </button>
+    </>
+  ) : null;
+  if (!init.boardBeside && gate !== 'ready') {
     if (gate === 'connecting') return <div className="bf-center">{t('app.connecting', 'Connecting…')}</div>;
-    return (
-      <div className="bf-center">
-        <p>{t('app.connectFailed', "Couldn't reach BuilderForce. Check your connection and try again.")}</p>
-        <button className="bf-btn bf-btn--primary" onClick={() => void mintToken()}>
-          {t('app.retry', 'Retry')}
-        </button>
-      </div>
-    );
+    return <div className="bf-center">{connectionFailure}</div>;
   }
 
   // The destinations that are not a board. Same bundle, same transport, no Brain
@@ -134,16 +122,21 @@ export function WorkspaceApp() {
   if (init.view === 'backlog' || init.view === 'prd' || init.view === 'roadmap' || init.view === 'retros' || init.view === 'poker') {
     return <ProjectPageScreen init={init} view={init.view} />;
   }
-  return <WorkspaceScreen init={init} />;
+  return <WorkspaceScreen init={init} connectionFailure={connectionFailure} />;
 }
 
 /** The canvas, with the editor's chat as one of its surfaces. */
-function WorkspaceScreen({ init }: { init: InitData }) {
+function WorkspaceScreen({ init, connectionFailure }: { init: InitData; connectionFailure: ReactNode }) {
   return (
     <CanvasScreenProviders init={init}>
       {/* The sidebar chat view holds the conversation only — its board opens in the
           visualization panel beside it, so nothing is drawn above the chat. */}
-      {init.boardBeside ? <VsCodeChatSurface init={init} /> : <BoardWithChat init={init} />}
+      {init.boardBeside ? (
+        <div className="bf-degraded-shell">
+          {connectionFailure && <div className="bf-canvas-degraded">{connectionFailure}</div>}
+          <VsCodeChatSurface init={init} />
+        </div>
+      ) : <BoardWithChat init={init} />}
     </CanvasScreenProviders>
   );
 }

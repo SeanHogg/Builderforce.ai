@@ -34,6 +34,7 @@ import { serverFileStore, type WorkspaceFileStore } from './workspace/workspaceF
 /** Card fields this module owns. */
 export const APP_PRIMARY_FIELD = 'appPrimary';
 export const LOCAL_APP_KEY_FIELD = 'localAppKey';
+export const APP_KIT_FIELD = 'appKit';
 export const APP_IMPORT_HASH_FIELD = 'appImportHash';
 /** The app a LENS made before the first turn (`useCanvasEntryApp`) — a guess at the
  *  platform, made before anyone said which. See {@link newAppTakesPrimary}. */

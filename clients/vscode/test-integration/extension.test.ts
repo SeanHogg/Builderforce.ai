@@ -141,7 +141,7 @@ suite('webview ↔ host bridge', () => {
    * `acquireVsCodeApi` handshake regresses, NOTHING arrives and this times out —
    * which is precisely the failure that used to require installing a `.vsix` to see.
    */
-  test('the shipped webview boots and its first message reaches the host', async function () {
+  test('the shipped sidebar shows its composer while the tenant token is pending', async function () {
     // A cold webview + a large bundle: generous, and still far quicker than a package
     // + install + reload cycle.
     this.timeout(30_000);
@@ -160,24 +160,34 @@ suite('webview ↔ host bridge', () => {
       // timeout; with them the failure names the parse error, the throwing module or
       // the CSP directive that blocked a load.
       const bootErrors: string[] = [];
-      const received = new Promise<{ type?: string; id?: string }>((resolve, reject) => {
+      const composerVisible = new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
           const why = bootErrors.length ? `:\n  ${bootErrors.join('\n  ')}` : ' (and reported no error)';
-          reject(new Error(`the webview sent nothing to the host within the timeout${why}`));
+          reject(new Error(`the sidebar composer did not render within the timeout${why}`));
         }, 25_000);
         panel.webview.onDidReceiveMessage((msg: { type?: string; message?: string }) => {
           if (msg?.type === BOOT_ERROR) {
             bootErrors.push(String(msg.message));
             return;
           }
-          clearTimeout(timer);
-          resolve(msg);
+          if (msg?.type === 'ready') {
+            void panel.webview.postMessage({
+              type: 'init',
+              boardBeside: true,
+              surface: 'chat',
+              baseUrl: 'https://api.builderforce.ai',
+              signedIn: true,
+              hasWorkspace: false,
+              labels: {},
+            });
+          } else if (msg?.type === COMPOSER_VISIBLE) {
+            clearTimeout(timer);
+            resolve();
+          }
         });
       });
       panel.webview.html = bridgeHtml(panel.webview, ext.extensionUri);
-      const first = await received;
-      assert.ok(first && typeof first === 'object', 'the webview posted a non-object message');
-      assert.ok(typeof first.type === 'string' && first.type.length > 0, `the first message carries no type: ${JSON.stringify(first)}`);
+      await composerVisible;
     } finally {
       panel.dispose();
     }
@@ -186,6 +196,7 @@ suite('webview ↔ host bridge', () => {
 
 /** The message type the prelude reports boot errors under. Never a real app message. */
 const BOOT_ERROR = '__bridgeTest.bootError';
+const COMPOSER_VISIBLE = '__bridgeTest.composerVisible';
 
 /**
  * The local knowledge store (G03) is a SQLite file opened through `node:sqlite`, loaded at runtime. `@vscode/test-electron`
@@ -213,17 +224,21 @@ suite('local SQLite', () => {
  * a script error (parse failure, a module throwing at evaluation), an unhandled
  * rejection, or a CSP violation (a chunk or worker the policy refuses).
  *
- * `acquireVsCodeApi` may be called once per webview, and the bundle calls it as it
- * boots — so the prelude acquires it only when it has an error to report. If the
- * bundle got there first, the bridge is up and `ready` has already been posted.
+ * The observer and the bundle share the one permitted acquisition of the VS Code API.
  */
 function bridgeHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
   const prelude = `(() => {
+  const acquire = window.acquireVsCodeApi;
   let api;
-  const report = (message) => {
-    try { api = api || acquireVsCodeApi(); } catch { return; }
-    api.postMessage({ type: ${JSON.stringify(BOOT_ERROR)}, message });
-  };
+  window.acquireVsCodeApi = () => api ??= acquire();
+  const post = (message) => window.acquireVsCodeApi().postMessage(message);
+  const report = (message) => post({ type: ${JSON.stringify(BOOT_ERROR)}, message });
+  const observer = new MutationObserver(() => {
+    if (!document.querySelector('#root textarea')) return;
+    observer.disconnect();
+    post({ type: ${JSON.stringify(COMPOSER_VISIBLE)} });
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('error', (e) => report('error: ' + (e.error && e.error.stack || e.message) + ' @ ' + e.filename + ':' + e.lineno));
   window.addEventListener('unhandledrejection', (e) => report('unhandled rejection: ' + (e.reason && e.reason.stack || e.reason)));
   document.addEventListener('securitypolicyviolation', (e) => report('CSP blocked ' + e.blockedURI + ' (' + e.violatedDirective + ')'));

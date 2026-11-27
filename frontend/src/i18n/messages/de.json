@@ -29781,6 +29781,8 @@
     },
     "blankCanvasTagline": "Eine leere Fläche. Sag, was du willst, und es nimmt Gestalt an.",
     "startersLabel": "Wege zum Start",
+    "starterKitLabel": "App-Starterkit",
+    "starterKitPlaceholder": "Kit auswählen",
     "runtimeObject": {
       "projectHealth": "{title} – Zustand",
       "projectRoadmap": "{title} – Roadmap",

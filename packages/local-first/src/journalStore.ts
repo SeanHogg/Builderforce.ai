@@ -36,7 +36,9 @@ export {
   readJournalTail,
   scanJournal,
   scanJournalAsync,
+  scanJournalStateAsync,
   type JournalOpenScan,
+  type JournalStateScan,
   type JournalScan,
   type JournalTail,
 } from './journalReplay.js';
