@@ -24,8 +24,8 @@ import { dirname, join, relative, resolve as resolvePath, sep } from 'node:path'
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 // Generated from ONE source each (api/scripts/gen-container-shared.mjs): the tool caps and the shared glob + ignore policy.
-import { LIST_MAX_FILES, LIST_RETURN_MAX, READ_MAX_BYTES } from './toolOutputPolicy.mjs';
-import { dirMayContainGlobMatch, emptyGlobListingNote, isListedDirName, isVcsMetadataName, matchGlobInScope, normalizeScopeDir, summarizeDirs } from './workspaceGlob.mjs';
+import { READ_MAX_BYTES } from './toolOutputPolicy.mjs';
+import { emptyGlobListingNote, isListedDirName, isVcsMetadataName, listingResult, normalizeScopeDir, walkWorkspace } from './workspaceGlob.mjs';
 
 const GIT_TIMEOUT_MS = 10 * 60 * 1000;
 const GIT_MAX_BUFFER = 64 * 1024 * 1024;
@@ -344,49 +344,43 @@ async function parentStillInside(workdir, abs) {
 }
 
 /**
- * List repo files under `dir`, capped at `LIST_MAX_FILES`. BREADTH-FIRST so shallow files (root
- * docs like ROADMAP.md) are collected before the cap is hit deep in a large subtree; sorted for
- * stable output. Which directories it enters (`isListedDirName`) and how a glob matches
- * (`matchGlobInScope`, `dirMayContainGlobMatch`) are the shared policy, generated into
- * `workspaceGlob.mjs` from agent-tools, so the container lists what every other host lists.
- *
- * The glob is applied DURING the walk, so the cap counts MATCHES: a globbed listing is
- * never starved by unrelated files ahead of the match in the queue.
+ * List repo files under `dir` with THE shared walk (`walkWorkspace`, generated into `workspaceGlob.mjs`
+ * from agent-tools): breadth-first, capped, the glob applied during the walk, a big plain listing summarised.
+ * Only the clone's one-level `list` ({@link cloneFs}) is this file's; containment is the caller's
+ * (`insideClone`), so the container lists what every other host lists.
  */
 async function listFiles(dir, sub, glob) {
   const scope = normalizeScopeDir(sub);
-  const root = scope ? join(dir, scope) : dir;
-  const acc = [];
-  const queue = [root];
-  let truncated = false;
-  while (queue.length > 0) {
-    if (acc.length >= LIST_MAX_FILES) { truncated = true; break; }
-    const d = queue.shift();
-    let entries;
-    try { entries = await readdir(d, { withFileTypes: true }); } catch { continue; }
-    for (const e of entries) {
-      const full = join(d, e.name);
-      if (e.isDirectory()) {
-        if (!isListedDirName(e.name)) continue;
-        if (glob) {
-          const relDir = relative(dir, full).split(sep).join('/');
-          if (!dirMayContainGlobMatch(relDir, glob, sub)) continue;
-        }
-        queue.push(full);
-      }
-      else {
-        if (isVcsMetadataName(e.name)) continue;
-        const rel = relative(dir, full).split(sep).join('/');
-        if (glob && !matchGlobInScope(rel, glob, sub)) continue;
-        if (acc.length >= LIST_MAX_FILES) { truncated = true; break; }
-        acc.push(rel);
-      }
-    }
+  try {
+    const found = await walkWorkspace(cloneFs(dir), { start: scope, ...(glob ? { glob, scope } : {}), dirFilter: isListedDirName });
+    const result = listingResult(found, glob, scope || undefined, false);
+    if (glob && found.paths.length === 0) result.note = emptyGlobListingNote(glob, sub, found.truncated);
+    return result;
+  } catch (e) {
+    // The named directory could not be read (permissions, not a directory): the provider's `io` code, and never the clone's absolute path.
+    const errno = e && typeof e.code === 'string' ? e.code : 'unknown';
+    return { ok: false, error: `list failed for '${scope}' (${errno})`, code: 'io' };
   }
-  acc.sort((a, b) => a.localeCompare(b));
-  // A glob returns every match; a big plain listing collapses to the directory summary (the same rule every host applies).
-  const summarised = !glob && acc.length > LIST_RETURN_MAX;
-  const result = { ok: true, paths: summarised ? summarizeDirs(acc, scope) : acc, truncated: truncated || summarised };
-  if (glob && acc.length === 0) result.note = emptyGlobListingNote(glob, sub, truncated);
-  return result;
+}
+
+/**
+ * The clone as the shared walk's `WorkspaceFs` (only `list` is walked): one directory level, root-relative POSIX paths.
+ * A directory that does not exist lists as empty (a scope the clone does not have is an empty listing, as on every remote
+ * host); a symlink is never followed (a link to a directory is listed as an entry, not entered), and a VCS store is no entry.
+ */
+function cloneFs(dir) {
+  return {
+    async *list(rel) {
+      let entries;
+      try { entries = await readdir(rel ? join(dir, rel) : dir, { withFileTypes: true }); } catch (e) {
+        if (e && e.code === 'ENOENT') return;
+        throw e;
+      }
+      for (const e of entries) {
+        const isDir = e.isDirectory();
+        if (!isDir && isVcsMetadataName(e.name)) continue;
+        yield { path: rel ? `${rel}/${e.name}` : e.name, kind: isDir ? 'dir' : 'file' };
+      }
+    },
+  };
 }

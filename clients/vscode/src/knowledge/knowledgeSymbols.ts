@@ -27,12 +27,13 @@ import {
 } from "@builderforce/agent-tools/knowledge";
 import { UNTIMED, type LoadTimer } from "./knowledgeLoadTrace";
 import { onAliasConfigChanged } from "./aliasConfigEvents";
+import { SNAPSHOT_FILE_MAX_BYTES } from "@builderforce/tool-output-policy";
 import { assertInsideRoot } from "./knowledgeFixPaths";
 import type { KnowledgeSymbolRecord, KnowledgeSymbolRelation } from "./knowledgeProtocol";
 import { isSafeRelative } from "./safePath";
 
 export const MAX_SYMBOL_FILES = 200;
-export const MAX_SYMBOL_FILE_BYTES = 512 * 1024;
+export const MAX_SYMBOL_FILE_BYTES = SNAPSHOT_FILE_MAX_BYTES;
 export const MAX_SYMBOL_TOTAL_BYTES = 8 * 1024 * 1024;
 /** A ref longer than this is not a ref of ours. */
 export const MAX_REF_LENGTH = 4096;

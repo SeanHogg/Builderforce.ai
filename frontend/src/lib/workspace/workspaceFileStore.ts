@@ -15,6 +15,7 @@
  * storage. They stay keyed by the storage project id, and a store says whether it has one
  * through `kind`, so a surface hides those panels rather than offering a door that fails.
  */
+import { findLiteralMatches } from '@builderforce/agent-tools/text-scan';
 import {
   deleteFile,
   fetchFileContent,
@@ -81,17 +82,13 @@ export function serverFileStore(storageProjectId: number): WorkspaceFileStore {
  * the same contract the server search answers (1-based line and column, trimmed preview).
  */
 export function searchEntries(entries: ReadonlyArray<{ path: string; content: string }>, query: string): WorkspaceSearchResult {
-  const needle = query.toLowerCase();
   const matches: ProjectSearchMatch[] = [];
-  if (!needle) return { matches, truncated: false };
+  if (!query) return { matches, truncated: false };
   for (const entry of entries) {
-    const lines = entry.content.split('\n');
-    for (let index = 0; index < lines.length; index += 1) {
-      const column = lines[index].toLowerCase().indexOf(needle);
-      if (column < 0) continue;
-      matches.push({ path: entry.path, line: index + 1, column: column + 1, preview: lines[index].trim().slice(0, 300) });
-      if (matches.length >= WORKSPACE_SEARCH_LIMIT) return { matches, truncated: true };
+    for (const hit of findLiteralMatches(entry.content, query, { limit: WORKSPACE_SEARCH_LIMIT - matches.length, everyOccurrence: false })) {
+      matches.push({ path: entry.path, line: hit.line, column: hit.column, preview: hit.lineText.trim().slice(0, 300) });
     }
+    if (matches.length >= WORKSPACE_SEARCH_LIMIT) return { matches, truncated: true };
   }
   return { matches, truncated: false };
 }

@@ -14,6 +14,7 @@ import { promisify } from "node:util";
 import { lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { isOutputDirName } from "@builderforce/agent-tools/skip-dirs";
+import { SNAPSHOT_FILE_MAX_BYTES } from "@builderforce/tool-output-policy";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 import type {
   CodingDispatchAgent,
@@ -224,19 +225,14 @@ export function makeCodingAgent(getGateway: () => GatewayLike | null): CodingDis
  * Directories that can never be project SOURCE are skipped on the way out
  * (`node_modules`, `.git`, build output, caches): an agent that runs an install
  * would otherwise try to upload tens of thousands of dependency files back into
- * the workspace. Binary/oversized files are skipped for the same reason the
- * server caps the tree it hands out — they are not editable text.
- */
-
-/** Above this a file is treated as an asset, not source, and is not sent back. */
-const MAX_SNAPSHOT_FILE_BYTES = 512 * 1024;
-
-/**
- * Directories the snapshot walk skips: build output, dependencies and the VCS store ONLY.
+ * the workspace. Binary/oversized files (`SNAPSHOT_FILE_MAX_BYTES`) are skipped for the
+ * same reason the server caps the tree it hands out — they are not editable text.
+ *
+ * The walk skips build output, dependencies and the VCS store ONLY (`isOutputDirName`).
  * The snapshot is diffed against the materialised tree and every before-path missing from
  * it is DELETED upstream, so anything a user edits (`.vscode`, `.husky`, `vendor`, `target`)
  * must be walked. NOT `isIndexedDirName`/`WORKSPACE_SKIP_DIRS` (search/index policy, which
- * also skips dot-dirs, vendor, target, .idea). The shared `isOutputDirName` is that narrow set.
+ * also skips dot-dirs, vendor, target, .idea).
  */
 
 export function makeCodingFs(): CodingDispatchFs {
@@ -263,7 +259,7 @@ export function makeCodingFs(): CodingDispatchFs {
           if (!entry.isFile()) continue;
           const full = join(current, entry.name);
           const buf = await readFile(full).catch(() => null);
-          if (!buf || buf.byteLength > MAX_SNAPSHOT_FILE_BYTES) continue;
+          if (!buf || buf.byteLength > SNAPSHOT_FILE_MAX_BYTES) continue;
           // A NUL byte is the cheap, reliable "this is not text" signal; the
           // workspace stores text, so a binary would round-trip corrupted.
           if (buf.includes(0)) continue;

@@ -52,6 +52,47 @@ export function smartCaseSensitive(query: string): boolean {
   return /[A-Z]/.test(query.replace(/\\./g, ""));
 }
 
+/** One literal hit: 1-based line and column, and the whole line it sits on. */
+export interface LiteralMatch {
+  line: number;
+  column: number;
+  lineText: string;
+}
+
+export interface LiteralMatchOptions {
+  /** Stop after this many hits (default: unbounded). */
+  limit?: number;
+  /** Report every occurrence on a line (default) or only the first. */
+  everyOccurrence?: boolean;
+}
+
+/**
+ * The literal, case-insensitive, column-reporting line matcher a panel search uses (find a name
+ * or string, jump to line and column): `query` is plain text, never a regex. Lines split on
+ * `\n` or `\r\n`. An empty query matches nothing.
+ */
+export function findLiteralMatches(text: string, query: string, opts: LiteralMatchOptions = {}): LiteralMatch[] {
+  const needle = query.toLowerCase();
+  const limit = opts.limit ?? Number.POSITIVE_INFINITY;
+  const every = opts.everyOccurrence ?? true;
+  const out: LiteralMatch[] = [];
+  if (!needle) return out;
+  const lines = text.split(/\r?\n/);
+  for (let index = 0; index < lines.length && out.length < limit; index += 1) {
+    const lineText = lines[index] ?? "";
+    const haystack = lineText.toLowerCase();
+    let from = 0;
+    while (out.length < limit) {
+      const at = haystack.indexOf(needle, from);
+      if (at < 0) break;
+      out.push({ line: index + 1, column: at + 1, lineText });
+      if (!every) break;
+      from = at + needle.length;
+    }
+  }
+  return out;
+}
+
 /** Sort by path then line so a result set reads like a file, whichever backend produced it. */
 export function orderMatches<T extends { path: string; line?: number }>(matches: readonly T[]): T[] {
   return [...matches].sort((a, b) => a.path.localeCompare(b.path) || (a.line ?? 0) - (b.line ?? 0));

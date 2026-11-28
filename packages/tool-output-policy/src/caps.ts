@@ -273,6 +273,14 @@ export const LIST_RETURN_MAX = 400;
 export const READ_MAX_BYTES = 2 * 1024 * 1024;
 /** Matches one `search_code` call returns; past this the result says `truncated`. */
 export const SEARCH_MAX_MATCHES = 100;
+/** Largest file a SNAPSHOT / sync / import / governance walk carries as source (512 KiB); a bigger one is an asset, not editable text, and is skipped. */
+export const SNAPSHOT_FILE_MAX_BYTES = 512 * 1024;
+/** Largest shell output (512 KiB) a shell-bleed validation reads when checking a command's stdout for bled file content. */
+export const SHELL_BLEED_MAX_BYTES = 512 * 1024;
+/** Files the IDE panel's project search (Worker) reads before it reports `truncated`. */
+export const PANEL_SEARCH_MAX_FILES = 400;
+/** Files an UNSCOPED agent search over R2 reads: one page of keys (each read is a GET against the Worker's subrequest budget). */
+export const R2_AGENT_SEARCH_MAX_FILES = 1_000;
 
 /** Whether a tool's output is a shell/build/test log. */
 export function isShellTool(tool: string): boolean {

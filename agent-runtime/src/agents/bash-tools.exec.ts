@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { DEFAULT_COMMAND_TIMEOUT_MS } from "@builderforce/tool-output-policy";
+import { DEFAULT_COMMAND_TIMEOUT_MS, SHELL_BLEED_MAX_BYTES } from "@builderforce/tool-output-policy";
 import { shellFailure, shellFailureError, workspaceCommandRefusal } from "@builderforce/agent-tools";
 import type { AgentTool, AgentToolResult } from "../builderforce/model/agent-types.js";
 import {
@@ -173,7 +173,7 @@ async function validateScriptFileForShellBleed(params: {
   if (!stat.isFile()) {
     return;
   }
-  if (stat.size > 512 * 1024) {
+  if (stat.size > SHELL_BLEED_MAX_BYTES) {
     return;
   }
 

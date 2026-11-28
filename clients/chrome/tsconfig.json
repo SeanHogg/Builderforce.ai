@@ -13,6 +13,7 @@
       "@seanhogg/builderforce-mcp": ["../../packages/builderforce-mcp/src/index.ts"],
       "@builderforce/agent-tools": ["../../packages/agent-tools/src/index.ts"],
       "@builderforce/agent-tools/knowledge": ["../../packages/agent-tools/src/knowledge/index.ts"],
+      "@builderforce/agent-tools/skip-dirs": ["../../packages/agent-tools/src/skipDirs.ts"],
       "@builderforce/knowledge-browser": ["../../packages/knowledge-browser/src/index.ts"],
       "@builderforce/agent-tools/knowledge-index": ["../../packages/agent-tools/src/knowledge-index.ts"],
       "@builderforce/agent-tools/prefetch": ["../../packages/agent-tools/src/prefetch/index.ts"],

@@ -3,6 +3,7 @@ import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { isDependencyDirName } from "@builderforce/agent-tools/skip-dirs";
 import chokidar, { FSWatcher } from "chokidar";
 import { resolveAgentDir } from "../agents/agent-scope.js";
 import { ResolvedMemorySearchConfig } from "../agents/memory-search.js";
@@ -64,22 +65,13 @@ const EMBEDDING_CACHE_TABLE = "embedding_cache";
 const SESSION_DIRTY_DEBOUNCE_MS = 5000;
 const SESSION_DELTA_READ_CHUNK_BYTES = 64 * 1024;
 const VECTOR_LOAD_TIMEOUT_MS = 30_000;
-const IGNORED_MEMORY_WATCH_DIR_NAMES = new Set([
-  ".git",
-  "node_modules",
-  ".pnpm-store",
-  ".venv",
-  "venv",
-  ".tox",
-  "__pycache__",
-]);
-
 const log = createSubsystemLogger("memory");
 
 function shouldIgnoreMemoryWatchPath(watchPath: string): boolean {
   const normalized = path.normalize(watchPath);
   const parts = normalized.split(path.sep).map((segment) => segment.trim().toLowerCase());
-  return parts.some((segment) => IGNORED_MEMORY_WATCH_DIR_NAMES.has(segment));
+  // Absolute paths: only VCS / dependency / environment names (never a build-output name, which can be a parent folder).
+  return parts.some(isDependencyDirName);
 }
 
 export abstract class MemoryManagerSyncOps {

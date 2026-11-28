@@ -1,11 +1,11 @@
 import type { AgentToolResult } from "../builderforce/model/agent-types.js";
 import { createEditTool, createReadTool, createWriteTool } from "./native-file-tools.js";
-import { detectMime } from "../media/mime.js";
 import { sniffMimeFromBase64 } from "../media/sniff-mime-from-base64.js";
 import type { ImageSanitizationLimits } from "./image-sanitization.js";
 import type { AnyAgentTool } from "./coding-tools.types.js";
 import { assertSandboxPath } from "./sandbox-paths.js";
 import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
+import { sandboxWorkspaceFs } from "./sandbox/sandboxWorkspaceFs.js";
 import { sanitizeToolResultImages } from "./tool-images.js";
 import { CHARS_PER_TOKEN } from "@builderforce/workload";
 
@@ -671,12 +671,22 @@ type SandboxToolParams = {
   bridge: SandboxFsBridge;
   modelContextWindowTokens?: number;
   imageSanitization?: ImageSanitizationLimits;
+  /** Paths may reach outside `root` (the session's `workspaceOnly` is off); the bridge stays the boundary. */
+  unconfined?: boolean;
 };
 
+/** A confined sandbox tool refuses an out-of-root path with the sandbox's own "Path escapes sandbox root" wording, ahead of the provider. */
+const confinedSandboxTool = (tool: AnyAgentTool, params: SandboxToolParams): AnyAgentTool =>
+  params.unconfined === true ? tool : wrapToolWorkspaceRootGuard(tool, params.root);
+
 export function createSandboxedReadTool(params: SandboxToolParams) {
-  const base = createReadTool(params.root, {
-    operations: createSandboxReadOperations(params),
-  }) as unknown as AnyAgentTool;
+  const base = confinedSandboxTool(
+    createReadTool(params.root, {
+      ...sandboxToolFs(params),
+      readImageBytes: (resolvedPath) => params.bridge.readFile({ filePath: resolvedPath, cwd: params.root }),
+    }) as unknown as AnyAgentTool,
+    params,
+  );
   return createBuilderForceAgentsReadTool(base, {
     modelContextWindowTokens: params.modelContextWindowTokens,
     imageSanitization: params.imageSanitization,
@@ -684,16 +694,12 @@ export function createSandboxedReadTool(params: SandboxToolParams) {
 }
 
 export function createSandboxedWriteTool(params: SandboxToolParams) {
-  const base = createWriteTool(params.root, {
-    operations: createSandboxWriteOperations(params),
-  }) as unknown as AnyAgentTool;
+  const base = confinedSandboxTool(createWriteTool(params.root, sandboxToolFs(params)) as unknown as AnyAgentTool, params);
   return wrapToolParamNormalization(base, CLAUDE_PARAM_GROUPS.write, params.root);
 }
 
 export function createSandboxedEditTool(params: SandboxToolParams) {
-  const base = createEditTool(params.root, {
-    operations: createSandboxEditOperations(params),
-  }) as unknown as AnyAgentTool;
+  const base = confinedSandboxTool(createEditTool(params.root, sandboxToolFs(params)) as unknown as AnyAgentTool, params);
   return wrapToolParamNormalization(base, CLAUDE_PARAM_GROUPS.edit, params.root);
 }
 
@@ -732,52 +738,11 @@ export function createBuilderForceAgentsReadTool(
   };
 }
 
-function createSandboxReadOperations(params: SandboxToolParams) {
+/** The sandbox's file system for the native tools: the shared provider's adapter over the bridge. */
+function sandboxToolFs(params: SandboxToolParams) {
+  const unconfined = params.unconfined === true;
   return {
-    readFile: (absolutePath: string) =>
-      params.bridge.readFile({ filePath: absolutePath, cwd: params.root }),
-    access: async (absolutePath: string) => {
-      const stat = await params.bridge.stat({ filePath: absolutePath, cwd: params.root });
-      if (!stat) {
-        throw createFsAccessError("ENOENT", absolutePath);
-      }
-    },
-    detectImageMimeType: async (absolutePath: string) => {
-      const buffer = await params.bridge.readFile({ filePath: absolutePath, cwd: params.root });
-      const mime = await detectMime({ buffer, filePath: absolutePath });
-      return mime && mime.startsWith("image/") ? mime : undefined;
-    },
-  } as const;
-}
-
-function createSandboxWriteOperations(params: SandboxToolParams) {
-  return {
-    mkdir: async (dir: string) => {
-      await params.bridge.mkdirp({ filePath: dir, cwd: params.root });
-    },
-    writeFile: async (absolutePath: string, content: string) => {
-      await params.bridge.writeFile({ filePath: absolutePath, cwd: params.root, data: content });
-    },
-  } as const;
-}
-
-function createSandboxEditOperations(params: SandboxToolParams) {
-  return {
-    readFile: (absolutePath: string) =>
-      params.bridge.readFile({ filePath: absolutePath, cwd: params.root }),
-    writeFile: (absolutePath: string, content: string) =>
-      params.bridge.writeFile({ filePath: absolutePath, cwd: params.root, data: content }),
-    access: async (absolutePath: string) => {
-      const stat = await params.bridge.stat({ filePath: absolutePath, cwd: params.root });
-      if (!stat) {
-        throw createFsAccessError("ENOENT", absolutePath);
-      }
-    },
-  } as const;
-}
-
-function createFsAccessError(code: string, filePath: string): NodeJS.ErrnoException {
-  const error = new Error(`Sandbox FS error (${code}): ${filePath}`) as NodeJS.ErrnoException;
-  error.code = code;
-  return error;
+    fs: sandboxWorkspaceFs(params.bridge, params.root, { scope: unconfined ? "unconfined" : "workspace" }),
+    unconfined,
+  };
 }

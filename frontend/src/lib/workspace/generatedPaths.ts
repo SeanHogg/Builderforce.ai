@@ -9,6 +9,8 @@
  * may persist and what a run mounts cannot disagree. Framework caches (Next, SvelteKit,
  * wrangler, Turborepo) are build output too.
  */
+// Not the walk ignore list (`OUTPUT_DIRS`, agent-tools skipDirs.ts): this decides what a run SAVES BACK, so it is
+// deliberately narrower (a user's `build/`, `out/` or `coverage/` may be source and must persist; a walk skips them).
 const GENERATED_DIRECTORIES = ['node_modules/', 'dist/', '.git/', '.next/', '.svelte-kit/', '.wrangler/', '.turbo/'];
 
 /** True for a workspace-relative path inside dependencies or build output. */

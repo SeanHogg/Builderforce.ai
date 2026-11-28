@@ -4,6 +4,8 @@
  * PRIVATE-TOKEN for PATs, so we send both headers. The project id is the
  * URL-encoded "owner/repo" path.
  */
+// SNAPSHOT_FILE_MAX_BYTES: files larger than this are skipped (protects the token budget + memory).
+import { SNAPSHOT_FILE_MAX_BYTES } from '@builderforce/tool-output-policy';
 import {
   type FetchLike,
   type RepoCommit,
@@ -13,8 +15,6 @@ import {
   RepoSourceError,
   decodeBase64Utf8,
 } from './repoSourceBase';
-
-const MAX_FILE_BYTES = 512 * 1024;
 
 interface GlProject { default_branch?: string }
 interface GlTreeNode { path?: string; type?: string }
@@ -89,7 +89,7 @@ export class GitLabRepoSource implements RepoSource {
       `/projects/${this.projectId}/repository/files/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`,
     );
     if (!ok || !body) return null;
-    if (typeof body.size === 'number' && body.size > MAX_FILE_BYTES) return null;
+    if (typeof body.size === 'number' && body.size > SNAPSHOT_FILE_MAX_BYTES) return null;
     if (body.encoding !== 'base64' || typeof body.content !== 'string') return null;
     return decodeBase64Utf8(body.content.replace(/\n/g, ''));
   }

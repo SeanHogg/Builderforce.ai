@@ -1,86 +1,19 @@
 /**
- * BuilderForceAgentsLLM in-memory RAG.
+ * BuilderForceAgentsLLM retrieval context for the local-model path.
  *
- * Walks the workspace directory, scores source files by keyword overlap
- * with the user query, and returns the top-N most relevant excerpts.
- * No external dependencies — pure Node.js fs + simple TF-IDF-style scoring.
- *
- * ## v1 Implementation Note (keyword overlap only)
- *
- * The current scorer uses **term frequency without IDF** — it counts how many
- * query tokens appear anywhere in a file.  This is essentially a weighted
- * keyword grep, not full semantic retrieval.  It works well for exact symbol
- * lookups (function names, type names) but produces poor results for semantic
- * or conceptual queries (e.g. "how does authentication work").
- *
- * @todo Replace the tokenise/score pair with a proper TF-IDF implementation,
- *       or embed a lightweight sentence-transformer for semantic similarity, once
- *       the retrieval quality becomes a measurable bottleneck.
+ * Retrieval is the ONE on-prem code index (`resolveOnPremSemantic`: Builderforce Desktop when it
+ * answers, else the workspace code index of `@builderforce/workspace-mcp`); this module only
+ * shapes its hits into the context block the local stream injects.
  */
 
-import fs from "node:fs/promises";
-import path from "node:path";
-import { isIndexedDirName } from "@builderforce/agent-tools/skip-dirs";
+import type { RepoSemanticCapability } from "@builderforce/agent-tools";
+import { resolveOnPremSemantic } from "./on-prem-semantic.js";
+import { logWarn } from "../logger.js";
 
-const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".md", ".json"]);
-const MAX_SCAN_FILES = 800;
 const MAX_EXCERPT_CHARS = 600;
 const DEFAULT_TOP_K = 3;
-
-// ── File walker ───────────────────────────────────────────────────────────────
-
-async function walkSourceFiles(dir: string, files: string[] = []): Promise<string[]> {
-  if (files.length >= MAX_SCAN_FILES) {
-    return files;
-  }
-  let entries: import("node:fs").Dirent<string>[];
-  try {
-    entries = await fs.readdir(dir, { withFileTypes: true, encoding: "utf-8" });
-  } catch {
-    return files;
-  }
-  for (const entry of entries) {
-    if (files.length >= MAX_SCAN_FILES) {
-      break;
-    }
-    if (entry.isDirectory()) {
-      if (isIndexedDirName(entry.name)) {
-        await walkSourceFiles(path.join(dir, entry.name), files);
-      }
-    } else if (entry.isFile() && SOURCE_EXTENSIONS.has(path.extname(entry.name))) {
-      files.push(path.join(dir, entry.name));
-    }
-  }
-  return files;
-}
-
-// ── Keyword tokeniser ─────────────────────────────────────────────────────────
-
-function tokenise(text: string): Set<string> {
-  return new Set(
-    text
-      .toLowerCase()
-      .split(/[\s\W]+/)
-      .filter((t) => t.length > 2),
-  );
-}
-
-// ── Scorer ────────────────────────────────────────────────────────────────────
-
-function score(queryTokens: Set<string>, fileContent: string): number {
-  const fileTokens = tokenise(fileContent);
-  let hits = 0;
-  for (const t of queryTokens) {
-    if (fileTokens.has(t)) {
-      hits++;
-    }
-  }
-  return hits;
-}
-
-const RAG_CONCURRENCY = 20;
-
-// ── Public API ────────────────────────────────────────────────────────────────
+/** Hits asked of the index per wanted file: several definitions of one file collapse to its best hit. */
+const HITS_PER_FILE = 4;
 
 /**
  * Returns a formatted string of the most relevant file excerpts for the query.
@@ -91,53 +24,36 @@ export async function retrieveRelevantContext(opts: {
   workspaceDir: string;
   topK?: number;
   maxExcerptChars?: number;
+  /** The code index to query. Default: the ONE on-prem resolver (Desktop probe, else the workspace index); a test injects a hermetic one. */
+  semantic?: RepoSemanticCapability;
 }): Promise<string> {
   const topK = opts.topK ?? DEFAULT_TOP_K;
   const maxChars = opts.maxExcerptChars ?? MAX_EXCERPT_CHARS;
-  const queryTokens = tokenise(opts.query);
-  if (queryTokens.size === 0) {
+  if (!opts.query.trim()) return "";
+
+  let found;
+  try {
+    const semantic = opts.semantic ?? (await resolveOnPremSemantic(opts.workspaceDir));
+    found = await semantic.search(opts.query, { limit: topK * HITS_PER_FILE });
+  } catch (err) {
+    logWarn(`local-model retrieval failed, continuing without codebase context: ${err instanceof Error ? err.message : String(err)}`);
     return "";
   }
-
-  const files = await walkSourceFiles(opts.workspaceDir);
-  if (files.length === 0) {
-    return "";
+  if (!found.ok) return "";
+  if (found.indexing === true && (found.results ?? []).length === 0) {
+    // The index was still being built when the wait ran out: an empty context here is "not ready", not "no match".
+    logWarn("local-model retrieval: the code index is still being built, so this turn has no codebase context");
   }
 
-  // FIX #4: process in bounded batches to avoid memory pressure on large repos.
-  const scored: Array<{ file: string; score: number; excerpt: string }> = [];
-
-  for (let i = 0; i < files.length; i += RAG_CONCURRENCY) {
-    const batch = files.slice(i, i + RAG_CONCURRENCY);
-    await Promise.all(
-      batch.map(async (file) => {
-        try {
-          const content = await fs.readFile(file, "utf-8");
-          const s = score(queryTokens, content);
-          if (s > 0) {
-            scored.push({
-              file,
-              score: s,
-              excerpt: content.slice(0, maxChars) + (content.length > maxChars ? "\n…" : ""),
-            });
-          }
-        } catch {
-          // skip unreadable files
-        }
-      }),
-    );
+  const bestPerFile = new Map<string, string>();
+  for (const hit of found.results ?? []) {
+    if (bestPerFile.size >= topK) break;
+    if (!bestPerFile.has(hit.path)) {
+      bestPerFile.set(hit.path, hit.snippet.slice(0, maxChars) + (hit.snippet.length > maxChars ? "\n…" : ""));
+    }
   }
+  if (bestPerFile.size === 0) return "";
 
-  if (scored.length === 0) {
-    return "";
-  }
-
-  scored.sort((a, b) => b.score - a.score);
-  const top = scored.slice(0, topK);
-
-  const sections = top.map(
-    (entry) => `### ${path.relative(opts.workspaceDir, entry.file)}\n${entry.excerpt}`,
-  );
-
+  const sections = [...bestPerFile].map(([file, excerpt]) => `### ${file}\n${excerpt}`);
   return `## Relevant codebase context\n\n${sections.join("\n\n")}`;
 }

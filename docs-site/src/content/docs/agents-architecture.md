@@ -24,20 +24,18 @@ The foundation layer responsible for understanding code structure and context.
 
 #### Knowledge Engine Components
 
-**AST Parser (`src/builderforce/ast-parser.ts`)**
+**Symbols (`packages/agent-tools`: `symbols.ts`, `node-tree-sitter.ts`)**
 
-- Parses TypeScript/JavaScript files using TypeScript Compiler API
-- Extracts semantic information: functions, classes, interfaces, types
-- Tracks visibility, parameters, return types, modifiers
-- Exports metadata for downstream analysis
+- Finds the functions, classes, interfaces and types in each file
+- Reads real parse trees for 11 languages, and falls back to a simple line scan for the rest
+- Records whether each definition is exported
 
-**Code Map Builder (`src/builderforce/code-map.ts`)**
+**Repo map (`packages/repo-map`)**
 
-- Builds semantic code maps across entire projects
-- Tracks import/export relationships
-- Creates dependency graphs
-- Calculates impact radius for changes
-- Identifies coupling and module boundaries
+- Builds a map of the whole project from those symbols
+- Links files that import each other
+- Ranks the files that matter most for the task at hand and fits them into the model's size budget
+- Renders the ranked map as compact text and searches definitions by name
 
 **Git History Tool (`src/builderforce/tools/git-history-tool.ts`)**
 

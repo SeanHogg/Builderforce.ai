@@ -8,6 +8,7 @@
  * file-category classifier (verified 2026-11-09), so this is the one copy — do not add a second.
  */
 
+import { isGeneratedDirName } from '@builderforce/agent-tools/skip-dirs';
 import { pathOfRef, type KNode } from '@seanhogg/builderforce-memory/knowledge';
 
 export type FileCategory = 'source' | 'test' | 'doc' | 'config' | 'style' | 'data' | 'other';
@@ -40,11 +41,8 @@ const CONFIG_NAMES = new Set([
     '.prettierignore', '.stylelintrc', '.npmignore', '.huskyrc', '.lintstagedrc', '.browserslistrc',
 ]);
 
-/** Path segments that mark a tree as generated / vendored — not source the person wrote. */
-const GENERATED_SEGMENTS = new Set([
-    'node_modules', 'dist', 'build', 'out', 'coverage', '.next', '.nuxt', '.cache', 'vendor', 'third_party',
-    'third-party', '__snapshots__', '.turbo', '.output', 'target', '.gradle', 'bin', 'obj',
-]);
+/** Whether a path segment marks a tree as generated / vendored (agent-tools' ONE list), or is a jest snapshot folder — not source the person wrote. */
+const isGeneratedSegment = (name: string): boolean => isGeneratedDirName(name) || name === '__snapshots__';
 
 /** Test / spec conventions by extension and by path. */
 const TEST_EXT = new Set(['test', 'spec', 'stories', 'cy']);
@@ -73,7 +71,7 @@ export function fileCategory(n: Pick<KNode, 'ref'>): FileCategory {
     const base = path.slice(path.lastIndexOf('/') + 1);
 
     // Generated / vendored trees read as "other" no matter what their extension says.
-    if (GENERATED_SEGMENTS.has(base) || /(^|\/)node_modules\//.test(path) || /(^|\/)(dist|build|out|coverage)(\/|$)/.test(path)) {
+    if (isGeneratedSegment(base) || /(^|\/)node_modules\//.test(path) || /(^|\/)(dist|build|out|coverage)(\/|$)/.test(path)) {
         return 'other';
     }
 

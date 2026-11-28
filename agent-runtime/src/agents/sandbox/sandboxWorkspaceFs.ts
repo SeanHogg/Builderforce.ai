@@ -12,7 +12,7 @@
  */
 
 import { readdir } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { tryResolveInsideRootReal } from "@builderforce/agent-tools/node-path.js";
 import { scrubRoot } from "@builderforce/agent-tools/node-workspace";
 import { WorkspaceError, type WorkspaceEntry, type WorkspaceFs, type WorkspaceRead } from "@builderforce/agent-tools/workspace";
@@ -48,8 +48,27 @@ export function sandboxWorkspaceFs(bridge: SandboxFsBridge, root: string, option
     if (r.ok) return r.abs;
     throw new WorkspaceError(r.reason === "escapes" ? "outside_root" : "io", r.error);
   };
+  // Unconfined: an absolute path goes to the bridge VERBATIM (it may be a container path such as
+  // "/agent/x", which `path.resolve` would turn into "C:\agent\x" on win32); the bridge is the boundary.
   const fileAbs = async (p: string): Promise<string> =>
-    unconfined ? (isAbsolute(p) ? resolve(p) : resolve(rootResolved, p)) : confined(p);
+    unconfined ? (isAbsolute(p) ? p : resolve(rootResolved, p)) : confined(p);
+
+  /**
+   * An absolute path (a host path or a container path the bridge maps) as the root-relative POSIX
+   * path when it lands inside the root, else undefined. A host-path adapter, like `nodeWorkspaceFs`.
+   */
+  const toRelative = (p: string): string | undefined => {
+    let hostPath: string;
+    try {
+      hostPath = bridge.resolvePath({ filePath: p, cwd: rootResolved }).hostPath;
+    } catch {
+      return undefined;
+    }
+    const rel = relative(rootResolved, hostPath);
+    if (rel === "") return "";
+    if (rel === ".." || rel.startsWith(`..${sep}`) || rel.startsWith("../") || isAbsolute(rel)) return undefined;
+    return rel.split(sep).join("/");
+  };
 
   async function* list(dir: string): AsyncIterable<WorkspaceEntry> {
     const abs = dir === "" ? rootResolved : await confined(dir);
@@ -82,6 +101,7 @@ export function sandboxWorkspaceFs(bridge: SandboxFsBridge, root: string, option
   return {
     list: (dir) => list(dir),
     read,
+    toRelative,
     async write(p, content) {
       const abs = await fileAbs(p);
       try {

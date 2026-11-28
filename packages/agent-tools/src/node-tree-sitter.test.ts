@@ -55,6 +55,17 @@ describe("treeSitterSymbolExtractor", () => {
     expect(go.map((s) => `${s.kind}:${s.name}:${s.exported}`)).toEqual(["struct:Server:true", "method:Run:true", "function:helper:false"]);
   });
 
+  it("parses Ruby, Kotlin and Swift (the native index's other languages)", async () => {
+    const ex = treeSitterSymbolExtractor();
+    const names = async (file: string, src: string) => (await ex.extract(file, src)).map((s) => `${s.kind}:${s.name}`);
+    expect(await names("shop.rb", "module Shop\n  class Store\n    def open\n    end\n    def self.build\n    end\n  end\nend\ndef top\nend\n"))
+      .toEqual(["module:Shop", "class:Store", "method:open", "method:build", "function:top"]);
+    expect(await names("Store.kt", "class Store {\n  fun open() {}\n}\nobject Single\nfun top() {}\ntypealias Id = String\n"))
+      .toEqual(["class:Store", "method:open", "class:Single", "function:top", "type:Id"]);
+    expect(await names("Store.swift", "class Store {\n  func open() {}\n}\nprotocol Port { func go() }\nfunc top() {}\ntypealias Id = String\n"))
+      .toEqual(["class:Store", "method:open", "interface:Port", "method:go", "function:top", "type:Id"]);
+  });
+
   it("falls back to the regex extractor when the grammars are missing", async () => {
     const ex = treeSitterSymbolExtractor({ wasmDir: emptyDir });
     expect(await ex.extract("src/billing.ts", TS_SOURCE)).toEqual(extractSymbols("src/billing.ts", TS_SOURCE));

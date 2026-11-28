@@ -7,7 +7,7 @@
  * Regenerate with `node scripts/gen-container-shared.mjs` (from `api/`).
  * `--check` fails the build when the source no longer matches the hash below.
  *
- * @source-sha256 345f3f661fdfc7fc97cd43fefeb0e585c2587e5484a74fe75131cd2816fae25f
+ * @source-sha256 838ba1ce656433fa480e8fc631ba9689799f3c246cef67a722610ccb36006962
  */
 // ── caps.ts ──
 /**
@@ -253,6 +253,14 @@ const LIST_RETURN_MAX = 400;
 const READ_MAX_BYTES = 2 * 1024 * 1024;
 /** Matches one `search_code` call returns; past this the result says `truncated`. */
 const SEARCH_MAX_MATCHES = 100;
+/** Largest file a SNAPSHOT / sync / import / governance walk carries as source (512 KiB); a bigger one is an asset, not editable text, and is skipped. */
+const SNAPSHOT_FILE_MAX_BYTES = 512 * 1024;
+/** Largest shell output (512 KiB) a shell-bleed validation reads when checking a command's stdout for bled file content. */
+const SHELL_BLEED_MAX_BYTES = 512 * 1024;
+/** Files the IDE panel's project search (Worker) reads before it reports `truncated`. */
+const PANEL_SEARCH_MAX_FILES = 400;
+/** Files an UNSCOPED agent search over R2 reads: one page of keys (each read is a GET against the Worker's subrequest budget). */
+const R2_AGENT_SEARCH_MAX_FILES = 1_000;
 /** Whether a tool's output is a shell/build/test log. */
 function isShellTool(tool) {
     return SHELL_TOOLS.has(tool);

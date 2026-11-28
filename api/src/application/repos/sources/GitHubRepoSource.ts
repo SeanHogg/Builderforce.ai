@@ -3,6 +3,8 @@
  * Auth: Bearer <token> (PAT / GitHub App installation token / OAuth).
  * Assumes github.com (api.github.com); GitHub Enterprise hosts are a v2 item.
  */
+// SNAPSHOT_FILE_MAX_BYTES: files larger than this are skipped (protects the token budget + memory).
+import { SNAPSHOT_FILE_MAX_BYTES } from '@builderforce/tool-output-policy';
 import {
   type FetchLike,
   type RepoCommit,
@@ -12,9 +14,6 @@ import {
   RepoSourceError,
   decodeBase64Utf8,
 } from './repoSourceBase';
-
-/** Skip files larger than this (bytes) — protects the token budget + memory. */
-const MAX_FILE_BYTES = 512 * 1024;
 
 interface GhRepo { default_branch?: string }
 interface GhTreeNode { path?: string; type?: string; size?: number; sha?: string }
@@ -120,7 +119,7 @@ export class GitHubRepoSource implements RepoSource {
       `/repos/${this.slug}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(ref)}`,
     );
     if (!ok || !body) return null;
-    if (typeof body.size === 'number' && body.size > MAX_FILE_BYTES) return null;
+    if (typeof body.size === 'number' && body.size > SNAPSHOT_FILE_MAX_BYTES) return null;
     if (body.encoding !== 'base64' || typeof body.content !== 'string') return null;
     return decodeBase64Utf8(body.content.replace(/\n/g, ''));
   }

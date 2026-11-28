@@ -18,7 +18,8 @@ import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 /**
  * Build output a download also leaves out, beyond the shared rule (`isGeneratedPath`:
  * `node_modules`, `dist`, `.git`): CRA's `build/` and Next's `.next/`. Kept here rather
- * than in the shared rule, which also decides what the agent's shell saves back.
+ * than in the shared rule, which also decides what the agent's shell saves back. Deliberately
+ * narrower than the walk list (`OUTPUT_DIRS`): a user's `out/` or `coverage/` may be source.
  */
 const DOWNLOAD_EXCLUDED_DIRECTORIES = ['build', '.next'];
 

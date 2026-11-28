@@ -15,6 +15,7 @@
  * MAX_IMPORT_BYTES total, binary/asset extensions skipped. Anything dropped is
  * reported so the UI can say "imported N of M". Never throws.
  */
+import { isInSkippedDir, isOutputDirName } from '@builderforce/agent-tools/skip-dirs';
 import { listRepoFiles, readRepoFile, type RepoReadContext } from './readRepoContents';
 
 /** Hard cap on files pulled in one import (subrequest + response-size guard). */
@@ -27,8 +28,6 @@ const READ_CONCURRENCY = 8;
 /** Binary/asset files the text editor + in-browser runtime mount can't use as source. */
 const SKIP_BINARY_EXT =
   /\.(png|jpe?g|gif|ico|webp|bmp|tiff?|woff2?|ttf|eot|otf|mp[34]|mov|avi|webm|wav|ogg|flac|pdf|zip|gz|tgz|tar|rar|7z|wasm|bin|exe|dll|so|dylib|class|jar|psd|ai|sketch|node)$/i;
-/** Heavy, machine-generated files worth skipping on import (regen locally). */
-const SKIP_NOISE = /(^|\/)(node_modules|\.git|dist|build|\.next|coverage|out)\//i;
 
 export interface ImportedFile {
   path: string;
@@ -95,7 +94,8 @@ export async function importRepoContents(ctx: RepoReadContext): Promise<ImportRe
   const importable: string[] = [];
   for (const path of tree.paths) {
     if (SKIP_BINARY_EXT.test(path)) skipped.push({ path, reason: 'binary' });
-    else if (SKIP_NOISE.test(path)) skipped.push({ path, reason: 'noise' });
+    // Heavy, machine-generated files worth skipping on import (regen locally): the ONE build-output / dependency list.
+    else if (isInSkippedDir(path, isOutputDirName)) skipped.push({ path, reason: 'noise' });
     else importable.push(path);
   }
 

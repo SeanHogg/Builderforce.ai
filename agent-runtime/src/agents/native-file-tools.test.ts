@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   activateStaging,
@@ -46,6 +46,65 @@ describe("native file tools", () => {
     await expect(
       createEditTool(dir).execute("c", { path: "d.txt", oldText: "x", newText: "y" }),
     ).rejects.toThrow(/not unique/);
+  });
+
+  it("regression: edit failures speak this tool's vocabulary (no replaceAll / read_file / oldString)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nft-"));
+    await createWriteTool(dir).execute("c", { path: "d.txt", content: "x x\nunique line\n" });
+    const dup = (await createEditTool(dir).execute("c", { path: "d.txt", oldText: "x", newText: "y" }).catch((e: unknown) => e)) as Error;
+    expect(dup.message).toMatch(/not unique/);
+    expect(dup.message).not.toMatch(/replaceAll|oldString/);
+    const miss = (await createEditTool(dir).execute("c", { path: "d.txt", oldText: "uniq line", newText: "y" }).catch((e: unknown) => e)) as Error;
+    expect(miss.message).toMatch(/read tool/);
+    expect(miss.message).not.toMatch(/read_file|oldString/);
+  });
+
+  it("regression: a read past the 2 MiB provider default still pages and reports the true line total", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nft-"));
+    const line = `${"x".repeat(98)}\n`;
+    writeFileSync(join(dir, "big.txt"), line.repeat(25_000), "utf-8");
+    const r = await createReadTool(dir).execute("c", { path: "big.txt", offset: 24_990, limit: 5 });
+    expect((r.content[0] as { text: string }).text).not.toMatch(/larger than/);
+    expect((r.content[0] as { text: string }).text.split("\n").length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("regression: a ../ escape is refused as outside_root by read, write and edit", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nft-root-"));
+    const outside = mkdtempSync(join(tmpdir(), "nft-out-"));
+    writeFileSync(join(outside, "secret.txt"), "secret", "utf-8");
+    const escape = `../${basename(outside)}/secret.txt`;
+    await expect(createReadTool(dir).execute("c", { path: escape })).rejects.toThrow(/outside the workspace/);
+    await expect(createWriteTool(dir).execute("c", { path: escape, content: "x" })).rejects.toThrow(/outside the workspace/);
+    await expect(
+      createEditTool(dir).execute("c", { path: escape, oldText: "secret", newText: "x" }),
+    ).rejects.toThrow(/outside the workspace/);
+    expect(readFileSync(join(outside, "secret.txt"), "utf-8")).toBe("secret");
+  });
+
+  it("regression: an absolute path outside the root is refused, and allowed once unconfined", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nft-root-"));
+    const outside = mkdtempSync(join(tmpdir(), "nft-out-"));
+    const file = join(outside, "a.txt");
+    writeFileSync(file, "outside text", "utf-8");
+    await expect(createReadTool(dir).execute("c", { path: file })).rejects.toThrow(/outside the workspace/);
+    const r = await createReadTool(dir, { unconfined: true }).execute("c", { path: file });
+    expect((r.content[0] as { text: string }).text).toContain("outside text");
+  });
+
+  it("regression: a missing file reports the provider's not_found text, never a host path", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nft-"));
+    await expect(createReadTool(dir).execute("c", { path: "nope.txt" })).rejects.toThrow(/file not found: nope\.txt/);
+    await expect(
+      createEditTool(dir).execute("c", { path: "nope.txt", oldText: "a", newText: "b" }),
+    ).rejects.toThrow(/file not found: nope\.txt/);
+    for (const run of [
+      () => createReadTool(dir).execute("c", { path: "nope.txt" }),
+      () => createEditTool(dir).execute("c", { path: "nope.txt", oldText: "a", newText: "b" }),
+    ]) {
+      const err = (await run().catch((e: unknown) => e)) as Error;
+      expect(err.message).not.toContain(dir);
+      expect(err.message).not.toContain(tmpdir());
+    }
   });
 
   it("write/edit buffer to the staged map instead of disk when staging is on", async () => {

@@ -1,3 +1,66 @@
+## ✅ RESOLVED 2026-11-28 — The re-audit duplicates on the coding path (CIX-G018, G019, G020, G021, G022, G023, G028)
+
+- **G018: native read/write/edit now use the shared provider.** These are agent-runtime's `native-file-tools.ts` tools. They now run on `createRepoCapabilities`: over `nodeWorkspaceFs` on the host and over `sandboxWorkspaceFs` in the sandbox. `resolveToCwd` and the private fs/ops copies are deleted.
+  - Staging is a `WorkspaceFs` decorator.
+  - The schemas are unchanged, including `oldText`/`newText`.
+  - `unconfined: !workspaceOnly` keeps the old reach.
+  - `read` still reads the whole file. The model's view is still bounded by the shared 2,000-line / 50 KB caps.
+  - Edit errors use the tool's own wording for each provider code.
+  - Image reads sniff the content (`detectMime`).
+  - Writes keep the existing file's line endings and report the stored byte count.
+- **The sandbox takes host paths.** `sandboxWorkspaceFs` gained `toRelative` (via `bridge.resolvePath`, failing safe). Unconfined mode passes absolute paths to the bridge verbatim. Confined sandbox tools keep the "Path escapes sandbox root" guard.
+- **G019: the container uses the shared walker.** Its `listFiles` uses the generated shared `walkWorkspace`/`listingResult` through a `cloneFs` adapter.
+  - Containment is unchanged: `insideClone`, the `.git` block, `O_NOFOLLOW` and the TOCTOU re-checks.
+  - The bundles are regenerated, and both `--check`s pass.
+- **G020: one retrieval engine.** `builderforcellm-rag.ts` retrieves through `resolveOnPremSemantic` (Desktop, else `workspaceSemantic`). The private walker, tokenizer and scorer are deleted.
+  - A semantic source can be injected, which keeps the tests hermetic.
+  - "Index still building" is logged.
+- **G021: one ignore policy.** The product ignore lists now fold into `skipDirs.ts`, which gained `isDependencyDirName`, `isGeneratedDirName` and `isInSkippedDir`. Migrated:
+  - agent-runtime `commands/builderforce.ts`, `manager-sync-ops`, directory-sync, and the trace targets;
+  - api `RepoSource` and `importRepoContents`;
+  - the frontend download;
+  - the knowledge-graph view's `fileCategory`.
+  - Kept on purpose:
+    - `generatedPaths.ts` (what a run saves back), and the download zip's narrow `build`/`.next` rule. A user's `out/` or `coverage/` may be source.
+    - `third_party` stays visible.
+  - Directory sync prunes output dirs while walking, so a root under a folder named `build` still syncs.
+- **G022: one cap.** There is one `SNAPSHOT_FILE_MAX_BYTES`, plus the named `PANEL_SEARCH_MAX_FILES`, `R2_AGENT_SEARCH_MAX_FILES` and `SHELL_BLEED_MAX_BYTES`, all in `tool-output-policy/caps.ts`. The 5 copies are migrated.
+- **G023: one matcher and one resolver.** `findLiteralMatches` (`text-scan.ts`) replaces the api and frontend line matchers. `resolveWorkspaceSemantic` (workspace-mcp) replaces the two Desktop-else-local resolvers, and Desktop errors are now reported.
+- **G028: 11 grammars.** Ruby, Kotlin and Swift come from the installed `tree-sitter-wasms`, which makes 11, matching `lang.rs`. The docs-site architecture page is corrected.
+- **Review:** Opus, twice.
+  - The first pass found 3 HIGH and 4 MEDIUM, all fixed: stale bundles, sandbox absolute paths, the directory-sync ancestor match, the read cap, `third_party`, the download scope, and the rag flake.
+  - The re-review said ship as-is. Its LOW follow-ups are CIX-G030.
+- **Verify:** typechecks clean in agent-tools, agent-runtime, api, vscode and frontend (apart from another session's knowledge-graph-view files). Targeted tests pass, and the rag tests passed 3 runs out of 3. The e2e failures that predate this batch are CIX-G031.
+
+## ✅ RESOLVED 2026-11-28 — One coding provider on every host (CIX-G002, G003, G006, G009, G010, G011, G013, G014, G015)
+
+- **Scope:** steps 1–4 of option D in [platform-duplication-audit.md §2.5](docs/specs/tasks/platform-duplication-audit.md#25-target-design-one-code-index-every-host).
+- **One provider:** every host (VS Code, headless Workspace MCP, agent-runtime, the api sandbox, R2, git-remote and the frontend canvas) now reads, writes, edits, lists and searches through `createRepoCapabilities(fs: WorkspaceFs)` in `packages/agent-tools/src/workspace.ts`.
+  - Each host supplies its own `WorkspaceFs` adapter. The error codes are shared: not_found, is_directory, outside_root, too_large, no_match, ambiguous, unsupported, io and invalid.
+  - The shared conformance suite (`workspaceConformance.test-util.ts`) pins the leading-"/" rule:
+    - a host-disk adapter treats an absolute path as a host path;
+    - every other adapter treats a leading "/" as the repo root;
+    - drive letters and `..` escapes are outside_root.
+- **G003 / G014:** `workspace__search` and `workspace__references` are each one shared tool.
+  - Search runs ripgrep and honours `.gitignore`. The fallback walk uses `gitIgnoredMatcher`.
+  - Both search paths cap files at 2 MiB.
+- **G006:** repo-map's member indent and the field-symbol owner spans were fixed (`symbols.ts`, `ownerSpans.ts`), with a regression test.
+  - Folding repo-map into `packages/code` is step 5, tracked in the register.
+- **G009 / G015:** one ignore policy (`skipDirs.ts`) and one set of caps (`tool-output-policy/caps.ts`) for the provider.
+  - Ignore lists and caps outside the provider are CIX-G021 / CIX-G022.
+- **G010:** the provider resolves every path through one `resolvePath`. Hand-written normalisers outside it are CIX-G024.
+- **G011:** the index and symbol files live in one dot-dir. The rest of the `.builderForceAgents` split is CIX-G027.
+- **G013:** one change feed, `WatchPort` / `nodeWatchPort`.
+  - It re-bases paths for each subscriber and reports a lost watch through `onLost`.
+  - Dispatch snapshots delete a file only when it is really gone (`CodingDispatchFs.missing`).
+- **Same pass, recent-commit dedupes:**
+  - api: one editor-key gate (`editorKeyGate.ts`) and one request-claims helper (`requestClaims.ts`: `getClientIp`, `getUserAgent`, `claimsFromContext`), used by about 30 routes.
+  - VS Code: one `localDeviceId`, one `sleep(ms, signal)`, one `writeFileAtomically` and one `tokenLimitNotice`.
+- **Review:** Opus.
+  - It found one HIGH: ripgrep's `--no-ignore` leaked gitignored files into search. Fixed, with a real `git init` test.
+  - The symbol-relation regressions were fixed.
+- **Verify:** targeted typechecks and tests passed (548 tests) in agent-tools, repo-map, agent-runtime, api, vscode and frontend. Commit `43cdd89c4` and the sweep commits before it.
+
 ## ✅ RESOLVED 2026-11-28 — Map/3D level scene: Opus review findings fixed (part of AE-G070; VSIX 2026.11.240)
 
 - **Scope.** The Opus review of the `Placement` contract change that introduced the one-level Map/3D scene (`aspect`, `level`, `LevelDescriptor`, system/app drill frames).

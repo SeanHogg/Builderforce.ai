@@ -1,6 +1,6 @@
 /**
  * The tree-sitter symbol extractor — real parse trees (web-tree-sitter, WASM) for the
- * languages whose grammars load: TS/TSX/JS, Python, PHP, C#, Go, Rust, Java. Everything
+ * languages whose grammars load: TS/TSX/JS, Python, PHP, C#, Go, Rust, Java, Ruby, Kotlin, Swift. Everything
  * else, and any language whose runtime, grammar or query fails to load, is read by the
  * line-regex extractor (`symbols.ts`) — so the index never loses a file to a missing wasm.
  *
@@ -121,6 +121,33 @@ const PHP = `
 (trait_declaration name: (name) @trait)
 (method_declaration name: (name) @method)
 `;
+const RUBY = `
+(program (method name: (_) @function))
+(program (class name: (_) @class))
+(program (module name: (_) @module))
+(module body: (body_statement (class name: (_) @class)))
+(module body: (body_statement (module name: (_) @module)))
+(module body: (body_statement [(method name: (_) @method) (singleton_method name: (_) @method)]))
+(class body: (body_statement [(method name: (_) @method) (singleton_method name: (_) @method)]))
+`;
+// The Kotlin grammar has no field names: a definition's name is its first direct identifier child.
+const KOTLIN = `
+(source_file (function_declaration (simple_identifier) @function))
+(source_file (class_declaration (type_identifier) @class))
+(source_file (object_declaration (type_identifier) @class))
+(source_file (type_alias . (type_identifier) @type))
+(class_body (function_declaration (simple_identifier) @method))
+(class_body (class_declaration (type_identifier) @class))
+`;
+const SWIFT = `
+(source_file (function_declaration name: (_) @function))
+(source_file (class_declaration name: (type_identifier) @class))
+(source_file (protocol_declaration name: (type_identifier) @interface))
+(source_file (typealias_declaration . (type_identifier) @type))
+(class_body (function_declaration name: (_) @method))
+(enum_class_body (function_declaration name: (_) @method))
+(protocol_body (protocol_function_declaration name: (_) @method))
+`;
 
 const TYPESCRIPT: Grammar = { wasm: "tree-sitter-typescript.wasm", family: "js", query: JS_COMMON + TS_EXTRA };
 const GRAMMAR_BY_EXT: Record<string, Grammar> = {
@@ -136,6 +163,10 @@ const GRAMMAR_BY_EXT: Record<string, Grammar> = {
   java: { wasm: "tree-sitter-java.wasm", family: "oo", query: JAVA },
   cs: { wasm: "tree-sitter-c_sharp.wasm", family: "oo", query: CSHARP },
   php: { wasm: "tree-sitter-php.wasm", family: "oo", query: PHP },
+  rb: { wasm: "tree-sitter-ruby.wasm", family: "oo", query: RUBY },
+  kt: { wasm: "tree-sitter-kotlin.wasm", family: "oo", query: KOTLIN },
+  kts: { wasm: "tree-sitter-kotlin.wasm", family: "oo", query: KOTLIN },
+  swift: { wasm: "tree-sitter-swift.wasm", family: "oo", query: SWIFT },
 };
 
 /** Every grammar wasm this extractor can use — the list a bundler copies. */

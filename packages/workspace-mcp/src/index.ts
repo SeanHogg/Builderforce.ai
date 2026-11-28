@@ -111,6 +111,22 @@ export function workspaceSemantic(
   };
 }
 
+/**
+ * THE `repo.semantic` resolver every local host shares (the editor and the on-prem runtime):
+ * Builderforce Desktop's capability when it answers, else the workspace's own code index and
+ * repo map ({@link workspaceSemantic}). A Desktop probe that throws is reported through
+ * `onDesktopError` (never swallowed) and falls back to the local index. The host supplies the
+ * Desktop probe and the local index factory; the order and the fallback are decided here once.
+ */
+export async function resolveWorkspaceSemantic(host: {
+  desktop: () => Promise<RepoSemanticCapability | undefined>;
+  local: () => RepoSemanticCapability;
+  onDesktopError: (error: unknown) => void;
+}): Promise<RepoSemanticCapability> {
+  const desktop = await host.desktop().catch((error: unknown) => { host.onDesktopError(error); return undefined; });
+  return desktop ?? host.local();
+}
+
 async function findWorkspaceCode(workspace: Workspace, args: Record<string, unknown>, options: WorkspaceMcpOptions) {
   const { root, caps } = workspace;
   return fromDefinition(semanticSearchTool)({ root, caps: { ...caps, semantic: workspaceSemantic(workspace, options) } }, args);

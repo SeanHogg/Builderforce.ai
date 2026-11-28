@@ -15,14 +15,13 @@ import {
   createRepoCapabilities, WorkspaceError,
   type RepoCapabilityOptions, type SearchMatch, type WorkspaceEntry, type WorkspaceFs, type WorkspaceRead,
 } from '@builderforce/agent-tools/workspace';
+import { R2_AGENT_SEARCH_MAX_FILES } from '@builderforce/tool-output-policy';
 import { indexByDir, withListingSignal } from '../workspaceFs/flatListing';
 import { readWorkspaceFile, WORKSPACE_BRANCH, workspacePrefix } from './workspaceStore';
 import type { WorkspaceApplyResult, WorkspaceChangeSet } from './taskWorkspaceTarget';
 
 /** R2 pages read for one snapshot (1,000 keys each). A listing past this is reported incomplete. */
 const MAX_LIST_PAGES = 200;
-/** Files an UNSCOPED agent search reads: one R2 page of keys, the bound the search always had (each read is a GET, and a Worker has a subrequest budget). */
-const AGENT_SEARCH_MAX_FILES = 1_000;
 /** Parallel GETs per scan. */
 export const R2_READ_CONCURRENCY = 8;
 
@@ -127,7 +126,7 @@ export function r2WorkspaceFs(bucket: R2Bucket, projectId: number, opts: R2Works
     async search(query, scope, { signal }) {
       const found = await scanFiles(fs, query, scope, {
         concurrency: R2_READ_CONCURRENCY,
-        ...(scope ? {} : { maxFiles: AGENT_SEARCH_MAX_FILES }),
+        ...(scope ? {} : { maxFiles: R2_AGENT_SEARCH_MAX_FILES }),
         ...(signal ? { signal } : {}),
       });
       if (!found.ok) throw new WorkspaceError(found.code ?? 'io', found.error ?? 'search failed');

@@ -664,24 +664,28 @@ The TypeScript `@seanhogg/builderforce-code-index` combines the following compon
 
 Gaps:
 
-- `CIX-G002` **Workspace cutover complete.** `workspace__find` and the saved `codebase_semantic_search` call use the shared TypeScript index and a warm local embedder when available. The saved call uses lexical search for extension-filtered queries.
-- `CIX-G003` **Workspace exact search shared.** VS Code and headless Workspace MCP expose `workspace__search` through the same `search_code` tool. Other host search adapters remain part of the index audit.
 - `CIX-G004` **5 symbol parsers exist**: native tree-sitter (11 languages), WASM tree-sitter (7), regex, the TS compiler API and regex relations.
 - `CIX-G005` **3 chunkers exist, and only the native `bf-index` embeds code bodies.** The editor index holds cards only.
-- `CIX-G006` **repo-map is a hand-kept TS mirror of the Rust `graph.rs`/`repo_map.rs`, fed by regex.** `symbolRepoMap.ts` is a third, graph-less map.
 - `CIX-G007` **6 lexical engines and 5 tokenizers exist.**
 - `CIX-G008` **4 RRF/fusion copies exist.**
-- `CIX-G009` **7 ignore lists disagree with each other.**
-- `CIX-G010` **Path normalisation is done case by case.**
-- `CIX-G011` **One repo gets three indexes, in two dot-dirs** (`.builderforce` and `.builderForceAgents`).
 - `CIX-G012` **4 embedding models are in use, with no shared fingerprint policy.** The never-offered Synapse embedder slot was removed on 2026-11-27.
-- `CIX-G013` **3 change-detection schemes exist**: a watcher plus blake3, an mtime snapshot, and a 5-minute staleness window.
-- `CIX-G014` **Workspace cutover complete.** VS Code and headless Workspace MCP expose the shared TypeScript `workspace__references` tool.
-- `CIX-G015` **Result caps and file caps disagree.**
-  - Result caps: 8 / 25 / 20 / 100 / 30.
-  - File caps: 1 MB / 256 KB.
 - `CIX-G016` **Verification complete. Keep the native index.** The full lexical comparisons matched all 5,385 hired.video files and all 19,383 Builderforce.ai files. Native used less memory in both runs and found 12 of 15 low-overlap judgments in the top eight to TypeScript hybrid's 9. The headless TypeScript path uses the cached BGE checkpoint from the judged harness. [Audit §2.5](../specs/tasks/platform-duplication-audit.md#25-target-design-one-code-index-every-host)
 - `CIX-G017` **API `knowledge.search` searches SOPs and docs (`recallSops.ts`), but its name suggests code search.**
+- `CIX-G029` **Step 5, in flight 2026-11-28.** Move the neutral code algorithms into `packages/code`, fold in repo-map, and rename the package to `@seanhogg/builderforce-code`.
+- `CIX-G024`–`G027` **Re-audit findings 2026-11-27, queued after step 5** (each finding is a row in [audit §2.6](../specs/tasks/platform-duplication-audit.md)):
+  - G024: hand path normalisers.
+  - G025: hand containment checks. Includes the private `resolveToCwd` in `agent-runtime/src/agents/sandbox-paths.ts`.
+  - G026: hand walkers.
+  - G027: the dot-dir split.
+- `CIX-G030` **In flight 2026-11-28: review follow-ups to the G018–G023 batch.**
+  - Native `write` probes the whole existing file for its line endings (`native-file-tools.ts` `providerFor` passes the read cap of `WHOLE_FILE`).
+  - The `fileCategory.ts` fold dropped `third_party` from generated segments.
+  - The native image branch ignores staged writes.
+  - A non-image binary file is read twice.
+  - The `sandboxWorkspaceFs` header comment is stale.
+- `CIX-G031` **In flight 2026-11-28: agent-runtime e2e tool-schema tests fail on main.** These failures predate the G018 batch.
+  - Failing tests: "avoids anyOf/oneOf/allOf in tool schemas" and "removes unsupported JSON Schema keywords for Cloud Code Assist API compatibility". The source is `ask_human` `kind`, a `Type.Union` of literals (`builderforce/tools/ask-human-tool.ts:20`).
+  - Also: `sandbox/registry.test.ts` "keeps both container updates under concurrent writes" fails on Windows.
 
 ### Inference, catalog and routing consolidation `[platform]` `[agents]`
 

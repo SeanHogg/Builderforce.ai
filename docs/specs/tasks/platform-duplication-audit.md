@@ -96,7 +96,7 @@ Roots: `B` = Builderforce.ai, `I` = builderforce-inference/crates, `M` = builder
 | 4 | `codebase_semantic_search` | `B/agent-runtime/src/builderforce/shared-tools/node-code-tools.ts:~361-595` | regex `extractSymbols` | **none** (BM25 only, despite the name) | `<root>/.builderForceAgents/search-index.json`, 5-min staleness | BM25 over the first 200 lines per file, 5000 files, 20 results | — | agent-runtime |
 | 5 | `codebase_search` (= on-prem `search_code`) | same file `:~187-350`; wired at `agents/node-capability-provider.ts:296` | — | — | — | ripgrep per keyword + hand-weighted score, 20 results | — | agent-runtime |
 | 6 | code-map / ast-parser | `B/agent-runtime/src/builderforce/{code-map,ast-parser}.ts` | TS compiler API (TS/JS only) | — | — | — | dependency graph | agent-runtime |
-| 7 | Shared definition index | `B/packages/agent-tools/src/{symbols,node-tree-sitter,node-symbols,symbolRepoMap,symbolRelations,callScan}.ts` | web-tree-sitter WASM, 7 languages + regex fallback | — | `<ws>/.builderforce/symbols.json` (VS Code) · `<root>/.builderForceAgents/symbols.json` (on-prem) | `find_symbol`, `file_outline` | coarse (no ref graph) | VS Code, agent-runtime |
+| 7 | Shared definition index | `B/packages/agent-tools/src/{symbols,node-tree-sitter,node-symbols,symbolRepoMap,symbolRelations,callScan}.ts` | web-tree-sitter WASM, 11 languages (the native index's set) + regex fallback | — | `<ws>/.builderforce/symbols.json` (VS Code) · `<root>/.builderForceAgents/symbols.json` (on-prem) | `find_symbol`, `file_outline` | coarse (no ref graph) | VS Code, agent-runtime |
 | 8 | **packages/repo-map** | `B/packages/repo-map/src/*` | regex facts (a deliberate TS mirror of #1's graph and map) | — | R2, keyed by repo+sha | keyword over definitions | PageRank (same constants as #1) | Cloudflare Worker |
 | 9 | Cloud dense arm | `B/api/src/application/repos/repoSymbolVectors.ts`, `knowledge/knowledgeEmbedder.ts` | — | bge-m3 Workers AI, int8, signatures only | R2 per repo | RRF with #8 | — | Worker |
 | 10 | **Deterministic knowledge index** | `M/memory/src/retrieval/knowledge-index/*` + `B/packages/agent-tools/src/knowledge/index/*` + `B/clients/vscode/src/knowledge/index/hostKnowledgeIndex.ts` + `B/api/.../knowledgeIndexPort.ts` | graph cards (path + symbol, no bodies) | chain: Synapse (never offered) → Evermind CPU → Ollama | int8 CSR `.idx` (editor) / `.bin` (R2) | exact → lexical → dense cascade | — | Worker, browser, Node |
@@ -114,7 +114,7 @@ Checked and not duplicates:
 
 | Responsibility | Copies |
 |---|---|
-| Symbol / definition parsing | **5**: bf-index `lang.rs` (11 languages), agent-tools `node-tree-sitter.ts` (7), agent-tools `symbols.ts` regex, agent-runtime `ast-parser.ts` (TS API), `symbolRelations.ts` (regex) |
+| Symbol / definition parsing | **5**: bf-index `lang.rs` (11 languages), agent-tools `node-tree-sitter.ts` (11), agent-tools `symbols.ts` regex, agent-runtime `ast-parser.ts` (TS API), `symbolRelations.ts` (regex) |
 | Chunking | 3 incompatible: bf-index (tree-sitter, 150/60 lines), memory `chunk.ts` (1000/200 chars), node-code-tools (first 200 lines, no chunks) |
 | Embedders | **4 models**: bge-small 384d (Synapse), bge-m3 (cloud), Evermind SSM (editor, memory-mcp), Ollama (editor). No vectors are shared across stores |
 | Vector stores | 4: SQLite BLOB, int8 CSR `.idx`/`.bin`, HNSW, R2 per-repo vectors |
@@ -140,7 +140,7 @@ That is three walks, three parsers, two symbol snapshots and two embedders. None
 
 | Capability | Best today | Why |
 |---|---|---|
-| Parsing / chunking | bf-index (native tree-sitter, 11 languages, body chunks) | Only one with real chunks. agent-tools WASM tree-sitter is 7 languages, but `tree-sitter-wasms` ships grammars for all 11. |
+| Parsing / chunking | bf-index (native tree-sitter, 11 languages, body chunks) | Only one with real chunks. agent-tools WASM tree-sitter now loads the same 11 languages (Ruby, Kotlin and Swift were wired from the installed `tree-sitter-wasms`). |
 | Repo map | bf-index ≡ packages/repo-map (same algorithm) | repo-map already runs in Workers, Node and the browser; it only lacks tree-sitter facts. |
 | Lexical + dense store | memory knowledge-index | Pure TS, runs everywhere, int8 + CSR, fingerprint-guarded. Lacks body chunks. |
 | Embedder | Undecided: bge-small (Synapse) vs Evermind vs bge-m3 | One model per index fingerprint; see §2.5. |
@@ -375,7 +375,7 @@ The judged samples favor native hybrid on recall at eight, and native used less 
 | CIX-G001 | **Bug:** on-prem `search_code` is keyword-ranked ripgrep (`runCodebaseSearch`), but its contract promises an exact substring or regex. The `path` scope is applied after the search. | Route it to exact/regex search, with the scope applied first | `agent-runtime/src/agents/node-capability-provider.ts:296`, `node-code-tools.ts:~187` |
 | CIX-G002 | Workspace cutover complete | `workspace__find` and the saved `codebase_semantic_search` call use the shared index and warm embedder policy | `packages/workspace-mcp`, `workspace-search.ts` |
 | CIX-G003 | Workspace exact search shared | VS Code and headless MCP share `workspace__search`. The broader host adapters are tracked here. | `packages/workspace-mcp`, `readRepoContents.ts`, `ideWorkspaceCoding.ts` |
-| CIX-G004 | 5 symbol parsers (native tree-sitter 11 languages, WASM 7, regex, TS compiler API, regex relations) | One `parse` on WASM tree-sitter (11 languages) plus a regex fallback | `lang.rs`, `node-tree-sitter.ts`, `symbols.ts`, `ast-parser.ts`, `symbolRelations.ts` |
+| CIX-G004 | 5 symbol parsers (native tree-sitter 11 languages, WASM 11, regex, TS compiler API, regex relations) | One `parse` on WASM tree-sitter (11 languages) plus a regex fallback | `lang.rs`, `node-tree-sitter.ts`, `symbols.ts`, `ast-parser.ts`, `symbolRelations.ts` |
 | CIX-G005 | 3 chunkers; only Synapse embeds code bodies; the editor index holds cards only | Port the `chunk.rs` rules; add chunk records to the knowledge index | `chunk.rs`, memory `knowledge-index/*` |
 | CIX-G006 | repo-map is a hand-maintained TS mirror of `graph.rs`/`repo_map.rs`, fed by regex | Keep repo-map as the one implementation, fed by `parse`; delete `symbolRepoMap.ts` | `packages/repo-map`, `agent-tools/symbolRepoMap.ts` |
 | CIX-G007 | 6 lexical engines and 5 tokenizers | knowledge-index lexical + `bm25.ts`; one `codeTokenize` | see §2.2 |

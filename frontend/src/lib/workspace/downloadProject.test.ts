@@ -35,6 +35,12 @@ describe('isDownloadableSource', () => {
     expect(isDownloadableSource('packages/ui/node_modules/x/y.js')).toBe(false);
     expect(isDownloadableSource('.git/HEAD')).toBe(false);
   });
+
+  it('regression: keeps a user\'s out/ and coverage/ folders (they may be source)', () => {
+    expect(isDownloadableSource('out/x.js')).toBe(true);
+    expect(isDownloadableSource('coverage/y')).toBe(true);
+    expect(isDownloadableSource('packages/app/out/x.js')).toBe(true);
+  });
 });
 
 describe('projectArchiveName', () => {

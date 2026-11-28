@@ -6,6 +6,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isSkippedDirName } from "@builderforce/agent-tools/skip-dirs";
+import { SNAPSHOT_FILE_MAX_BYTES } from "@builderforce/tool-output-policy";
 
 /** Extensions that are never text-scanned (binary by nature). */
 const BINARY_EXTENSIONS = new Set([
@@ -37,7 +38,7 @@ const BINARY_EXTENSIONS = new Set([
 ]);
 
 export const MAX_WALK_FILES = 10_000;
-export const MAX_SCAN_BYTES = 512 * 1024;
+export const MAX_SCAN_BYTES = SNAPSHOT_FILE_MAX_BYTES;
 
 /**
  * Dot-directories that are policy-relevant and therefore walked (everything else

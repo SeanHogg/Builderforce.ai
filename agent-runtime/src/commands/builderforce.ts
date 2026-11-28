@@ -5,6 +5,7 @@
 import { builderforceApiBase, DEFAULT_BUILDERFORCE_API_URL } from "../infra/builderforce-http.js";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isIndexedDirName } from "@builderforce/agent-tools/skip-dirs";
 import { confirm, intro, note, outro, password, select, spinner, text } from "@clack/prompts";
 import { Command } from "commander";
 import {
@@ -136,19 +137,6 @@ async function detectLanguagesFromFiles(projectRoot: string): Promise<string[]> 
   };
 
   const counts: Record<string, number> = {};
-  const ignoreDirs = new Set([
-    "node_modules",
-    ".git",
-    "dist",
-    "build",
-    ".builderForceAgents",
-    "__pycache__",
-    ".next",
-    "out",
-    "coverage",
-    "vendor",
-  ]);
-
   async function walk(dir: string, depth: number): Promise<void> {
     if (depth > 3) {
       return;
@@ -161,7 +149,7 @@ async function detectLanguagesFromFiles(projectRoot: string): Promise<string[]> 
     }
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        if (!ignoreDirs.has(entry.name) && !entry.name.startsWith(".")) {
+        if (isIndexedDirName(entry.name) && !entry.name.startsWith(".")) {
           await walk(path.join(dir, entry.name), depth + 1);
         }
       } else {

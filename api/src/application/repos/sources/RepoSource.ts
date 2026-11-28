@@ -12,6 +12,7 @@
  * repo that blows the per-invocation budget surfaces the typed
  * WorkerSubrequestExhaustedError the DO knows how to back off on.
  */
+import { isGeneratedDirName, isInSkippedDir } from '@builderforce/agent-tools/skip-dirs';
 import { fetchWithVendorTimeout } from '../../llm/vendors/types';
 import { GitHubRepoSource } from './GitHubRepoSource';
 import { GitLabRepoSource } from './GitLabRepoSource';
@@ -62,9 +63,6 @@ export function createRepoSource(
 // Evidence selection — pick the most informative files within a token budget.
 // ---------------------------------------------------------------------------
 
-/** Directories never worth sampling (vendored / generated / build output). */
-const EXCLUDED_DIR = /(^|\/)(node_modules|dist|build|out|coverage|vendor|\.git|\.next|\.nuxt|\.cache|__pycache__|\.venv|target|bin|obj)(\/|$)/i;
-
 /** Binary / non-source extensions we never send to the LLM. */
 const BINARY_EXT = /\.(png|jpe?g|gif|webp|svg|ico|bmp|tiff?|pdf|zip|gz|tar|7z|rar|jar|war|class|exe|dll|so|dylib|bin|wasm|woff2?|ttf|eot|otf|mp[34]|mov|avi|mkv|wav|ogg|flac|lock|min\.js|min\.css|map)$/i;
 
@@ -78,8 +76,9 @@ const MANIFEST = /(^|\/)(package\.json|tsconfig(\..*)?\.json|requirements\.txt|p
 const ENTRYPOINT = /(^|\/)(src\/)?(index|main|app|server|bootstrap|cli)\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|rb|php|cs)$/i;
 const FRAMEWORK_CONFIG = /(^|\/)(next\.config\.[mc]?[jt]s|vite\.config\.[mc]?[jt]s|nuxt\.config\.[mc]?[jt]s|angular\.json|svelte\.config\.[mc]?[jt]s|astro\.config\.[mc]?[jt]s|remix\.config\.[mc]?[jt]s|webpack\.config\.[mc]?[jt]s)$/i;
 
+/** Whether `path` sits in a vendored / generated / build-output directory (never worth sampling). */
 export function isExcludedPath(path: string): boolean {
-  return EXCLUDED_DIR.test(path);
+  return isInSkippedDir(path, isGeneratedDirName);
 }
 export function isBinaryPath(path: string): boolean {
   return BINARY_EXT.test(path);

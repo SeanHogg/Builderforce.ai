@@ -118,6 +118,20 @@ describe('the workspace helper protocol', () => {
     expect(JSON.stringify(r)).not.toContain('k.txt');
   });
 
+  it('lists through the shared walk: skips node_modules and .git, and still refuses an escape', async () => {
+    const w = ws();
+    await w.handle({ op: 'init' });
+    for (const d of ['src', 'node_modules/pkg', '.git/objects']) await mkdir(join(workdir, d), { recursive: true });
+    await writeFile(join(workdir, 'src', 'a.ts'), 'a');
+    await writeFile(join(workdir, 'README.md'), 'r');
+    await writeFile(join(workdir, 'node_modules', 'pkg', 'index.js'), 'x');
+    await writeFile(join(workdir, '.git', 'config'), '[core]\n');
+    expect(await w.handle({ op: 'list' })).toMatchObject({ ok: true, paths: ['README.md', 'src/a.ts'] });
+    expect(await w.handle({ op: 'list', glob: '*.js' })).toMatchObject({ ok: true, paths: [] });
+    expect((await w.handle({ op: 'list', path: '.git' })).ok).toBe(false);
+    expect((await w.handle({ op: 'list', path: '../' })).ok).toBe(false);
+  });
+
   it('summarises a big plain listing to directories and marks a read of a huge file truncated', async () => {
     const w = ws();
     type Reply = { ok: boolean; truncated?: boolean; paths: string[]; content: string };

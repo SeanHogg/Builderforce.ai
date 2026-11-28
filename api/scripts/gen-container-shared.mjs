@@ -14,8 +14,8 @@
  *   • `container/toolOutputPolicy.mjs` ← `packages/tool-output-policy` (PRD C7: caps,
  *     head+tail cuts, the shell/test summarizer, JSON projection, read_file windows);
  *   • `container/workspaceGlob.mjs` ← `packages/agent-tools` `glob.ts` + `skipDirs.ts` (the
- *     workspace agent's `list` walk: the glob matcher and the directory ignore policy, so the
- *     container lists exactly what the editor, the on-prem agent and the Worker list);
+ *     workspace agent's `list` walk: the glob matcher, the directory ignore policy and the walk itself
+ *     (`walkWorkspace`), so the container lists exactly what the editor, the on-prem agent and the Worker list);
  *
  * `--check` needs no compiler: each bundle's header carries a hash of the source it was
  * built from, so the check recomputes it and fails the moment a source changes without
@@ -57,12 +57,12 @@ const BUNDLES = [
     // The workspace agent's `list` walk: the glob matcher and the directory ignore policy every host shares.
     out: join(API_ROOT, 'container', 'workspaceGlob.mjs'),
     srcDir: join(REPO_ROOT, 'packages', 'agent-tools', 'src'),
-    // `workspaceList.ts` brings `summarizeDirs` (the big-listing directory summary); its caps come from the sibling policy module.
+    // `workspaceList.ts` brings `walkWorkspace` (THE breadth-first walk) and `listingResult` / `summarizeDirs` (the big-listing directory summary); its caps come from the sibling policy module.
     files: ['glob.ts', 'skipDirs.ts', 'workspaceList.ts'],
     imports: "import { LIST_MAX_FILES, LIST_RETURN_MAX } from './toolOutputPolicy.mjs';",
     exports: [
       'matchGlobInScope', 'dirMayContainGlobMatch', 'emptyGlobListingNote', 'normalizeScopeDir', 'toPosixPath',
-      'isListedDirName', 'isVcsMetadataName', 'summarizeDirs',
+      'isListedDirName', 'isVcsMetadataName', 'summarizeDirs', 'walkWorkspace', 'listingResult',
     ],
   },
 ];

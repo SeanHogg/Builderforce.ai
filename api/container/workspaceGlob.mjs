@@ -7,7 +7,7 @@
  * Regenerate with `node scripts/gen-container-shared.mjs` (from `api/`).
  * `--check` fails the build when the source no longer matches the hash below.
  *
- * @source-sha256 b556d71ccaa1c477d8bb2efbd1a0ed3c715c2bd19243b9f34ebf9c2296d08886
+ * @source-sha256 414d9df20aa66ac567029605623b38473d693a59d90d38dc0c9516f079d8acaf
  */
 import { LIST_MAX_FILES, LIST_RETURN_MAX } from './toolOutputPolicy.mjs';
 // ── glob.ts ──
@@ -254,14 +254,43 @@ function dirMayContainGlobMatch(dirPosix, pattern, scopeDir) {
  * (`knowledge/fsDirectorySource.ts`) and the browser's (`@builderforce/knowledge-browser`)
  * — so the same folder gives the same graph on every host. Pure.
  */
+/** Version-control stores. */
+const VCS_DIRS = [".git", ".hg", ".svn"];
+/** Installed-dependency and language-environment directories (never a workspace's own files, wherever they sit). */
+const DEPENDENCY_DIRS = ["node_modules", ".pnpm-store", ".venv", "venv", ".tox", "__pycache__"];
+/** Version-control and dependency/environment directory names: safe to match ANYWHERE in an absolute path, because no project lives inside one (a build-output name like `out` or `build` can be a parent folder, so it is not in this set). */
+const DEPENDENCY_AND_VCS_DIRS = new Set([...VCS_DIRS, ...DEPENDENCY_DIRS]);
+/** Whether `name` is a VCS store or an installed-dependency / language-environment directory. */
+const isDependencyDirName = (name) => DEPENDENCY_AND_VCS_DIRS.has(name);
 /** Build, dependency, VCS and cache OUTPUT directories: what a snapshot walk that must see every user-edited file still skips. */
 const OUTPUT_DIRS = new Set([
-    "node_modules", ".git", ".hg", ".svn", ".next", ".nuxt", "dist", "build", "out", ".cache", ".turbo", ".vercel", "coverage", ".venv", "venv", "__pycache__", ".vscode-test",
+    ...DEPENDENCY_AND_VCS_DIRS, ".next", ".nuxt", ".svelte-kit", ".wrangler", ".output", ".gradle", "dist", "build", "out", ".cache", ".turbo", ".vercel", "coverage", ".vscode-test",
 ]);
 /** Whether `name` is a build/dependency/VCS output directory. */
 const isOutputDirName = (name) => OUTPUT_DIRS.has(name);
 /** {@link OUTPUT_DIRS} plus the directories not worth indexing (vendored code, target, IDE state). */
 const WORKSPACE_SKIP_DIRS = new Set([...OUTPUT_DIRS, "vendor", "target", ".idea"]);
+/**
+ * Compiled-output names (.NET / Java `bin`, `obj`) that are ALSO real source folders in other
+ * ecosystems (a JS package's `bin/` holds its CLI), so no walk skips them; only a CLASSIFIER
+ * ("is this generated?", evidence sampling) treats them as generated, via {@link isGeneratedDirName}.
+ */
+const COMPILED_OUTPUT_DIRS = new Set(["bin", "obj"]);
+/** Whether a classifier (not a walk) reads a directory called `name` as generated or vendored: any {@link WORKSPACE_SKIP_DIRS} entry or a compiled-output folder. */
+const isGeneratedDirName = (name) => WORKSPACE_SKIP_DIRS.has(name) || COMPILED_OUTPUT_DIRS.has(name);
+/**
+ * Whether a `/` or `\` separated `path` lies inside a directory `isSkipped` accepts (default: a
+ * {@link WORKSPACE_SKIP_DIRS} name; pass {@link isOutputDirName} to skip only build output and
+ * dependencies), at any depth. The last segment is the file, not a directory, so it is not
+ * tested. Directory names are lower-cased first, like the import/evidence rules this replaced.
+ */
+function isInSkippedDir(path, isSkipped = (name) => WORKSPACE_SKIP_DIRS.has(name)) {
+    const segments = path.split(/[\\/]+/);
+    for (let i = 0; i < segments.length - 1; i++)
+        if (isSkipped((segments[i] ?? "").toLowerCase()))
+            return true;
+    return false;
+}
 /** The one hidden directory an index walk still enters: CI workflows and issue templates are source worth indexing. */
 const INDEXED_DOT_DIR = ".github";
 /**
@@ -271,7 +300,7 @@ const INDEXED_DOT_DIR = ".github";
 const LIST_CONFIG_DOT_DIRS = new Set([
     ".github", ".vscode", ".devcontainer", ".husky", ".changeset", ".claude", ".cursor",
 ]);
-const VCS_METADATA_NAMES = new Set([".git", ".hg", ".svn"]);
+const VCS_METADATA_NAMES = new Set(VCS_DIRS);
 /** A version-control store's name (`.git`, `.hg`, `.svn`): never walked as a folder and never listed as a file (a `.git` FILE is a link to a store, not a source). */
 function isVcsMetadataName(name) {
     return VCS_METADATA_NAMES.has(name);
@@ -382,4 +411,4 @@ function listingResult(found, glob, subdir, unbounded) {
     return { ok: true, paths: summarizeDirs(found.paths, subdir), truncated: true };
 }
 
-export { matchGlobInScope, dirMayContainGlobMatch, emptyGlobListingNote, normalizeScopeDir, toPosixPath, isListedDirName, isVcsMetadataName, summarizeDirs };
+export { matchGlobInScope, dirMayContainGlobMatch, emptyGlobListingNote, normalizeScopeDir, toPosixPath, isListedDirName, isVcsMetadataName, summarizeDirs, walkWorkspace, listingResult };

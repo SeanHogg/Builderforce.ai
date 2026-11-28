@@ -338,12 +338,13 @@ export function createBuilderForceAgentsCodingTools(options?: {
         const sandboxed = createSandboxedReadTool({
           root: sandboxRoot,
           bridge: sandboxFsBridge!,
+          unconfined: !workspaceOnly,
           modelContextWindowTokens: options?.modelContextWindowTokens,
           imageSanitization,
         });
         return [workspaceOnly ? wrapToolWorkspaceRootGuard(sandboxed, sandboxRoot) : sandboxed];
       }
-      const freshReadTool = createReadTool(workspaceRoot);
+      const freshReadTool = createReadTool(workspaceRoot, { unconfined: !workspaceOnly });
       const wrapped = createBuilderForceAgentsReadTool(freshReadTool, {
         modelContextWindowTokens: options?.modelContextWindowTokens,
         imageSanitization,
@@ -362,7 +363,7 @@ export function createBuilderForceAgentsCodingTools(options?: {
       }
       // Wrap with param normalization for Claude Code compatibility
       const wrapped = wrapToolParamNormalization(
-        createWriteTool(workspaceRoot),
+        createWriteTool(workspaceRoot, { unconfined: !workspaceOnly }),
         CLAUDE_PARAM_GROUPS.write,
         workspaceRoot,
       );
@@ -375,7 +376,7 @@ export function createBuilderForceAgentsCodingTools(options?: {
       }
       // Wrap with param normalization for Claude Code compatibility
       const wrapped = wrapToolParamNormalization(
-        createEditTool(workspaceRoot),
+        createEditTool(workspaceRoot, { unconfined: !workspaceOnly }),
         CLAUDE_PARAM_GROUPS.edit,
         workspaceRoot,
       );

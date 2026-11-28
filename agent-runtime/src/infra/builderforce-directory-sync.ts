@@ -1,6 +1,8 @@
 import { builderforceApiBase } from "./builderforce-http.js";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isOutputDirName } from "@builderforce/agent-tools/skip-dirs";
+import { SNAPSHOT_FILE_MAX_BYTES } from "@builderforce/tool-output-policy";
 import {
   loadProjectContext,
   loadWorkspaceState,
@@ -12,14 +14,11 @@ import { readSharedEnvVar } from "./env-file.js";
 
 type SyncLog = { warn: (msg: string) => void };
 
-const MAX_FILE_BYTES = 512 * 1024;
 const MAX_FILE_COUNT = 200;
 
+/** By file NAME only: a skipped directory is pruned in `walk`, never matched on an ancestor of the root. */
 function shouldSyncFile(filePath: string): boolean {
   const normalized = filePath.toLowerCase();
-  if (normalized.includes(`${path.sep}node_modules${path.sep}`)) {
-    return false;
-  }
   if (normalized.endsWith(".png") || normalized.endsWith(".jpg") || normalized.endsWith(".jpeg")) {
     return false;
   }
@@ -58,14 +57,17 @@ async function collectFiles(
       }
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        await walk(fullPath);
+        // Prune build output / dependencies without descending (only entries UNDER the root are tested).
+        if (!isOutputDirName(entry.name.toLowerCase())) {
+          await walk(fullPath);
+        }
         continue;
       }
       if (!entry.isFile() || !shouldSyncFile(fullPath)) {
         continue;
       }
       const stat = await fs.stat(fullPath).catch(() => null);
-      if (!stat || stat.size > MAX_FILE_BYTES) {
+      if (!stat || stat.size > SNAPSHOT_FILE_MAX_BYTES) {
         continue;
       }
       const content = await fs.readFile(fullPath, "utf-8").catch(() => "");

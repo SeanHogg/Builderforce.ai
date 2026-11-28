@@ -2,7 +2,12 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { retrieveRelevantContext } from "./builderforcellm-rag.js";
+import { retrieveRelevantContext as retrieveWithSemantic } from "./builderforcellm-rag.js";
+import { localIndexSemantic } from "./on-prem-semantic.js";
+
+/** Hermetic setup: the workspace's own code index with a no-op embedder (no Desktop probe, no model load). */
+const retrieveRelevantContext = (opts: Parameters<typeof retrieveWithSemantic>[0]) =>
+  retrieveWithSemantic({ ...opts, semantic: localIndexSemantic(opts.workspaceDir, { embedder: async () => undefined }) });
 
 describe("retrieveRelevantContext", () => {
   let tmpDir: string;
@@ -124,6 +129,18 @@ describe("retrieveRelevantContext", () => {
     const result = await retrieveRelevantContext({ query: "dep dependency", workspaceDir: tmpDir });
     // Should return empty — no source files outside skipped dirs
     expect(result).toBe("");
+  });
+
+  it("regression: retrieval is the shared code index, so the excerpt is the matching definition, not the file head", async () => {
+    const filler = Array.from({ length: 80 }, (_, i) => `export const filler${i} = ${i};`).join("\n");
+    await fs.writeFile(
+      path.join(tmpDir, "deep.ts"),
+      `${filler}\nexport function reconcileLedgerBalances(entries: number[]) { return entries.length; }\n`,
+      "utf-8",
+    );
+    const result = await retrieveRelevantContext({ query: "reconcileLedgerBalances", workspaceDir: tmpDir });
+    expect(result).toContain("### deep.ts");
+    expect(result).toContain("reconcileLedgerBalances");
   });
 
   it("scans TypeScript, JavaScript, and Markdown files", async () => {

@@ -1,5 +1,6 @@
 /**
- * The editor's `repo.semantic` backing for one tool call, resolved the way a catalog is:
+ * The editor's `repo.semantic` backing for one tool call: the ONE resolver
+ * (`resolveWorkspaceSemantic`, `@builderforce/workspace-mcp`) fed this host's pieces:
  *
  *   - Builderforce Desktop answering ⇒ its capability, WITH the LLMLingua-2 compressor when
  *     its health probe reports one (`catalogDesktopSemantic`) — the C8 compression path
@@ -16,15 +17,20 @@
  */
 
 import { type RepoSemanticCapability } from "@builderforce/agent-tools";
-import { workspaceSemantic } from "@builderforce/workspace-mcp";
+import { resolveWorkspaceSemantic, workspaceSemantic } from "@builderforce/workspace-mcp";
 import { catalogDesktopSemantic } from "../context/desktopContext";
+import { logLine } from "../diagnostics/errorReporter";
 import { hostCostLeverOn } from "../host/hostCostLevers";
 import { knowledgeRootId } from "../knowledge/knowledgeRoots";
+import { messageOf } from "../shared/messageOf";
 import { symbolGrammarOptions } from "../workspace/workspaceSymbols";
 import { vscodeWatchPort } from "../workspace/workspaceSymbolWatch";
 import { buildLocalCapabilityProvider } from "./localCapabilities";
 
-export async function resolveLocalSemantic(root: string): Promise<RepoSemanticCapability> {
-  const desktop = await catalogDesktopSemantic(root, { adaptive: hostCostLeverOn("c4_adaptive_context") }).catch(() => undefined);
-  return desktop ?? workspaceSemantic({ root, caps: buildLocalCapabilityProvider(root) }, { grammar: symbolGrammarOptions, watch: vscodeWatchPort(), rootId: knowledgeRootId });
+export function resolveLocalSemantic(root: string): Promise<RepoSemanticCapability> {
+  return resolveWorkspaceSemantic({
+    desktop: () => catalogDesktopSemantic(root, { adaptive: hostCostLeverOn("c4_adaptive_context") }),
+    local: () => workspaceSemantic({ root, caps: buildLocalCapabilityProvider(root) }, { grammar: symbolGrammarOptions, watch: vscodeWatchPort(), rootId: knowledgeRootId }),
+    onDesktopError: (err) => logLine(`desktop semantic unavailable, using the local index: ${messageOf(err)}`),
+  });
 }

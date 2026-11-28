@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SEARCH_MAX_MATCHES } from "@builderforce/tool-output-policy";
-import { compileSearchPattern, isValidRegex, MATCH_TEXT_MAX, scanFiles, smartCaseSensitive } from "./text-scan.js";
+import { compileSearchPattern, findLiteralMatches, isValidRegex, MATCH_TEXT_MAX, scanFiles, smartCaseSensitive } from "./text-scan.js";
 import { memoryWorkspaceFs } from "./memoryWorkspaceFs.js";
 
 describe("pattern helpers", () => {
@@ -119,5 +119,32 @@ describe("scanFiles", () => {
     const ctl = new AbortController();
     ctl.abort();
     expect(await scanFiles(memoryWorkspaceFs(FILES), "x", "", { signal: ctl.signal })).toMatchObject({ ok: false, error: "search stopped" });
+  });
+});
+
+describe("findLiteralMatches", () => {
+  const TEXT = "Foo bar foo\r\nnothing\nxfOOx";
+
+  it("is case-insensitive and reports 1-based line and column of every occurrence", () => {
+    expect(findLiteralMatches(TEXT, "FOO")).toEqual([
+      { line: 1, column: 1, lineText: "Foo bar foo" },
+      { line: 1, column: 9, lineText: "Foo bar foo" },
+      { line: 3, column: 2, lineText: "xfOOx" },
+    ]);
+  });
+
+  it("reports only the first occurrence per line on request", () => {
+    expect(findLiteralMatches(TEXT, "foo", { everyOccurrence: false }).map((m) => [m.line, m.column])).toEqual([[1, 1], [3, 2]]);
+  });
+
+  it("stops at the limit, mid-line included", () => {
+    expect(findLiteralMatches(TEXT, "foo", { limit: 2 }).map((m) => [m.line, m.column])).toEqual([[1, 1], [1, 9]]);
+    expect(findLiteralMatches(TEXT, "foo", { limit: 0 })).toEqual([]);
+  });
+
+  it("treats the query as text, not a regex, and an empty query matches nothing", () => {
+    expect(findLiteralMatches("a.c abc a(b", "a.c")).toHaveLength(1);
+    expect(findLiteralMatches("call a(b)", "a(b")).toHaveLength(1);
+    expect(findLiteralMatches(TEXT, "")).toEqual([]);
   });
 });
