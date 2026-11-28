@@ -387,6 +387,9 @@
   "workspaceChoose": {
     "message": "选择工作区"
   },
+  "workspaceChanged": {
+    "message": "工作区已更改。"
+  },
   "workspaceSwitchFailed": {
     "message": "无法切换工作区。"
   },

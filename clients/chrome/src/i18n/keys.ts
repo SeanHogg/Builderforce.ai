@@ -516,4 +516,4 @@ export const MESSAGE_KEYS = [
   'translationGetTranslator',
 ] as const;
 
-export type MessageKey = (typeof M
+export type MessageKey = (typeof MESSAGE_KEYS)[number];

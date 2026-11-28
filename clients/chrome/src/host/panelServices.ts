@@ -452,4 +452,6 @@ export async function createPanelServices(): Promise<PanelServices> {
 function describeTarget(args: unknown): string {
   if (!args || typeof args !== 'object') return '';
   const a = args as Record<string, unknown>;
-  for (const key of ['url', 'ref', 'query', 'title']) if (typeof a[ke
+  for (const key of ['url', 'ref', 'query', 'title']) if (typeof a[key] === 'string') return a[key] as string;
+  return '';
+}

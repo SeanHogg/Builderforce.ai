@@ -387,6 +387,9 @@
   "workspaceChoose": {
     "message": "Arbeitsbereich auswählen"
   },
+  "workspaceChanged": {
+    "message": "Der Arbeitsbereich wurde gewechselt."
+  },
   "workspaceSwitchFailed": {
     "message": "Der Arbeitsbereich konnte nicht gewechselt werden."
   },

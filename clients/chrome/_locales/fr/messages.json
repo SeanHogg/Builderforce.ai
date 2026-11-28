@@ -387,6 +387,9 @@
   "workspaceChoose": {
     "message": "Choisir un espace de travail"
   },
+  "workspaceChanged": {
+    "message": "L’espace de travail a changé."
+  },
   "workspaceSwitchFailed": {
     "message": "Impossible de changer d’espace de travail."
   },

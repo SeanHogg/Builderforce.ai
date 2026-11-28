@@ -17,4 +17,7 @@ export function scopedGatewayFetch(
       throw new Error(workspaceChanged());
     }
     const headers = new Headers(init?.headers);
-    headers.set(GATEWAY_WORKSPACE_HEADER, Str
+    headers.set(GATEWAY_WORKSPACE_HEADER, String(tenantId));
+    return fetch(url, { ...init, headers });
+  };
+}

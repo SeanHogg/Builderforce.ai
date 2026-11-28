@@ -497,6 +497,9 @@
   "workspaceChoose": {
     "message": "Choose a workspace"
   },
+  "workspaceChanged": {
+    "message": "The workspace changed."
+  },
   "workspaceSwitchFailed": {
     "message": "The workspace could not be switched."
   },
