@@ -775,7 +775,7 @@ export function activate(context: vscode.ExtensionContext): BuilderforceApi {
       void maybeScan(context, false);
     }),
     // Keep the find_symbol / file_outline definition index current as files change.
-    ...watchWorkspaceSymbols(),
+    ...watchWorkspaceSymbols(vscode.workspace),
     // Desktop started after the workspace was grounded: its repo map joins the next run.
     watchDesktopStarts(() => onDesktopStart(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath)),
     // Switching the active project re-pushes Brain init so an open chat's system

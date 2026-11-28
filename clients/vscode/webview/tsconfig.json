@@ -86,6 +86,7 @@
       // The view's source has no install of its own: its React is this package's one copy (as in tsconfig.canvas.json).
       "react": ["../node_modules/@types/react/index.d.ts"],
       "three": ["../node_modules/@types/three/index.d.ts"],
+      "@react-three/fiber": ["../../../frontend/node_modules/@react-three/fiber/dist/react-three-fiber.cjs.d.ts"],
       "react/*": ["../node_modules/@types/react/*"],
       "@builderforce/secret-redaction": ["../../../packages/secret-redaction/src/index.ts"],
       "@builderforce/agent-tools/code-mask": ["../../../packages/agent-tools/src/knowledge/codeMask.ts"],

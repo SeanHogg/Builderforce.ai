@@ -12,8 +12,6 @@ import { nativeNeedsConfirm, parseToolOutput, toolLabel } from "./nativeRunTool"
 import { createStreamRelay, exhaustedToolBudget, transientRunPersistence } from "./nativeRunStream";
 import { createNativeStream, SURFACE_HEADER, SURFACE_VALUE } from "./nativeGatewayStream";
 
-vi.mock("../workspace/workspaceSymbolWatch", () => ({ vscodeWatchPort: () => undefined }));
-
 function toolDef(name: string, opts: { mutating?: boolean; remote?: boolean } = {}): ToolDef {
   return {
     name,

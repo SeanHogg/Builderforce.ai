@@ -12,7 +12,7 @@
  */
 
 import * as path from "path";
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import { markSymbolFileChanged } from "@builderforce/agent-tools/node-symbols";
 import type { WatchPort } from "@builderforce/agent-tools/watch-port";
 
@@ -48,8 +48,8 @@ export function vscodeWatchPort(): WatchPort {
 }
 
 /** Open the one watcher and feed the definition index from it; dispose with the extension. */
-export function watchWorkspaceSymbols(): vscode.Disposable[] {
-  const watcher = vscode.workspace.createFileSystemWatcher("**/*");
+export function watchWorkspaceSymbols(workspace: Pick<typeof vscode.workspace, "createFileSystemWatcher">): vscode.Disposable[] {
+  const watcher = workspace.createFileSystemWatcher("**/*");
   const symbols: Listener = { root: undefined, onChange: (absPaths) => { for (const abs of absPaths) markSymbolFileChanged(abs); } };
   listeners.add(symbols);
   return [

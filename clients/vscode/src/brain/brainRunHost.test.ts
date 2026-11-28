@@ -26,8 +26,6 @@ import { transientRunPersistence } from "../native/nativeRunStream";
 import { subagentToolDef } from "../subagent/subagentTool";
 import { subagentControlToolDefs } from "../subagent/subagentControlTools";
 
-vi.mock("../workspace/workspaceSymbolWatch", () => ({ vscodeWatchPort: () => undefined }));
-
 function toolDef(name: string, opts: { mutating?: boolean; remote?: boolean; result?: unknown } = {}): ToolDef & { calls: unknown[] } {
   const calls: unknown[] = [];
   return {

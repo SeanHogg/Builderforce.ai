@@ -116,9 +116,9 @@ describe("post-login auth surface sync", () => {
   it("treats a refused editor key as signed out, not a dead signed-in session", () => {
     const api = src("bfApi/session.ts");
     const guard = src("auth/editorKeyGuard.ts");
-    // 401/400 is a verdict on the KEY and is announced; other failures are not.
-    expect(api).toMatch(/res\.status === 401 \|\| res\.status === 400/);
-    expect(api).toContain("editorKeyRejected.fire(key)");
+    // The shared exchange classifies key refusals. The host announces that result.
+    expect(api).toMatch(/return exchangeEditorKey\(getBaseUrl\(\), key,/);
+    expect(api).toMatch(/if \(result\.rejected\) editorKeyRejected\.fire\(key\)/);
     // The guard only expires the key that is STILL stored (a stale exchange must not
     // sign a fresh key out) and signs out through the normal path.
     expect(guard).toMatch(/secrets\.get\(SECRET_KEY\)\)\s*!==\s*rejectedKey/);
