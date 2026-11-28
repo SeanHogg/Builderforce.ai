@@ -16,7 +16,7 @@
  * while signed out wait (unscoped) for the next sign-in.
  */
 import type { KeyValueStore } from '../platform/keyValue';
-import { revokeKey } from '@builderforce/device-auth';
+import { isTenantSessionFresh, revokeKey, tenantSessionExpiresAt } from '@builderforce/device-auth';
 
 /** Where the credential lives in `chrome.storage.local` — read by the platform policy
  *  too, which derives the default inference mode from "signed in". */
@@ -110,7 +110,7 @@ export function createSession(deps: SessionDeps): Session {
     async jwt(force = false) {
       await loaded;
       if (!key) return null;
-      if (!force && jwtCache && deps.now() < jwtCache.exp - 60_000) return jwtCache.token;
+      if (!force && jwtCache && isTenantSessionFresh(jwtCache.exp, deps.now())) return jwtCache.token;
       let res: Response;
       try {
         res = await deps.fetch(`${deps.baseUrl}/api/auth/tenant-api-key-token`, {
@@ -129,7 +129,7 @@ export function createSession(deps: SessionDeps): Session {
       if (!res.ok) return null;
       const body = (await res.json()) as { token?: string; expiresIn?: number; tenantId?: number; userId?: string };
       if (!body.token) return null;
-      jwtCache = { token: body.token, exp: deps.now() + (body.expiresIn ?? 3600) * 1000 };
+      jwtCache = { token: body.token, exp: tenantSessionExpiresAt(deps.now(), body.expiresIn) };
       if (typeof body.userId === 'string' && body.userId !== user) {
         user = body.userId;
         await deps.storage.set(USER, body.userId);

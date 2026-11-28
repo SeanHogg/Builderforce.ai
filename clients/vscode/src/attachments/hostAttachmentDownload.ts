@@ -9,7 +9,7 @@ import * as os from "node:os";
 import * as vscode from "vscode";
 import { fetchAuthed } from "../bfApi";
 import { downloadAttachment, type AttachmentDownloadRequest } from "./attachmentDownload";
-import { ATTACHMENT_DOWNLOAD_MAX_BYTES } from "./attachmentLimits";
+import { ATTACHMENT_DOWNLOAD_MAX_BYTES } from "@builderforce/asset-limits";
 import { logLine } from "../diagnostics/errorReporter";
 import { messageOf } from "../shared/messageOf";
 import { getBaseUrl } from "../gateway/gateway";

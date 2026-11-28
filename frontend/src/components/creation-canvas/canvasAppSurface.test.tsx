@@ -176,7 +176,7 @@ describe('the app surface', () => {
 
   it('passes the selected starter kit to the workspace creator', async () => {
     const actions = session([]);
-    renderSurface(<CanvasAppSurface nodes={[]} session={actions} persistence="local" onExit={vi.fn()} />);
+    renderSurface(<CanvasAppSurface nodes={[]} session={actions} persistence="local" sessionTitle="" onExit={vi.fn()} />);
     const picker = screen.getByRole('combobox', { name: 'App starter kit' });
     fireEvent.change(picker, { target: { value: 'react-node' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));

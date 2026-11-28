@@ -30,10 +30,26 @@ import type {
 import { clone } from './clone.js';
 import { indexKeyOf, type RecordIndex, type RecordIndexKey } from './recordIndex.js';
 import type { ScanVisit } from './storeContract.js';
+import type { AnyRecordPartition, PartitionLoader } from './recordPartition.js';
 
 export * from './storeContract.js';
 export { defineRecordIndex, type RecordIndex, type RecordIndexKey } from './recordIndex.js';
 export { changeTouches, isEmptyDelta, resetDeltaOf, type LocalFirstChange, type LocalFirstDelta } from './localFirstDelta.js';
+export {
+  defineRecordPartition,
+  homeOfRow,
+  partitionDeclarationOf,
+  partitionIdOf,
+  partitionTypeOf,
+  stubOf,
+  type AnyRecordPartition,
+  type PartitionDeclaration,
+  type PartitionLoader,
+  type PartitionPointer,
+  type RecordPartition,
+  type RecordStub,
+} from './recordPartition.js';
+export { splitPartitionedDelta } from './partitionedDelta.js';
 
 /**
  * Rows of `type` for which `where` holds, cloned — and ONLY those. `list` clones every
@@ -91,6 +107,20 @@ export interface MemoryLocalFirstStoreOptions {
    * wrote nothing. The delta's rows are the store's own — read them, never mutate them.
    */
   onCommit?: (delta: LocalFirstDelta) => Promise<void>;
+  /**
+   * The record types stored in partitions (`defineRecordPartition`). Their rows live in
+   * per-partition segments, never in the main state; what is always in memory is a stub per row.
+   * Without a `loader` every partition is resident, so a store with partitions behaves the same
+   * as one without — the rows are just filed by home.
+   *
+   * `onCommit` receives the commit with the partitioned rows still in `records` and
+   * `deletedRecords`, plus the `stubs` / `deletedStubs` that name them: `splitPartitionedDelta`
+   * separates them. A host that stores partitions apart sets `partitionPointers` on the delta
+   * there (the one field it owns) — the state moves its pointers with the commit.
+   */
+  partitions?: readonly AnyRecordPartition[];
+  /** Reads a partition that is in storage but not in memory. With none, every partition is resident. */
+  loader?: PartitionLoader;
 }
 
 export interface MemoryLocalFirstStore extends LocalFirstStore {
@@ -105,8 +135,12 @@ export interface MemoryLocalFirstStore extends LocalFirstStore {
   /**
    * The committed state as arrays WITHOUT cloning the rows: read-only, valid until the next
    * commit. A compaction streams it to disk; `export()` is the cloning, caller-owned form.
+   * With partitions it holds the unpartitioned rows plus stubs, pointers and declarations, and
+   * never loads a partition.
    */
   view(): LocalFirstSnapshot;
+  /** Bring these partitions current (`partitionIdOf`). A load commits nothing and notifies nobody. */
+  ensureLoaded(partitionIds: Iterable<string>): Promise<void>;
 }
 
 export function createMemoryLocalFirstStore(
@@ -114,6 +148,8 @@ export function createMemoryLocalFirstStore(
   options: MemoryLocalFirstStoreOptions = {},
 ): MemoryLocalFirstStore {
   let state = CommittedState.from(initial);
+  const partitions = options.partitions ?? [];
+  state.configurePartitions(partitions, options.loader);
   let tail: Promise<unknown> = Promise.resolve();
   let transacting = false;
   const listeners = new Set<LocalFirstListener>();
@@ -149,10 +185,14 @@ export function createMemoryLocalFirstStore(
       notify(state.applyDelta(delta));
     },
     adoptInitialState(replayed) {
+      // A journal fold builds its state with no knowledge of this store's partitions.
+      replayed.configurePartitions(partitions, options.loader);
       state = replayed;
     },
     view: () => state.view(),
-    export: async () => clone(state.view()),
+    // The whole store, every partition loaded: a caller of `export` gets every row, as always.
+    export: async () => clone(await state.fullView()),
+    ensureLoaded: (partitionIds) => state.ensureLoaded(partitionIds),
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

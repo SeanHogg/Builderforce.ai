@@ -152,6 +152,7 @@
       "@builderforce/provider-connect/accounts": ["../../../packages/provider-connect/src/connectedAccounts.ts"],
       "@builderforce/run-context": ["../../../packages/run-context/src/index.ts"],
       "@builderforce/local-first": ["../../../packages/local-first/src/index.ts"],
+      "@builderforce/local-first/indexed-db": ["../../../packages/local-first/src/indexedDb.ts"],
       // `WorkspaceApp.tsx` reaches the page engines (`src/engines/pageEngines.ts`), and through
       // them the page-engine bridge protocol, which names catalog types.
       "@builderforce/json-schema": ["../../../packages/json-schema/src/index.ts"],

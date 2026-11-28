@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { sendWithTenantSession } from "@builderforce/device-auth";
 import { NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import { getBaseUrl } from "../gateway/gateway";
 import { trackReachability } from "../sync/outboxStorage";
@@ -65,8 +66,6 @@ export async function fetchAuthed(
 ): Promise<Response | undefined> {
   const { asTenant: requested, ...init } = authedInit ?? {};
   const requestedTenant = requested ?? "current";
-  let token = await exchangeJwt(secrets);
-  if (!token) return undefined;
   const call = (t: string) => {
     // "current": the workspace selected NOW. A token that still acts as another tenant (a
     // re-scope that failed and fell back to the key's) must not be used.
@@ -88,13 +87,7 @@ export async function fetchAuthed(
       },
     }));
   };
-  let res = await call(token);
-  if (res.status === 401) {
-    token = await exchangeJwt(secrets, true);
-    if (!token) return undefined;
-    res = await call(token);
-  }
-  return res;
+  return sendWithTenantSession((force) => exchangeJwt(secrets, force), call);
 }
 
 export async function authed<T>(

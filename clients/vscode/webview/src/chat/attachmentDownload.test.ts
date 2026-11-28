@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 // The real transport acquires the VS Code API at load; every request here goes through the injected `send`.
 vi.mock('../bridge/bridgeTransport', () => ({ request: vi.fn() }));
 
-import { ATTACHMENT_DOWNLOAD_MAX_BYTES } from '../../../src/attachments/attachmentLimits';
+import { ATTACHMENT_DOWNLOAD_MAX_BYTES } from '@builderforce/asset-limits';
 import { createHostAttachmentDownload } from './attachmentDownload';
 
 const tooLarge = (name: string) => `${name} is too large`;

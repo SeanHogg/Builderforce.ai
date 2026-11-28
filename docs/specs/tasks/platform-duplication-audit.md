@@ -30,7 +30,7 @@ The OpenVSCode-in-Tauri shell is not being built. Until the fork ships, the edit
 |---|---|
 | CHAT-G015 | Closed. The Synapse chat fork is deleted. |
 | CHAT-G016 | Reduced to the Spawn copy of dictation. |
-| CHAT-G010, CHAT-G018 | The Synapse part is gone. The VS Code, brain-embedded and Chrome parts remain open. |
+| CHAT-G010, CHAT-G018 | The Synapse part is gone. The API, Brain and VS Code share the attachment size limits. Chrome diagnostics and the remaining chat budgets stay open. |
 | MEM-G105, MEM-G106 | The former Tauri experience integration and its direct `memory.json` reads were removed. The native Teach-once helper remains in `bf-teach`. |
 | MEM-G114 | Reduced to 2 brain-map UIs (`EvermindBrainMap`, `EvermindBrain3D`). |
 | INF-G006 | Closed. `hub.rs` is deleted. |
@@ -350,9 +350,11 @@ The native service was faster on both lexical samples. Keep it until a full-repo
 
 Full coverage cannot be matched at the current TypeScript limits. Of 5,385 eligible hired.video files, at most 4,548 fit the 24 MiB budget. Of 19,389 eligible Builderforce.ai files, at most 4,428 fit. Both ceilings precede the 20,000-chunk cap. The harness's `--full-comparison` mode runs the same TypeScript scanner, chunker, and ranker with a larger in-memory budget. This mode skips shared snapshot I/O and leaves the shipped limits unchanged. Its cold time therefore excludes writing and reopening the TypeScript snapshot. Both engines must index every materialized path for the comparison to pass.
 
-An offline check used the same cached BGE-small ONNX model with native and a scratch TypeScript `EmbedderPort`. The native engine embedded all 207 chunks from the 40-file matched corpus. Both engines ranked the judged file first for all three questions, as did TypeScript’s lexical-only search. The sample confirms the offline evaluation path. Native retirement still requires matched full coverage, a larger judged set with low-lexical-overlap queries, and a production TypeScript embedder for the chosen model.
+An offline smoke used the same cached BGE-small ONNX model with native and TypeScript. The native engine embedded all 207 chunks from the 40-file matched corpus. Both engines ranked the judged file first for all three questions, as did TypeScript’s lexical-only search. The larger judged comparison below measures low-overlap retrieval separately.
 
 **Full matched Windows lexical run (2026-11-27).** Both engines indexed the same 5,385 files at hired.video commit `27dbdf38dfb`, with zero missing or extra paths. TypeScript measured 503.1 s cold, 810/2,019 ms warm p50/p95 and 583 MiB RSS. Native measured 375.0 s, 369/850 ms and 19 MiB RSS. The run used the in-memory TypeScript benchmark budget and shared the host with other builds. Native leads on cold latency, warm latency and memory on this corpus.
+
+**Full matched Ubuntu WSL lexical run (2026-11-27).** Both engines indexed the same 19,383 files at Builderforce.ai commit `56755a50276`, with zero missing or extra paths. Over 30 warm runs per engine, TypeScript measured 301.5 s cold and 384/508 ms warm p50/p95, with 2,156 MiB RSS and 64,280 chunks. Native measured 2,342.5 s cold and 647/1,321 ms warm p50/p95, with 25 MiB RSS and 164,646 chunks. TypeScript used the expanded in-memory budget. The corpus and indexes were on WSL's Linux filesystem. The Windows run on this repository reached the native stage's original 30-minute timeout.
 
 The judged retrieval harness and the headless Workspace code search now load the same local BGE checkpoint through `loadBgeCodeEmbedder`. The headless runtime uses that adapter for `workspace__find` and saved semantic search when the checkpoint is installed. It falls back to a warm Ollama embedder or lexical search. A production-path smoke loaded the pinned checkpoint and returned a normalized 384-dimensional vector. The editor still uses the existing Ollama path.
 
@@ -364,7 +366,7 @@ The judged comparison evaluated 12 queries on each repository, with 64 matched f
 | Builderforce.ai | 8 / 12, 0.343 | 8 / 12, 0.451 | 6 / 12, 0.458 | 9 / 12, 0.468 |
 | Low overlap across both | 9 / 15, 0.274 | 9 / 15, 0.461 | 9 / 15, 0.350 | 12 / 15, 0.504 |
 
-The judged samples favor native hybrid on recall at eight. They support retaining the native index pending a replacement that matches its retrieval and resource use.
+The judged samples favor native hybrid on recall at eight, and native used less memory on both full-repository runs. Warm and cold latency favored different engines on the two corpora. Keep the native index until a replacement delivers comparable retrieval and resource use within its shipped limits.
 
 ### 2.6 Granular gaps
 
@@ -385,7 +387,7 @@ The judged samples favor native hybrid on recall at eight. They support retainin
 | CIX-G013 | Change detection: watcher + blake3 (Synapse) vs mtime snapshot (VS Code) vs 5-min staleness (agent-runtime) | Content-hash incremental + host watcher port | `watcher.rs`, `indexWatcher.ts`, `node-code-tools.ts` |
 | CIX-G014 | Workspace cutover complete | VS Code and headless MCP share `workspace__references` | `packages/workspace-mcp` |
 | CIX-G015 | Result caps disagree (8/25/20/100/30), as do file caps (1 MB / 256 KB; 5k / 6k / 40k files) | One cap policy per tool, documented | §2.2 |
-| CIX-G016 | Partial comparison only | §2.5 records a full-repo smoke and matched lexical samples. Full-repo matched coverage and dense quality remain open | — |
+| CIX-G016 | Verification complete. Keep the native index | §2.5 records matched full-repository lexical benchmarks, judged dense retrieval and the production headless TypeScript embedder. Native leads on memory and low-overlap recall | — |
 | CIX-G017 | API `knowledge.search` is SOP/doc search (`recallSops.ts`), but its name suggests code | Rename it to `docs.search`, or document it | `builtinMcpService.ts:1402` |
 | CIX-G018 | **Re-audit 2026-11-27:** agent-runtime native `read`/`write`/`edit` are a seventh file-tool host. Only the edit matcher is shared; they keep their own fs ops, caps (2,000 lines / 50 KB), containment (`resolveToCwd`) and `File not found` text | Run them on `createRepoCapabilities`. Staging stays a decorator, and `oldText`/`newText` stay at the tool layer | `agent-runtime/src/agents/native-file-tools.ts` |
 | CIX-G019 | The container's `listFiles` is a hand copy of `walkWorkspace`. Its containment (`lexicallyInside`, `resolveInside`, `insideClone`) and error wording are also its own | Generate `walkWorkspace` into the container. Containment stays stricter (`.git` block, `O_NOFOLLOW`, TOCTOU re-checks) until a security review | `api/container/workspaceAgent.mjs:264-396`, `gen-container-shared.mjs` |
@@ -654,7 +656,7 @@ The real duplication is in four places:
 
 | Capability | Survivor | Other copies |
 |---|---|---|
-| Composer | `brain-ui/src/composer/BrainComposer.tsx` | Synapse `chat/composer.js`; TUI input; `brain-embedded/src/ui/PromptInput.tsx` (may be dead, UNVERIFIED) |
+| Composer | `brain-ui/src/composer/BrainComposer.tsx` | TUI input; `brain-embedded/src/ui/PromptInput.tsx` is used by the web Meeting Room |
 | Markdown | `brain-ui/src/Markdown.tsx` | `frontend/src/components/ChatMessageContent.tsx` (own react-markdown setup, mermaid, save-fence, apply, create-file); Control UI `grouped-render.ts` |
 | Message rows and actions | `brain-ui/src/timeline/MessageRows.tsx` and `MessageActions.tsx` | web `ChatMessageBubble`, `ChatMessageActions`, `BrainMessageActions` |
 | Tool cards and step text | `brain-ui` `ToolStep`, `StepRows`, `ToolGroupRow`, `toolStepView.ts` | Control UI `tool-cards.ts`; Synapse `stepText.js`; TUI renderer |
@@ -666,7 +668,7 @@ The real duplication is in four places:
 | Transcript and diagnostics | `brain-embedded` `gatherChatDiagnostics`, `chatDiagnosticsReport`, `brainTriage` | VS Code `diagnostics/transcript.ts` and `transcriptSections.ts`; web `managerChatDiagnostics.ts`, `diagnosticsCapture.ts`, `diagnosticsReport.ts`; `canvasDiagnosticsContext.tsx`; `brain-ui/src/evermind/diagnosticsReport.ts` |
 | Starters and work modes | `brain-ui/src/surface/StarterTiles.tsx`; `ModePane.tsx` and `brain-embedded/src/chatMode.ts` | VS Code `editorStarters.tsx`; Chrome `rovrStarters.tsx`; web `useComposerStarters.tsx`, `WorkOptionsPicker.tsx`, `BrainCapabilityPicker.tsx`, `lib/brain/chatModes.ts`; Chrome `runOptions.ts` |
 | Voice | `brain-ui/src/useVoiceDictation.ts` | Synapse `chat/dictation.js` (its header says it is a verbatim copy); Spawn `desktop/spawn/ui/js/dictation.js` (UNVERIFIED) |
-| Limits | `brain-embedded` `toolResultBudget`, `HISTORY_TOKEN_BUDGET`, `uploadUrls.ts` `ASSET_MAX_BYTES` | Synapse hardcodes `HISTORY=24`, `RECALL_CHARS=6000`, `RESULT_CHARS=16000` and a 5-minute approval wait; VS Code `attachmentLimits.ts` mirrors the API by comment |
+| Limits | `packages/asset-limits` serves the API, Brain and VS Code. `brain-embedded` owns `toolResultBudget` and `HISTORY_TOKEN_BUDGET` | Remaining host budgets need review |
 | Labels | `brain-ui` `labelCatalog.ts` and `timelineCatalog.ts` | six label paths: web next-intl plus hand maps (`PERSONA_PATH`, `RECIPIENT_PATH`); VS Code `chatLabels.ts` and `composerLabels.ts`; Chrome `i18n/t` plus a `QUEUED_KEY` map (`$1` vs `{model}`); Synapse `i18n.js`; TUI English literals; Control UI `ui/src/i18n` |
 
 ### 5.4 Data-model overlaps
@@ -725,15 +727,15 @@ The real duplication is in four places:
 | CHAT-G007 | Model-picker rendering in three hosts | Data adapters only → `ModelPane` | Chrome `ModelPickerSection.tsx`, VS Code `useComposerModels.ts`, web `useComposerOptions.ts`, `dockModelMenu.ts` |
 | CHAT-G008 | Starter and work-mode tiles built per host | Starter data into `StarterTiles`; modes from `chatMode.ts` | `editorStarters.tsx`, `rovrStarters.tsx`, `useComposerStarters.tsx`, `WorkOptionsPicker.tsx`, `BrainCapabilityPicker.tsx`, `lib/brain/chatModes.ts`, Chrome `runOptions.ts` |
 | CHAT-G009 | Six label paths and hand key maps | One `labelCatalog` plus a `t()` adapter per host | `chatLabels.ts`, `composerLabels.ts`, Chrome `QUEUED_KEY`, web `PERSONA_PATH`/`RECIPIENT_PATH` |
-| CHAT-G010 | Limits copied per host | One exported limits module, with a test | Synapse constants, VS Code `attachmentLimits.ts`, brain-embedded budgets |
+| CHAT-G010 | Attachment size limits consolidated | `packages/asset-limits` supplies the API and VS Code. Brain preserves its public constants for the web device blob store. Review the remaining chat budgets | `packages/asset-limits`, `brain-embedded/src` |
 | CHAT-G011 | Third and fourth slash-command registries with hand-written help | TUI reads `composerCommands`; help is generated | `agent-runtime/src/tui/commands.ts`, `auto-reply/commands-registry.ts` |
 | CHAT-G012 | No shared run-event vocabulary | `RunEvent` plus transport adapters | TUI assembler, Control UI controller, Synapse `brain.rs`, VS Code bridge |
 | CHAT-G013 | Control UI has its own message normalizer, tool cards and copy-as-markdown | Consume the shared normalizer and serializer | `agent-runtime/ui/src/ui/chat/*` |
 | CHAT-G014 | Agent-host chat uses a second message store | Fold into `brain_chat_*` (expand/contract) | `api/src/presentation/routes/chatRoutes.ts` and its tables |
 | CHAT-G015 | Synapse chat is a full fork: composer, transcript, approval, streaming, polling | Removed by the Synapse IDE rebuild (the VSIX chat) | `I/app/ui/js/views/chat.js`, `chat/*`, `approval.js`, `stepText.js`, `src-tauri/src/cloud/brain.rs` |
 | CHAT-G016 | Dictation copied into Synapse (and Spawn) | Deleted with CHAT-G015; until then, one plain-JS build of the core of `useVoiceDictation` | `I/app/ui/js/chat/dictation.js`, `desktop/spawn/ui/js/dictation.js` |
-| CHAT-G017 | `PromptInput.tsx` in brain-embedded may be dead | Verify references; delete if unused | `brain-embedded/src/ui/PromptInput.tsx` |
-| CHAT-G018 | No tests for Synapse chat, Chrome diagnostics or shared limits | Tests come with CHAT-G005 and CHAT-G010; Synapse via CHAT-G015 | — |
+| CHAT-G017 | Verification complete. `PromptInput` has an active consumer | Keep the component for the web Meeting Room | `frontend/src/components/meetings/MeetingRoom.tsx` |
+| CHAT-G018 | Chrome diagnostics and remaining chat limits need tests | API upload, VS Code upload/download and web blob store have focused attachment coverage | CHAT-G005, CHAT-G010 |
 
 ## 6. Shell, terminal and file tools
 
@@ -881,7 +883,7 @@ Paths: BF = `Builderforce.ai`, I = `builderforce-inference`, M = `builderforce-m
 |---|---|---|---|---|---|
 | Web `frontend/src/lib/{auth.ts, auth/*, apiClient.ts, builderforceApi.ts}` | password, MFA, OAuth, SSO, magic link, passkey | web JWT and tenant JWT (see `AUTH-G015`) | no refresh; tenant JWT through `/api/auth/tenant-token` | `apiRequest`: 401 clears the session and redirects to `/login`; 402 becomes a plan-limit error | `apiClient*.test`, `auth.test`, `AuthContext*.test` |
 | VS Code `clients/vscode/src/{auth/auth.ts, bfApi/session.ts, bfApi/transport.ts}` | `packages/device-auth`, with a paste-key fallback | `bfk_*` key in SecretStorage | key → `/api/auth/tenant-api-key-token` → `/api/vscode/tenants/:id/token`; 60 s margin, single-flight, epoch guard, park/drop workspace | `authed`: 401 forces a re-mint and retries once; 60 s timeout; `asTenant` pin | `session.mint`, `session.park`, `transport`, `gatewayAuth`, `editorKeyGuard` |
-| Chrome `clients/chrome/src/{auth/session.ts, api/apiClient.ts}` | device flow (SettingsView, UNVERIFIED) | key in `chrome.storage.local` (see `AUTH-G016`) | same exchange; 60 s margin; a 400/401 on exchange clears the session; **no workspace switch** | **no 401 retry**; `ApiError{status}`; `Idempotency-Key` | `apiClient.test.ts` (11 lines), `config.test` |
+| Chrome `clients/chrome/src/{auth/session.ts, api/apiClient.ts}` | device flow (`SettingsView`) | key in `chrome.storage.local` (see `AUTH-G016`) | same exchange; 60 s margin; a 400/401 on exchange clears the session; workspace switch open | forced refresh and one 401 retry for replayable requests; `ApiError{status}`; `Idempotency-Key` | `apiClient.test.ts`, `config.test` |
 | Synapse/Spawn `I/crates/bf-cloud/{device.rs, session.rs, account.rs, error.rs}` | **Rust copy of the device flow** | OS keyring (`bf-vault`), no plaintext fallback | same exchange; assumes 900 s when the server omits `expiresIn` (TypeScript hosts assume 3600 s) | `Session::api` retries once on 401 under a Mutex | 6 unit tests |
 | agent-runtime `agent-runtime/src/commands/builderforce-connect.ts`, `infra/builderforce-relay.ts`, `run-context-client.ts` | `BUILDERFORCE_TOKEN` → `POST /api/agent-hosts` → API key | `~/.builderforce/.env` (see `AUTH-G017`) | static key | about 56 hand-built Bearer sites; no shared client | none for auth |
 | SDK `BF/sdk/src/infrastructure/httpClient.ts` | — | caller-supplied key | static | rich `BuilderforceApiError`, 180 s timeout, no 401 refresh | yes |
@@ -894,7 +896,7 @@ Paths: BF = `Builderforce.ai`, I = `builderforce-inference`, M = `builderforce-m
 |---|---|---|
 | Device flow | `packages/device-auth` | `I/bf-cloud/src/device.rs` (Rust; kept native, but pinned by a shared fixture) |
 | Editor-key session (exchange, margin, single-flight, workspace switch, rejected-key event) | VS Code `bfApi/session.ts`, **extracted** host-neutral into `packages/editor-session` (injected storage, fetch, clock) | Chrome `auth/session.ts`; `I/bf-cloud/session.rs` (Rust; fixture) |
-| Authed fetch with a forced re-mint and one retry on 401 | VS Code `bfApi/transport.ts`, extracted with the session | Chrome `createAuthenticatedFetch`; Rust `Session::api`; the agent-runtime sites |
+| Authed fetch with a forced re-mint and one retry on 401 | `packages/device-auth/src/tenantSession.ts`, used by VS Code and Chrome | Rust `Session::api`; the agent-runtime sites |
 | Error flattening (`{error}` vs `{error:{message,code}}`) | `frontend/src/lib/apiClient.ts` `flattenErrorBody`, moved to a shared package | Chrome `flattenErrorMessage` (its comment admits it is a copy); SDK parser; Rust `CloudError::from_ureq`, which misses the nested form |
 | Base URL and web-origin derivation | none; add one resolver | VS Code `appUrl()` and `webUrl`; Rust `web_base_of`; frontend `apiOrigin.ts`; Chrome `PLATFORM_ORIGINS` |
 | Key revoke on sign-out | `device-auth` `revokeKey` | Rust `sign_out` (inline) |
@@ -909,11 +911,10 @@ Paths: BF = `Builderforce.ai`, I = `builderforce-inference`, M = `builderforce-m
   - web: `NEXT_PUBLIC_AUTH_API_URL` and `NEXT_PUBLIC_WORKER_URL`;
   - agent-runtime: `BUILDERFORCE_URL`, `_API_KEY`, `_TOKEN`, `_WEB_URL`, `_GATEWAY_URL`, `_AGENTS_LINK_URL` and `_AGENTS_GATEWAY_TOKEN`;
   - memory: `BUILDERFORCE_MEMORY_TOKEN`.
-- **Refresh.** The web has none and signs out on 401. Editor hosts re-mint short JWTs from a long-lived key, but only VS Code has a forced retry plus single-flight.
+- **Refresh.** Chrome and VS Code share the forced refresh and single retry. VS Code also deduplicates concurrent token exchanges. The web signs out on 401.
 - **Rejected key.** VS Code fires an event, Chrome clears the session, and Rust returns `KeyRejected` and signs out.
 - **Workspace switch.** The web uses `/api/auth/tenant-token`. VS Code and Rust use `/api/vscode/tenants/:id/token`, a VS Code-named route used by non-VS Code clients. Chrome has no workspace switch.
-- **Expiry fallback.** 3600 s in TypeScript vs 900 s in Rust.
-- **Stale doc paths** in the `packages/device-auth/src/index.ts` header (`clients/vscode/src/auth.ts`, `bfApi.ts`).
+- **Expiry fallback.** The API, Chrome and VS Code use the shared 3600 s default. Rust still uses 900 s.
 - **Rust device poll** swallows non-status errors and has no distinct `cancelled` reason.
 
 ### 7.5 Target design and order
@@ -932,16 +933,16 @@ Paths: BF = `Builderforce.ai`, I = `builderforce-inference`, M = `builderforce-m
 |---|---|---|
 | AUTH-G001 | Rust device flow duplicates TypeScript; no shared contract fixture | `I/crates/bf-cloud/src/device.rs`, `packages/device-auth` |
 | AUTH-G002 | Three copies of the editor-key session | VS Code `bfApi/session.ts`, Chrome `auth/session.ts`, `I/bf-cloud/session.rs` |
-| AUTH-G003 | Chrome has no 401 forced-refresh retry | `clients/chrome/src/api/apiClient.ts` |
+| AUTH-G003 | Closed. Chrome uses the shared 401 forced refresh and one retry for replayable requests. Tests cover the idempotency key and workspace scope | `clients/chrome/src/api/apiClient.test.ts` |
 | AUTH-G004 | Chrome has no workspace switch | `clients/chrome/src/auth/session.ts` |
 | AUTH-G005 | agent-runtime has about 56 hand-built Bearer fetches and about 18 `BUILDERFORCE_URL` fallbacks | `agent-runtime/src/{infra,builderforce,commands}/*` |
 | AUTH-G006 | Default base URL split (`api.` vs `/gateway`) | all clients |
 | AUTH-G007 | Inconsistent configuration names and aliases | see §7.4 |
 | AUTH-G008 | Error flattening copied four times; Rust misses the nested form | `frontend/src/lib/apiClient.ts`, `clients/chrome/src/api/apiClient.ts`, `sdk/src/infrastructure/httpClient.ts`, `I/bf-cloud/src/error.rs` |
-| AUTH-G009 | `expiresIn` fallback differs (3600 vs 900) | VS Code, Chrome, Rust session code |
-| AUTH-G010 | Stale paths in the `device-auth` header comment | `packages/device-auth/src/index.ts` |
+| AUTH-G009 | The API and TypeScript clients now share the `expiresIn` default. Rust parity remains open (900 s) | `packages/device-auth/src/tenantSession.ts`, Spawn `bf-cloud` |
+| AUTH-G010 | Closed. The `device-auth` header names the current Chrome and VS Code entry points | `packages/device-auth/src/index.ts` |
 | AUTH-G011 | The web has no refresh; an expired token means a hard logout | `frontend/src/lib/apiClient.ts`, `auth/session.ts` |
-| AUTH-G012 | Auth-client test gaps: Chrome (11 lines), Rust (6), agent-runtime (none) | — |
+| AUTH-G012 | Chrome now tests refresh and retry. Chrome session, Rust parity and agent-runtime client coverage remain open | — |
 | AUTH-G013 | Web origin derived from the API URL by hand in Rust and VS Code | `I/bf-cloud/src/lib.rs` `web_base_of`, VS Code `appUrl()` |
 | AUTH-G014 | Not yet audited: Chrome SettingsView sign-in, W `aiGateway`/`hostRelay`, `packages/knowledge-client`, `packages/provider-connect` | — |
 | AUTH-G015–G019 | Security-sensitive; details in the local security findings file | — |

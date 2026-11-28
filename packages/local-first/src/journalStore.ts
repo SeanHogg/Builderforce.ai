@@ -14,6 +14,7 @@
  *   - `journalReplay.ts`     fold frames back into state: `scanJournal`, `scanJournalAsync`,
  *                            `decodeJournalFrames`, `readJournalTail`
  *   - `journalCompaction.ts` the shared policy and the chunked compaction writer
+ *   - `compactBlocks.ts`     the column encoding of a base's stubs and mappings
  *   - `localFirstDelta.ts`   what a commit changed
  *
  * `BFJF1` (one whole snapshot — the shipped format) stays readable forever; a snapshot

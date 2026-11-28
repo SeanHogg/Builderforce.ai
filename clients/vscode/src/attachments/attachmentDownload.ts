@@ -18,7 +18,7 @@
  */
 
 import { decodeBase64, decodedLengthOf } from "./attachmentIngress";
-import { ATTACHMENT_DOWNLOAD_MAX_BYTES } from "./attachmentLimits";
+import { ATTACHMENT_DOWNLOAD_MAX_BYTES } from "@builderforce/asset-limits";
 
 /** The account paths an attachment is read from: an upload (credentialed) and its signed copy. */
 export const ATTACHMENT_PATHS = ["/api/brain/uploads/", "/api/brain-files/"] as const;

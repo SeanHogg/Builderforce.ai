@@ -1,7 +1,7 @@
 /**
  * The marks on the stage (PRD 43 B1a rules 1, 4, 5; B3 Marks): ONE `InstancedMesh` per type batch of the MarkSet, sized
  * at the batch's capacity, created in {@link MarkLayer.setMarks} only (a new graph, or an overflow). Per instance it holds
- * two placement sets, A and B — `placeA` / `placeB` (position xyz + scale) and `extrudeAB` — and the paint (tone, tone2,
+ * two placement sets, A and B — `placeA` / `placeB` (position xyz + scale) and `extrudeAB` (extrude, order, aspect) — and the paint (tone, tone2,
  * fill, flags as one vec4). Packed because D3D11 ANGLE links at most 16 vertex attributes (instanceMatrix takes 4).
  *
  * A placement swap writes the incoming placement into the STALE set (2 ranged uploads per batch: its `place` and
@@ -17,6 +17,7 @@ import { SlotTable } from '../slots';
 import { uploadRange, type StageStats } from '../stats';
 import { staggerAt, type StaggerClock } from '../tween';
 import { FLAG, type MarkPaint, type MarkSet, type Placement, type SlotAppend } from '../types';
+import { aspectOf, PACKED_ONE, withAspect } from './aspect';
 import { markGeometry } from './geometry';
 import { markMaterial, type SharedMarkUniforms } from './shader';
 
@@ -25,15 +26,16 @@ interface Batch {
     /** placeA, placeB: xyz + scale per instance. */
     place: [InstancedBufferAttribute, InstancedBufferAttribute];
     /**
-     * extrude A in x, B in y, and in z the instance's place in the placement's entry order (the 45 ms stagger counts across
-     * every batch) — packed so a placement swap stays at the same uploads and the program under the 16-attribute cap.
+     * extrude A in x, B in y, in z the instance's place in the placement's entry order (the 45 ms stagger counts across
+     * every batch), and in w the footprint aspects of A and B (`Placement.aspect`, `aspect.ts`) — packed so a placement swap
+     * stays at the same uploads and the program under the 16-attribute cap.
      */
     extrude: InstancedBufferAttribute;
     paint: InstancedBufferAttribute;
 }
 
-/** Floats per instance in `extrudeAB`: extrude A, extrude B, entry order. */
-const EX = 3;
+/** Floats per instance in `extrudeAB`: extrude A, extrude B, entry order, and the A/B footprint aspects packed (`aspect.ts`). */
+const EX = 4;
 
 /**
  * Each instance's entry order for `p`'s tween, per batch: the marks `p` shows counted across EVERY batch, so the 45 ms
@@ -167,6 +169,7 @@ export class MarkLayer {
                     place[i * 4] = p.position[s * 3]!; place[i * 4 + 1] = p.position[s * 3 + 1]!; place[i * 4 + 2] = p.position[s * 3 + 2]!;
                     place[i * 4 + 3] = p.scale[s]!;
                     extrude[i * EX + w] = p.extrude[s]!;
+                    extrude[i * EX + 3] = withAspect(extrude[i * EX + 3]!, w, p.aspect?.[s] ?? 1);
                 }
                 uploadRange(this.stats, b.place[w], 0, count, bi);
             }
@@ -200,6 +203,8 @@ export class MarkLayer {
                 z[i * 4 + 3] = p.scale[s]!;
                 ex[i * EX + to] = p.extrude[s]!;
                 ex[i * EX + 2] = order[bi]![i]!;
+                const was = ex[i * EX + 3]!, aFrom = aspectOf(was, from), aTo = aspectOf(was, to);
+                ex[i * EX + 3] = withAspect(withAspect(was, from, aFrom + (aTo - aFrom) * t), to, p.aspect?.[s] ?? 1);
             }
             uploadRange(this.stats, b.place[from], 0, count, bi);
             uploadRange(this.stats, b.place[to], 0, count, bi);
@@ -246,6 +251,7 @@ export class MarkLayer {
                 for (let c = 0; c < 3; c++) place[i * 4 + c] = other[i * 4 + c] = parent >= 0 && from ? from.position[parent * 3 + c] ?? 0 : 0;
                 place[i * 4 + 3] = other[i * 4 + 3] = 0;
                 extrude[i * EX] = extrude[i * EX + 1] = extrude[i * EX + 2] = 0;
+                extrude[i * EX + 3] = PACKED_ONE;
                 const pb = parent >= 0 ? table.batchOf[parent]! : -1;
                 if (pb >= 0) for (let c = 0; c < 4; c++) paint[i * 4 + c] = (this.batches[pb]!.paint.array as Float32Array)[table.instanceOf[parent]! * 4 + c]!;
             }

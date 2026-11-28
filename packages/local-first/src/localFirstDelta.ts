@@ -21,6 +21,9 @@ import type {
   SyncConflict,
   SyncReceipt,
 } from './records.js';
+import type { PartitionDeclaration, PartitionPointer, RecordStub } from './recordPartition.js';
+import type { RecordIndexKey } from './recordIndex.js';
+import type { MappingBlock, StubBlock } from './compactBlocks.js';
 
 export interface LocalFirstDelta {
   /**
@@ -63,6 +66,21 @@ export interface LocalFirstDelta {
   /** Cursors cleared, by destination key. */
   unsetCursors?: string[];
   nextSequence?: number;
+  /**
+   * Stubs written, one per partitioned row the commit upserted (`recordPartition.ts`). The main
+   * journal carries these in place of the rows, which live in their partition's own frame.
+   */
+  stubs?: RecordStub[];
+  /** Stubs removed: a partitioned row hard-deleted or re-homed. `home` is where it LIVED (names the partition holding the deletion). */
+  deletedStubs?: Array<{ entityType: LocalEntityType; id: string; home: RecordIndexKey }>;
+  /** Where each partition's rows are stored now, by partition id. A host sets it in `onCommit`; the package only moves it. */
+  partitionPointers?: Record<string, PartitionPointer>;
+  /** The partitioned types, persisted so a build that declares differently still finds the rows. */
+  partitionDeclarations?: PartitionDeclaration[];
+  /** BASE frames only: `stubs` as columns (`compactBlocks.ts`). Expanded into `stubs` when a frame is read. */
+  stubBlock?: StubBlock;
+  /** BASE frames only: `mappings` as columns. Expanded into `mappings` when a frame is read. */
+  mappingBlock?: MappingBlock;
 }
 
 /**
@@ -90,6 +108,12 @@ export function isEmptyDelta(delta: LocalFirstDelta): boolean {
     && !delta.conflicts?.length
     && !(delta.cursors && Object.keys(delta.cursors).length > 0)
     && !delta.unsetCursors?.length
+    && !delta.stubs?.length
+    && !delta.deletedStubs?.length
+    && !(delta.partitionPointers && Object.keys(delta.partitionPointers).length > 0)
+    && !delta.partitionDeclarations?.length
+    && !delta.stubBlock
+    && !delta.mappingBlock
     && delta.nextSequence === undefined;
 }
 
@@ -143,5 +167,8 @@ export function resetDeltaOf(snapshot: LocalFirstSnapshot): LocalFirstDelta {
     conflicts: snapshot.conflicts,
     cursors: snapshot.cursors,
     nextSequence: snapshot.nextSequence,
+    ...(snapshot.stubs ? { stubs: snapshot.stubs } : {}),
+    ...(snapshot.partitionPointers ? { partitionPointers: snapshot.partitionPointers } : {}),
+    ...(snapshot.partitionDeclarations ? { partitionDeclarations: snapshot.partitionDeclarations } : {}),
   };
 }

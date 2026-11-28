@@ -60,7 +60,7 @@ export function drillFrameOf(key: string | null): Pick<DrillFrame, 'level' | 're
     if (!key) return null;
     const at = key.indexOf(':');
     const level = key.slice(0, at);
-    return at > 0 && (level === 'package' || level === 'class' || level === 'function') ? { level, ref: key.slice(at + 1) } : null;
+    return at > 0 && (level === 'system' || level === 'app' || level === 'package' || level === 'class' || level === 'function') ? { level, ref: key.slice(at + 1) } : null;
 }
 
 /** The overlay channels that move geometry (the rest are paint, `markPaint`). */

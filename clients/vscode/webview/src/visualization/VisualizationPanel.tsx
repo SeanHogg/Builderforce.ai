@@ -61,7 +61,6 @@ import {
   isRunActive,
   visualizationViewReducer,
   INITIAL_VIEW_STATE,
-  type VisualizationView,
 } from './visualizationViewState';
 
 /** The frames `src/brainRunHostProtocol.ts` defines — read, never re-declared. */

@@ -23,6 +23,7 @@ import type {
 import { isLocalId } from './entityId.js';
 import type { LocalFirstChange } from './localFirstDelta.js';
 import type { RecordIndex, RecordIndexKey } from './recordIndex.js';
+import type { PartitionDeclaration, PartitionPointer, RecordStub } from './recordPartition.js';
 
 export interface LocalFirstTransaction {
   get<T = unknown>(entityType: LocalEntityType, id: string): Promise<LocalRecord<T> | undefined>;
@@ -51,6 +52,17 @@ export interface LocalFirstTransaction {
    * which falls back to a filtered `scan`.
    */
   scanIndex?<T = unknown>(index: RecordIndex<T>, key: RecordIndexKey, visit: ScanVisit<T>): Promise<void>;
+  /**
+   * Visit the STUBS of a partitioned type (`recordPartition.ts`): one per row, tombstones
+   * included, WITHOUT loading any partition — what a hot path reads when it needs a row's
+   * version, device, destination or ordinal but not the row. Draft-aware: it reflects this
+   * transaction's own puts and deletes. Visits nothing for an unpartitioned type. Same
+   * `SCAN_STOP` rule as `scan`; the stubs are the store's own — never mutate or retain one.
+   * Optional so a hand-rolled transaction still fits.
+   */
+  scanStubs?(entityType: LocalEntityType, visit: (stub: Readonly<RecordStub>) => void | ScanStop): Promise<void>;
+  /** One row's stub, as `scanStubs` sees it (draft-aware, loads nothing). A copy: the caller owns it. */
+  stub?(entityType: LocalEntityType, id: string): Promise<RecordStub | undefined>;
   put<T>(record: LocalRecord<T>, expectedVersion?: number): Promise<void>;
   /**
    * Remove one local row. A pull tombstone calls this instead of `put`: writing
@@ -213,6 +225,14 @@ export interface LocalFirstSnapshot {
   conflicts: SyncConflict[];
   cursors: Record<string, string>;
   nextSequence: number;
+  /**
+   * The partition state (`recordPartition.ts`), present only for a store that has any. A
+   * `view()` holds the UNPARTITIONED rows in `records` plus these; `export()` is the whole
+   * store, so its `records` hold every row and it carries none of these.
+   */
+  stubs?: RecordStub[];
+  partitionPointers?: Record<string, PartitionPointer>;
+  partitionDeclarations?: PartitionDeclaration[];
 }
 
 /**

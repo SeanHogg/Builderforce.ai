@@ -12,8 +12,12 @@ import { destinationKey, earliestMapping, normalizeServerMapping, type EntityDes
 import { parseEntityRef, parseSyncId, syncIdText, tierRefText } from './entityId.js';
 import type { LocalFirstDelta } from './localFirstDelta.js';
 import { DraftMap } from './draftMap.js';
-import { CommittedState, PendingCounts, PendingEntityIndex, PendingKeyIndex, mappingKey, recordKey } from './storeState.js';
-import { isJournalEventId, SCAN_STOP, type AppendJournalEvent, type LocalFirstTransaction, type PendingCount, type PendingLookup, type ScanPendingVisit, type ScanVisit } from './storeContract.js';
+import { CommittedState, mappingKey, recordKey, splitRecordKey } from './storeState.js';
+import { PendingCounts, PendingEntityIndex, PendingKeyIndex } from './pendingIndexes.js';
+import { isJournalEventId, SCAN_STOP, type AppendJournalEvent, type LocalFirstTransaction, type PendingCount, type PendingLookup, type ScanPendingVisit, type ScanStop, type ScanVisit } from './storeContract.js';
+import { committedGroup, draftStub, homeChanged, loadIndex, loadRow, loadType, scanDraftStubs, typeRowsOf } from './partitionedReads.js';
+import { partitionedDeltaParts } from './partitionedDelta.js';
+import type { RecordStub } from './recordPartition.js';
 import { isRecordPayloadMarker, materializedEvent } from './recordPayloadMarker.js';
 import { draftPendingCount, draftPendingLookup, visitPendingOf, type DraftPendingSources } from './draftPending.js';
 import { clone } from './clone.js';
@@ -48,7 +52,7 @@ export class Transaction implements LocalFirstTransaction {
 
   constructor(private readonly base: CommittedState, private readonly mutable: boolean) {
     this.maxMappedSeq = base.maxMappedSeq;
-    this.records = new DraftMap(base.records);
+    this.records = new DraftMap(base.recordsBase());
     this.events = new DraftMap(base.events);
     this.mappings = new DraftMap(base.mappings);
     this.receipts = new DraftMap(base.receipts);
@@ -66,7 +70,18 @@ export class Transaction implements LocalFirstTransaction {
   private readonly pendingSources: DraftPendingSources;
 
   async get<T>(entityType: LocalEntityType, id: string): Promise<LocalRecord<T> | undefined> {
+    const loading = loadRow(this.base, entityType, id);
+    if (loading) await loading;
     return clone(this.records.get(recordKey(entityType, id))) as LocalRecord<T> | undefined;
+  }
+
+  async scanStubs(entityType: LocalEntityType, visit: (stub: Readonly<RecordStub>) => void | ScanStop): Promise<void> {
+    scanDraftStubs(this.base, this.records, entityType, visit);
+  }
+
+  async stub(entityType: LocalEntityType, id: string): Promise<RecordStub | undefined> {
+    const stub = draftStub(this.base, this.records, entityType, id);
+    return stub && { ...stub };
   }
 
   async list<T>(entityType?: LocalEntityType): Promise<LocalRecord<T>[]> {
@@ -76,6 +91,8 @@ export class Transaction implements LocalFirstTransaction {
   }
 
   async scan<T>(entityType: LocalEntityType | undefined, visit: ScanVisit<T>): Promise<void> {
+    const loading = loadType(this.base, entityType);
+    if (loading) await loading;
     if (entityType === undefined) {
       for (const record of this.records.values()) {
         if (visit(record as LocalRecord<T>) === SCAN_STOP) return;
@@ -89,7 +106,7 @@ export class Transaction implements LocalFirstTransaction {
     // so a typed scan yields in `list` order, same as the old walk-everything loop.
     // The tail below reads ONLY the draft's tail upserts (isTailKey): iterating
     // `values()` here would re-yield the base rows the indexed pass already visited.
-    const rows = this.base.typeRows(entityType);
+    const rows = typeRowsOf(this.base, entityType);
     if (this.records.untouched) {
       // A read (or a transaction that wrote no row): the committed rows ARE the answer.
       for (const record of rows?.values() ?? []) {
@@ -111,7 +128,9 @@ export class Transaction implements LocalFirstTransaction {
   }
 
   async scanIndex<T>(index: RecordIndex<T>, key: RecordIndexKey, visit: ScanVisit<T>): Promise<void> {
-    const group = this.base.indexGroup(index as RecordIndex, key);
+    const loading = loadIndex(this.base, index as RecordIndex, key);
+    if (loading) await loading;
+    const group = committedGroup(this.base, index as RecordIndex, key);
     if (this.records.untouched) {
       for (const record of group?.values() ?? []) {
         if (visit(record as LocalRecord<T>) === SCAN_STOP) return;
@@ -141,16 +160,26 @@ export class Transaction implements LocalFirstTransaction {
   async put<T>(record: LocalRecord<T>, expectedVersion?: number): Promise<void> {
     this.assertMutable();
     if (!record.id || typeof record.id !== 'string') throw new Error('client_entity_id_must_be_stable_uuid');
+    this.base.table.assertWritable(record.entityType);
     const key = recordKey(record.entityType, record.id);
+    // The row's current partition must be in memory: `expectedVersion` reads it and a re-home deletes from it.
+    const loading = loadRow(this.base, record.entityType, record.id);
+    if (loading) await loading;
     const current = this.records.get(key);
     if (expectedVersion !== undefined && current?.version !== expectedVersion) {
       throw Object.assign(new Error('entity_version_conflict'), { code: 'ENTITY_VERSION_CONFLICT' });
     }
-    this.records.set(key, clone(record));
+    const written = clone(record);
+    // A put that changes the row's home is a delete in the old partition and a put in the new
+    // one, in this one delta: delete-then-set is how the overlay already says "removed and re-added".
+    if (current && homeChanged(this.base, current, written)) this.records.delete(key);
+    this.records.set(key, written);
   }
 
   async delete(entityType: LocalEntityType, id: string): Promise<boolean> {
     this.assertMutable();
+    const loading = loadRow(this.base, entityType, id);
+    if (loading) await loading;
     return this.records.delete(recordKey(entityType, id));
   }
 
@@ -350,11 +379,12 @@ export class Transaction implements LocalFirstTransaction {
     const delta: LocalFirstDelta = {};
     const records = [...this.records.upserts()].map(([, row]) => row);
     if (records.length > 0) delta.records = records;
-    const deletedRecords = [...this.records.removedKeys()].map((key) => {
-      const row = this.base.records.get(key)!;
-      return { entityType: row.entityType, id: row.id };
-    });
+    // A removed row's type and id are in its key: a partitioned row is not in `base.records`, and
+    // reading it back from the composite would throw whenever its partition is not in memory.
+    const removed = [...this.records.removedKeys()];
+    const deletedRecords = removed.map(splitRecordKey);
     if (deletedRecords.length > 0) delta.deletedRecords = deletedRecords;
+    Object.assign(delta, partitionedDeltaParts(this.base, records, removed));
     const events = [...this.events.upserts()].map(([, event]) => event);
     if (events.length > 0) delta.events = events;
     const acknowledgedEvents = [...this.events.removedKeys()];

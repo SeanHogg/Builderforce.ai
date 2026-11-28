@@ -7,6 +7,7 @@
  * `asScope` pins the identity a replayed write must be sent as: when the session now
  * acts as another tenant the request is NOT sent — it fails retriably and waits.
  */
+import { sendWithTenantSession } from '@builderforce/device-auth';
 import type { Session } from '../auth/session';
 
 export type ApiFetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -62,25 +63,35 @@ export type AuthenticatedFetch = (path: string, init?: ApiRequestInit & Pick<Req
 export function createAuthenticatedFetch(deps: { session: Session; baseUrl: string; fetch: ApiFetch }): AuthenticatedFetch {
   return async (path, init = {}) => {
     const { json, asScope, idempotencyKey, headers, ...rest } = init;
-    if (asScope !== undefined && asScope !== deps.session.scope()) {
-      throw new ApiError(undefined, 'parked: queued for another workspace');
-    }
-    const token = await deps.session.jwt();
-    // No status: the outbox keeps it and retries once there is a credential again.
-    if (!token) throw new ApiError(undefined, 'not signed in or unreachable');
+    let requiredScope: string | null | undefined = asScope;
+    const checkScope = () => {
+      const scope = deps.session.scope();
+      if (requiredScope !== undefined && requiredScope !== scope) {
+        throw new ApiError(undefined, 'parked: queued for another workspace');
+      }
+      return scope;
+    };
+    checkScope();
     try {
-      return await deps.fetch(`${deps.baseUrl}${path}`, {
-        ...rest,
-        headers: {
-          // A `Headers` instance spreads to nothing — read it into a plain record.
-          ...(headers ? Object.fromEntries(new Headers(headers).entries()) : {}),
-          authorization: `Bearer ${token}`,
-          ...(json !== undefined ? { 'content-type': 'application/json' } : {}),
-          ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+      const requestHeaders = new Headers(headers);
+      if (json !== undefined) requestHeaders.set('content-type', 'application/json');
+      if (idempotencyKey) requestHeaders.set('Idempotency-Key', idempotencyKey);
+      const body = json !== undefined ? JSON.stringify(json) : rest.body;
+      const response = await sendWithTenantSession(
+        (force) => deps.session.jwt(force),
+        (token) => {
+          requiredScope = checkScope();
+          const authenticatedHeaders = new Headers(requestHeaders);
+          authenticatedHeaders.set('authorization', `Bearer ${token}`);
+          return deps.fetch(`${deps.baseUrl}${path}`, { ...rest, headers: authenticatedHeaders, body });
         },
-        ...(json !== undefined ? { body: JSON.stringify(json) } : {}),
-      });
+        !(body instanceof ReadableStream),
+      );
+      // No status: the outbox keeps it and retries once there is a credential again.
+      if (!response) throw new ApiError(undefined, 'not signed in or unreachable');
+      return response;
     } catch (e) {
+      if (e instanceof ApiError) throw e;
       throw new ApiError(undefined, e instanceof Error ? e.message : String(e));
     }
   };

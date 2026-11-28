@@ -8,7 +8,7 @@
 
 import { destinationKey, type EntityDestination, type JournalEvent } from './records.js';
 import { SCAN_STOP, type PendingCount, type PendingLookup, type ScanPendingVisit } from './storeContract.js';
-import type { PendingCounts, PendingEntityIndex, PendingKeyIndex } from './storeState.js';
+import type { PendingCounts, PendingEntityIndex, PendingKeyIndex } from './pendingIndexes.js';
 
 export interface DraftPendingSources {
   /** The event as the draft sees it now (undefined: acknowledged / unknown). */

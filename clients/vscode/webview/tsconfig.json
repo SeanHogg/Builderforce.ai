@@ -23,6 +23,7 @@
     // No `baseUrl`: TypeScript 6 removed it (TS5102), and without one a `paths`
     // target resolves relative to THIS file — which is what these already are.
     "paths": {
+      "@builderforce/asset-limits": ["../../../packages/asset-limits/src/index.ts"],
       "@builderforce/agent-loop": ["../../../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-skills": ["../../../packages/agent-skills/src/index.ts"],
       // The audit view types its code-analysis report off the agent-tools
@@ -83,6 +84,7 @@
       "@builderforce/knowledge-graph-view/delta/history": ["../../../packages/knowledge-graph-view/src/delta/history/index.ts"],
       // The view's source has no install of its own: its React is this package's one copy (as in tsconfig.canvas.json).
       "react": ["../node_modules/@types/react/index.d.ts"],
+      "three": ["../node_modules/@types/three/index.d.ts"],
       "react/*": ["../node_modules/@types/react/*"],
       "@builderforce/secret-redaction": ["../../../packages/secret-redaction/src/index.ts"],
       "@builderforce/agent-tools/code-mask": ["../../../packages/agent-tools/src/knowledge/codeMask.ts"],

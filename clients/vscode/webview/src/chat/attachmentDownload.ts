@@ -9,7 +9,7 @@
  */
 import { useMemo } from 'react';
 import type { AttachmentDownload, AttachmentPreviewItem } from '@seanhogg/builderforce-brain-ui';
-import { ATTACHMENT_DOWNLOAD_MAX_BYTES } from '../../../src/attachments/attachmentLimits';
+import { ATTACHMENT_DOWNLOAD_MAX_BYTES } from '@builderforce/asset-limits';
 import { base64Of } from './attachmentUpload';
 import { request } from '../bridge/bridgeTransport';
 import type { LabelBundle } from '../bridge/vscodeBridge';

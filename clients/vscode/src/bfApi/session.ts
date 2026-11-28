@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { isTenantSessionFresh, tenantSessionExpiresAt } from "@builderforce/device-auth";
 import { getApiKey, getBaseUrl } from "../gateway/gateway";
 import { setOutboxScope, trackReachability } from "../sync/outboxStorage";
 import { setCurrentWorkspace } from "../workspace/workspaceSelection";
@@ -185,7 +186,7 @@ async function requestBaseJwt(key: string): Promise<KeyExchange> {
     if (!res.ok) return { ok: false, rejected: false };
     const body = (await res.json()) as { token?: string; expiresIn?: number; tenantId?: number };
     if (!body.token || typeof body.tenantId !== "number") return { ok: false, rejected: false };
-    return { ok: true, jwt: { token: body.token, exp: Date.now() + (body.expiresIn ?? 3600) * 1000, tenantId: body.tenantId } };
+    return { ok: true, jwt: { token: body.token, exp: tenantSessionExpiresAt(Date.now(), body.expiresIn), tenantId: body.tenantId } };
   } catch {
     return { ok: false, rejected: false };
   }
@@ -196,7 +197,7 @@ async function exchangeBaseJwt(
   secrets: vscode.SecretStorage,
   force: boolean,
 ): Promise<{ token: string; tenantId: number } | undefined> {
-  if (!force && baseJwt && Date.now() < baseJwt.exp - 60_000) return baseJwt;
+  if (!force && baseJwt && isTenantSessionFresh(baseJwt.exp, Date.now())) return baseJwt;
   const epoch = jwtEpoch;
   const key = await getApiKey(secrets);
   if (!key) return undefined;
@@ -254,7 +255,7 @@ async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<s
   if (!base) return undefined;
   const target = selectedTenantId ?? base.tenantId;
   if (target === base.tenantId) return base.token;
-  if (!force && scopedJwt && scopedJwt.tenantId === target && Date.now() < scopedJwt.exp - 60_000) {
+  if (!force && scopedJwt && scopedJwt.tenantId === target && isTenantSessionFresh(scopedJwt.exp, Date.now())) {
     return scopedJwt.token;
   }
   // Re-scope to another of the user's workspaces. Degrades to the base token:
@@ -310,7 +311,7 @@ async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<s
         parkWorkspaceWrites();
         return base.token;
       }
-      scopedJwt = { token: body.token, exp: Date.now() + (body.expiresIn ?? 3600) * 1000, tenantId: target };
+      scopedJwt = { token: body.token, exp: tenantSessionExpiresAt(Date.now(), body.expiresIn), tenantId: target };
       syncOutboxScope();
       return scopedJwt.token;
     }

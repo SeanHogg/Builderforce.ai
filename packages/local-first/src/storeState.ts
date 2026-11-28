@@ -6,156 +6,27 @@
  * applied, a journal being folded on open — is the same step: apply one
  * `LocalFirstDelta`. That is what lets a journal store ONE delta per commit and replay
  * it anywhere, and why the state never has to be re-indexed per transaction.
+ *
+ * Rows of a PARTITIONED type (`recordPartition.ts`) are not in `records`: they live in the
+ * `PartitionTable`'s segments, and only their stubs are always in memory.
  */
 
 import { destinationKey, normalizeServerMapping, type JournalEvent, type LocalEntityType, type LocalRecord, type ServerMapping, type SyncConflict, type SyncReceipt } from './records.js';
 import { ChangeBuilder, type LocalFirstChange, type LocalFirstDelta } from './localFirstDelta.js';
 import type { LocalFirstSnapshot } from './storeContract.js';
-import { isRecordPayloadFence } from './recordPayloadMarker.js';
 import { RecordGroups, recordIndexId, sameRecordIndex, type RecordIndex, type RecordIndexKey } from './recordIndex.js';
+import { PendingCounts, PendingEntityIndex, PendingKeyIndex } from './pendingIndexes.js';
+import { PartitionTable } from './partitionTable.js';
+import { stubOf, type AnyRecordPartition, type PartitionLoader, type RecordPartition } from './recordPartition.js';
+import { CompositeRecords } from './compositeRecords.js';
+import { recordKey } from './recordKey.js';
 
-export const recordKey = (type: LocalEntityType, id: string): string => `${type}:${id}`;
+export { recordKey, splitRecordKey } from './recordKey.js';
 export const mappingKey = (mapping: Pick<ServerMapping, 'entityType' | 'clientEntityId' | 'destination'>): string =>
   `${destinationKey(mapping.destination)}:${mapping.entityType}:${mapping.clientEntityId}`;
 
-/**
- * Pending events by their caller-side idempotency key, so `append` finds the event a key
- * already names in O(1) instead of walking every event. A key maps to a LIST because a
- * snapshot opened from disk may carry two events with one key; the latest one in
- * iteration order is the one a lookup returns, exactly as a rebuilt Map would.
- */
-export class PendingKeyIndex {
-  private readonly byKey = new Map<string, JournalEvent[]>();
-
-  add(event: JournalEvent): void {
-    if (event.idempotencyKey === undefined) return;
-    const list = this.byKey.get(event.idempotencyKey);
-    if (list) list.push(event);
-    else this.byKey.set(event.idempotencyKey, [event]);
-  }
-
-  remove(event: JournalEvent): void {
-    if (event.idempotencyKey === undefined) return;
-    const list = this.byKey.get(event.idempotencyKey);
-    if (!list) return;
-    const at = list.lastIndexOf(event);
-    if (at >= 0) list.splice(at, 1);
-    if (list.length === 0) this.byKey.delete(event.idempotencyKey);
-  }
-
-  /** Every event filed under this key (read-only to the caller). */
-  all(key: string): readonly JournalEvent[] {
-    return this.byKey.get(key) ?? [];
-  }
-
-  /** The latest event with this key that `live` still accepts. */
-  latest(key: string, live?: (event: JournalEvent) => boolean): JournalEvent | undefined {
-    const list = this.byKey.get(key);
-    if (!list) return undefined;
-    for (let index = list.length - 1; index >= 0; index -= 1) {
-      const event = list[index]!;
-      if (!live || live(event)) return event;
-    }
-    return undefined;
-  }
-
-  clear(): void {
-    this.byKey.clear();
-  }
-}
-
-/**
- * Pending event ids by the row they write (`clientEntityId`), so "this row's pending events"
- * costs that row, not the whole journal. Every bind and bound write drops a row's older
- * pending events (`journalRules.ts`); walking every event for each row made a bind of a
- * long-offline history O(rows × events) — 75k messages × 92k events, about an hour inside
- * one transaction — so the bind never finished and nothing was ever sent or acknowledged.
- * An id set, not event objects: the caller reads the event itself through its own view, so
- * a held / dead-lettered replacement under the same id is seen as it is now.
- */
-export class PendingEntityIndex {
-  private readonly byEntity = new Map<string, Set<string>>();
-
-  add(event: Pick<JournalEvent, 'eventId' | 'clientEntityId'>): void {
-    const ids = this.byEntity.get(event.clientEntityId);
-    if (ids) ids.add(event.eventId);
-    else this.byEntity.set(event.clientEntityId, new Set([event.eventId]));
-  }
-
-  remove(event: Pick<JournalEvent, 'eventId' | 'clientEntityId'>): void {
-    const ids = this.byEntity.get(event.clientEntityId);
-    if (!ids) return;
-    ids.delete(event.eventId);
-    if (ids.size === 0) this.byEntity.delete(event.clientEntityId);
-  }
-
-  /** The ids of the row's events. Read-only to the caller. */
-  of(clientEntityId: string): ReadonlySet<string> | undefined {
-    return this.byEntity.get(clientEntityId);
-  }
-
-  clear(): void {
-    this.byEntity.clear();
-  }
-}
-
-/**
- * Running counts of the committed events per partition (`destinationKey`): how many, and how
- * many of them are dead-lettered. Kept by the same `applyDelta` path as the events, so "how much
- * work is left" is a lookup instead of a walk of the journal (`countPending`).
- */
-export class PendingCounts {
-  private readonly byPartition = new Map<string, { total: number; dead: number }>();
-  private deadTotal = 0;
-
-  add(event: Pick<JournalEvent, 'destination' | 'deadLetter' | 'idempotencyKey'>): void {
-    this.bump(event, 1);
-  }
-
-  remove(event: Pick<JournalEvent, 'destination' | 'deadLetter' | 'idempotencyKey'>): void {
-    this.bump(event, -1);
-  }
-
-  /** Events in `partition` that are not dead-lettered. */
-  live(partition: string): number {
-    const row = this.byPartition.get(partition);
-    return row ? row.total - row.dead : 0;
-  }
-
-  /** Live events across every partition. */
-  liveTotal(): number {
-    let live = 0;
-    for (const row of this.byPartition.values()) live += row.total - row.dead;
-    return live;
-  }
-
-  /** Dead-lettered events across every partition. */
-  dead(): number {
-    return this.deadTotal;
-  }
-
-  clear(): void {
-    this.byPartition.clear();
-    this.deadTotal = 0;
-  }
-
-  private bump(event: Pick<JournalEvent, 'destination' | 'deadLetter' | 'idempotencyKey'>, by: 1 | -1): void {
-    // The record-payload fence is no work and no failure: it only holds older builds off markers.
-    if (isRecordPayloadFence(event)) return;
-    const key = destinationKey(event.destination);
-    const row = this.byPartition.get(key) ?? { total: 0, dead: 0 };
-    row.total += by;
-    if (event.deadLetter) {
-      row.dead += by;
-      this.deadTotal += by;
-    }
-    // A draft's adjustments may go negative (it acknowledges committed events): only zero is empty.
-    if (row.total === 0 && row.dead === 0) this.byPartition.delete(key);
-    else this.byPartition.set(key, row);
-  }
-}
-
 export class CommittedState {
+  /** The UNPARTITIONED rows. A partitioned type's rows are in `table`'s segments. */
   readonly records = new Map<string, LocalRecord>();
   readonly events = new Map<string, JournalEvent>();
   /** The committed events by the row they write (`PendingEntityIndex`). */
@@ -167,6 +38,8 @@ export class CommittedState {
   readonly conflicts = new Map<string, SyncConflict>();
   readonly cursors = new Map<string, string>();
   readonly pendingKeys = new PendingKeyIndex();
+  /** Stubs, pointers and segments of the partitioned types (empty, and free, for a store with none). */
+  readonly table = new PartitionTable();
   /**
    * The per-type scan index: the committed rows by entity type, by id, in committed
    * insertion order. A `scan(type)` walks ONLY this type's rows — and walks the rows
@@ -200,8 +73,20 @@ export class CommittedState {
     this.mappings.set(key, row);
   }
 
-  /** Commit one row: the records Map, the per-type rows and every built index of its type. */
-  private putRecord(record: LocalRecord): void {
+  /**
+   * Commit one row. A row of a partitioned type that has a home goes to its segment (and its
+   * stub is rebuilt from the row itself, so a stub can never disagree with the row it names);
+   * every other row goes to the records Map, the per-type rows and every built index of its type.
+   */
+  private putRecord(record: LocalRecord, carried: Set<string>, force = false): void {
+    const partition = this.table.partitionOf(record.entityType);
+    const stub = partition && stubOf(partition, record);
+    if (stub) {
+      this.removeMain(record.entityType, record.id); // a row that gained a home leaves the main state
+      this.table.applyRow(stub, record, carried, force);
+      return;
+    }
+    this.table.deleteRow(record.entityType, record.id); // a row that lost its home leaves its segment
     this.records.set(recordKey(record.entityType, record.id), record);
     let rows = this.recordTypes.get(record.entityType);
     if (!rows) this.recordTypes.set(record.entityType, (rows = new Map()));
@@ -209,15 +94,26 @@ export class CommittedState {
     for (const groups of this.indexes.get(record.entityType) ?? []) groups.put(record);
   }
 
-  private removeRecord(entityType: LocalEntityType, id: string): void {
-    this.records.delete(recordKey(entityType, id));
+  private removeMain(entityType: LocalEntityType, id: string): void {
+    if (!this.records.delete(recordKey(entityType, id))) return;
     this.recordTypes.get(entityType)?.delete(id);
     for (const groups of this.indexes.get(entityType) ?? []) groups.remove(id);
   }
 
-  /** The committed rows of `entityType` by id, in committed order — what a typed scan walks. */
+  /** Remove a row wherever it lives: its stub says a segment, otherwise the main state. */
+  private removeRecord(entityType: LocalEntityType, id: string, carried: Set<string>): void {
+    if (this.table.stub(entityType, id)) this.table.deleteRow(entityType, id, carried);
+    else this.removeMain(entityType, id);
+  }
+
+  /** The committed UNPARTITIONED rows of `entityType` by id, in committed order. */
   typeRows(entityType: LocalEntityType): ReadonlyMap<string, LocalRecord> | undefined {
     return this.recordTypes.get(entityType);
+  }
+
+  /** The records Map a transaction reads through: the main rows, plus the loaded segments when any type is partitioned. */
+  recordsBase(): ReadonlyMap<string, LocalRecord> {
+    return this.table.enabled ? new CompositeRecords(this.records, this.table) : this.records;
   }
 
   /**
@@ -249,7 +145,9 @@ export class CommittedState {
   /** Index a snapshot. The rows are adopted, not cloned: nothing mutates a committed row. */
   static from(initial?: Partial<LocalFirstSnapshot>): CommittedState {
     const state = new CommittedState();
-    for (const record of initial?.records ?? []) state.putRecord(record);
+    state.table.restore(initial ?? {});
+    const carried = new Set<string>(); // nothing settles after a snapshot: only a delta moves pointers
+    for (const record of initial?.records ?? []) state.putRecord(record, carried);
     for (const event of initial?.events ?? []) state.events.set(event.eventId, event);
     // Legacy rows (no `syncId`, `kind:ref` in `serverId`) are read through the ONE normaliser; nothing is dropped.
     // A legacy row without a `mappedSeq` gets the next one AFTER every persisted one, in load order.
@@ -269,6 +167,27 @@ export class CommittedState {
   }
 
   /**
+   * Declare which types are partitioned and how their partitions are read. Rows of those types
+   * already in the main state (a store opened from a snapshot that predates the partition) move
+   * into their segments, in order, so there is one place a row can be.
+   */
+  configurePartitions(declared: readonly AnyRecordPartition[], loader?: PartitionLoader): void {
+    const partitions = declared as readonly RecordPartition[];
+    this.table.configure(partitions, loader);
+    const carried = new Set<string>();
+    for (const partition of partitions) {
+      for (const record of [...(this.recordTypes.get(partition.index.entityType)?.values() ?? [])]) {
+        if (stubOf(partition, record)) this.putRecord(record, carried, true);
+      }
+    }
+  }
+
+  /** Bring these partitions' segments current (`PartitionTable.load`). A load commits nothing and notifies nobody. */
+  async ensureLoaded(partitionIds: Iterable<string>): Promise<void> {
+    await this.table.load(partitionIds);
+  }
+
+  /**
    * Apply one commit. Deletions first, then upserts (see `localFirstDelta.ts`). Returns what
    * changed, or `undefined` for a `reset` — everything changed, which is what a listener
    * is told when the change is unknown.
@@ -276,9 +195,22 @@ export class CommittedState {
   applyDelta(delta: LocalFirstDelta): LocalFirstChange | undefined {
     const change = new ChangeBuilder();
     if (delta.reset) this.clear();
+    // Pointers first: whether a partitioned row is kept in memory depends on whether it has one.
+    const moved = this.table.setPointers(delta.partitionPointers);
+    this.table.declare(delta.partitionDeclarations);
+    const carried = new Set<string>();
     for (const gone of delta.deletedRecords ?? []) {
-      this.removeRecord(gone.entityType, gone.id);
+      this.removeRecord(gone.entityType, gone.id, carried);
       change.record(gone.entityType, gone.id);
+    }
+    for (const gone of delta.deletedStubs ?? []) {
+      this.table.deleteRow(gone.entityType, gone.id);
+      change.record(gone.entityType, gone.id);
+    }
+    // A stub-only change (another window's commit to a partition this one never loaded) still names the row.
+    for (const stub of delta.stubs ?? []) {
+      this.table.putStub(stub);
+      change.record(stub.entityType, stub.id);
     }
     for (const id of delta.acknowledgedEvents ?? []) {
       const event = this.events.get(id);
@@ -294,7 +226,7 @@ export class CommittedState {
       change.sync();
     }
     for (const record of delta.records ?? []) {
-      this.putRecord(record);
+      this.putRecord(record, carried);
       change.record(record.entityType, record.id);
     }
     for (const event of delta.events ?? []) {
@@ -330,13 +262,27 @@ export class CommittedState {
       change.sync();
     }
     if (delta.nextSequence !== undefined) this.nextSequence = delta.nextSequence;
+    this.table.settle(moved, carried);
     return delta.reset ? undefined : change.build();
   }
 
-  /** Shallow copy of the arrays: the rows inside are the state's own — read-only to the caller. */
+  /**
+   * Shallow copy of the arrays: the rows inside are the state's own — read-only to the caller.
+   * Holds the UNPARTITIONED rows plus the stubs, pointers and declarations; it never loads.
+   */
   view(): LocalFirstSnapshot {
+    return { ...this.snapshotOf([...this.records.values()]), ...this.table.view() };
+  }
+
+  /** The WHOLE store as one plain snapshot: loads every partition, so every row is in `records`. */
+  async fullView(): Promise<LocalFirstSnapshot> {
+    await this.ensureLoaded(this.table.allPartitionIds());
+    return this.snapshotOf([...this.records.values(), ...this.table.loadedRows()]);
+  }
+
+  private snapshotOf(records: LocalRecord[]): LocalFirstSnapshot {
     return {
-      records: [...this.records.values()],
+      records,
       events: [...this.events.values()],
       mappings: [...this.mappings.values()],
       receipts: [...this.receipts.values()],
@@ -359,6 +305,7 @@ export class CommittedState {
     this.pendingKeys.clear();
     this.pendingEntities.clear();
     this.pendingCounts.clear();
+    this.table.clear();
     this.nextSequence = 1;
     this.maxMappedSeq = 0;
   }

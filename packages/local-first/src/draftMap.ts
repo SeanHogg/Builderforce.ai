@@ -15,10 +15,25 @@ type Change<V> =
   | { readonly deleted: true }
   | { readonly deleted: false; readonly value: V; readonly relocated: boolean };
 
+/**
+ * What the overlay needs of the committed side: a `ReadonlyMap` fits, and so does the
+ * composite of main rows and loaded partitions (`compositeRecords.ts`).
+ */
+export interface DraftBase<V> extends Iterable<[string, V]> {
+  get(key: string): V | undefined;
+  has(key: string): boolean;
+  values(): Iterable<V>;
+}
+
 export class DraftMap<V> {
   private readonly changes = new Map<string, Change<V>>();
 
-  constructor(private readonly base: ReadonlyMap<string, V>) {}
+  constructor(private readonly base: DraftBase<V>) {}
+
+  /** What THIS draft did to `key`, ignoring the committed side: a write (with its value), a delete, or nothing. */
+  peek(key: string): { readonly deleted: true } | { readonly deleted: false; readonly value: V } | undefined {
+    return this.changes.get(key);
+  }
 
   /** The draft wrote nothing to this map: a read can walk the committed one directly. */
   get untouched(): boolean {

@@ -1,3 +1,4 @@
+import { assetMaxBytes } from '@builderforce/asset-limits';
 import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
 import { signPublishUpload, signUpload } from '../../infrastructure/auth/uploadSign';
 
@@ -39,21 +40,6 @@ export type AssetRejection =
   | { error: 'no-file' }
   | { error: 'too-large'; maxBytes: number }
   | { error: 'type-not-allowed'; type: string };
-
-/**
- * How large an upload may be.
- *
- * Video is deliberately larger: a rendered clip is not an attachment, and the
- * alternative to a 100MB ceiling is that the video surfaces cannot store their
- * own output at all.
- */
-/** Mirrored by `ASSET_MAX_BYTES` in brain-embedded `uploadUrls.ts`, which the device blob store admits against. */
-export const ASSET_MAX_BYTES = 10 * 1024 * 1024;
-export const ASSET_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
-
-export function assetMaxBytes(type: string): number {
-  return type.startsWith('video/') ? ASSET_MAX_VIDEO_BYTES : ASSET_MAX_BYTES;
-}
 
 /**
  * What may be stored.

@@ -35,6 +35,7 @@ import { selectPendingOf } from './pendingQueries.js';
 import { hashPayload } from './payloadHash.js';
 import type { EntityDestination, JournalEvent, JournalOperation, LocalEntityType, LocalRecord, ServerMapping } from './records.js';
 import { parseSyncId } from './entityId.js';
+import type { RecordStub } from './recordPartition.js';
 import { ensureRecordPayloadFence, fencedDependsOn, isRecordPayloadMarker, recordPayloadMarker } from './recordPayloadMarker.js';
 
 /** The version a sign-in binding records: a server chat exists, nothing was imported. */
@@ -64,6 +65,19 @@ export interface JournalWriteOptions {
 export function isOwnRecord(row: LocalRecord, deviceId: string): boolean {
   return row.provenance?.source !== 'imported' || row.provenance.deviceId === deviceId;
 }
+
+/**
+ * `isOwnRecord` for a row known only by its stub: the stub carries the same two provenance
+ * fields (an absent provenance reads as `source: 'local'`, `deviceId: ''`). The ONE stub-side
+ * own-row rule — never re-derive it at a call site.
+ */
+export function isOwnStub(stub: Pick<RecordStub, 'source' | 'deviceId'>, deviceId: string): boolean {
+  return stub.source !== 'imported' || stub.deviceId === deviceId;
+}
+
+/** A live (not tombstoned) row of this device, by its stub — the stub twin of `!deletedAt && isOwnRecord`. */
+export const isLiveOwnStub = (stub: Pick<RecordStub, 'source' | 'deviceId' | 'deleted'>, deviceId: string): boolean =>
+  !stub.deleted && isOwnStub(stub, deviceId);
 
 /** Whether the server has imported this row (a sync receipt mapped it). */
 export function isImported(mapping: Pick<ServerMapping, 'serverVersion'> | undefined): boolean {

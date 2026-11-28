@@ -19,7 +19,8 @@ import { fileNodesOf, mapEdges, tailOf } from '../outlineGraph';
 import { buildStations, fileRefOf, stationOfRef, type Station, type StationModel } from '../stations';
 import { isClassLike, isErrorish, membersOfClass, shortName, symbolSort, symbolsOf, symbolsOfFile } from './symbols';
 
-export type DrillLevel = 'package' | 'class' | 'function';
+/** The outline's one hierarchy. `system` and `app` are folders drawn by the level scene (`placement/levelChildren.ts`): their view here is empty. */
+export type DrillLevel = 'system' | 'app' | 'package' | 'class' | 'function';
 export interface DrillFrame {
     level: DrillLevel; ref: string; name: string;
     /** A package frame: the member files it was entered with, so a rebuilt map (new station ids) can re-anchor it (`reanchorDrill`). */
@@ -96,7 +97,16 @@ function drillEdges(graph: KnowledgeGraph, records: readonly SymbolRecord[]): KE
     return edges;
 }
 
+/** A system or an app has no station level of its own: the level scene places its folders and stations from `levelChildren`. */
+function emptyView(graph: KnowledgeGraph, level: DrillLevel): DrillView {
+    return {
+        level, stations: { stations: [], byId: new Map(), stationOf: new Map() }, lines: { lines: [], interchanges: new Map(), omitted: 0 },
+        order: [], leaves: new Set(), noSymbols: !hasSymbols(graph), filesOnly: false,
+    };
+}
+
 export function buildDrillView(graph: KnowledgeGraph, world: StationModel, frame: DrillFrame, records: readonly SymbolRecord[] = []): DrillView {
+    if (frame.level === 'system' || frame.level === 'app') return emptyView(graph, frame.level);
     const edges = frame.level === 'package' ? mapEdges(graph) : drillEdges(graph, records);
     const picked = membersOf(graph, world, frame, edges);
     const members = [...picked.members].sort((a, b) => b.node.importance - a.node.importance || cmp(a.node.ref, b.node.ref)).slice(0, MAX_MEMBERS);

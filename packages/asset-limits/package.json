@@ -1,0 +1,10 @@
+{
+  "name": "@builderforce/asset-limits",
+  "version": "2026.11.1",
+  "private": true,
+  "type": "module",
+  "description": "Shared tenant asset size limits for uploads, local storage and attachment downloads.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

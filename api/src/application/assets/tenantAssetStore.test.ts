@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   ALLOWED_ASSET_TYPES,
   assetKey,
-  assetMaxBytes,
   isAllowedAsset,
   readAssetByKey,
   readTenantAsset,
@@ -43,11 +42,7 @@ describe('assetKey', () => {
   });
 });
 
-describe('assetMaxBytes / isAllowedAsset', () => {
-  it('gives video a larger ceiling than everything else', () => {
-    expect(assetMaxBytes('video/mp4')).toBeGreaterThan(assetMaxBytes('image/png'));
-  });
-
+describe('isAllowedAsset', () => {
   it('allows every declared MIME type', () => {
     for (const type of ALLOWED_ASSET_TYPES) expect(isAllowedAsset(type, 'file')).toBe(true);
   });

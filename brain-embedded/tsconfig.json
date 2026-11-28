@@ -26,6 +26,7 @@
     // `--noEmit`. This program never emits — `type-check` is `--noEmit` and the build
     // is tsup, which sets its own `dist` and declaration root (`tsup.config.ts`).
     "paths": {
+      "@builderforce/asset-limits": ["../packages/asset-limits/src/index.ts"],
       "@seanhogg/builderforce-mcp": ["../packages/builderforce-mcp/src/index.ts"],
       "@builderforce/code-shield": ["../packages/code-shield/src/index.ts"],
       "@builderforce/secret-redaction": ["../packages/secret-redaction/src/index.ts"],

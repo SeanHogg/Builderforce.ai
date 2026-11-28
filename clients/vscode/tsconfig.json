@@ -9,6 +9,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["node", "vscode"],
     "paths": {
+      "@builderforce/asset-limits": ["../../packages/asset-limits/src/index.ts"],
       "@builderforce/workspace-mcp": ["../../packages/workspace-mcp/src/index.ts"],
       "@seanhogg/builderforce-code-index": ["../../packages/code-index/src/index.ts"],
       "@seanhogg/builderforce-mcp/policy": ["../../packages/builderforce-mcp/src/policy.ts"],

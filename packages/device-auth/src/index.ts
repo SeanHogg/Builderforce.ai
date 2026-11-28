@@ -1,7 +1,7 @@
 /**
  * Device sign-in (RFC 8628) — the ONE implementation the Chrome extension (Rovr,
  * `clients/chrome/src/sidepanel/SettingsView.tsx`) and the VS Code extension
- * (`clients/vscode/src/auth/auth.ts`, session in `clients/vscode/src/bfApi/session.ts`) both run, against the same endpoints:
+ * (`clients/vscode/src/auth/auth.ts`) both run, against the same endpoints:
  *
  *   POST /api/auth/device/code   → a code pair + the `/activate` page to approve it on
  *   POST /api/auth/device/token  → polled until the person approves; yields a `bfk_*`
@@ -16,6 +16,8 @@
  *
  * Host-neutral: fetch, the page opener and the clock are injected (tested with fakes).
  */
+
+export { isTenantSessionFresh, sendWithTenantSession, tenantSessionExpiresAt, TENANT_SESSION_TTL_SECONDS } from './tenantSession.js';
 
 export interface DeviceAuthDeps {
   baseUrl: string;

@@ -14,7 +14,10 @@
  */
 
 import type { LocalFirstSnapshot } from './storeContract.js';
+import type { ServerMapping } from './records.js';
+import type { RecordStub } from './recordPartition.js';
 import { JOURNAL_DELTA_MAGIC, encodeJournalBody } from './journalCodec.js';
+import { encodeMappingBlock, encodeStubBlock } from './compactBlocks.js';
 
 /**
  * THE journal compaction policy — every host's journal (the VSIX file journal in
@@ -55,26 +58,43 @@ export const DEFAULT_COMPACTION_FRAME: CompactionFrameLimits = Object.freeze({
   maxRows: 500,
 });
 
-const SECTIONS = ['records', 'events', 'mappings', 'receipts', 'conflicts'] as const;
+const SECTIONS = ['records', 'stubs', 'events', 'mappings', 'receipts', 'conflicts'] as const;
 type Section = typeof SECTIONS[number];
-type Chunk = Partial<Record<Section, string[]>>;
+/** Stubs and mappings are written as column blocks (`compactBlocks.ts`), so a chunk holds their rows, not their JSON. */
+type BlockSection = 'stubs' | 'mappings';
+interface Chunk {
+  json: Partial<Record<Exclude<Section, BlockSection>, string[]>>;
+  stubs?: RecordStub[];
+  mappings?: ServerMapping[];
+}
 
-/** The snapshot's rows, stringified once, grouped into bounded chunks. Always yields at least one. */
+/** What a block row weighs in a frame, near enough to close a chunk on: a column row is ~70 bytes plus its id. */
+const BLOCK_ROW_BYTES = 70;
+
+/** The snapshot's rows, grouped into bounded chunks (JSON sections stringified once). Always yields at least one. */
 function* chunks(snapshot: LocalFirstSnapshot, limits: CompactionFrameLimits): Generator<Chunk> {
-  let current: Chunk = {};
+  let current: Chunk = { json: {} };
   let bytes = 0;
   let rows = 0;
   let yielded = false;
   for (const section of SECTIONS) {
-    for (const row of snapshot[section]) {
-      const json = JSON.stringify(row);
-      (current[section] ??= []).push(json);
-      bytes += json.length;
+    for (const row of snapshot[section] ?? []) {
+      if (section === 'stubs') {
+        (current.stubs ??= []).push(row as RecordStub);
+        bytes += BLOCK_ROW_BYTES + (row as RecordStub).id.length;
+      } else if (section === 'mappings') {
+        (current.mappings ??= []).push(row as ServerMapping);
+        bytes += BLOCK_ROW_BYTES + (row as ServerMapping).clientEntityId.length;
+      } else {
+        const json = JSON.stringify(row);
+        (current.json[section] ??= []).push(json);
+        bytes += json.length;
+      }
       rows += 1;
       if (bytes >= limits.maxBytes || rows >= limits.maxRows) {
         yield current;
         yielded = true;
-        current = {};
+        current = { json: {} };
         bytes = 0;
         rows = 0;
       }
@@ -85,6 +105,19 @@ function* chunks(snapshot: LocalFirstSnapshot, limits: CompactionFrameLimits): G
 
 const encoder = new TextEncoder();
 
+/** One chunk's frame parts for `section`, in the frame's own key order. */
+function sectionParts(chunk: Chunk, section: Section): string[] {
+  if (section === 'stubs') return chunk.stubs ? [`"stubBlock":${JSON.stringify(encodeStubBlock(chunk.stubs))}`] : [];
+  if (section === 'mappings') {
+    if (!chunk.mappings) return [];
+    const block = encodeMappingBlock(chunk.mappings);
+    // A mapping the columns cannot reproduce exactly goes out plain: nothing is ever changed to fit.
+    return [block ? `"mappingBlock":${JSON.stringify(block)}` : `"mappings":${JSON.stringify(chunk.mappings)}`];
+  }
+  const rows = chunk.json[section];
+  return rows && rows.length > 0 ? [`"${section}":[${rows.join(',')}]`] : [];
+}
+
 function frameOf(chunk: Chunk, snapshot: LocalFirstSnapshot, first: boolean, last: boolean, generation?: string): Uint8Array {
   // `reset` MUST be the first key (`encodeDeltaFrame` / `isBaseFrame` rely on it).
   const parts: string[] = [];
@@ -93,11 +126,10 @@ function frameOf(chunk: Chunk, snapshot: LocalFirstSnapshot, first: boolean, las
     if (generation) parts.push(`"generation":${JSON.stringify(generation)}`);
     parts.push(`"nextSequence":${JSON.stringify(snapshot.nextSequence)}`);
     parts.push(`"cursors":${JSON.stringify(snapshot.cursors ?? {})}`);
+    if (snapshot.partitionPointers) parts.push(`"partitionPointers":${JSON.stringify(snapshot.partitionPointers)}`);
+    if (snapshot.partitionDeclarations) parts.push(`"partitionDeclarations":${JSON.stringify(snapshot.partitionDeclarations)}`);
   }
-  for (const section of SECTIONS) {
-    const rows = chunk[section];
-    if (rows && rows.length > 0) parts.push(`"${section}":[${rows.join(',')}]`);
-  }
+  for (const section of SECTIONS) parts.push(...sectionParts(chunk, section));
   if (last) parts.push('"endsBase":true');
   return encodeJournalBody(JOURNAL_DELTA_MAGIC, encoder.encode(`{${parts.join(',')}}`));
 }
@@ -130,7 +162,7 @@ export async function* snapshotFrames(
     }
     held = chunk;
   }
-  yield frameOf(held ?? {}, snapshot, first, true, first ? generation : undefined);
+  yield frameOf(held ?? { json: {} }, snapshot, first, true, first ? generation : undefined);
 }
 
 /** One opaque base-generation id per compaction (`crypto.randomUUID` when available). */

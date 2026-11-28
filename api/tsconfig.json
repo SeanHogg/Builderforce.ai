@@ -11,6 +11,8 @@
     "resolveJsonModule": true,
     "noEmit": true,
     "paths": {
+      "@builderforce/asset-limits": ["../packages/asset-limits/src/index.ts"],
+      "@builderforce/device-auth": ["../packages/device-auth/src/index.ts"],
       "@seanhogg/builderforce-mcp/client": ["../packages/builderforce-mcp/src/client.ts"],
       "@seanhogg/builderforce-mcp/protocol": ["../packages/builderforce-mcp/src/protocol.ts"],
       "@seanhogg/builderforce-mcp/server": ["../packages/builderforce-mcp/src/server.ts"],

@@ -1,4 +1,5 @@
 import { and, eq } from 'drizzle-orm';
+import { TENANT_SESSION_TTL_SECONDS } from '@builderforce/device-auth';
 import { decodeJwtPayload, signJwt } from './JwtService';
 import { parseTokenTimeToDate } from './MfaService';
 import { authTokens, tenantMembers } from '../database/schema';
@@ -73,7 +74,7 @@ export async function mintTenantSessionToken(
     sessionId?: string;
   },
 ): Promise<{ token: string; expiresIn: number }> {
-  const expiresIn = opts.expiresIn ?? 3600;
+  const expiresIn = opts.expiresIn ?? TENANT_SESSION_TTL_SECONDS;
   const role = opts.role ?? (await resolveMemberRole(db, opts.userId, opts.tenantId));
   const token = await signJwt(
     {

@@ -79,6 +79,10 @@ function canonicalSnapshot(snapshot: LocalFirstSnapshot): LocalFirstSnapshot {
       Object.entries(snapshot.cursors ?? {}).sort(([a], [b]) => a.localeCompare(b)),
     ),
     nextSequence: snapshot.nextSequence,
+    // The partition state exists only for a store with partitions: other snapshots encode byte for byte as before.
+    ...(snapshot.stubs?.length ? { stubs: [...snapshot.stubs].sort(byEntity) } : {}),
+    ...(snapshot.partitionPointers ? { partitionPointers: snapshot.partitionPointers } : {}),
+    ...(snapshot.partitionDeclarations?.length ? { partitionDeclarations: snapshot.partitionDeclarations } : {}),
   };
 }
 

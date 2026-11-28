@@ -15,6 +15,7 @@ import type { LocalFirstDelta } from './localFirstDelta.js';
 import { CommittedState } from './storeState.js';
 import type { LocalFirstSnapshot } from './storeContract.js';
 import { damagedAfterStop, isBaseFrame, walkFrames, type JournalFrameBound } from './journalCodec.js';
+import { expandBlocks } from './compactBlocks.js';
 
 export function isLocalFirstSnapshot(value: unknown): value is LocalFirstSnapshot {
   if (!value || typeof value !== 'object') return false;
@@ -44,7 +45,13 @@ function parseFrame(bytes: Uint8Array, bound: JournalFrameBound): Parsed | undef
     return undefined;
   }
   if (bound.kind === 'snapshot') return isLocalFirstSnapshot(parsed) ? { kind: 'snapshot', snapshot: parsed } : undefined;
-  return isDelta(parsed) ? { kind: 'delta', delta: parsed } : undefined;
+  if (!isDelta(parsed)) return undefined;
+  try {
+    // A base frame's column blocks become plain rows here, so the state never sees one.
+    return { kind: 'delta', delta: expandBlocks(parsed) };
+  } catch {
+    return undefined; // a block whose columns do not line up is a damaged frame, like any other that fails to parse
+  }
 }
 
 /** A parsed frame applied to a state: a snapshot or a reset starts a new one. */

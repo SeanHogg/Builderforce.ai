@@ -406,7 +406,7 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
 - `AE-G054` **`DEFAULT_CHAT_TITLE` has two homes.** Give the Brain chat contract one shared home.
 - `AE-G055` **Project #11 still carries a placeholder key, so every ticket key reads `1-UNTITLED-1773010025035-N`** (found 2026-11-19, chats #273/#275). The key was stored before `buildProjectKey` stopped generating placeholders; `tickets.from_delta` and normal creation both build keys correctly from it. Fix: rename the project key, which re-keys every ticket on the board via `rekeyProject`. *Blocker: operator decision to re-key project #11's tickets.*
 - `AE-G056` **The god-module restructure preview cannot be checked against what the codemod moves (PRD 43 Part C, C6).** `compute/compare/restructure.ts` splits a god module into connected components of its members' internal calls/uses; `surface/codemods.ts` only names the `god-module → splitByCommand` row (kind, label, `builtin`) and exposes no split plan, so a test can only assert the row exists. Fix: give the codemod a pure planner (`planSplit(graph, finding, symbols) → { moves: Map<memberRef, newModuleRef> }`) that both the codemod and the preview call, then delete the proposer's own grouping. *Blocker: the `splitByCommand` codemod's grouping rule lives in the host fix flow and is not specified anywhere this repo can read; it needs its owner to state the rule.* [make.md › PRD 43 Part C](../../docs/specs/make.md)
-- `AE-G057` **The live knowledge view does not match the design prototype (`.builderforce/design/code-visualizer.html`)** (user, 2026-11-26: "needs to look exactly like the mockup"). The existing view is updated in place; there is no adapter and no parallel view. Gaps by region:
+- `AE-G057` **The live knowledge view does not match the design prototype (`.builderforce/design/code-visualizer.html`)** (user, 2026-11-26: "needs to look exactly like the mockup"). The existing view is updated in place; there is no adapter and no parallel view. **Superseded in scope on 2026-11-27:** the prototype now leads with three questions (look / clean up / fundamentals), an explicit review loop and a chat that drives the picture. The full, itemised change list with today's files and done-checks is [visualizer-three-questions.md](../specs/visualizer-three-questions.md); the regions below remain valid for the parts it keeps. Gaps by region:
   - (1) **Header.** It is 56px with an inline ask field and a separate Review button. The mockup has a 38px bar: an ↑ out button, a mono spine, then a search icon, a status button, theme and panels.
   - (2) **Toolbar.** There are two rows (cameras plus panel toggles, then text question pills). The mockup has one row: a views segment (icons, with the active one labelled), a 3D | Flat segment, and a question segment (icons, active labelled) plus More.
   - (3) **Drawer.** The ActPanel, PanelDrawer and SimulatePanel are separate and the right rail is always open. The mockup has ONE tabbed drawer (Act · Coverage · Patterns · API · Simulate · Fix · Review), closed by default.
@@ -566,12 +566,7 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
 - `UP-G001` **Starter kit and `AppBlueprint` are two shapes, and the manifest has no model, knowledge or IDE-component sections.**
   - The shapes are `ide-templates` kits plus the `builderforce.json` v1 manifest on one side, and `creation-canvas-contract` `AppBlueprint` on the other, bridged by `manifestToBlueprintOverrides`.
   - Fix: one environment manifest, from which `AppBlueprint` is derived.
-- `UP-G002` **The starter-kit picker is still split across entry points.**
-  - The user decided on 2026-11-26 that Spawn becomes a project type and that a Movie/Video editor project type is required. Both are built on existing pieces: `bf-roblox` and `canvasVideoTools`.
-  - Starter entry points are split three ways: `CreationStarterPanel`, `create/*` and `CanvasAppStart`.
-  - Kits are not marketplace items.
-  - Fix: one picker fed by the kit registry, mountable in every host.
-  - The project-type registry now includes Roblox and Movie or Video. The editor creates both project types. The Create launcher and the empty App surface use that registry to open a new video timeline.
+- `UP-G002` **The Create launcher and Canvas App surface share a starter-kit picker.** The picker and the editor's `/starter-kit` command take their choices from `ide-templates`. The selected kit composes the same files and manifest for browser workspaces, hosted workspaces and files in an editor folder. The shared project-type registry also offers Roblox in the editor and Movie or Video in the editor and Canvas. Movie or Video opens a new timeline.
 - `UP-G003` **Shell logic is implemented twice.**
   - The web uses `browserRuntime/workspaceShell.ts`; VS Code uses `src/tools/localShell*.ts`.
   - Fix: one `ShellPort` with WebContainer and local adapters.
@@ -617,7 +612,7 @@ Source: [unified-platform-gap-review.md](../specs/tasks/unified-platform-gap-rev
   - Downloads: the Synapse links use `builderforce-inference` `releases/latest`, and headless `bfi`/`bf-context` releases are published with `--latest=false` so that link stays on the last installer release. Spawn's button (`/api/spawn/downloads`, a stub) resolves the newest release that has installers. Repoint both when the fork ships. The product name and copy stay "Synapse".
   - Design: [synapse-vscode-fork.md](../specs/tasks/synapse-vscode-fork.md). Repo `builderforce-inference/app` (user, 2026-11-27).
   - Shipped: batch 1 (the extension API, the Spawn extension and the runtime-id rename) and batch 2 (the AI project types). See DONE.md.
-  - The installer workflow built Apple Silicon and Intel macOS DMGs and the Linux Debian package with both extensions. The public release requires the Windows installer and the production API migration. [macOS verification](https://github.com/SeanHogg/builderforce-inference/actions/runs/46071723312) · [Linux verification](https://github.com/SeanHogg/builderforce-inference/actions/runs/46073705911)
+  - CI built Apple Silicon and Intel macOS DMGs, a Linux Debian package and a Windows installer, each with both extensions. The public release is gated on the production API migration. [Four-platform verification](https://github.com/SeanHogg/builderforce-inference/actions/runs/46077559263)
 - `UP-G017` **The editor registers Roblox projects when the Spawn extension is installed.** The Spawn VSIX builds successfully. Public distribution through Synapse and retirement of the standalone app follow the installer rollout. The `builderforce-spawn` repo owns `bf-roblox` and keeps `bf-cloud`, `bf-vault`, and the Tauri shell during the transition.
 - `UP-G018` **The rebuilt Teach-once, Self-Directed Agents and phone approvals are not yet in users' hands.** The code is shipped (see DONE.md). Nothing reaches users until three steps happen, all release steps rather than code:
   1. A `builderforce-inference` headless release publishes the three `bf-teach-helper` binaries. The workflow signs and verifies the macOS helpers before publishing the draft. *Blocker: the Apple Developer ID signing secrets and the release tag.*
@@ -686,7 +681,7 @@ Gaps:
 - `CIX-G015` **Result caps and file caps disagree.**
   - Result caps: 8 / 25 / 20 / 100 / 30.
   - File caps: 1 MB / 256 KB.
-- `CIX-G016` **Native retirement remains gated.** The hired.video benchmark matched all 5,385 files and native led on latency and memory. Across both repositories, native hybrid found 12 of 15 low-overlap judgments in the top eight to TypeScript hybrid's 9. The headless TypeScript path uses the cached BGE checkpoint from the judged harness. The full matched Builderforce.ai lexical comparison remains open. [Audit §2.5](../specs/tasks/platform-duplication-audit.md#25-target-design-one-code-index-every-host)
+- `CIX-G016` **Verification complete. Keep the native index.** The full lexical comparisons matched all 5,385 hired.video files and all 19,383 Builderforce.ai files. Native used less memory in both runs and found 12 of 15 low-overlap judgments in the top eight to TypeScript hybrid's 9. The headless TypeScript path uses the cached BGE checkpoint from the judged harness. [Audit §2.5](../specs/tasks/platform-duplication-audit.md#25-target-design-one-code-index-every-host)
 - `CIX-G017` **API `knowledge.search` searches SOPs and docs (`recallSops.ts`), but its name suggests code search.**
 
 ### Inference, catalog and routing consolidation `[platform]` `[agents]`
@@ -768,14 +763,13 @@ Details, paths and migration order: `docs/specs/tasks/platform-duplication-audit
 - `CHAT-G007` **Model pickers are rendered in three hosts** (Chrome, VS Code, web). Keep only data adapters feeding `ModelPane`.
 - `CHAT-G008` **Starter and work-mode tiles are built per host.** Make them data for `StarterTiles`, with modes from `chatMode.ts`.
 - `CHAT-G009` **There are six label paths, plus hand-written key-mapping tables.** Use one brain-ui `labelCatalog` with a `t()` adapter per host.
-- `CHAT-G010` **Chat limits are copied per host:** VS Code `attachmentLimits.ts` mirrors the API by comment. Export one limits module.
+- `CHAT-G010` **Attachment upload and download limits now share `packages/asset-limits`.** Review the remaining chat budgets.
 - `CHAT-G011` **The TUI's `commands.ts` and `auto-reply/commands-registry.ts` are a third and fourth slash-command registry,** with hand-written help.
 - `CHAT-G012` **There is no shared run-event vocabulary** across the gateway WebSocket, Tauri, SSE and the VS Code bridge. Define `RunEvent` with one adapter per transport.
 - `CHAT-G013` **The Control UI (Lit) has its own message normalizer, tool cards and copy-as-markdown.**
 - `CHAT-G014` **Agent-host chat (`chatRoutes.ts`) uses a second message store.** Fold it into `brain_chat_*` with an expand/contract migration.
 - `CHAT-G016` **`useVoiceDictation` is copied into Spawn** (`builderforce-spawn/spawn/ui/js/dictation.js`). The Tauri Synapse copy is gone. It is deleted when Spawn becomes an extension in Synapse (`UP-G017`).
-- `CHAT-G017` **brain-embedded `ui/PromptInput.tsx` may be dead code.** Verify its references and delete it if unused.
-- `CHAT-G018` **Chrome diagnostics and the shared limits have no tests.**
+- `CHAT-G018` **Chrome diagnostics and the remaining chat budgets need tests.** The attachment limits have focused API, VS Code and web coverage.
 
 ### Shell and file tools consolidation `[platform]`
 
@@ -802,14 +796,13 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §7. 
 
 - `AUTH-G001` **The Rust device flow (`builderforce-spawn/crates/bf-cloud`/src/device.rs) duplicates `packages/device-auth`,** with no shared contract fixture. `bf-cloud` moved from builderforce-inference to builderforce-spawn on 2026-11-27, where Spawn is its only consumer.
 - `AUTH-G002` **There are three copies of the editor-key session** (VS Code `bfApi/session.ts`, Chrome `auth/session.ts`, Rust `builderforce-spawn/crates/bf-cloud`/src/session.rs). Extract a host-neutral `packages/editor-session`.
-- `AUTH-G003` **The Chrome client has no 401 forced-refresh retry.**
 - `AUTH-G004` **The Chrome client has no workspace switch.**
 - `AUTH-G005` **agent-runtime has about 56 hand-built Bearer fetches and about 18 `BUILDERFORCE_URL` fallbacks.** Replace them with one `builderforceClient`.
 - `AUTH-G006` **The default base URL is split:** `api.builderforce.ai` (web, agent-runtime, SDK) vs `builderforce.ai/gateway` (VS Code, Chrome).
 - `AUTH-G007` **Configuration names and aliases are inconsistent** across hosts. Keep one documented table and deprecate the aliases.
 - `AUTH-G008` **Error flattening is copied four times** (web, Chrome, SDK, and Rust `builderforce-spawn/crates/bf-cloud` `CloudError`, which misses the nested `{error:{message,code}}` form).
-- `AUTH-G009` **The fallback when the server omits `expiresIn` differs:** 3600 s in TypeScript, 900 s in Rust (`builderforce-spawn/crates/bf-cloud`).
-- `AUTH-G012` **Auth-client test gaps:** Chrome `apiClient.test.ts` is 11 lines, Rust `bf-cloud` has 6 tests, and agent-runtime has none.
+- `AUTH-G009` **Rust `bf-cloud` uses a 900 s fallback when the server omits `expiresIn`.** The API and the TypeScript clients now share the 3600 s default.
+- `AUTH-G012` **Chrome session, Rust parity and agent-runtime client coverage remain open.** Chrome now tests the 401 retry.
 - `AUTH-G013` **Rust (`builderforce-spawn/crates/bf-cloud` `web_base_of`) and VS Code derive the web origin from the API URL by hand.**
 - `AUTH-G014` **Not yet audited:** Chrome SettingsView sign-in, webcontainers `aiGateway`/`hostRelay`, `knowledge-client`, `provider-connect`.
 - `AUTH-G016` **Security-sensitive client and credential findings.** The local security findings file also covers `AUTH-G017` through `AUTH-G019`. See DONE.md for the resolution of `AUTH-G015` and `AUTH-G018`.

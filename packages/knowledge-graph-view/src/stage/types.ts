@@ -222,6 +222,23 @@ export interface Placement {
      * roof, which Flat lowers. Absent = y is a placement coordinate (the mind map's sink, a sequence's planes) and stays put.
      */
     liftWithDepth?: boolean;
+    /**
+     * Per slot, the footprint's depth ÷ width (default 1 = square): the level scene's rectangular shapes. The renderer scales
+     * the instance's local z by it (tweened A → B like `extrude`). Absent = every slot is square.
+     */
+    aspect?: Float32Array;
+    /** What the level scene drew (the Map and 3D cameras): the diagnostics read it, the stage ignores it. Plain JSON. */
+    level?: LevelDescriptor;
+}
+
+/** What one level of the Map / 3D scene shows: its children, their shapes and what the level leaves off the map. */
+export interface LevelDescriptor {
+    level: 'world' | 'system' | 'app' | 'package' | 'class' | 'function';
+    ref: string | null;
+    name: string;
+    children: { slot: number; key: string; name: string; kind: string; form: string; w: number; d: number; h: number; files: number; minis: number }[];
+    total: number;
+    notOnMap: { stations: number; files: number; examples: string[] };
 }
 
 /** Slots appended after the MarkSet (B1a rule 1: a drill APPENDS into the preallocated headroom). Same fields as the MarkSet's, per appended slot. */

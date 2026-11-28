@@ -14,13 +14,15 @@ import type { SymbolRecord } from '../../types';
 import { fileRefOf, stationOfRef, type StationModel } from '../stations';
 import { tailOf } from '../outlineGraph';
 import { buildDrillView, hasSymbols, type DrillFrame, type DrillLevel, type DrillView } from './drillView';
+import { folderFrameOf, folderOfKey, frameToEnter, isStructuralLevel, LEVEL_RANK } from './levelFrames';
 import { anchorFilesOf, reanchorDrill } from './reanchorDrill';
 import { SYMBOL_FILES, isClassLike, membersOfClass, symbolSort, symbolsOf, symbolsOfFile, withSymbolRecords } from './symbols';
 
 /** The package moves of one re-anchor; `seq` changes with every one. */
 export interface Reanchored { seq: number; moves: ReadonlyMap<string, string> }
 
-export type EnterCheck = { can: true; level: DrillLevel } | { can: false; reason: 'noSymbols' | 'leaf' | 'deepest' | 'unknown' };
+/** `ref` is the frame's own ref: a station id, a folder path (system, app) or a node ref. A folder mark is asked about by its slot key (`dir:<path>`). */
+export type EnterCheck = { can: true; level: DrillLevel; ref: string } | { can: false; reason: 'noSymbols' | 'leaf' | 'deepest' | 'unknown' };
 
 /** Reads the definitions of some files (the source's `symbolsOf` bound to its root); undefined on a host that cannot. */
 export type SymbolLoader = (fileRefs: string[]) => Promise<SymbolRecord[]>;
@@ -37,6 +39,8 @@ export interface DrillModel {
     selected: string | null;
     select(id: string | null): void;
     canEnter(id: string): EnterCheck;
+    /** The frame `enter(id)` lands on (a level holding one child is skipped through), or null when it cannot be entered. */
+    frameOf(id: string): DrillFrame | null;
     enter(id: string): void;
     openFile?(ref: string): void;
     hasMembers?(ref: string): boolean;
@@ -55,7 +59,8 @@ export interface DrillModel {
     reanchored: Reanchored;
 }
 
-const NEXT: Record<string, DrillLevel | undefined> = { world: 'package', package: 'class', class: 'function' };
+/** The level a station (or a file, or a symbol) opens from `level`: world → system → app → package → class → function (system and app are entered through their folder marks). */
+const NEXT: Record<string, DrillLevel | undefined> = { world: 'package', system: 'package', app: 'package', package: 'class', class: 'function' };
 
 export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load?: SymbolLoader): DrillModel {
     const [stack, setStack] = useState<readonly DrillFrame[]>([]);

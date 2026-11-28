@@ -1994,6 +1994,215 @@ Suggested connected sync cadence: a configurable coarse interval plus run-comple
 
 ---
 
+## Design — Partitioned chat history: the VSIX opens without reading every message (AE-G031)
+
+### Problem (measured 2026-11-27 on the operator's store)
+
+The VSIX takes about 35 s to load. The store open is that time: every record is read and parsed at boot.
+
+- **The journal** is 538.7 MB: a 484 MB base plus a 54 MB tail.
+- **What it holds:** 216,323 records and 208,048 mappings.
+  - 177,140 records are `message` rows: 370 MB, spread over only 121 chats.
+  - Their `metadata` (tool results 112 MB, tool args 36 MB) is 202 MB of that.
+  - Most of the mappings belong to messages: about 45 MB.
+- **What boot costs:** read 19.3 s, then crc walk, parse and fold 42.4 s (machine under load).
+- **Who reads messages:** only one chat's messages at a time, through `MESSAGES_BY_CHAT`. Four hot paths walk every message anyway:
+  - `nextId`, on every send;
+  - `chatSync`, on every pass;
+  - the `messageRecordById` fallback;
+  - the rail and Local Work walks of `view()`.
+
+### Decision
+
+Message ROWS live in **one partition per chat**, each partition a journal file of its own. Boot reads the main journal only.
+
+The main journal holds:
+
+- every other row;
+- **every mapping**, messages' included;
+- a slim **stub** per partitioned row;
+- the **pointer** (file, committed length) of each partition.
+
+A partition is loaded on the first read that can touch it, then kept current.
+
+This is a store mechanism declared by DATA (`defineRecordPartition`), not a VSIX special case. A store with no partition declared behaves exactly as today. The memory store treats every partition as resident (one code path, no loader).
+
+Every existing caller stays correct. A whole-type `scan`, `list` or `export()` loads every partition (correct, slow), so only the hot paths above change.
+
+Mappings stay in main because three things need all of them in memory:
+
+- `maxMappedSeq` and the "earliest mapping wins" rule (`earliestMapping`);
+- receipt pruning;
+- mappings that outlive their row: a pulled tombstone hard-deletes the row, and a receipt can map a row deleted since.
+
+Rejected alternatives:
+
+- **"Cold bodies"**: keep the rows, put only `metadata` aside. It saves about 45%.
+- **A binary base**: the same full read, made cheaper. It still grows with history.
+- **Partitioned mappings**: they break `mappedSeq` ordering and pruning (above).
+
+### Size budget (operator's store, computed)
+
+| Part of the v4 main base | Size |
+|---|---|
+| Unpartitioned rows (usage 30 MB, change-set 6.6, chat 5.4, other ~8) | ~50 MB |
+| Mappings, in the compact block encoding below (208k × ~70 B) | ~15 MB |
+| Stubs, in the compact block encoding (177k × ~70 B) | ~13 MB |
+| Events, receipts, conflicts | ~20 MB |
+| **Total** | **~100 MB, against 484 MB in v3** |
+
+**Compact block encoding.** A base (compaction) frame may carry `stubBlock` and `mappingBlock`: column arrays with destinations and device ids interned in a table. A delta frame keeps plain objects. Both decode to the same in-memory shapes.
+
+### Contract (`@builderforce/local-first`)
+
+```ts
+// recordPartition.ts — which partition a row LIVES in. Separate from an index's group key:
+// an index drops tombstones (`indexKeyOf` → undefined for `deletedAt`); a home key does not.
+defineRecordPartition<T>({
+  index: RecordIndex<T>,                                  // its groups ARE the partitions (scanIndex → one partition)
+  homeOf: (row: LocalRecord<T>) => RecordIndexKey | undefined, // index.keyOf ignoring deletedAt; undefined → unpartitioned
+  ordinalOf?: (row: LocalRecord<T>) => number | undefined,
+}): RecordPartition<T>
+
+interface RecordStub {                // in memory and in main, one per partitioned row (tombstones included)
+  id: string; entityType: LocalEntityType; home: RecordIndexKey;
+  version: number; deleted: boolean;
+  deviceId: string; source: string;   // what `isOwnRecord` reads (provenance.deviceId + provenance.source)
+  destinationKey: string; unbound: boolean;
+  ordinal?: number;
+}
+
+// LocalFirstTransaction, new (optional, so hand-rolled fakes still compile):
+scanStubs(entityType, visit: (stub: Readonly<RecordStub>) => void | typeof SCAN_STOP): Promise<void> // draft-aware
+stub(entityType, id): Promise<RecordStub | undefined>                                                // draft-aware
+```
+
+Persisted beside the stubs: the partition DECLARATIONS (entity type, index name). A build that declares differently still finds the rows.
+
+**Routing inside `Transaction`** (partitioned types only):
+
+| Call | Routing |
+|---|---|
+| `get(type, id)` | Stub, then load its partition, then read. No stub means absent. |
+| `scanIndex(partition.index, key)` | Load that one partition. |
+| `scanIndex(other)`, `scan(type)`, `scan(undefined)`, `list` | Load every partition of the type. Order: by partition, then committed order (documented). |
+| `put` / `delete` | Load the row's home partition first (for `expectedVersion` and `delta()`'s deletion lookup), then write. |
+| `put` that changes a row's home | One commit holds a delete in the old partition's frame and a put in the new one's. |
+| `mapping*` | Unchanged: mappings are in main. |
+| `view()` | The unpartitioned rows, all mappings, events, stubs and pointers. It never loads a partition. Compaction, the snapshot cache, the rail and Local Work read it. |
+
+**State.** `CommittedState` gains a `PartitionTable` with the stubs, the pointers and the loaded segments. Each segment records how far it was read (file, length). Partitioned rows are never in `state.records`.
+
+`DraftMap` reads through a composite base (main plus loaded segments). `delta()` takes a deletion's type and id from that composite, never `base.records.get(key)!`.
+
+Every state path carries stubs and pointers: `applyDelta`, `isEmptyDelta`, `resetDeltaOf`, `CommittedState.from`, the compaction sections, and the durable store's first frame (`snapshotAfter`).
+
+**Change notification.** The change a listener receives names partitioned row ids from the STUB changes. `subscribeMessages` therefore sees another window's commit in a chat this window never loaded.
+
+**Loading and keeping current** (`PartitionLoader` port; with none, everything is resident):
+
+- `applyDelta` stays synchronous. It updates stubs and pointers, applies its own partitioned rows to segments that are loaded, and marks any other loaded segment whose pointer moved as **stale**.
+- Every partitioned read first awaits ONE in-flight catch-up per partition. The catch-up reads from the segment's loaded length to the current pointer, and installs only if the pointer is unchanged since the read began; otherwise it repeats.
+- A reset drops every segment.
+- A load fills memory only. It is not a commit, notifies nobody, and is allowed inside a transaction and inside a lock-free read.
+
+### Storage (VSIX, `clients/vscode/src/localFirst`)
+
+**Files**
+
+- `local-first-v4.journal`: the main journal, same codec. Deltas gain `stubs`, `deletedStubs` and `partitionPointers`; bases may use the compact blocks.
+- `local-first-v4.partitions/<entityType>.<encodedKey>.<generation>.journal`: one standard journal per partition, holding only that partition's rows.
+  - Every partition frame carries the main commit sequence (`commitSeq`) of the commit it belongs to.
+
+**Commit order (under the existing cross-window lock)**
+
+1. Catch up main, as today.
+2. For each partition the delta touches, truncate the file to the caught-up POINTER (never to a length this process tracked), then append and fsync its frame.
+3. When a partition file is new, fsync the partitions directory.
+4. Append the main frame: stub changes, plus each touched partition's new committed length. **This is the commit point.**
+5. If step 4 fails, roll every touched partition's in-process length back to its pointer. The next commit truncates the leftover.
+
+**Another window.** Its main tail moves pointers. Loaded segments go stale and catch up lazily (above); unloaded ones are left alone.
+
+**Compaction**
+
+- Main compacts as today from `view()`, which holds no partitioned rows, so nothing is dropped.
+- A partition compacts on its own tail policy, like the main compaction, in two phases:
+  1. Without the lock, stream a temp file named `*.tmp-<generation>`.
+  2. Under the lock, catch its tail up, rename, and commit a main frame that switches the pointer. Publish only if the pointer is unchanged since the stream began.
+- Old generations are deleted lazily, under the lock, only when no pointer names them.
+- A reader that gets ENOENT or EPERM on a partition file refreshes the main tail and retries. It never treats that as damage.
+
+**Migration from v3: two phases, like compaction**
+
+1. **Without the lock**: fold v3 at offset X. Run the event-backlog migration on that resident fold. Stream every partition and the v4 base into temps. The base sets `EVENT_BACKLOG_MIGRATED` unconditionally.
+2. **Under the lock**: apply v3's frames after X as one commit. Rename the temps. Record the v3 baseline (length and generation).
+
+Neither phase holds the lock longer than a compaction does, so other windows (old builds included) never hit `local_first_store_busy`.
+
+**Backlog migration on v4.** After that, the event-backlog migration never runs again. Its planner looks rows up through a transaction, never `view().records`. Its main-only backup and restore are removed for v4.
+
+**Old windows.** A window still on an old build keeps writing v3. On a v4 open, frames appended to v3 past the baseline are merged as ONE v4 commit, the same seam as the v2→v3 `mergeLegacyWrites`, extended rather than copied:
+
+- The merge plans with `get`/`stub` lookups, never `view().records`, so an old window's edit to a message is kept.
+- A v3 whose generation changed (an old window compacted) is diffed in full. That is the slow case, and it is measured separately.
+- After retirement, a v3 recreated with no base is merged the same way.
+
+**Retirement.** v3 is retired by the existing retire step once v4 has opened cleanly and v3 has not grown for 14 days. The stray `local-first-v2.journal`, `*.pre-migration.*` and `local-first-v3.import.json` go by the same rule.
+
+**Recovery**
+
+- **A damaged main** is rebuilt from the cache plus each partition file, read only up to frames whose `commitSeq` is at or below the rebuilt main state. That rebuilds stubs and pointers, and drops leftovers.
+- **A damaged partition**:
+  1. Set the file aside.
+  2. Commit stub deletions for its rows and report them.
+  3. If its destination is bound, reset that destination's pull cursor so the server refills it.
+
+  It never fails the open.
+
+### Consumer changes (brain-embedded, VSIX)
+
+- `MESSAGE_PARTITION` lives in `localChat/records.ts`:
+  ```ts
+  defineRecordPartition({
+    index: MESSAGES_BY_CHAT,
+    homeOf: (row) => row.payload.chatId,
+    ordinalOf: (row) => row.payload.message.id,
+  })
+  ```
+  It is passed to the VSIX store at creation (`localFirstStore.ts`).
+- **`nextId`** reads chat ids plus the `scanStubs('message')` ordinals of stubs that pass the same `isOwnRecord`/live filter. It never loads a partition.
+- **`messageRecordById` fallback** scans stubs for the ordinal, then calls `get`.
+- **`chatSync`**: the "anything unbound" check and `bindInSlices` select by stub, then `get` the chosen rows, loading only their chats.
+- **`touchesChatMessages`** compares `stub.home` and never loads a partition.
+- **No change needed**: `materializeRound`, `mergePulled`, `deleteChat` and `dependencyGraph`. `get` and the index load what they touch.
+
+### Done when
+
+1. **Boot.** On a copy of the operator's store, the v4 main journal is 110 MB or less, and its open (read+parse+fold) is at least 4× faster than v3's. Both are measured on the same machine, in the same run, with v3 quiet.
+2. **Existing suites pass unchanged** (the oracle):
+   - local-first, except `journalStore*`;
+   - brain-embedded `localChat` and `localFirstPersistence`;
+   - VSIX `localFirst` behaviour suites.
+
+   **Format tests that change on purpose:** the suites that read journal frames or pin v3 file names (`localFirstStore.transaction.test.ts`, `localFirstJournalIo*.test.ts`, `durableLocalFirstStore.*.test.ts` where they name `local-first-v3`). Each change is listed in the review.
+3. **New tests**, one `regression:` test each:
+   - a v3→v4 migration exports equal;
+   - a crash between the partition and main frames leaves the commit invisible and the leftover truncated;
+   - a failed main append leaves no aborted write visible after the next commit;
+   - a cross-window partition tail is applied lazily when loaded and ignored when not;
+   - a load racing a pointer move never installs older rows;
+   - compaction of either kind never loses a row, and an old generation deleted under a reader is retried rather than set aside;
+   - a tombstoned message stays in its partition (main does not grow on `deleteChat`);
+   - an old-window v3 edit of a message after migration is merged;
+   - the backlog migration never drops an event whose row is in an unloaded partition;
+   - `nextId` never re-issues an id across unloaded chats;
+   - `materializeRound` sends, rather than acknowledging as gone, an event whose chat was not loaded;
+   - `chatSync` binds the rows of unloaded chats;
+   - a damaged partition leaves no stale stub.
+
+---
+
 ## Design — Studio local-first
 
 **Mostly implemented.** Reviewed against the repository on 2026-11-25. The Canvas replica, journal, sync importers, guest binding, editor media queue, device-board shell, recent-board seeding and the pull projector are wired in. The browser release gate is written but has not been run, and the pull switch waits on live database checks.

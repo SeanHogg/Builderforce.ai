@@ -26,10 +26,10 @@
  */
 
 import { MAX_INLINE_TEXT_BYTES } from "@seanhogg/builderforce-brain-embedded";
+import { assetMaxBytes } from "@builderforce/asset-limits";
 import type { InferenceMode } from "@builderforce/local-first";
 import { inlineMentions, mentionBudget, type MentionBudget } from "@builderforce/tool-output-policy";
 import { ingressBlock, type IngressDeps, type IngressText } from "../context/contextIngress";
-import { uploadMaxBytes } from "./attachmentLimits";
 
 /** Texts kept at once. A pending attachment that was never sent is forgotten oldest first. */
 export const MAX_STORED_ATTACHMENT_TEXTS = 64;
@@ -38,19 +38,13 @@ export const MAX_STORED_TEXT_CHARS = MAX_INLINE_TEXT_BYTES;
 /** All stored texts together; past it the oldest are forgotten. */
 export const MAX_STORED_TOTAL_CHARS = 8 * MAX_STORED_TEXT_CHARS;
 
-/**
- * The platform's upload ceiling for a MIME type (`attachmentLimits.ts`, the one copy).
- * Checked here so a file the platform will refuse is never encoded, posted and sent.
- */
-export { UPLOAD_MAX_BYTES, UPLOAD_MAX_VIDEO_BYTES, uploadMaxBytes } from "./attachmentLimits";
-
 /** Why a file may not go to the account, or null when it may. */
 export type UploadRefusal = { reason: "local-only" } | { reason: "too-large"; maxBytes: number };
 
 /** The ONE admission rule for a cloud upload (see the header). */
 export function uploadRefusal(file: { mime: string; size: number }, mode: InferenceMode): UploadRefusal | null {
   if (mode === "local-only") return { reason: "local-only" };
-  const maxBytes = uploadMaxBytes(file.mime);
+  const maxBytes = assetMaxBytes(file.mime);
   return file.size > maxBytes ? { reason: "too-large", maxBytes } : null;
 }
 
