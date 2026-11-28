@@ -1,6 +1,7 @@
 /** The Brain's tool vocabulary for this board — the inline actions plus every tool-module family, built once per session/role/locale. */
 import { type Dispatch, type RefObject, type SetStateAction, useMemo } from 'react';
 import { canvasBuildActions, type BoundCanvasBuild } from '@/lib/canvasBuildTools';
+import { useConfirmShellCommand } from '@/hooks/useConfirmShellCommand';
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
 import { canvasFounderOpsActions, type CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
@@ -70,12 +71,14 @@ function buildActionsFor(
   buildsRef: RefObject<BoundCanvasBuild[]>,
   createApp: CanvasSessionAppActions['createApp'],
   appWritten: CanvasSessionAppActions['appWritten'],
+  confirmShellCommand: (command: string) => Promise<boolean>,
 ): BrainAction[] {
   return canvasBuildActions({
     builds: () => buildsRef.current ?? [],
     createBuild: createApp,
     onFilesChanged: notifyWorkspaceFilesChanged,
     onBuildWritten: appWritten,
+    confirmShellCommand,
   });
 }
 
@@ -120,7 +123,10 @@ export function useCanvasBrainVocabulary({ buildsRef, createApp, appWritten, bui
    * call time, so adding an object to the board never re-registers them, and `createApp`
    * gives a guest board a browser-held workspace instead of refusing.
    */
-  const canvasBuildActionList = useMemo<BrainAction[]>(() => buildActionsFor(buildsRef, createApp, appWritten), [appWritten, buildsRef, createApp]);
+  const confirmShellCommand = useConfirmShellCommand();
+  const canvasBuildActionList = useMemo<BrainAction[]>(() =>
+    buildActionsFor(buildsRef, createApp, appWritten, confirmShellCommand),
+  [appWritten, buildsRef, confirmShellCommand, createApp]);
 
   /**
    * The context every board-mutation AI tool GROUP shares — founder-ops, legal

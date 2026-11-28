@@ -945,6 +945,16 @@ var TOOL_NAME_ALIASES = {
 function normalizeToolName(name) {
   return name.trim().toLowerCase();
 }
+var WORKSPACE_INSPECTION_TOOLS = [
+  "read_file",
+  "list_files",
+  "search_code",
+  "find_symbol",
+  "file_outline"
+];
+var WORKSPACE_CODE_WRITE_TOOLS = ["write_file", "edit_file", "delete_file"];
+var NATIVE_FILE_WRITE_TOOLS = ["write", "edit", "apply_patch"];
+var NATIVE_FILE_TOOLS = ["read", ...NATIVE_FILE_WRITE_TOOLS];
 function resolveToolAlias(name) {
   const key = name.trim().toLowerCase();
   return TOOL_NAME_ALIASES[key] ?? name;
@@ -1156,14 +1166,18 @@ var workspaceMemoryReadTool = defineTool({
 
 // ../packages/agent-tools/src/fileWindow.ts
 var READ_DEFAULT_LINE_LIMIT = 2e3;
-function windowFileContent(content, opts) {
+function sliceFileLines(content, start, end) {
   const lines = content.split("\n");
-  const totalLines = lines.length;
-  const start = opts?.offset && opts.offset > 1 ? Math.min(Math.floor(opts.offset), totalLines + 1) : 1;
+  const selected = lines.slice(start, end);
+  return { content: selected.join("\n"), totalLines: lines.length, returnedLines: selected.length };
+}
+function windowFileContent(content, opts) {
+  const start = opts?.offset && opts.offset > 1 ? Math.floor(opts.offset) : 1;
   const limit = opts?.limit && opts.limit > 0 ? Math.floor(opts.limit) : READ_DEFAULT_LINE_LIMIT;
-  const slice = lines.slice(start - 1, start - 1 + limit);
-  const end = start - 1 + slice.length;
-  return { content: slice.join("\n"), truncated: end < totalLines, totalLines, offset: start, returnedLines: slice.length };
+  const slice = sliceFileLines(content, start - 1, start - 1 + limit);
+  const offset = Math.min(start, slice.totalLines + 1);
+  const last = offset - 1 + slice.returnedLines;
+  return { ...slice, offset, truncated: last < slice.totalLines };
 }
 function fileWindowNote(win) {
   if (!win.truncated) return void 0;
@@ -2086,6 +2100,54 @@ async function runInRepoScope(ctx, scope, run) {
   return null;
 }
 
+// ../packages/agent-tools/src/shell-job-types.ts
+function shellFailure(code, error) {
+  return { ok: false, code, error };
+}
+
+// ../packages/tool-output-policy/src/caps.ts
+var DEFAULT_COMMAND_TIMEOUT_MS = 10 * 6e4;
+var MAX_BACKGROUND_JOBS = 32;
+var BACKGROUND_JOB_LIMIT_ERROR = `too many running background jobs (${MAX_BACKGROUND_JOBS}); stop one with command_stop first`;
+var EDITOR_COMMAND_BUFFER_CHARS = 4 * 1024 * 1024;
+var NATIVE_FILE_READ_MAX_BYTES = 50 * 1024;
+var TOOL_OUTPUT_CAPS = {
+  read_file: 16e3,
+  run_command: 2e4,
+  exec: 2e4,
+  bash: 2e4,
+  git_status: 2e4,
+  git_diff: 2e4,
+  git_history: 2e4,
+  git_sync_latest: 2e4,
+  git_undo: 2e4,
+  git_redo: 2e4,
+  // Up to four children's reports in one result, each capped by agent-tools'
+  // `SUBAGENT_REPORT_CHARS`. A research child's report IS its deliverable: under the 6K
+  // default a wait on four left the owner ~1.5K of each, and it re-spawned researchers
+  // to recover what was cut (VS Code chat #6). Four full reports plus each one's header
+  // and cut marker; `subagentReportBudget.test.ts` (brain-embedded) holds the two together.
+  wait_agents: 34e3,
+  // The Creation Canvas's reads. A board snapshot is the whole board as JSON and a real
+  // board runs to tens of KB; under the 6K default the model was handed a sliver of it and
+  // asked the user to re-select objects that were already there. A build file is paged
+  // like `read_file` (see {@link PAGED_READ_TOOLS}).
+  canvas_read_snapshot: 64e3,
+  canvas_read_object: 32e3,
+  canvas_read_build_file: 16e3
+};
+var READ_FILE_TOOL = "read_file";
+var PAGED_READ_TOOLS = {
+  // `read_file`'s `offset` applies to each path of a `paths[]` read (agent-tools core-tools).
+  [READ_FILE_TOOL]: { search: "search_code", perPathOffset: true },
+  // The canvas's `offset` is honoured for a SINGLE path only.
+  canvas_read_build_file: { search: "canvas_search_build_files", perPathOffset: false }
+};
+var READ_MAX_BYTES = 2 * 1024 * 1024;
+
+// ../packages/tool-output-policy/src/readFileWindow.ts
+var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;
+
 // ../packages/agent-tools/src/shell-command-shape.ts
 function withoutQuoted(command) {
   return command.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, '""');
@@ -2654,8 +2716,26 @@ async function refuseBranchSwitchOverChanges(command, dir, ctx) {
   return branchSwitchRefusal(command, found, paths);
 }
 
+// ../packages/agent-tools/src/workspaceCommandPolicy.ts
+var SYSTEM_MAINTENANCE = /^(?:mkfs(?:\.[\w-]+)?|mkswap|diskpart(?:\.exe)?|format\.com|format-volume|clear-disk|shutdown(?:\.exe)?|reboot|poweroff)$/i;
+function workspaceInvocations(command) {
+  return (splitShellSegments(command) ?? []).map((segment) => {
+    const [program, ...args] = commandWords(shellTokens(segment));
+    return { name: program?.split(/[\\/]/).at(-1)?.toLowerCase(), args };
+  });
+}
+function workspaceCommandRefusal(command) {
+  if (command.includes("\0")) return shellFailure("invalid", "The shell command contains a null character.");
+  for (const { name } of workspaceInvocations(command)) {
+    if (name && SYSTEM_MAINTENANCE.test(name)) {
+      return shellFailure("refused", "System maintenance commands are outside the workspace shell policy.");
+    }
+  }
+  return void 0;
+}
+
 // ../packages/agent-tools/src/shell-tools.ts
-var SHELL_WAIT_MAX_MS = 10 * 60 * 1e3;
+var SHELL_WAIT_MAX_MS = DEFAULT_COMMAND_TIMEOUT_MS;
 function waitArg(v) {
   return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.min(Math.floor(v), SHELL_WAIT_MAX_MS) : void 0;
 }
@@ -2672,40 +2752,52 @@ function commandDir(command, cwd, defaultRepo) {
   return safeRepoArg(defaultRepo) ?? void 0;
 }
 var jobNote = (id) => `Running in the background (job ${id}). Keep working; check it with command_status { "id": "${id}" } (pass waitMs to wait for it), stop it with command_stop { "id": "${id}" }.`;
+function withShellFailure(result, code = "command_failed") {
+  if (result.ok) return result;
+  const message = result.exitCode === void 0 ? "The command failed" : `The command exited with code ${result.exitCode}`;
+  return { ...result, ...shellFailure(result.code ?? code, result.error ?? message) };
+}
 function finishedJob(st) {
   return {
     ok: st.status === "exited" && st.exitCode === 0,
     ...st.exitCode !== void 0 ? { exitCode: st.exitCode } : {},
     stdout: st.output ?? "",
     ...st.outputId ? { outputId: st.outputId } : {},
+    ...st.code ? { code: st.code } : st.status === "unknown" ? { code: "not_found" } : {},
     ...st.status === "killed" ? { aborted: true, error: st.error ?? "the job was stopped" } : st.error ? { error: st.error } : {}
   };
 }
 function shapeResult(command, r) {
-  return searchNoMatch(command, r);
+  return withShellFailure(searchNoMatch(command, r), r.aborted ? "aborted" : "command_failed");
 }
 async function runShellCommand(args, ctx) {
   const stripped = stripTailLimit(typeof args.command === "string" ? args.command : "");
   const command = stripped.command;
   const tailNote = stripped.stripped ? `ran without the trailing \`| tail -${stripped.tail}\` \u2014 the full output is retained under \`outputId\`; read its head with output_filter { outputId, head: \u2026 }. ` : "";
-  if (!command.trim()) return { data: { ok: false, error: "command is required" } };
+  if (!command.trim()) return { data: shellFailure("invalid", "command is required") };
   const cwd = cwdArg(args.cwd);
   if (cwd === null) {
-    return { data: { ok: false, error: "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path)." } };
+    return { data: shellFailure("invalid", "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path).") };
   }
   const shell = ctx.caps.shell;
   const dir = commandDir(command, cwd, shell.defaultRepo);
   const where = dir ? { cwd: dir } : {};
+  const policyRefusal = workspaceCommandRefusal(command);
+  if (policyRefusal) return { data: { ...policyRefusal, ...where } };
+  const decision = await shell.authorize?.(command, { ...where, signal: ctx.signal });
+  if (decision && !decision.allowed) {
+    return { data: { ...shellFailure("refused", decision.reason ?? "The shell command was not approved."), ...where } };
+  }
   const background = args.background === true;
   const yieldMs = waitArg(args.yieldMs);
   let note;
   const refused = await refuseBranchSwitchOverChanges(command, dir, ctx);
-  if (refused) return { data: { ok: false, refused: "branch-switch", error: refused, ...where } };
+  if (refused) return { data: { ...shellFailure("refused", refused), refused: "branch-switch", ...where } };
   if (background || yieldMs !== void 0) {
     if (shell.start && shell.poll) {
-      if (ctx.signal?.aborted) return { data: { ok: false, aborted: true, error: "stopped before the command started", ...where } };
+      if (ctx.signal?.aborted) return { data: { ...shellFailure("aborted", "stopped before the command started"), aborted: true, ...where } };
       const started = await (dir ? shell.start(command, { cwd: dir }) : shell.start(command));
-      if (!started.ok || !started.id) return { data: { ok: false, error: started.error ?? "the background job did not start", ...where } };
+      if (!started.ok || !started.id) return { data: { ...shellFailure(started.code ?? "command_failed", started.error ?? "the background job did not start"), ...where } };
       const id = started.id;
       if (background) return { data: { ok: true, background: true, id, status: "running", note: jobNote(id), ...where } };
       const st = await shell.poll(id, { waitMs: yieldMs, ...ctx.signal ? { signal: ctx.signal } : {} });
@@ -2724,6 +2816,7 @@ async function runShellCommand(args, ctx) {
   return { data: { ...r, ...where, ...notes ? { note: notes } : {} } };
 }
 async function compressedJobStatus(st, ctx) {
+  st = withShellFailure(st, st.status === "killed" ? "aborted" : st.status === "unknown" ? "not_found" : "command_failed");
   if (st.status === "running" || typeof st.output !== "string") return st;
   const r = await compressShellResult(finishedJob(st), ctx);
   return r.compressed && typeof r.stdout === "string" ? { ...st, output: r.stdout } : st;
@@ -2745,9 +2838,9 @@ var commandStatusTool = defineTool({
   requires: ["shell.jobs"],
   async execute(args, ctx) {
     const id = jobId(args);
-    if (!id) return { data: { ok: false, error: "id is required" } };
+    if (!id) return { data: shellFailure("invalid", "id is required") };
     const poll = ctx.caps.shell?.poll;
-    if (!poll) return { data: { ok: false, error: "background commands are not available on this surface" } };
+    if (!poll) return { data: shellFailure("unsupported", "background commands are not available on this surface") };
     const waitMs = waitArg(args.waitMs);
     const st = await poll.call(ctx.caps.shell, id, { ...waitMs !== void 0 ? { waitMs } : {}, ...ctx.signal ? { signal: ctx.signal } : {} });
     return { data: await compressedJobStatus(st, ctx) };
@@ -2764,9 +2857,9 @@ var commandStopTool = defineTool({
   requires: ["shell.jobs"],
   async execute(args, ctx) {
     const id = jobId(args);
-    if (!id) return { data: { ok: false, error: "id is required" } };
+    if (!id) return { data: shellFailure("invalid", "id is required") };
     const kill = ctx.caps.shell?.kill;
-    if (!kill) return { data: { ok: false, error: "background commands are not available on this surface" } };
+    if (!kill) return { data: shellFailure("unsupported", "background commands are not available on this surface") };
     const st = await kill.call(ctx.caps.shell, id);
     return { data: await compressedJobStatus(st, ctx) };
   }
@@ -5587,6 +5680,9 @@ var import_ingest8 = require("@seanhogg/builderforce-memory/ingest");
 // ../packages/agent-tools/src/knowledge/codeGraphFindings.ts
 var import_knowledge50 = require("@seanhogg/builderforce-memory/knowledge");
 
+// ../packages/agent-tools/src/knowledge/runTraces.ts
+var MAX_TRACE_FILE_BYTES = 2 * 1024 * 1024;
+
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
 var import_knowledge51 = require("@seanhogg/builderforce-memory/knowledge");
 var MAX_PINPOINT_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -7489,10 +7585,64 @@ var SELF_REVIEW = `SELF-REVIEW \u2014 read your own diff with \`git_diff\` ${REV
 var CLOUD_SELF_REVIEW = `SELF-REVIEW \u2014 re-read every file you changed ${REVIEW_CHECKLIST}`;
 
 // src/localWorkspaceTools.ts
+var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
+  ...WORKSPACE_INSPECTION_TOOLS,
+  // The semantic index (Builderforce Desktop). Pinned for the same reason and more so:
+  // its whole purpose is the question phrased in words — "how do refunds reach the
+  // ledger?" — which is exactly the turn whose text shares no stem with the tool name.
+  // Inert where the host does not advertise them (desktop app not running, web Brain).
+  "semantic_search",
+  "repo_map",
+  // The free-token readers (cost levers, WS-L): a long doc read compressed, and a question
+  // answered by a LOCAL model over the files it names. "summarize the design notes" shares
+  // no stem with either name, and they exist to be reached for BEFORE a paid read.
+  // Inert where the host did not advertise them (no compressor / no local model).
+  "read_compressed",
+  "local_research",
+  ...WORKSPACE_CODE_WRITE_TOOLS,
+  "run_command",
+  // A background command's companions (PRD 35 E6): a turn that started `npm test` in the
+  // background and now asks "did it pass?" shares no stem with `command_status`.
+  "command_status",
+  "command_stop",
+  // The git tools, read and publish alike. They belong here for exactly the reason the
+  // file tools do: "commit the change and push to main" is not one domain among many a
+  // query can be relevant to, it is the surface doing its job. The turn that produced
+  // this set is the proof — `run_command` shared no stem with that request, missed the
+  // relevance cut, and the agent spent the run unable to find the tool its own persona
+  // had just told it to use. `git_status` before a commit, and `open_pull_request`
+  // after one, are dropped by the same mechanism on a turn phrased "ship this".
+  "git_status",
+  "git_diff",
+  "git_history",
+  "git_sync_latest",
+  "git_undo",
+  "git_redo",
+  "git_commit",
+  "git_push",
+  "open_pull_request",
+  // Cleanup after a merge is the LAST step of shipping and the one most easily trimmed:
+  // by the time the agent reaches it, the turn's text is about the change, not about
+  // branches, so "cleanup" shares no stem with anything the user said. Unpinned, the
+  // agent falls back to hand-rolled `run_command` git — which is exactly how
+  // `git push origin --delete <branch>` → `remote ref does not exist` happened.
+  "git_cleanup_merged",
+  // Delegation to a sub-agent. It belongs here for the same reason and fails the same
+  // way: a turn phrased "where does the auth middleware live?" shares no stem with
+  // "delegate", so relevance drops the one tool that would answer it cheaply, and the
+  // agent burns the turns delegation exists to save. Nothing is pinned that the host
+  // did not advertise — the web Brain offers no `spawn_agent`, so this is inert there.
+  "spawn_agent",
+  // Its side-by-side twin — what a planner's `hand_off` fans out to; editor-only.
+  "spawn_agents",
+  // The owner's verbs for children running in the background (editor-only): a turn about
+  // "check on Ada" or "tell a2 to stop" shares no stem with the tool names either.
+  "wait_agents",
+  "message_agent",
+  "stop_agent"
+]);
 var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
-  "write_file",
-  "edit_file",
-  "delete_file",
+  ...WORKSPACE_CODE_WRITE_TOOLS,
   "canvas_write_build_file",
   "canvas_edit_build_file",
   "canvas_restore_build_file"
@@ -10409,7 +10559,7 @@ async function readPackageScripts(sandbox) {
     return null;
   }
 }
-async function detectRunner(sandbox) {
+async function detectRunner2(sandbox) {
   const atRoot = async (name) => {
     const listed = await sandbox.list(name).catch((error) => {
       sandbox.onError?.("list", error);
@@ -10422,7 +10572,7 @@ async function detectRunner(sandbox) {
   return "npm";
 }
 async function runSandboxVerify(sandbox, shell, now = Date.now) {
-  const [packageScripts, runner] = await Promise.all([readPackageScripts(sandbox), detectRunner(sandbox)]);
+  const [packageScripts, runner] = await Promise.all([readPackageScripts(sandbox), detectRunner2(sandbox)]);
   const plan = planInRunVerify({ surface: "sandbox", packageScripts, runner });
   const results = [];
   const deadline = now() + VERIFY_BUDGET_MS;
@@ -10659,49 +10809,6 @@ var SYNONYMS = (() => {
 // ../packages/agent-run/src/policy/tools/selectTools.ts
 var NAME_HIT = LEXICAL_WEIGHTS.name;
 var DESCRIPTION_HIT = LEXICAL_WEIGHTS.description;
-
-// ../packages/tool-output-policy/src/caps.ts
-var DEFAULT_COMMAND_TIMEOUT_MS = 10 * 6e4;
-var MAX_BACKGROUND_JOBS = 32;
-var BACKGROUND_JOB_LIMIT_ERROR = `too many running background jobs (${MAX_BACKGROUND_JOBS}); stop one with command_stop first`;
-var EDITOR_COMMAND_BUFFER_CHARS = 4 * 1024 * 1024;
-var NATIVE_FILE_READ_MAX_BYTES = 50 * 1024;
-var TOOL_OUTPUT_CAPS = {
-  read_file: 16e3,
-  run_command: 2e4,
-  exec: 2e4,
-  bash: 2e4,
-  git_status: 2e4,
-  git_diff: 2e4,
-  git_history: 2e4,
-  git_sync_latest: 2e4,
-  git_undo: 2e4,
-  git_redo: 2e4,
-  // Up to four children's reports in one result, each capped by agent-tools'
-  // `SUBAGENT_REPORT_CHARS`. A research child's report IS its deliverable: under the 6K
-  // default a wait on four left the owner ~1.5K of each, and it re-spawned researchers
-  // to recover what was cut (VS Code chat #6). Four full reports plus each one's header
-  // and cut marker; `subagentReportBudget.test.ts` (brain-embedded) holds the two together.
-  wait_agents: 34e3,
-  // The Creation Canvas's reads. A board snapshot is the whole board as JSON and a real
-  // board runs to tens of KB; under the 6K default the model was handed a sliver of it and
-  // asked the user to re-select objects that were already there. A build file is paged
-  // like `read_file` (see {@link PAGED_READ_TOOLS}).
-  canvas_read_snapshot: 64e3,
-  canvas_read_object: 32e3,
-  canvas_read_build_file: 16e3
-};
-var READ_FILE_TOOL = "read_file";
-var PAGED_READ_TOOLS = {
-  // `read_file`'s `offset` applies to each path of a `paths[]` read (agent-tools core-tools).
-  [READ_FILE_TOOL]: { search: "search_code", perPathOffset: true },
-  // The canvas's `offset` is honoured for a SINGLE path only.
-  canvas_read_build_file: { search: "canvas_search_build_files", perPathOffset: false }
-};
-var READ_MAX_BYTES = 2 * 1024 * 1024;
-
-// ../packages/tool-output-policy/src/readFileWindow.ts
-var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;
 
 // ../packages/agent-run/src/policy/tools/gates.ts
 var CONTROL_TOOLS = new Set(CONTROL_TOOL_NAMES);

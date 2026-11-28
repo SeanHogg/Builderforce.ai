@@ -18,6 +18,7 @@
 
 import type { ActionModelRankStat, ActionType } from "@builderforce/learned-routing";
 import { MODEL_ANALYTICS_PATH } from "@builderforce/learned-routing";
+import { fetchBuilderforce } from "../../../infra/builderforce-http.js";
 import { logDebug } from "../../../logger.js";
 import { resolveGatewayLink } from "./settings.js";
 
@@ -121,10 +122,10 @@ export async function fetchScopeRanking(
   }
   try {
     const url = `${link.base}${MODEL_ANALYTICS_PATH}?scope=${encodeURIComponent(scopeToken)}`;
-    const res = await fetch(url, {
-      headers: { Accept: "application/json", Authorization: `Bearer ${link.apiKey}` },
+    const res = await fetchBuilderforce(url, {
+      headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
+    }, link.apiKey);
     if (!res.ok) {
       logDebug(`[learned-routing] model-analytics scope=${scopeToken} returned HTTP ${res.status}`);
       // Cache the empty result too: a 403 on a scope this host may not read would

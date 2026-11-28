@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { loadProjectContext } from "../../builderforce/project-context-store.js";
 import { danger } from "../../globals.js";
 import { readSharedEnvVar } from "../../infra/env-file.js";
+import { builderforceApiBase } from "../../infra/builderforce-http.js";
 import { triggerWorkflow } from "../../infra/workflow-trigger.js";
 import { defaultRuntime } from "../../runtime.js";
 import { formatDocsLink } from "../../terminal/links.js";
@@ -23,7 +24,7 @@ async function resolveConnection(): Promise<
         "Not linked to Builderforce (BUILDERFORCE_API_KEY not set in ~/.builderforce/.env). Run `builderforce onboard` first.",
     };
   }
-  const baseUrl = readSharedEnvVar("BUILDERFORCE_URL")?.trim() || "https://api.builderforce.ai";
+  const baseUrl = builderforceApiBase();
 
   let agentNodeId = readSharedEnvVar("BUILDERFORCE_AGENT_NODE_ID")?.trim();
   if (!agentNodeId) {

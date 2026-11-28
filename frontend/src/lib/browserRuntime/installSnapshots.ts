@@ -66,11 +66,12 @@ export async function restoreInstalledPackages(
   runtime: SnapshotRuntime,
   key: string,
   store?: SnapshotStore | null,
+  isCurrent: () => boolean = () => true,
 ): Promise<boolean> {
   try {
     const snapshots = store === undefined ? await installSnapshotStore() : store;
     const zip = await snapshots?.load(key);
-    if (!zip) return false;
+    if (!zip || !isCurrent()) return false;
     runtime.importZip(zip);
     return true;
   } catch {
@@ -83,11 +84,12 @@ export async function saveInstalledPackages(
   runtime: SnapshotRuntime,
   key: string,
   store?: SnapshotStore | null,
+  isCurrent: () => boolean = () => true,
 ): Promise<boolean> {
   try {
     // Resolved BEFORE the (synchronous) export, so a fire-and-forget caller returns first.
     const snapshots = store === undefined ? await installSnapshotStore() : store;
-    if (!snapshots) return false;
+    if (!snapshots || !isCurrent()) return false;
     return await snapshots.save(key, runtime.exportZip({ include: SNAPSHOT_PATHS, level: 1 }));
   } catch {
     return false;

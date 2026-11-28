@@ -12,6 +12,8 @@
  * Best-effort and OFF unless fully configured (gateway url + key + host id +
  * project id) — a mis/under-configured runtime is a silent no-op, never a crash.
  */
+import { builderforceAuthHeaders } from "./builderforce-http.js";
+
 export interface ProjectEvermindSyncConfig {
   gatewayUrl: string;
   apiKey: string;
@@ -42,7 +44,7 @@ export interface ContributeResult {
 
 /** Host-key auth for the agent-side Evermind doors (text and delta alike). */
 export function authHeaders(cfg: ProjectEvermindSyncConfig): Record<string, string> {
-  return { Authorization: `Bearer ${cfg.apiKey}`, "X-AgentHost-Id": String(cfg.agentHostId) };
+  return builderforceAuthHeaders(cfg.apiKey, cfg.agentHostId);
 }
 
 /**

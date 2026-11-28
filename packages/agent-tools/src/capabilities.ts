@@ -233,6 +233,8 @@ export interface WebCapability {
  *  cloud Container, on-prem Node) — never on the bare Worker/DO. */
 export interface ShellCapability {
   run(command: string, opts?: ShellRunOptions): Promise<ShellResult>;
+  /** A host can apply its configured approval or allowlist policy before a command is launched. */
+  authorize?(command: string, options: ShellRunOptions): Promise<{ allowed: boolean; reason?: string }>;
   /**
    * The run's default checkout, when the workspace root CONTAINS checkouts rather than
    * being one — resolved once per run by the surface (`resolveDefaultRepo`). Set ⇒ the

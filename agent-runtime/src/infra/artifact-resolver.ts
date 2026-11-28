@@ -5,6 +5,7 @@
  * and returns skills, personas, and content assigned at any level.
  */
 
+import { fetchBuilderforce } from "./builderforce-http.js";
 import { logDebug } from "../logger.js";
 
 export type ResolvedArtifact = {
@@ -45,10 +46,9 @@ export async function resolveTaskArtifacts(
   }
   const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/artifacts/resolve?${params}`;
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${opts.apiKey}` },
+    const res = await fetchBuilderforce(url, {
       signal: AbortSignal.timeout(10_000),
-    });
+    }, opts.apiKey);
     if (!res.ok) {
       logDebug(`[artifact-resolver] resolve failed: HTTP ${res.status}`);
       return empty;

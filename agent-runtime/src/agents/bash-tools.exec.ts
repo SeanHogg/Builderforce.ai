@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_COMMAND_TIMEOUT_MS } from "@builderforce/tool-output-policy";
+import { shellFailure, shellFailureError, workspaceCommandRefusal } from "@builderforce/agent-tools";
 import type { AgentTool, AgentToolResult } from "../builderforce/model/agent-types.js";
 import {
   type ExecAsk,
@@ -109,6 +110,9 @@ export type ExecToolDetails =
       durationMs: number;
       aggregated: string;
       cwd?: string;
+      ok?: false;
+      code?: ReturnType<typeof shellFailure>["code"];
+      error?: string;
     }
   | {
       status: "approval-pending";
@@ -184,7 +188,7 @@ async function validateScriptFileForShellBleed(params: {
     const before = content.slice(0, idx);
     const line = before.split("\n").length;
     const token = first[0];
-    throw new Error(
+    throw shellFailureError("invalid",
       [
         `exec preflight: detected likely shell variable injection (${token}) in ${target.kind} script: ${path.basename(
           absPath,
@@ -204,7 +208,7 @@ async function validateScriptFileForShellBleed(params: {
       .map((l) => l.trim())
       .find((l) => l.length > 0);
     if (firstNonEmpty && /^NODE\b/.test(firstNonEmpty)) {
-      throw new Error(
+      throw shellFailureError("invalid",
         `exec preflight: JS file starts with shell syntax (${firstNonEmpty}). ` +
           `This looks like a shell command, not JavaScript.`,
       );
@@ -262,8 +266,10 @@ export function createExecTool(
       };
 
       if (!params.command) {
-        throw new Error("Provide a command to start.");
+        throw shellFailureError("invalid", "Provide a command to start.");
       }
+      const policyRefusal = workspaceCommandRefusal(params.command);
+      if (policyRefusal) throw shellFailureError(policyRefusal.code, policyRefusal.error);
 
       const maxOutput = DEFAULT_MAX_OUTPUT;
       const pendingMaxOutput = DEFAULT_PENDING_MAX_OUTPUT;
@@ -324,7 +330,7 @@ export function createExecTool(
               "allowFrom (tools.elevated.allowFrom.<provider> / agents.list[].tools.elevated.allowFrom.<provider>)",
             );
           }
-          throw new Error(
+          throw shellFailureError("refused",
             [
               `elevated is not available right now (runtime=${runtime}).`,
               `Failing gates: ${gates.join(", ")}`,
@@ -347,7 +353,7 @@ export function createExecTool(
       const requestedHost = normalizeExecHost(params.host) ?? null;
       let host: ExecHost = requestedHost ?? configuredHost;
       if (!elevatedRequested && requestedHost && requestedHost !== configuredHost) {
-        throw new Error(
+        throw shellFailureError("refused",
           `exec host not allowed (requested ${renderExecHostLabel(requestedHost)}; ` +
             `configure tools.exec.host=${renderExecHostLabel(requestedHost)} to allow).`,
         );
@@ -429,17 +435,17 @@ export function createExecTool(
         const hostAsk = maxAsk(ask, approvals.agent.ask);
         const askFallback = approvals.agent.askFallback;
         if (hostSecurity === "deny") {
-          throw new Error("exec denied: host=node security=deny");
+          throw shellFailureError("refused", "exec denied: host=node security=deny");
         }
         const boundNode = defaults?.node?.trim();
         const requestedNode = params.node?.trim();
         if (boundNode && requestedNode && boundNode !== requestedNode) {
-          throw new Error(`exec node not allowed (bound to ${boundNode})`);
+          throw shellFailureError("refused", `exec node not allowed (bound to ${boundNode})`);
         }
         const nodeQuery = boundNode || requestedNode;
         const nodes = await listNodes({});
         if (nodes.length === 0) {
-          throw new Error(
+          throw shellFailureError("not_found",
             "exec host=node requires a paired node (none available). This requires a companion app or node host.",
           );
         }
@@ -448,7 +454,7 @@ export function createExecTool(
           nodeId = resolveNodeIdFromList(nodes, nodeQuery, !nodeQuery);
         } catch (err) {
           if (!nodeQuery && String(err).includes("node required")) {
-            throw new Error(
+            throw shellFailureError("invalid",
               "exec host=node requires a node id when multiple nodes are available (set tools.exec.node or exec.node).",
               { cause: err },
             );
@@ -460,7 +466,7 @@ export function createExecTool(
           ? nodeInfo?.commands?.includes("system.run")
           : false;
         if (!supportsSystemRun) {
-          throw new Error(
+          throw shellFailureError("unsupported",
             "exec host=node requires a node that supports system.run (companion app or node host).",
           );
         }
@@ -693,6 +699,7 @@ export function createExecTool(
             durationMs: Date.now() - startedAt,
             aggregated: [stdout, stderr, errorText].filter(Boolean).join("\n"),
             cwd: workdir,
+            ...(!success ? shellFailure("command_failed", errorText || stderr || "The node command failed.") : {}),
           } satisfies ExecToolDetails,
         };
       }
@@ -703,7 +710,7 @@ export function createExecTool(
         const hostAsk = maxAsk(ask, approvals.agent.ask);
         const askFallback = approvals.agent.askFallback;
         if (hostSecurity === "deny") {
-          throw new Error("exec denied: host=gateway security=deny");
+          throw shellFailureError("refused", "exec denied: host=gateway security=deny");
         }
         const allowlistEval = evaluateShellAllowlist({
           command: params.command,
@@ -906,7 +913,7 @@ export function createExecTool(
         }
 
         if (hostSecurity === "allowlist" && (!analysisOk || !allowlistSatisfied)) {
-          throw new Error("exec denied: allowlist miss");
+          throw shellFailureError("refused", "exec denied: allowlist miss");
         }
 
         // If allowlist uses safeBins, sanitize only those stdin-only segments:
@@ -930,7 +937,7 @@ export function createExecTool(
               platform: process.platform,
             });
             if (!fallback.ok || !fallback.command) {
-              throw new Error(
+              throw shellFailureError("refused",
                 `exec denied: safeBins sanitize failed (${safe.reason ?? "unknown"})`,
               );
             }
@@ -1066,7 +1073,10 @@ export function createExecTool(
               return;
             }
             if (outcome.status === "failed") {
-              reject(new Error(outcome.reason ?? "Command failed."));
+              reject(Object.assign(shellFailureError(
+                outcome.timedOut ? "timeout" : signal?.aborted ? "aborted" : "command_failed",
+                outcome.reason ?? "Command failed.",
+              ), { exitCode: outcome.exitCode ?? undefined }));
               return;
             }
             resolve({
@@ -1082,6 +1092,7 @@ export function createExecTool(
                 durationMs: outcome.durationMs,
                 aggregated: outcome.aggregated,
                 cwd: run.session.cwd,
+                ...(outcome.exitCode ? shellFailure("command_failed", `The command exited with code ${outcome.exitCode}`) : {}),
               },
             });
           })

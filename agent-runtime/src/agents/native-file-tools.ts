@@ -15,7 +15,7 @@ import {
   writeFile as fsWriteFile,
 } from "node:fs/promises";
 import { dirname, extname, isAbsolute, resolve as resolvePath } from "node:path";
-import { applyStringEdit } from "@builderforce/agent-tools";
+import { applyStringEdit, sliceFileLines } from "@builderforce/agent-tools";
 import { NATIVE_FILE_READ_MAX_BYTES as DEFAULT_MAX_BYTES, NATIVE_FILE_READ_MAX_LINES as DEFAULT_MAX_LINES } from "@builderforce/tool-output-policy";
 import { Type } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "../builderforce/model/agent-types.js";
@@ -197,16 +197,12 @@ function readTextResult(
   offset: number | undefined,
   limit: number | undefined,
 ): AgentToolResult<{ truncation?: TruncationResult }> {
-  const allLines = raw.split("\n");
   const startLine = offset ? Math.max(0, offset - 1) : 0;
-  if (startLine >= allLines.length) {
-    throw new Error(`Offset ${offset} is beyond end of file (${allLines.length} lines total)`);
+  const selected = sliceFileLines(raw, startLine, limit === undefined ? undefined : startLine + limit);
+  if (startLine >= selected.totalLines) {
+    throw new Error(`Offset ${offset} is beyond end of file (${selected.totalLines} lines total)`);
   }
-  const selected =
-    limit !== undefined
-      ? allLines.slice(startLine, Math.min(startLine + limit, allLines.length)).join("\n")
-      : allLines.slice(startLine).join("\n");
-  const truncation = truncateHead(selected);
+  const truncation = truncateHead(selected.content);
   let text = truncation.content;
   if (truncation.firstLineExceedsLimit) {
     text = `[Line ${startLine + 1} exceeds ${DEFAULT_MAX_BYTES / 1024}KB limit. Use bash: sed -n '${startLine + 1}p' ${path}]`;

@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { ShellFailureCode, ShellJobStatus } from "@builderforce/agent-tools";
+import { runShellConformance } from "@builderforce/agent-tools/shell-conformance";
 import { peekSystemEvents, resetSystemEventsForTest } from "../infra/system-events.js";
 import { getFinishedSession, resetProcessRegistryForTests } from "./bash-process-registry.js";
 import { createExecTool, createProcessTool, execTool, processTool } from "./bash-tools.js";
@@ -76,6 +78,43 @@ async function runBackgroundEchoLines(lines: string[]) {
 beforeEach(() => {
   resetProcessRegistryForTests();
   resetSystemEventsForTest();
+});
+
+runShellConformance("native runtime", () => {
+  const exec = createExecTool({ host: "gateway", security: "full", ask: "off", allowBackground: true });
+  const process = createProcessTool();
+  type ProcessDetails = { status: string; aggregated?: string; exitCode?: number; code?: ShellFailureCode; error?: string };
+  return {
+    async run(command, options) {
+      try {
+        const { details } = await exec.execute("conformance", { command }, options?.signal);
+        if (details.status !== "completed" && details.status !== "failed") return { ok: false, error: details.status };
+        return { ok: details.status === "completed" && details.exitCode === 0, exitCode: details.exitCode ?? undefined,
+          stdout: details.aggregated, code: details.code, error: details.error };
+      } catch (error) {
+        const failure = error as { exitCode?: number; code?: ShellFailureCode; error?: string };
+        return { ok: false, ...failure };
+      }
+    },
+    async start(command) {
+      const { details } = await exec.execute("conformance", { command, background: true });
+      return details.status === "running" ? { ok: true, id: details.sessionId } : { ok: false, error: details.status };
+    },
+    async poll(id, options): Promise<ShellJobStatus> {
+      const result = await process.execute("conformance", { action: "poll", sessionId: id, timeout: options?.waitMs }, options?.signal);
+      const details = result.details as ProcessDetails;
+      return {
+        id, ok: details.status === "running" || details.status === "completed",
+        status: details.status === "running" ? "running" : details.code === "not_found" ? "unknown" : "exited",
+        output: details.aggregated, exitCode: details.exitCode, code: details.code, error: details.error,
+      };
+    },
+    async kill(id): Promise<ShellJobStatus> {
+      const result = await process.execute("conformance", { action: "kill", sessionId: id });
+      const details = result.details as ProcessDetails;
+      return { ok: false, id, status: details.code === "aborted" ? "killed" : "unknown", code: details.code, error: details.error };
+    },
+  };
 });
 
 describe("exec tool backgrounding", () => {

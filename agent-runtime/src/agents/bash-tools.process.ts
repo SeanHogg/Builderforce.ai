@@ -1,3 +1,4 @@
+import { shellFailure, type ShellFailureCode } from "@builderforce/agent-tools";
 import type { AgentTool, AgentToolResult } from "../builderforce/model/agent-types.js";
 import { Type } from "@sinclair/typebox";
 import { formatDurationCompact } from "../infra/format-time/format-duration.ts";
@@ -14,6 +15,7 @@ import {
   listRunningSessions,
   markExited,
   setJobTtlMs,
+  waitForProcessSession,
 } from "./bash-process-registry.js";
 import { deriveSessionName, pad, sliceLogLines, truncateMiddle } from "./bash-tools.shared.js";
 import { recordCommandPoll, resetCommandPollCount } from "./command-poll-backoff.js";
@@ -86,7 +88,7 @@ function resolvePollWaitMs(value: unknown) {
   return 0;
 }
 
-function failText(text: string): AgentToolResult<unknown> {
+function failText(text: string, code: ShellFailureCode = "command_failed"): AgentToolResult<unknown> {
   return {
     content: [
       {
@@ -94,7 +96,7 @@ function failText(text: string): AgentToolResult<unknown> {
         text,
       },
     ],
-    details: { status: "failed" },
+    details: { status: "failed", ...shellFailure(code, text) },
   };
 }
 
@@ -146,13 +148,13 @@ export function createProcessTool(
     return true;
   };
 
-  return {
+  const tool: ReturnType<typeof createProcessTool> = {
     name: "process",
     label: "process",
     description:
       "Manage running exec sessions: list, poll, log, write, send-keys, submit, paste, kill.",
     parameters: processSchema,
-    execute: async (_toolCallId, args, _signal, _onUpdate): Promise<AgentToolResult<unknown>> => {
+    execute: async (_toolCallId, args, signal, _onUpdate): Promise<AgentToolResult<unknown>> => {
       const params = args as {
         action:
           | "list"
@@ -309,20 +311,13 @@ export function createProcessTool(
               };
             }
             resetPollRetrySuggestion(params.sessionId);
-            return failText(`No session found for ${params.sessionId}`);
+            return failText(`No session found for ${params.sessionId}`, "not_found");
           }
           if (!scopedSession.backgrounded) {
             return failText(`Session ${params.sessionId} is not backgrounded.`);
           }
           const pollWaitMs = resolvePollWaitMs(params.timeout);
-          if (pollWaitMs > 0 && !scopedSession.exited) {
-            const deadline = Date.now() + pollWaitMs;
-            while (!scopedSession.exited && Date.now() < deadline) {
-              await new Promise((resolve) =>
-                setTimeout(resolve, Math.min(250, deadline - Date.now())),
-              );
-            }
-          }
+          await waitForProcessSession(scopedSession.id, pollWaitMs, signal);
           const { stdout, stderr } = drainSession(scopedSession);
           const exited = scopedSession.exited;
           const exitCode = scopedSession.exitCode ?? 0;
@@ -564,7 +559,7 @@ export function createProcessTool(
 
         case "kill": {
           if (!scopedSession) {
-            return failText(`No active session found for ${params.sessionId}`);
+            return failText(`No active session found for ${params.sessionId}`, "not_found");
           }
           if (!scopedSession.backgrounded) {
             return failText(`Session ${params.sessionId} is not backgrounded.`);
@@ -591,6 +586,7 @@ export function createProcessTool(
             ],
             details: {
               status: "failed",
+              ...shellFailure("aborted", "The process was stopped."),
               name: scopedSession ? deriveSessionName(scopedSession.command) : undefined,
             },
           };
@@ -675,6 +671,17 @@ export function createProcessTool(
       };
     },
   };
+  const execute = tool.execute;
+  tool.execute = async (...args) => {
+    const result = await execute(...args);
+    const details = result.details;
+    if (!details || typeof details !== "object" || !("status" in details) || details.status !== "failed" || "code" in details) {
+      return result;
+    }
+    const message = result.content.find((part) => part.type === "text")?.text ?? "The process action failed.";
+    return { ...result, details: { ...details, ...shellFailure("command_failed", message) } };
+  };
+  return tool;
 }
 
 export const processTool = createProcessTool();

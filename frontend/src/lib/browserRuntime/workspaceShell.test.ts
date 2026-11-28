@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PreviewRuntime, SnapshotStore } from '@seanhogg/builderforce-webcontainers';
+import { runShellConformance, shellConformanceCommands } from '@builderforce/agent-tools/shell-conformance';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
 import { createWorkspaceShell, isInstallCommand, MAX_COMMAND_OUTPUT_CHARS, type WorkspaceShellResult } from './workspaceShell';
 import { installSnapshotKey } from './installSnapshots';
@@ -23,13 +24,14 @@ function memoryStore(initial: Record<string, string>) {
   return { store, files };
 }
 
-type Behaviour = (fs: Map<string, string | Uint8Array>, emit: (text: string) => void) => number | 'hang';
+type Behaviour = (fs: Map<string, string | Uint8Array>, emit: (text: string) => void, command: string) => number | 'hang';
 
 /** Just enough of the runtime: a flat fs keyed `/path`, `writeTree`, and a scripted `run`. */
-function fakeRuntime(behaviour: Behaviour, initialFs: Record<string, string> = {}) {
+function fakeRuntime(behaviour: Behaviour, initialFs: Record<string, string> = {}, supportsTreeKill = false) {
   const fs = new Map<string, string | Uint8Array>(Object.entries(initialFs));
   const spawned: Array<{ command: string; args: string[] }> = [];
   const kill = vi.fn();
+  const killTree = vi.fn();
   const runtime = {
     fs: {
       list: () => [...fs.keys()].sort(),
@@ -54,18 +56,59 @@ function fakeRuntime(behaviour: Behaviour, initialFs: Record<string, string> = {
       });
       let finish!: (code: number) => void;
       const exit = new Promise<number>((resolve) => { finish = (code) => { close(); resolve(code); }; });
-      kill.mockImplementation(() => finish(143));
-      const outcome = behaviour(fs, (text) => push(text));
+      const outcome = behaviour(fs, push, args[1] ?? '');
       if (outcome !== 'hang') queueMicrotask(() => finish(outcome));
-      return { pid: 1000, combinedOutput: output, stdin: new WritableStream<string>(), wait: () => exit, kill, resizeTerminal: () => {} };
+      return {
+        pid: 1000, combinedOutput: output, stdin: new WritableStream<string>(), wait: () => exit,
+        kill: () => { kill(); finish(143); },
+        killTree: supportsTreeKill ? () => {
+          killTree();
+          if (outcome === 'hang') finish(143);
+        } : undefined,
+        resizeTerminal: () => {},
+      };
     },
   };
-  return { runtime: runtime as unknown as PreviewRuntime, fs, spawned, kill };
+  return { runtime: runtime as unknown as PreviewRuntime, fs, spawned, kill, killTree };
 }
 
 const run = (shell: ReturnType<typeof createWorkspaceShell>, command: string) => shell.run(command) as Promise<WorkspaceShellResult>;
 
+runShellConformance('browser workspace', () => {
+  const fake = fakeRuntime((_fs, emit, command) => {
+    if (command === shellConformanceCommands.long) return 'hang';
+    if (command === shellConformanceCommands.failure) return 7;
+    if (command === shellConformanceCommands.large) emit('conformance-head\n' + 'x'.repeat(300_000) + '\nconformance-tail');
+    if (command === shellConformanceCommands.success) emit('conformance-ok\n');
+    return 0;
+  });
+  return createWorkspaceShell(memoryStore({}).store, { boot: async () => fake.runtime });
+});
+
 describe('createWorkspaceShell', () => {
+  it('runs another command in the active workspace without remounting behind a background job', async () => {
+    const child = fakeRuntime((_fs, emit, command) => {
+      if (command === 'npm run dev') return 'hang';
+      emit('built');
+      return 0;
+    });
+    const { store } = memoryStore({ 'app.js': 'app' });
+    const shell = createWorkspaceShell(store, { boot: async () => child.runtime });
+    const started = await shell.start!('npm run dev');
+    await vi.waitFor(() => expect(child.spawned).toHaveLength(1));
+
+    const otherStore = { ...memoryStore({ 'other.js': 'other' }).store, id: 8 };
+    const other = createWorkspaceShell(otherStore, { boot: async () => child.runtime });
+    try {
+      expect(await shell.run('npm run build')).toMatchObject({ ok: true, stdout: 'built' });
+      expect(await other.run('npm run build')).toMatchObject({ ok: false, code: 'refused' });
+      expect(child.fs.get('/app.js')).toBe('app');
+      expect(child.fs.has('/other.js')).toBe(false);
+    } finally {
+      await shell.kill!(started.id!);
+    }
+  });
+
   it('polls a background command without stopping it, then stops it through the process port', async () => {
     const { store } = memoryStore({});
     const child = fakeRuntime((_fs, emit) => { emit('server ready'); return 'hang'; });
@@ -79,6 +122,21 @@ describe('createWorkspaceShell', () => {
     expect(child.kill).not.toHaveBeenCalled();
     expect(await shell.kill!(started.id!)).toMatchObject({ ok: false, status: 'killed', exitCode: 143 });
     expect(child.kill).toHaveBeenCalledOnce();
+  });
+
+  it.each(['running', 'exited'] as const)('stops the process tree for a %s job', async (status) => {
+    const child = fakeRuntime((_fs, emit) => {
+      emit('server ready');
+      return status === 'running' ? 'hang' : 0;
+    }, {}, true);
+    const shell = createWorkspaceShell(memoryStore({}).store, { boot: async () => child.runtime });
+    const { id } = await shell.start!('npm run dev');
+
+    await vi.waitFor(async () => expect(await shell.poll!(id!)).toMatchObject({ status, output: 'server ready' }));
+    await shell.kill!(id!);
+
+    expect(child.killTree).toHaveBeenCalledOnce();
+    expect(child.kill).not.toHaveBeenCalled();
   });
 
   it('writes the workspace and runs the line through bfsh -c, returning output and exit code', async () => {

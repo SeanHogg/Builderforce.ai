@@ -8,7 +8,7 @@ export {
   DEFAULT_COMMAND_TIMEOUT_MS,
   MAX_BACKGROUND_JOBS,
   BACKGROUND_JOB_LIMIT_ERROR,
-  makeRoomForBackgroundJob,
+  createBackgroundJobRegistry,
   waitForBackgroundJob,
   backgroundWaitAbort,
   EDITOR_COMMAND_OUTPUT_CHARS,

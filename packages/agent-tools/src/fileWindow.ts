@@ -22,6 +22,13 @@ export interface FileWindow {
   returnedLines: number;
 }
 
+/** Slice line indexes using the same text decoding for every file-read contract. */
+export function sliceFileLines(content: string, start: number, end?: number) {
+  const lines = content.split("\n");
+  const selected = lines.slice(start, end);
+  return { content: selected.join("\n"), totalLines: lines.length, returnedLines: selected.length };
+}
+
 /**
  * Window file content to a 1-based line range, reporting whether more remains. This
  * is the SINGLE place large-file pagination lives, so every surface (cloud, container,
@@ -31,13 +38,12 @@ export interface FileWindow {
  * chunk); the windowing math is here, once.
  */
 export function windowFileContent(content: string, opts?: { offset?: number; limit?: number }): FileWindow {
-  const lines = content.split("\n");
-  const totalLines = lines.length;
-  const start = opts?.offset && opts.offset > 1 ? Math.min(Math.floor(opts.offset), totalLines + 1) : 1;
+  const start = opts?.offset && opts.offset > 1 ? Math.floor(opts.offset) : 1;
   const limit = opts?.limit && opts.limit > 0 ? Math.floor(opts.limit) : READ_DEFAULT_LINE_LIMIT;
-  const slice = lines.slice(start - 1, start - 1 + limit);
-  const end = start - 1 + slice.length; // last line number included
-  return { content: slice.join("\n"), truncated: end < totalLines, totalLines, offset: start, returnedLines: slice.length };
+  const slice = sliceFileLines(content, start - 1, start - 1 + limit);
+  const offset = Math.min(start, slice.totalLines + 1);
+  const last = offset - 1 + slice.returnedLines;
+  return { ...slice, offset, truncated: last < slice.totalLines };
 }
 
 /** The "how to read the next chunk" note for a truncated window; `undefined` when the

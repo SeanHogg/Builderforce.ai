@@ -14,6 +14,7 @@
  *   GET    /api/skills
  */
 
+import { builderforceAuthHeaders } from "../infra/builderforce-http.js";
 import type {
   AgentInfo,
   BuilderforceConfig,
@@ -300,7 +301,7 @@ export class BuilderforceTransportAdapter implements TransportAdapter {
       Accept: "application/json",
     };
     if (this.authToken) {
-      headers.Authorization = `Bearer ${this.authToken}`;
+      Object.assign(headers, builderforceAuthHeaders(this.authToken));
     }
     if (this.agentNodeId != null) {
       headers["X-AgentHost-Id"] = String(this.agentNodeId);

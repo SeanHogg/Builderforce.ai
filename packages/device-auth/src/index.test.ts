@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { completeDeviceSignIn, derivePlatformWebBase, DeviceAuthError, revokeKey, startDeviceSignIn, TENANT_SESSION_TTL_SECONDS, type DeviceAuthDeps } from './index';
+import { completeDeviceSignIn, derivePlatformWebBase, DeviceAuthError, readEditorTenantToken, revokeKey, startDeviceSignIn, TENANT_SESSION_TTL_SECONDS, type DeviceAuthDeps } from './index';
 import contract from '../fixtures/gateway-contract.json';
 
 const json = (status: number, body: unknown = {}) =>
@@ -83,6 +83,11 @@ describe('shared gateway contract', () => {
 
   it.each(contract.webOrigins)('derives the portal origin from $gateway', ({ gateway, web }) => {
     expect(derivePlatformWebBase(gateway)).toBe(web);
+  });
+
+  it.each(contract.workspaceTokens)('validates workspace token $body', async ({ body, expectedTenant, resolvedTenant }) => {
+    const token = await readEditorTenantToken(json(200, body), () => 0, expectedTenant ?? undefined);
+    expect(token?.tenantId ?? null).toBe(resolvedTenant);
   });
 });
 

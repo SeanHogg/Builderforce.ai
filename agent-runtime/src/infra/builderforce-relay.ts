@@ -9,6 +9,7 @@
  * Also sends periodic HTTP heartbeats to keep lastSeenAt fresh in the DB.
  */
 
+import { builderforceAuthHeaders, fetchBuilderforce } from "./builderforce-http.js";
 import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
@@ -381,15 +382,14 @@ export class BuilderforceRelayService implements IRelayService {
       const base = normalizeBaseUrl(this.opts.baseUrl);
       await git.push(dir, buildTaskCloneUrl(base, this.opts.agentNodeId, repo.repoId), branch);
       // Open/keep a PR so the pending changes are reviewable (idempotent server-side).
-      const response = await fetch(`${base}/api/agent-hosts/${this.opts.agentNodeId}/tasks/${taskId}/pull-request`, {
+      const response = await fetchBuilderforce(`${base}/api/agent-hosts/${this.opts.agentNodeId}/tasks/${taskId}/pull-request`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.opts.apiKey}`,
         },
         body: JSON.stringify({ branch, base: repo.defaultBranch ?? undefined, title }),
         signal: AbortSignal.timeout(30_000),
-      });
+      }, this.opts.apiKey);
       if (!response.ok) logWarn(`[builderforce] task ${taskId}: pull request request failed (${response.status})`);
       logWarn(`[builderforce] task ${taskId}: pushed pending changes to ${branch}`);
       return response.ok;
@@ -732,15 +732,14 @@ export class BuilderforceRelayService implements IRelayService {
     const url = `${base}/api/agent-hosts/${this.opts.agentNodeId}/late-steers`;
     let handled = false;
     try {
-      const res = await fetch(url, {
+      const res = await fetchBuilderforce(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.opts.apiKey}`,
         },
         body: JSON.stringify(buildLateSteerReport(executionId, reason, steers)),
         signal: AbortSignal.timeout(15_000),
-      });
+      }, this.opts.apiKey);
       if (res.ok) {
         const body = (await res.json().catch(() => null)) as { outcome?: { kind?: unknown } } | null;
         handled = typeof body?.outcome?.kind === "string" && body.outcome.kind !== "none";
@@ -769,15 +768,14 @@ export class BuilderforceRelayService implements IRelayService {
     const base = normalizeBaseUrl(this.opts.baseUrl);
     const url = `${base}/api/agent-hosts/${this.opts.agentNodeId}/executions/${executionId}/state`;
     try {
-      await fetch(url, {
+      await fetchBuilderforce(url, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.opts.apiKey}`,
         },
         body: JSON.stringify({ status, ...extra }),
         signal: AbortSignal.timeout(10_000),
-      });
+      }, this.opts.apiKey);
       logDebug(`[builderforce-relay] execution ${executionId} → ${status}`);
     } catch (err) {
       logDebug(`[builderforce-relay] execution state report failed: ${String(err)}`);
@@ -841,10 +839,9 @@ export class BuilderforceRelayService implements IRelayService {
     const url = `${base}/api/agent-hosts/${encodeURIComponent(remoteAgentNodeId)}/context-bundle`;
     let bundle: { files: Array<{ path: string; content: string; sha256: string }> };
     try {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${this.opts.apiKey}` },
+      const res = await fetchBuilderforce(url, {
         signal: AbortSignal.timeout(15_000),
-      });
+      }, this.opts.apiKey);
       if (!res.ok) {
         logDebug(
           `[builderforce-relay] context-bundle for agentNode ${remoteAgentNodeId} failed: ${res.status}`,
@@ -1026,7 +1023,7 @@ export class BuilderforceRelayService implements IRelayService {
     }
 
     const ws = new WebSocket(this.upstreamWsUrl, {
-      headers: { Authorization: `Bearer ${this.opts.apiKey}` },
+      headers: builderforceAuthHeaders(this.opts.apiKey),
     });
     this.ws = ws;
 
@@ -1650,11 +1647,10 @@ export class BuilderforceRelayService implements IRelayService {
       return;
     }
     try {
-      const response = await fetch(this.assignmentContextUrl, {
+      const response = await fetchBuilderforce(this.assignmentContextUrl, {
         method: "GET",
-        headers: { Authorization: `Bearer ${this.opts.apiKey}` },
         signal: AbortSignal.timeout(10_000),
-      });
+      }, this.opts.apiKey);
       if (!response.ok) {
         logDebug(`[builderforce-relay] assignment-context ${reason} failed: ${response.status}`);
         return;

@@ -25,9 +25,9 @@
  * `src/discord/api.ts` already consumes, with the JSON-body `retry_after` variant alongside.
  */
 
+import { NATIVE_FILE_WRITE_TOOLS, NATIVE_PROCESS_TOOLS, normalizeNativeToolName } from "@builderforce/agent-tools";
 import { retryAsync, type RetryInfo } from "../infra/retry.js";
 import { logDebug } from "../logger.js";
-import { normalizeToolName } from "./tool-policy.js";
 
 /**
  * Bounded budget. One initial call plus two retries, never more than ~10s of total backoff
@@ -42,14 +42,14 @@ export const TRANSIENT_TOOL_RETRY_DEFAULTS = {
 } as const;
 
 /** Mutating / side-effecting tools that are NEVER replayed, whatever they declare. */
-const NEVER_RETRY_TOOL_NAMES = new Set(["exec", "process", "write", "edit", "apply_patch"]);
+const NEVER_RETRY_TOOL_NAMES: ReadonlySet<string> = new Set([...NATIVE_PROCESS_TOOLS, ...NATIVE_FILE_WRITE_TOOLS]);
 
 /** True when this tool may be replayed after a rate-limit rejection. */
 export function isRetryableTool(tool: { name?: string; idempotent?: boolean }): boolean {
   if (tool.idempotent !== true) {
     return false;
   }
-  return !NEVER_RETRY_TOOL_NAMES.has(normalizeToolName(tool.name ?? ""));
+  return !NEVER_RETRY_TOOL_NAMES.has(normalizeNativeToolName(tool.name ?? ""));
 }
 
 function structuredStatus(err: unknown): number | undefined {

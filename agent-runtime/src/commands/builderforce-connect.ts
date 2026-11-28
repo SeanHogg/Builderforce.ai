@@ -50,7 +50,7 @@ export async function connectAgentHeadless(
 ): Promise<ConnectAgentHeadlessResult> {
   const token = params.token?.trim();
   if (!token) {
-    throw new Error("A workspace token is required (set BUILDERFORCE_TOKEN or pass --token).");
+    throw new Error("A workspace token is required. Use --token-stdin, BUILDERFORCE_TOKEN, or --token.");
   }
   const apiUrl = builderforceApiBase(params.apiUrl);
   const projectRoot = params.projectRoot ?? process.cwd();

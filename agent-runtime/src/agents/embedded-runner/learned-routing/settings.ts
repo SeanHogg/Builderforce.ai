@@ -29,7 +29,7 @@ import {
   type RoutingScope,
 } from "@builderforce/learned-routing";
 import { readSharedEnvVar } from "../../../infra/env-file.js";
-import { normalizeBaseUrl } from "../../../utils/normalize-base-url.js";
+import { builderforceApiBase } from "../../../infra/builderforce-http.js";
 
 /** Env var that opts this host into learned RE-RANKING of its model candidates. */
 export const SEED_FLAG_ENV = "BUILDERFORCE_LEARNED_ROUTING_SEED";
@@ -37,7 +37,6 @@ export const SEED_FLAG_ENV = "BUILDERFORCE_LEARNED_ROUTING_SEED";
 /** Env var naming the project whose routing scope this host reads/reports under. */
 export const PROJECT_ID_ENV = "BUILDERFORCE_PROJECT_ID";
 
-const DEFAULT_GATEWAY_URL = "https://api.builderforce.ai";
 
 /** Read an env var from the process first, then the shared `~/.builderforce/.env`
  *  — the same precedence every other agent-runtime → api call uses. */
@@ -77,7 +76,7 @@ export function resolveGatewayLink(): GatewayLink | null {
   if (!apiKey) {
     return null;
   }
-  return { base: normalizeBaseUrl(readEnv("BUILDERFORCE_URL") ?? DEFAULT_GATEWAY_URL), apiKey };
+  return { base: builderforceApiBase(), apiKey };
 }
 
 /**

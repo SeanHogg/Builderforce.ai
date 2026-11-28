@@ -32,6 +32,7 @@
  *     not stop a channel reply, so this never throws and the wait is bounded;
  *   - a malformed answer is a failure (it never replaces a good set with an empty one).
  */
+import { builderforceAuthHeaders } from "./builderforce-http.js";
 import { coercePolicyGates, SIDE_EFFECT_GATES_WIRE_LEVEL, type PolicyGate } from "@builderforce/agent-tools";
 import { logWarn } from "../logger.js";
 import { hostLink } from "./approval-gate.js";
@@ -65,8 +66,7 @@ async function fetchGates(link: NonNullable<ReturnType<typeof hostLink>>): Promi
   const res = await fetch(`${link.baseUrl}${POLICY_GATES_PATH}`, {
     headers: {
       Accept: "application/json",
-      Authorization: `Bearer ${link.apiKey}`,
-      "X-AgentHost-Id": link.agentNodeId,
+      ...builderforceAuthHeaders(link.apiKey, link.agentNodeId),
     },
     signal: AbortSignal.timeout(POLICY_GATES_FETCH_TIMEOUT_MS),
   });

@@ -11,6 +11,7 @@
  *   → { agents: Array<{ id, name, roleKey, systemPrompt, skills: string[], model? }> }
  */
 
+import { builderforceAuthHeaders } from "./builderforce-http.js";
 import { logDebug } from "../logger.js";
 
 /** One hired agent as returned by GET /api/runtime/hired-agents. */
@@ -44,10 +45,7 @@ export async function fetchHiredAgents(opts: HiredAgentsSyncOptions): Promise<Hi
   const url = `${opts.baseUrl.replace(/\/$/, "")}/api/runtime/hired-agents`;
   try {
     const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${opts.apiKey}`,
-        "X-AgentHost-Id": opts.agentNodeId,
-      },
+      headers: builderforceAuthHeaders(opts.apiKey, opts.agentNodeId),
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) {

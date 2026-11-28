@@ -45,6 +45,17 @@ function ctxWith(shell: ShellCapability): ToolContext {
   return { caps: { capabilities: new Set(["shell", "shell.outputs"]), shell } } as never;
 }
 
+it("applies the portable workspace policy and host authorization before launching", async () => {
+  const refused = fakeShell(() => { throw new Error("The command should never start"); });
+  const system = await runShellCommand({ command: "shutdown" }, ctxWith(refused.shell));
+  expect(system.data).toMatchObject({ ok: false, code: "refused" });
+
+  refused.shell.authorize = vi.fn(async () => ({ allowed: false, reason: "Fixture denied the command" }));
+  const host = await runShellCommand({ command: "echo fixture" }, ctxWith(refused.shell));
+  expect(host.data).toMatchObject({ ok: false, code: "refused", error: "Fixture denied the command" });
+  expect(refused.calls).toHaveLength(0);
+});
+
 describe("a. pipefail — a piped failing command reports the REAL exit code", () => {
   it("`exit 3 | tail` is ok:false with exitCode 3, not tail's 0", () => {
     const bash = process.platform === "win32" ? findBash() : "/bin/sh";

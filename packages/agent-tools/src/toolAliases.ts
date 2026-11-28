@@ -44,6 +44,29 @@ export function normalizeToolName(name: string): string {
   return name.trim().toLowerCase();
 }
 
+/** Workspace inspection tools whose reads are safe to repeat on a failover host. */
+export const WORKSPACE_INSPECTION_TOOLS = [
+  'read_file', 'list_files', 'search_code', 'find_symbol', 'file_outline',
+] as const;
+
+export const WORKSPACE_CODE_WRITE_TOOLS = ['write_file', 'edit_file', 'delete_file'] as const;
+
+export const NATIVE_FILE_WRITE_TOOLS = ['write', 'edit', 'apply_patch'] as const;
+export const NATIVE_FILE_TOOLS = ['read', ...NATIVE_FILE_WRITE_TOOLS] as const;
+export const NATIVE_PROCESS_TOOLS = ['exec', 'process'] as const;
+
+/** Compatibility aliases for the native coding tool catalog and its policies. */
+const NATIVE_TOOL_ALIASES: Readonly<Record<string, string>> = {
+  bash: 'exec',
+  'apply-patch': 'apply_patch',
+  str_replace_editor: 'edit',
+};
+
+export function normalizeNativeToolName(name: string): string {
+  const normalized = normalizeToolName(name);
+  return NATIVE_TOOL_ALIASES[normalized] ?? normalized;
+}
+
 /**
  * Resolve a model-emitted tool name to the catalog name, or return it unchanged.
  * Case-insensitive on the alias key; the catalog name is returned as registered.

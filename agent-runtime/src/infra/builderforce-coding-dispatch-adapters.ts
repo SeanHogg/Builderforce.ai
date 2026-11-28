@@ -8,6 +8,7 @@
  *
  * Kept separate from the pure orchestration so the latter stays unit-testable.
  */
+import { builderforceAuthHeaders } from "./builderforce-http.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
@@ -36,7 +37,7 @@ export function makeCodingHttp(opts: {
   apiKey: string;
 }): CodingDispatchHttp {
   const base = normalizeBaseUrl(opts.baseUrl);
-  const auth = { Authorization: `Bearer ${opts.apiKey}`, "Content-Type": "application/json" };
+  const auth = { ...builderforceAuthHeaders(opts.apiKey), "Content-Type": "application/json" };
   const hostBase = `${base}/api/agent-hosts/${opts.agentNodeId}`;
 
   return {
@@ -114,7 +115,7 @@ export function makeCodingHttp(opts: {
 export function makeCodingGit(opts: { apiKey: string }): CodingDispatchGit {
   // The agentHost key is sent as an HTTP extra-header so git authenticates to the
   // host git-proxy; the real provider token never reaches this process.
-  const authHeaderArgs = ["-c", `http.extraHeader=Authorization: Bearer ${opts.apiKey}`];
+  const authHeaderArgs = ["-c", `http.extraHeader=Authorization: ${builderforceAuthHeaders(opts.apiKey).Authorization}`];
   const identityArgs = [
     "-c",
     "user.email=agent@builderforce.ai",

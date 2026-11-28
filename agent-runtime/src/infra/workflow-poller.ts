@@ -17,6 +17,7 @@
 import { globalOrchestrator, type SpawnSubagentContext } from "../builderforce/orchestrator.js";
 import { logDebug, logWarn } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
+import { builderforceAuthHeaders } from "./builderforce-http.js";
 import { isOfflineMode } from "./env-file.js";
 
 type WorkflowPollerOptions = {
@@ -94,8 +95,7 @@ export class WorkflowPollerService {
 
   private authHeaders(extra?: Record<string, string>): Record<string, string> {
     return {
-      Authorization: `Bearer ${this.opts.apiKey}`,
-      "X-AgentHost-Id": this.opts.agentNodeId,
+      ...builderforceAuthHeaders(this.opts.apiKey, this.opts.agentNodeId),
       ...extra,
     };
   }

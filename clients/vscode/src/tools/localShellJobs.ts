@@ -14,7 +14,7 @@
  * full output (to {@link EDITOR_COMMAND_BUFFER_CHARS}) is retained for `output_filter` (`localShellOutputs.ts`).
  */
 
-import { BACKGROUND_JOB_LIMIT_ERROR, backgroundWaitAbort, EDITOR_COMMAND_BUFFER_CHARS, makeRoomForBackgroundJob, waitForBackgroundJob } from "@builderforce/tool-output-policy";
+import { BACKGROUND_JOB_LIMIT_ERROR, backgroundWaitAbort, createBackgroundJobRegistry, EDITOR_COMMAND_BUFFER_CHARS, waitForBackgroundJob } from "@builderforce/tool-output-policy";
 import type { ChildProcess } from "child_process";
 import type { ShellJobStart, ShellJobStatus } from "@builderforce/agent-tools";
 import { killTree } from "@builderforce/agent-tools/node-process";
@@ -42,11 +42,7 @@ interface Job {
 }
 
 /** Keyed by owner AND id, so a lookup from another run cannot reach the job. */
-const jobs = new Map<string, Job>();
-/** The next id per owner — ids are scoped to their run. */
-const nextJobOf = new Map<JobOwner, number>();
-
-const keyOf = (owner: JobOwner, id: string): string => `${owner ?? "-"}:${id}`;
+const jobs = createBackgroundJobRegistry<Job, number>();
 
 export interface StartJobOptions {
   cwd: string;
@@ -84,7 +80,9 @@ const unknownJob = (id: string): ShellJobStatus => ({
 
 export function startJob(command: string, opts: StartJobOptions): ShellJobStart {
   if (opts.signal?.aborted) return { ok: false, error: "the run was stopped" };
-  if (!makeRoomForBackgroundJob(jobs)) return { ok: false, error: BACKGROUND_JOB_LIMIT_ERROR };
+  const owner = opts.owner;
+  const id = jobs.reserve(owner);
+  if (!id) return { ok: false, error: BACKGROUND_JOB_LIMIT_ERROR };
   let child: ChildProcess;
   try {
     child = spawnCommand(command, opts.bash, {
@@ -94,10 +92,6 @@ export function startJob(command: string, opts: StartJobOptions): ShellJobStart 
   } catch (e) {
     return { ok: false, error: messageOf(e) };
   }
-  const owner = opts.owner;
-  const n = (nextJobOf.get(owner) ?? 0) + 1;
-  nextJobOf.set(owner, n);
-  const id = `job-${n}`;
   let settle!: () => void;
   const job: Job = { id, owner, child, status: "running", output: "", truncated: false, full: "", done: new Promise<void>((r) => { settle = r; }) };
   const append = (chunk: string): void => {
@@ -122,7 +116,7 @@ export function startJob(command: string, opts: StartJobOptions): ShellJobStart 
   };
   child.on("error", (e) => { append(`\n${e.message}`); finish(null); });
   child.on("close", (code) => finish(code));
-  jobs.set(keyOf(owner, id), job);
+  jobs.set(id, job, owner);
   return { ok: true, id };
 }
 
@@ -131,7 +125,7 @@ export function startJob(command: string, opts: StartJobOptions): ShellJobStart 
  * the WAIT early with the status so far — the job itself runs on.
  */
 export async function pollJob(id: string, waitMs = 0, opts: { owner?: JobOwner; signal?: AbortSignal } = {}): Promise<ShellJobStatus> {
-  const job = jobs.get(keyOf(opts.owner, id));
+  const job = jobs.get(id, opts.owner);
   if (!job) return unknownJob(id);
   if (job.status === "running" && waitMs > 0 && !opts.signal?.aborted) {
     await waitForBackgroundJob(job.done, waitMs, backgroundWaitAbort(opts.signal));
@@ -141,7 +135,7 @@ export async function pollJob(id: string, waitMs = 0, opts: { owner?: JobOwner; 
 
 /** Kill a job's process tree and report how it ended (waits briefly for the exit). */
 export async function killJob(id: string, owner?: JobOwner): Promise<ShellJobStatus> {
-  const job = jobs.get(keyOf(owner, id));
+  const job = jobs.get(id, owner);
   if (!job) return unknownJob(id);
   if (job.status === "running") {
     job.status = "killed";

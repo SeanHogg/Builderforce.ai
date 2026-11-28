@@ -9,7 +9,7 @@ import {
   toolCallPaths,
 } from "@builderforce/agent-tools";
 
-import { DEFAULT_BUILDERFORCE_API_URL } from "./builderforce-http.js";
+import { fetchBuilderforce, DEFAULT_BUILDERFORCE_API_URL } from "./builderforce-http.js";
 
 /**
  * Should this host contribute PRE-DIFFED weight deltas rather than raw run text?
@@ -467,12 +467,12 @@ export class KnowledgeLoopService {
               result: event.result,
               ts: new Date().toISOString(),
             };
-      void fetch(url, {
+      void fetchBuilderforce(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(10_000),
-      }).catch((err) => {
+      }, apiKey).catch((err) => {
         logDebug(`[knowledge-loop] verify timeline post failed: ${String(err)}`);
       });
     } catch (err) {
@@ -563,16 +563,15 @@ export class KnowledgeLoopService {
       timestamp: new Date().toISOString(),
     };
     try {
-      await fetch(url, {
+      await fetchBuilderforce(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
           "X-AgentHost-Id": String(agentNodeId),
         },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(10_000),
-      });
+      }, apiKey);
       logDebug(`[knowledge-loop] pushed memory to mesh: ${summary.slice(0, 60)}`);
     } catch (err) {
       logDebug(`[knowledge-loop] pushMemoryToMesh failed: ${String(err)}`);
@@ -615,10 +614,9 @@ export class KnowledgeLoopService {
     }
     const url = `${normalizeBaseUrl(baseUrl ?? DEFAULT_BUILDERFORCE_API_URL)}/api/teams/memory?limit=${limit}`;
     try {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${apiKey}` },
+      const res = await fetchBuilderforce(url, {
         signal: AbortSignal.timeout(10_000),
-      });
+      }, apiKey);
       if (!res.ok) {
         logDebug(`[knowledge-loop] pullTeamMemory HTTP ${res.status}`);
         return [];

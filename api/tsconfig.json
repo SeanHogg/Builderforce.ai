@@ -31,6 +31,7 @@
       "@builderforce/agent-tools/text-scan": ["../packages/agent-tools/src/text-scan.ts"],
       "@builderforce/agent-tools/memory-workspace-fs": ["../packages/agent-tools/src/memoryWorkspaceFs.ts"],
       "@builderforce/agent-tools/workspace-conformance": ["../packages/agent-tools/src/workspaceConformance.test-util.ts"],
+      "@builderforce/agent-tools/shell-conformance": ["../packages/agent-tools/src/shellConformance.test-util.ts"],
       "@builderforce/agent-loop": ["../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-run": ["../packages/agent-run/src/index.ts"],
       "@seanhogg/builderforce-memory/*": ["./node_modules/@seanhogg/builderforce-memory/dist/*/index.d.ts", "./node_modules/@seanhogg/builderforce-memory/dist/*/index.js"],

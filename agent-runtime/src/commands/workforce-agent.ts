@@ -12,32 +12,28 @@ import { note, outro, spinner } from "@clack/prompts";
 import { saveMambaState } from "../agents/mamba-state-engine.js";
 import { loadProjectContext, updateProjectContextFields } from "../builderforce/project-context.js";
 import type { AgentPackage, AgentPackageV2, InstalledWorkforceAgent } from "../builderforce/types.js";
+import { builderforceAuthHeaders, builderforceRegistryBase, DEFAULT_BUILDERFORCE_API_URL } from "../infra/builderforce-http.js";
 import { readSharedEnvVar } from "../infra/env-file.js";
 import { theme } from "../terminal/theme.js";
 import { fetchWithTimeout } from "../utils/fetch-timeout.js";
-import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-export const DEFAULT_REGISTRY_URL = "https://api.builderforce.ai";
+export const DEFAULT_REGISTRY_URL = DEFAULT_BUILDERFORCE_API_URL;
 const FETCH_TIMEOUT_MS = 30_000;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function resolveRegistryUrl(): string {
-  return normalizeBaseUrl(readSharedEnvVar("BUILDERFORCE_AGENTS_LINK_URL") ?? DEFAULT_REGISTRY_URL);
-}
-
 function resolveAuthHeaders(): Record<string, string> {
   const apiKey = readSharedEnvVar("BUILDERFORCE_AGENTS_LINK_API_KEY");
   if (!apiKey) {
     return {};
   }
-  return { Authorization: `Bearer ${apiKey}` };
+  return builderforceAuthHeaders(apiKey);
 }
 
 function isV2Package(pkg: AgentPackage): pkg is AgentPackageV2 {
@@ -56,7 +52,7 @@ export async function fetchAgentPackage(params: {
   agentId: string;
   registryUrl?: string;
 }): Promise<AgentPackage> {
-  const base = normalizeBaseUrl(params.registryUrl ?? resolveRegistryUrl());
+  const base = builderforceRegistryBase(params.registryUrl);
   const url = `${base}/api/agents/${encodeURIComponent(params.agentId)}/package`;
   let res: Response;
   try {
@@ -131,7 +127,7 @@ export async function installWorkforceAgent(params: {
   projectRoot: string;
   registryUrl?: string;
 }): Promise<string> {
-  const registryUrl = params.registryUrl ?? resolveRegistryUrl();
+  const registryUrl = builderforceRegistryBase(params.registryUrl);
 
   const spin = spinner();
   spin.start(`Fetching agent package for "${params.agentId}" from ${registryUrl}…`);

@@ -7,10 +7,13 @@
 
 import * as os from "os";
 import { describe, expect, it } from "vitest";
+import { runShellConformance } from "@builderforce/agent-tools/shell-conformance";
 import { createLocalShell } from "./localShell";
 
 /** A child that would run for 10 minutes, printing its own pid first. */
 const LONG_CHILD = 'node -e "console.log(process.pid);setTimeout(()=>{},600000)"';
+
+runShellConformance("VS Code", () => createLocalShell(os.tmpdir()));
 
 function alive(pid: number): boolean {
   try {

@@ -46,7 +46,7 @@ export interface PreviewRuntimeOwner {
 }
 
 /** A process the runtime started (`runtime.run(…)`). */
-export type RuntimeProcess = ReturnType<PreviewRuntime['run']>;
+export type RuntimeProcess = ReturnType<PreviewRuntime['run']> & { killTree?: () => void };
 
 /** The editor's processes on the runtime (dev server, terminal, commands) — stopped when it loses the runtime. */
 const workspaceProcesses = new Set<RuntimeProcess>();
@@ -68,7 +68,10 @@ export function onWorkspaceRevoked(listener: () => void): () => void {
 export const WORKSPACE_OWNER: PreviewRuntimeOwner = {
   id: 'workspace',
   onRevoked: () => {
-    for (const process of workspaceProcesses) process.kill();
+    for (const process of workspaceProcesses) {
+      if (process.killTree) process.killTree();
+      else process.kill();
+    }
     workspaceProcesses.clear();
     for (const listener of [...workspaceRevokeListeners]) listener();
   },
@@ -173,6 +176,12 @@ export function peekSharedPreviewRuntime(): Promise<PreviewRuntime> | null {
 
 /** Any `node_modules` folder — the root's, or a nested service root's (`/api/node_modules/…`). */
 const INSTALLED = /(^|\/)node_modules\//;
+const projectReplaceListeners = new Set<(runtime: PreviewRuntime) => void>();
+
+export function onProjectFilesReplacing(listener: (runtime: PreviewRuntime) => void): () => void {
+  projectReplaceListeners.add(listener);
+  return () => { projectReplaceListeners.delete(listener); };
+}
 
 /**
  * Make the runtime hold exactly `files` — this project, now — while keeping what
@@ -181,6 +190,7 @@ const INSTALLED = /(^|\/)node_modules\//;
  * so the previous run's files (another project, or files deleted since) go first.
  */
 export function replaceProjectFiles(runtime: PreviewRuntime, files: Record<string, string>): void {
+  for (const listener of projectReplaceListeners) listener(runtime);
   const stale = runtime.fs.list().filter((path) => !INSTALLED.test(path));
   timeWrite('rm', { fileCount: stale.length, totalBytes: 0 }, () => {
     for (const path of stale) runtime.fs.rm(path);

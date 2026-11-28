@@ -1,6 +1,7 @@
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import type { ModelDefinitionConfig } from "../config/types.models.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
+import { DEFAULT_BUILDERFORCE_API_URL } from "../infra/builderforce-http.js";
 import { ensureAuthProfileStore, listProfilesForProvider } from "./auth-profiles.js";
 import { discoverBedrockModels } from "./bedrock-discovery.js";
 import {
@@ -677,7 +678,7 @@ export function buildQianfanProvider(): ProviderConfig {
 // builderForceAgentsLLM — first-party free-model proxy (api.builderforce.ai/llm)
 // ---------------------------------------------------------------------------
 
-const BUILDERFORCE_AGENTSLLM_BASE_URL = "https://api.builderforce.ai/llm/v1";
+const BUILDERFORCE_AGENTSLLM_BASE_URL = `${DEFAULT_BUILDERFORCE_API_URL}/llm/v1`;
 const BUILDERFORCE_AGENTSLLM_FREE_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
 export function buildBuilderForceAgentsllmProvider(): ProviderConfig {

@@ -58,7 +58,7 @@ import { backfillEntryProvenance } from '../../application/llm/evermindProvenanc
 import type { EffectiveTeacher, RecordedSkipReason } from '../../application/llm/evermindTeacher';
 import { ingestErrorEvents } from '../../application/quality/ingestEngine';
 import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
-import { embedForRecall, packVec, unpackVec } from '../../application/llm/evermindEmbed';
+import { embedForRecall, evermindRecallFingerprint, packVec, unpackVec } from '../../application/llm/evermindEmbed';
 import { admitDeltaAgainstHead, deltaParseRefusal, mergeRegressionRefusal, type DeltaRefusal } from '../../application/llm/evermindDeltaLearn';
 import { gateEvermindMerge } from '../../application/llm/evermindMergeGate';
 import { mlHeadVersionKey } from '../../application/llm/evermindMlHeadDispatch';
@@ -95,6 +95,7 @@ const RECENT_PAGE_LIMIT = 200;
  * everything.
  */
 const RECALL_SCAN_MAX = 256;
+const RECALL_REEMBED_MAX = 8;
 /** How many memories ONE reindex call re-embeds. Reindexing runs a forward pass per
  *  memory, so a project with thousands would blow the request's CPU budget; the
  *  handler returns a cursor and `remaining` so the caller continues where it left
@@ -224,6 +225,8 @@ interface RecentEntry {
    *  time from the merged model so recall only has to embed the QUERY. Never returned
    *  to callers — it lives here purely to power {@link ProjectEvermindCoordinatorDO.handleRecall}. */
   emb?: string;
+  /** Immutable model and embedding recipe used to produce emb. */
+  embeddingFingerprint?: string;
   /**
    * The Brain chat that contributed this memory, when one did.
    *
@@ -347,7 +350,14 @@ const EVAL_POINTS_KEY = 'evalPoints';
 /** Per-isolate cache of the loaded head model for recall embedding, keyed by the
  *  immutable version ref (a new merge writes a new ref, so this can't serve stale
  *  weights). Module-scoped so it survives across recall requests on the same isolate. */
-let embedModelCache: { key: string; model: { lm: EvermindLM; tok: BPETokenizer } } | null = null;
+interface RecallEmbeddingHead {
+  ref: string;
+  version: number;
+  lm: EvermindLM;
+  tok: BPETokenizer;
+}
+
+let embedModelCache: RecallEmbeddingHead | null = null;
 
 export class ProjectEvermindCoordinatorDO implements DurableObject {
   declare readonly '__DURABLE_OBJECT_BRAND': never;
@@ -606,7 +616,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const evalPoints = (await this.state.storage.get<EvalPoint[]>(EVAL_POINTS_KEY)) ?? [];
     // Strip the packed embedding — it's a recall-only internal, never part of the
     // inspection payload the console polls (keeps that read small).
-    const lean = recent.map(({ emb, ...rest }) => rest);
+    const lean = recent.map(({ emb, embeddingFingerprint, ...rest }) => rest);
     // `nextBefore` is the cursor for the following page, or null at the end of the
     // history. The analyzer pages on this; the console ignores it and shows page one.
     const last = recent[recent.length - 1];
@@ -651,7 +661,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
   private async contributionStatus(id: number, hops = 0): Promise<Record<string, unknown>> {
     const merged = await this.readMemory(id);
     if (merged) {
-      const { emb: _emb, ...rest } = merged;
+      const { emb: _emb, embeddingFingerprint: _fingerprint, ...rest } = merged;
       return { status: 'merged', ...rest };
     }
     const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
@@ -672,12 +682,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
   }
 
   /**
-   * SSM-embedding recall: rank which learned memories would answer `query`. Embeds the
-   * query with the CURRENT model and cosine-compares it to each memory's stored
-   * embedding (computed at merge time), so this is one forward + a cheap scan. Falls
-   * back to embedding a memory's text on the fly for legacy entries that predate stored
-   * embeddings. Returns `{ matches: {id, score}[], method }` — `method` tells the caller
-   * whether embedding recall actually ran, so it can fall back to lexical when it can't.
+   * SSM recall scores only vectors in the current head's space. A small stale
+   * set can be refreshed for this read. Larger sets use the caller's lexical
+   * fallback until reindexing catches up.
    */
   private async handleRecall(request: Request): Promise<Response> {
     const meta = await this.state.storage.get<CoordMeta>(META_KEY);
@@ -695,14 +702,22 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const model = await this.loadEmbeddingModel(meta);
     if (!model) return this.json({ matches: [], method: 'unavailable' });
     const { lm, tok } = model;
-
+    const fingerprint = evermindRecallFingerprint(model.ref);
     const qVec = embedForRecall(lm, tok, query);
-    const scored = textEntries
-      .map((e) => {
-        const vec = e.emb ? unpackVec(e.emb) : embedForRecall(lm, tok, `${e.prompt ?? ''} ${e.text ?? ''}`.trim());
-        if (vec.length === 0) return null;
-        const sim = cosineSimilarity(qVec, vec); // -1..1; negatives are "unrelated", floor at 0
-        return { id: e.id, score: Math.round(Math.max(0, sim) * 1000) / 1000 };
+    if (qVec.length === 0 || !qVec.every(Number.isFinite)) return this.json({ matches: [], method: 'unavailable' });
+    const candidates = textEntries.map((entry) => {
+      const vector = entry.emb && entry.embeddingFingerprint === fingerprint ? unpackVec(entry.emb) : null;
+      return { entry, vector: vector?.length === qVec.length && vector.every(Number.isFinite) ? vector : null };
+    });
+    if (candidates.filter(({ vector }) => vector === null).length > RECALL_REEMBED_MAX) {
+      return this.json({ matches: [], method: 'unavailable' });
+    }
+    const scored = candidates
+      .map(({ entry, vector }) => {
+        const vec = vector ?? embedForRecall(lm, tok, `${entry.prompt ?? ''} ${entry.text ?? ''}`.trim());
+        if (vec.length !== qVec.length || !vec.every(Number.isFinite)) return null;
+        const sim = cosineSimilarity(qVec, vec);
+        return { id: entry.id, score: Math.round(Math.max(0, sim) * 1000) / 1000 };
       })
       .filter((m): m is { id: number; score: number } => m != null && m.score > 0.05)
       .sort((a, b) => b.score - a.score)
@@ -715,10 +730,10 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
    * immutable version ref (so repeated recalls between merges never re-read R2).
    * Returns null when unseeded, storage is absent, or the head isn't an `evermind-lm`.
    */
-  private async loadEmbeddingModel(meta: CoordMeta): Promise<{ lm: EvermindLM; tok: BPETokenizer } | null> {
+  private async loadEmbeddingModel(meta: CoordMeta): Promise<RecallEmbeddingHead | null> {
     const head = await getProjectEvermindHead(this.env, this.db, meta.tenantId, meta.projectId);
     if (head.version === 0 || !head.ref) return null;
-    if (embedModelCache && embedModelCache.key === head.ref) return embedModelCache.model;
+    if (embedModelCache?.ref === head.ref) return embedModelCache;
     const store = this.env.UPLOADS;
     if (!store) return null;
     const [baseObj, tokObj] = await Promise.all([store.get(`${head.ref}/model.evermind`), store.get(`${head.ref}/tokenizer.json`)]);
@@ -728,8 +743,8 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const tokenizer = JSON.parse(await tokObj.text()) as { vocab: Record<string, number>; merges: string[] };
     const tok = new BPETokenizer();
     tok.loadFromObjects(tokenizer.vocab, tokenizer.merges);
-    const model = { lm: pkg.loadLM(), tok };
-    embedModelCache = { key: head.ref, model };
+    const model = { ref: head.ref, version: head.version, lm: pkg.loadLM(), tok };
+    embedModelCache = model;
     return model;
   }
 
@@ -762,7 +777,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
 
     const model = await this.loadEmbeddingModel(meta);
     if (!model) return this.json({ ok: false, error: 'model not available for reindexing (unseeded or artifact storage unbound)' }, 503);
-    const head = await getProjectEvermindHead(this.env, this.db, meta.tenantId, meta.projectId);
+    const fingerprint = evermindRecallFingerprint(model.ref);
 
     let reindexed = 0;
     let skipped = 0;
@@ -770,9 +785,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       const source = `${e.prompt ?? ''} ${e.text ?? ''}`.trim();
       if (e.kind !== 'text' || !source) { skipped++; return e; }
       const vec = embedForRecall(model.lm, model.tok, source);
-      if (vec.length === 0) { skipped++; return e; }
+      if (vec.length === 0 || !vec.every(Number.isFinite)) { skipped++; return e; }
       reindexed++;
-      return { ...e, emb: packVec(vec) };
+      return { ...e, emb: packVec(vec), embeddingFingerprint: fingerprint };
     });
     await this.writeMemories(next);
 
@@ -782,7 +797,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     // than the cursor would mean listing it — the caller has `total` and knows how
     // many batches it has run, which is the same progress figure without the scan.
     const total = await this.countMemories();
-    return this.json({ ok: true, reindexed, skipped, done: nextBefore === null, nextBefore, total, version: head.version });
+    return this.json({ ok: true, reindexed, skipped, done: nextBefore === null, nextBefore, total, version: model.version });
   }
 
   /**
@@ -1235,9 +1250,8 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       await putProjectEvermindVersion(store, tenantId, projectId, nextVersion, nextPkg.toBlob(), tokenizer);
       await recordProjectEvermindMerge(this.env, this.db, tenantId, projectId, nextVersion, contributors);
 
-      // Verify the new version is the one we wrote (a concurrent merge is impossible
-      // — single DO — but a forward-only DB guard means we trust the row).
-      void projectEvermindRef(tenantId, projectId, nextVersion);
+      // Use the persisted artifact identity for newly generated embeddings.
+      const nextRef = projectEvermindRef(tenantId, projectId, nextVersion);
 
       // ── Post-merge fitness re-benchmark ────────────────────────────────────
       // Promotion to `inferenceEnabled` is benchmark-gated, but EVERY merge changes the
@@ -1272,12 +1286,16 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       // only has to embed the query later — the vector is computed once, here, off the
       // recall path. isLM is guaranteed when any text entry exists (tok is loaded then).
       if (isLM) {
+        const fingerprint = evermindRecallFingerprint(nextRef);
         for (const m of mergedMeta) {
           if (m.kind !== 'text') continue;
           const src = `${m.prompt ?? ''} ${m.text ?? ''}`.trim();
           if (!src) continue;
           try {
-            m.emb = packVec(embedForRecall(lm, tok, src));
+            const vector = embedForRecall(lm, tok, src);
+            if (vector.length === 0 || !vector.every(Number.isFinite)) continue;
+            m.emb = packVec(vector);
+            m.embeddingFingerprint = fingerprint;
           } catch (error) { /* best-effort: a failed embed just falls back to lexical recall */ 
             this.reportError(error, { operation: "drain" });
           }
@@ -1285,7 +1303,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       }
       // Cache the freshly-merged model for recall on this isolate (its ref is the new
       // version, so a later merge's new ref naturally supersedes this entry).
-      embedModelCache = { key: projectEvermindRef(tenantId, projectId, nextVersion), model: { lm, tok } };
+      embedModelCache = { ref: nextRef, version: nextVersion, lm, tok };
       // Record the merged contributions in the inspection ring, stamped with the
       // version they landed in (newest first). Best-effort — never fail the merge.
       const at = Date.now();

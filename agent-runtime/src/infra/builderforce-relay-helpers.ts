@@ -7,6 +7,7 @@
  *   RelayPresencePoller  — poll session presence and forward snapshots
  */
 
+import { builderforceAuthHeaders } from "./builderforce-http.js";
 import type { GatewayClient } from "../gateway/client.js";
 import { logDebug } from "../logger.js";
 import { buildLocalMachineProfile } from "./builderforce-context.js";
@@ -65,7 +66,7 @@ export class RelayHeartbeat {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.opts.apiKey}`,
+          ...builderforceAuthHeaders(this.opts.apiKey),
         },
         body: JSON.stringify({
           capabilities: ["chat", "tasks", "relay", "remote-dispatch"],

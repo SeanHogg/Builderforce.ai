@@ -3,6 +3,7 @@
  * and register them as available agent roles.
  */
 
+import { fetchBuilderforce } from "./builderforce-http.js";
 import { logDebug } from "../logger.js";
 
 export type PlatformPersona = {
@@ -36,10 +37,9 @@ export async function fetchPlatformPersonas(
 ): Promise<PlatformPersona[]> {
   const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/platform-personas`;
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${opts.apiKey}` },
+    const res = await fetchBuilderforce(url, {
       signal: AbortSignal.timeout(10_000),
-    });
+    }, opts.apiKey);
     if (!res.ok) {
       logDebug(`[platform-persona-sync] fetch failed: HTTP ${res.status}`);
       return [];

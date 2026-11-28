@@ -159,9 +159,9 @@ describe("WorkflowTelemetryService — Builderforce HTTP sync", () => {
     // bearer key names no host, so the server answered 401).
     const batch = fetchMock.mock.calls.find((c) => String(c[0]) === "https://bf.test/api/telemetry/spans")!;
     expect(JSON.parse((batch[1] as RequestInit).body as string)).toHaveLength(3);
-    const batchHeaders = (batch[1] as RequestInit).headers as Record<string, string>;
-    expect(batchHeaders["X-AgentHost-Id"]).toBe("7");
-    expect(batchHeaders.Authorization).toBe("Bearer secret");
+    const batchHeaders = new Headers((batch[1] as RequestInit).headers);
+    expect(batchHeaders.get("X-AgentHost-Id")).toBe("7");
+    expect(batchHeaders.get("Authorization")).toBe("Bearer secret");
 
     // The task.complete sync is a PATCH carrying the terminal status.
     const patch = fetchMock.mock.calls.find(

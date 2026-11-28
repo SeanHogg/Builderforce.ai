@@ -15,11 +15,13 @@ import { defineTool, type ToolContext, type ToolDefinition, type ToolResult } fr
 import { safeRepoArg, shellRunWithStop } from "./git-repo-scope.js";
 import { compressShellResult } from "./compress.js";
 import type { ShellFailureCode, ShellJobStatus, ShellResult } from "./capabilities.js";
+import { shellFailure } from "./shell-job-types.js";
 import { DEFAULT_COMMAND_TIMEOUT_MS } from "@builderforce/tool-output-policy";
 import { searchNoMatch } from "./shell-command-shape.js";
 import { stripTailLimit } from "./shell-pipe.js";
 import { outputFilterTool } from "./shell-output-filter.js";
 import { refuseBranchSwitchOverChanges } from "./branch-switch-guard.js";
+import { workspaceCommandRefusal } from "./workspaceCommandPolicy.js";
 
 /** The longest a `yieldMs` / `waitMs` may hold the call (the foreground ceiling). */
 const SHELL_WAIT_MAX_MS = DEFAULT_COMMAND_TIMEOUT_MS;
@@ -51,10 +53,6 @@ function commandDir(command: string, cwd: string | undefined, defaultRepo: strin
 
 const jobNote = (id: string): string =>
   `Running in the background (job ${id}). Keep working; check it with command_status { "id": "${id}" } (pass waitMs to wait for it), stop it with command_stop { "id": "${id}" }.`;
-
-function shellFailure(code: ShellFailureCode, error: string) {
-  return { ok: false as const, code, error };
-}
 
 function withShellFailure<T extends { ok: boolean; error?: string; code?: ShellFailureCode; exitCode?: number }>(
   result: T,
@@ -106,6 +104,12 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
   // command: `cd X && cmd` is not one language (Windows PowerShell 5.1 cannot parse `&&`).
   const dir = commandDir(command, cwd, shell.defaultRepo);
   const where = dir ? { cwd: dir } : {};
+  const policyRefusal = workspaceCommandRefusal(command);
+  if (policyRefusal) return { data: { ...policyRefusal, ...where } };
+  const decision = await shell.authorize?.(command, { ...where, signal: ctx.signal });
+  if (decision && !decision.allowed) {
+    return { data: { ...shellFailure('refused', decision.reason ?? 'The shell command was not approved.'), ...where } };
+  }
   const background = args.background === true;
   const yieldMs = waitArg(args.yieldMs);
   let note: string | undefined;

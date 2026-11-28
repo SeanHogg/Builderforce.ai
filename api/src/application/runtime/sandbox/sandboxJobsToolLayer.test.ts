@@ -11,6 +11,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildCoreToolRegistry, type CapabilityProvider } from '@builderforce/agent-tools';
+import { runShellConformance } from '@builderforce/agent-tools/shell-conformance';
 import { WORKSPACE_HELPER } from '../containerTestHelper';
 import { closeSandboxBox, createSandboxBox, serveSandbox, type SandboxBox } from '../../../../container/sandboxCore.mjs';
 
@@ -53,6 +54,8 @@ function loopback(withJobs = true): RunSandbox {
 /** A fresh capability provider per call — as each tick of a cloud run builds its own. */
 const provider = (sandbox: RunSandbox): CapabilityProvider =>
   withSandbox({ capabilities: new Set(['repo.read']) } as unknown as CapabilityProvider, sandbox, { heartbeat: async () => undefined });
+
+runShellConformance('cloud container', () => provider(loopback()).shell!, !posix);
 
 const registry = buildCoreToolRegistry();
 const call = async (caps: CapabilityProvider, name: string, args: Record<string, unknown>) =>

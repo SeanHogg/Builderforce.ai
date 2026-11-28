@@ -17,6 +17,7 @@
     "./text-scan": "./src/text-scan.ts",
     "./memory-workspace-fs": "./src/memoryWorkspaceFs.ts",
     "./workspace-conformance": "./src/workspaceConformance.test-util.ts",
+    "./shell-conformance": "./src/shellConformance.test-util.ts",
     "./sampling": "./src/sampling.ts",
     "./edit": "./src/edit.ts",
     "./documents": "./src/documents.ts",

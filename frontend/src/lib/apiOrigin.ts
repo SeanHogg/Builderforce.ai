@@ -9,7 +9,7 @@
  *
  * `check-api-transport` fails any other file that spells the literal.
  */
-import { BUILDERFORCE_API_ORIGIN } from '@builderforce/device-auth';
+import { BUILDERFORCE_API_ORIGIN, resolvePlatformBaseUrl } from '@builderforce/device-auth';
 
 export const PRODUCTION_API_ORIGIN = BUILDERFORCE_API_ORIGIN;
-export const API_ORIGIN = process.env.NEXT_PUBLIC_AUTH_API_URL || PRODUCTION_API_ORIGIN;
+export const API_ORIGIN = resolvePlatformBaseUrl(process.env.NEXT_PUBLIC_AUTH_API_URL, PRODUCTION_API_ORIGIN);

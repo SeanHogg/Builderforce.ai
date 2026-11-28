@@ -3,6 +3,7 @@
  * the agentNode is approaching its budget limits.
  */
 
+import { fetchBuilderforce } from "./builderforce-http.js";
 import { logDebug, logWarn } from "../logger.js";
 
 export type QuotaStatus = {
@@ -31,10 +32,9 @@ export type QuotaMonitorOptions = {
 export async function fetchQuotaStatus(opts: QuotaMonitorOptions): Promise<QuotaStatus | null> {
   const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/quota`;
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${opts.apiKey}` },
+    const res = await fetchBuilderforce(url, {
       signal: AbortSignal.timeout(10_000),
-    });
+    }, opts.apiKey);
     if (!res.ok) {
       logDebug(`[quota-monitor] fetch failed: HTTP ${res.status}`);
       return null;

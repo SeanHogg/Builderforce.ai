@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Env } from '../../env';
+import { evermindRecallFingerprint, packVec } from '../../application/llm/evermindEmbed';
 
 /**
  * The coordinator DO had NO test harness at all — the class needs a
@@ -36,7 +37,7 @@ vi.mock('@seanhogg/builderforce-memory-engine', async (importOriginal) => {
     base64ToBytes: actual.base64ToBytes,
     bytesToBase64: actual.bytesToBase64,
     EvermindModelPackage: { fromBlob: mocks.fromBlob, fromLM: mocks.fromLM },
-    BPETokenizer: class { loadFromObjects() {} },
+    BPETokenizer: class { loadFromObjects() {} encode() { return [1]; } },
     adaptAndDiff: vi.fn(),
     meanEvalLoss: mocks.evalLoss,
     mergeCheckpointDiffsGated: mocks.merge,
@@ -49,7 +50,7 @@ vi.mock('../../application/llm/projectEvermind', () => ({
   putProjectEvermindVersion: vi.fn(),
   recordProjectEvermindMerge: vi.fn(),
   quarantineProjectEvermind: vi.fn(),
-  projectEvermindRef: vi.fn(),
+  projectEvermindRef: vi.fn((tenantId: number, projectId: number, version: number) => `${tenantId}/${projectId}/v${version}`),
 }));
 vi.mock('../../application/observability/caughtErrorReporter', () => ({ reportCaughtError: vi.fn() }));
 
@@ -265,6 +266,60 @@ describe('/discard-pending', () => {
 
     const body = (await (await doInstance.fetch(recentUrl())).json()) as { total: number };
     expect(body.total).toBe(2);
+  });
+});
+
+describe('recall embedding space', () => {
+  function recallFixture(ref: string) {
+    const { state, map } = fakeState();
+    const embed = vi.fn(() => new Float32Array([1, 0]));
+    mocks.head.mockResolvedValue({ version: 2, ref });
+    mocks.fromBlob.mockReturnValue({ manifest: { modelType: 'evermind-lm' }, loadLM: () => ({ embed }) });
+    const store = { get: async () => ({
+      arrayBuffer: async () => new ArrayBuffer(0),
+      text: async () => JSON.stringify({ vocab: {}, merges: [] }),
+    }) };
+    const instance = new ProjectEvermindCoordinatorDO(state, { UPLOADS: store } as unknown as Env);
+    map.set('meta', { tenantId: 1, projectId: 2 });
+    return { instance, map, embed };
+  }
+
+  function recallRequest() {
+    return new Request('https://coordinator/recall', {
+      method: 'POST',
+      body: JSON.stringify({ query: 'remember the answer' }),
+    });
+  }
+
+  it('re-embeds a stale vector instead of scoring it in the new model space', async () => {
+    const { instance, map, embed } = recallFixture('fixture/stale/v2');
+    map.set('mem:000000000001', entry(1, {
+      emb: packVec(new Float32Array([0, 1])),
+      embeddingFingerprint: evermindRecallFingerprint('fixture/stale/v1'),
+    }));
+
+    const result = await (await instance.fetch(recallRequest())).json();
+
+    expect(result).toEqual({ matches: [{ id: 1, score: 1 }], method: 'embedding' });
+    expect(embed).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back for an oversized stale window and stamps the reindex for later recall', async () => {
+    const ref = 'fixture/reindex/v2';
+    const { instance, map, embed } = recallFixture(ref);
+    await seedMemories(instance, Array.from({ length: 9 }, (_, index) => index + 1));
+    expect(await (await instance.fetch(recallRequest())).json()).toEqual({ matches: [], method: 'unavailable' });
+    expect(embed).toHaveBeenCalledTimes(1);
+
+    const result = await (await instance.fetch(new Request('https://coordinator/reindex', { method: 'POST' }))).json();
+    expect(result).toMatchObject({ ok: true, reindexed: 9, version: 2 });
+    expect(map.get('mem:000000000001')).toMatchObject({ embeddingFingerprint: evermindRecallFingerprint(ref) });
+    const recent = (await (await instance.fetch(recentUrl())).json()) as { recent: unknown[] };
+    expect(recent.recent[0]).not.toHaveProperty('embeddingFingerprint');
+
+    embed.mockClear();
+    expect(await (await instance.fetch(recallRequest())).json()).toMatchObject({ method: 'embedding' });
+    expect(embed).toHaveBeenCalledTimes(1);
   });
 });
 

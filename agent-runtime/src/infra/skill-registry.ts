@@ -7,6 +7,7 @@
  * what capabilities the operator has enabled for this agentNode.
  */
 
+import { fetchBuilderforce } from "./builderforce-http.js";
 import { logDebug, logWarn } from "../logger.js";
 
 export type LoadedSkill = {
@@ -34,10 +35,9 @@ export async function fetchAndLoadSkills(opts: {
 }): Promise<void> {
   const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/skills`;
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${opts.apiKey}` },
+    const res = await fetchBuilderforce(url, {
       signal: AbortSignal.timeout(15_000),
-    });
+    }, opts.apiKey);
     if (!res.ok) {
       logWarn(`[skill-registry] fetch failed: ${res.status}`);
       return;

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { coerceFileContent } from '@builderforce/ide-file-contract';
 import { canvasBuildActions } from '@/lib/canvasBuildTools';
+import { useConfirmShellCommand } from '@/hooks/useConfirmShellCommand';
 import { inspectPreviewAction } from '@/lib/previewProbe/inspectPreviewAction';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
 import { isBrainAutoApprove } from '@/lib/brain/autoApprove';
@@ -53,6 +54,7 @@ export function useWorkspaceBrainActions({ store, projectName, modality, preview
 }): void {
   // Specs and tasks belong to a durable project; a browser-held workspace has none.
   const projectId = typeof store.id === 'number' ? store.id : null;
+  const confirmShellCommand = useConfirmShellCommand();
   const liveRef = useRef({ targets, modality, projectId, review, previewUrl });
   // Synced after commit, never during render; a tool runs long after either.
   useEffect(() => {
@@ -63,7 +65,8 @@ export function useWorkspaceBrainActions({ store, projectName, modality, preview
     builds: () => [{ objectId: String(store.id), title: projectName, modality, store }],
     createBuild: async () => { throw new Error('This workspace is already open — edit its files instead of creating another build.'); },
     onFilesChanged: notifyWorkspaceFilesChanged,
-  }).filter((action) => action.name !== 'canvas_create_build'), [modality, projectName, store]);
+    confirmShellCommand,
+  }).filter((action) => action.name !== 'canvas_create_build'), [confirmShellCommand, modality, projectName, store]);
 
   const actions = useMemo<BrainAction[]>(() => [
     ...buildToolActions,

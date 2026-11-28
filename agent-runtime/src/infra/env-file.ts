@@ -1,6 +1,28 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { escapeRegExp, resolveConfigDir } from "../utils.js";
+import {
+  isBuilderforceCredential,
+  readBuilderforceCredential,
+  storeBuilderforceCredential,
+  warnBuilderforceCredentialFallback,
+} from "./builderforce-credential-store.js";
+
+function envAssignment(key: string): RegExp {
+  return new RegExp(`^(\\s*(?:export\\s+)?)${escapeRegExp(key)}\\s*=`);
+}
+
+function writePrivateEnvFile(filepath: string, output: string): void {
+  fs.mkdirSync(path.dirname(filepath), { recursive: true, mode: 0o700 });
+  const temporary = `${filepath}.${randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temporary, output, { encoding: "utf8", mode: 0o600, flag: "wx" });
+    fs.renameSync(temporary, filepath);
+  } finally {
+    fs.rmSync(temporary, { force: true });
+  }
+}
 
 export function upsertSharedEnvVar(params: {
   key: string;
@@ -19,7 +41,18 @@ export function upsertSharedEnvVar(params: {
   }
 
   const lines = raw.length ? raw.split(/\r?\n/) : [];
-  const matcher = new RegExp(`^(\\s*(?:export\\s+)?)${escapeRegExp(key)}\\s*=`);
+  const matcher = envAssignment(key);
+  if (isBuilderforceCredential(key)) {
+    if (!value.trim() || /[\r\n\0]/.test(value)) {
+      throw new Error("Builderforce credentials must be non-empty and fit on one line.");
+    }
+    if (storeBuilderforceCredential(dir, key, value)) {
+      const retained = lines.filter((line) => !matcher.test(line));
+      if (retained.length !== lines.length) writePrivateEnvFile(filepath, retained.join("\n"));
+      return { path: filepath, updated: true, created: !raw };
+    }
+    warnBuilderforceCredentialFallback();
+  }
   let updated = false;
   let replaced = false;
 
@@ -42,34 +75,34 @@ export function upsertSharedEnvVar(params: {
     updated = true;
   }
 
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  }
-
   const output = `${nextLines.join("\n")}\n`;
-  fs.writeFileSync(filepath, output, "utf8");
-  fs.chmodSync(filepath, 0o600);
+  writePrivateEnvFile(filepath, output);
 
   return { path: filepath, updated, created: !raw };
 }
 
 /**
- * Read a single key from `~/.builderforce/.env`.
- * Returns the raw value string, or undefined if the key is absent.
+ * Read a persisted runtime setting. Builderforce credentials can also live in the
+ * system credential store.
  */
 export function readSharedEnvVar(
   key: string,
   env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
+  key = key.trim();
   const dir = resolveConfigDir(env);
   const filepath = path.join(dir, ".env");
-  if (!fs.existsSync(filepath)) {
-    return undefined;
-  }
-  const raw = fs.readFileSync(filepath, "utf8");
-  const matcher = new RegExp(`^(?:export\\s+)?${escapeRegExp(key.trim())}=(.*)$`, "m");
-  const match = raw.match(matcher);
-  return match ? match[1]?.trim() || undefined : undefined;
+  const raw = fs.existsSync(filepath) ? fs.readFileSync(filepath, "utf8") : "";
+  const matcher = envAssignment(key);
+  const literal = raw.split(/\r?\n/).find((line) => matcher.test(line))?.replace(matcher, "").trim() || undefined;
+  if (!isBuilderforceCredential(key)) return literal;
+  if (!literal) return readBuilderforceCredential(dir, key);
+
+  // A saved fallback takes precedence over an older keychain value. The next
+  // successful sign-in removes the fallback while updating the credential.
+  if (process.platform !== "win32") fs.chmodSync(filepath, 0o600);
+  warnBuilderforceCredentialFallback();
+  return literal;
 }
 
 /**

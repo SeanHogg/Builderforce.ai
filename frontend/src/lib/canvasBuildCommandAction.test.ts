@@ -1,31 +1,61 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { run } = vi.hoisted(() => ({ run: vi.fn() }));
+const { run, start, poll, kill } = vi.hoisted(() => ({ run: vi.fn(), start: vi.fn(), poll: vi.fn(), kill: vi.fn() }));
 
 vi.mock('@/lib/browserRuntime/workspaceShell', () => ({
-  createWorkspaceShell: () => ({ run }),
+  createWorkspaceShell: () => ({ run, start, poll, kill }),
 }));
 
-import { canvasRunBuildCommandAction } from './canvasBuildCommandAction';
+import { canvasBuildCommandActions } from './canvasBuildCommandAction';
 import { clearBuildFailures, formatBuildFailures } from './buildDiagnostics';
 import type { BoundCanvasBuild } from './canvasBuildTools';
 import { serverFileStore } from './workspace/workspaceFileStore';
 
 const STORE_ID = 901;
 
-function action() {
+function actions(confirmShellCommand?: (command: string) => Promise<boolean>) {
   const build: BoundCanvasBuild = {
     objectId: 'obj-1',
     title: 'App',
     modality: 'designer',
     store: serverFileStore(STORE_ID),
   };
-  return canvasRunBuildCommandAction({}, () => ({ build }));
+  return canvasBuildCommandActions({ confirmShellCommand }, () => ({ build }));
 }
+
+const action = () => actions()[0]!;
 
 afterEach(() => {
   run.mockReset();
+  start.mockReset();
+  poll.mockReset();
+  kill.mockReset();
   clearBuildFailures(STORE_ID);
+});
+
+it('runs, checks and stops a background command through the canvas actions', async () => {
+  const [command, status, stop] = actions();
+  start.mockResolvedValue({ ok: true, id: 'job-1' });
+  poll.mockResolvedValue({ ok: true, id: 'job-1', status: 'running', output: 'building' });
+  kill.mockResolvedValue({ ok: false, id: 'job-1', status: 'killed' });
+
+  expect(await command!.run({ command: 'npm test', background: true }))
+    .toMatchObject({ ok: true, id: 'job-1', note: expect.stringContaining(status!.name) });
+  expect(await status!.run({ id: 'job-1' })).toMatchObject({ ok: true, status: 'running', output: 'building' });
+  expect(await stop!.run({ id: 'job-1' })).toMatchObject({ ok: false, status: 'killed', code: 'aborted' });
+});
+
+it('runs destructive workspace commands only after the host confirms', async () => {
+  const command = 'git reset --hard';
+  const confirm = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  const [shell] = actions(confirm);
+  run.mockResolvedValue({ ok: true, exitCode: 0 });
+
+  expect(await shell!.run({ command })).toMatchObject({ ok: false, code: 'refused' });
+  expect(run).not.toHaveBeenCalled();
+  expect(await shell!.run({ command })).toMatchObject({ ok: true });
+  expect(confirm).toHaveBeenCalledWith(command);
+  expect(run).toHaveBeenCalledOnce();
 });
 
 describe('canvas_run_build_command diagnostics', () => {

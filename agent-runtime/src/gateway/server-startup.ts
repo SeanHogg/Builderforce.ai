@@ -29,6 +29,7 @@ import { BuilderforceRelayService } from "../infra/builderforce-relay.js";
 import { CompositeAgentTransport } from "../infra/composite-agent-transport.js";
 import { CronPollerService } from "../infra/cron-poller.js";
 import { isOfflineMode, readSharedEnvVar } from "../infra/env-file.js";
+import { builderforceApiBase } from "../infra/builderforce-http.js";
 import { isTruthyEnvValue } from "../infra/env.js";
 import { GatewayLlmService } from "../infra/gateway-llm-service.js";
 import { loadHiredAgentsCached } from "../infra/hired-agents-sync.js";
@@ -319,7 +320,7 @@ export async function linkHostToBuilderforce(params: Pick<SidecarParams, "defaul
   if (!apiKey) {
     return;
   }
-  const baseUrl = readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai";
+  const baseUrl = builderforceApiBase();
   try {
     const ctx = await loadProjectContext(params.defaultWorkspaceDir);
     const agentNodeId = ctx?.builderforce?.instanceId;
@@ -364,7 +365,7 @@ async function startBuilderforceServices(
 
   try {
     const apiKey = readSharedEnvVar("BUILDERFORCE_API_KEY");
-    const baseUrl = readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai";
+    const baseUrl = builderforceApiBase();
 
     if (!apiKey) {
       params.log.warn(

@@ -37,6 +37,8 @@ export const CANVAS_BUILD_FILE_WRITE_TOOLS: ReadonlySet<string> = new Set(
   [...CANVAS_BUILD_WORKSPACE_WRITE_TOOLS].filter((name) => name !== 'canvas_create_build'),
 );
 
+import { CANVAS_SHELL_TOOLS } from '@builderforce/creation-canvas-contract';
+
 /** Every tool name this module contributes. Used by the guest-boundary contract. */
 export const CANVAS_BUILD_TOOL_NAMES = [
   'canvas_create_build',
@@ -49,7 +51,7 @@ export const CANVAS_BUILD_TOOL_NAMES = [
   'canvas_read_preview_console',
   'canvas_list_build_file_history',
   'canvas_restore_build_file',
-  'canvas_run_build_command',
+  ...Object.values(CANVAS_SHELL_TOOLS),
 ] as const;
 
 /**

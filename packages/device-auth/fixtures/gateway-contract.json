@@ -13,6 +13,17 @@
   "webOrigins": [
     { "gateway": "https://builderforce.ai/gateway", "web": "https://builderforce.ai" },
     { "gateway": "https://api.builderforce.ai", "web": "https://builderforce.ai" },
-    { "gateway": "http://localhost:8787/gateway", "web": "http://localhost:8787" }
+    { "gateway": "http://localhost:8787/gateway", "web": "http://localhost:8787" },
+    { "gateway": " HTTPS://API.builderforce.ai:443/gateway ", "web": "https://builderforce.ai" },
+    { "gateway": "http://[::1]:8787/gateway", "web": "http://[::1]:8787" },
+    { "gateway": "unconfigured", "web": "https://builderforce.ai" },
+    { "gateway": "file:///app", "web": "https://builderforce.ai" }
+  ],
+  "workspaceTokens": [
+    { "body": { "token": "fixture", "tenantId": 7 }, "expectedTenant": 7, "resolvedTenant": 7 },
+    { "body": { "token": "fixture" }, "expectedTenant": 7, "resolvedTenant": 7 },
+    { "body": { "token": "fixture", "tenantId": 8 }, "expectedTenant": 7, "resolvedTenant": null },
+    { "body": { "token": "fixture", "tenantId": 0 }, "expectedTenant": null, "resolvedTenant": null },
+    { "body": { "token": "", "tenantId": 7 }, "expectedTenant": 7, "resolvedTenant": null }
   ]
 }

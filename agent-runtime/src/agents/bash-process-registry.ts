@@ -1,5 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import { SHELL_CAPTURE_CHARS, keepTail } from "@builderforce/tool-output-policy";
+import { backgroundWaitAbort, createBackgroundJobRegistry, SHELL_CAPTURE_CHARS, keepTail, waitForBackgroundJob } from "@builderforce/tool-output-policy";
 import { createSessionSlug as createSessionSlugId } from "./session-slug.js";
 
 const DEFAULT_JOB_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -71,13 +71,17 @@ export interface FinishedSession {
   totalOutputChars: number;
 }
 
-const runningSessions = new Map<string, ProcessSession>();
-const finishedSessions = new Map<string, FinishedSession>();
+type NativeJob =
+  | { status: "running"; session: ProcessSession; done: Promise<void>; settle: () => void }
+  | { status: "finished"; session: FinishedSession };
+
+// Native callers supply their own stable job ids and retain finished PTY output by TTL.
+const sessions = createBackgroundJobRegistry<NativeJob>();
 
 let sweeper: NodeJS.Timeout | null = null;
 
 function isSessionIdTaken(id: string) {
-  return runningSessions.has(id) || finishedSessions.has(id);
+  return sessions.get(id) !== undefined;
 }
 
 export function createSessionSlug(): string {
@@ -85,21 +89,33 @@ export function createSessionSlug(): string {
 }
 
 export function addSession(session: ProcessSession) {
-  runningSessions.set(session.id, session);
+  let settle!: () => void;
+  const done = new Promise<void>((resolve) => { settle = resolve; });
+  sessions.set(session.id, { status: "running", session, done, settle });
   startSweeper();
 }
 
 export function getSession(id: string) {
-  return runningSessions.get(id);
+  const entry = sessions.get(id);
+  return entry?.status === "running" ? entry.session : undefined;
 }
 
 export function getFinishedSession(id: string) {
-  return finishedSessions.get(id);
+  const entry = sessions.get(id);
+  return entry?.status === "finished" ? entry.session : undefined;
 }
 
 export function deleteSession(id: string) {
-  runningSessions.delete(id);
-  finishedSessions.delete(id);
+  const entry = sessions.get(id);
+  if (entry?.status === "running") entry.settle();
+  sessions.delete(id);
+}
+
+export async function waitForProcessSession(id: string, waitMs: number, signal?: AbortSignal): Promise<void> {
+  const entry = sessions.get(id);
+  if (entry?.status === "running" && waitMs > 0) {
+    await waitForBackgroundJob(entry.done, waitMs, backgroundWaitAbort(signal));
+  }
 }
 
 export function appendOutput(session: ProcessSession, stream: "stdout" | "stderr", chunk: string) {
@@ -162,7 +178,7 @@ export function markBackgrounded(session: ProcessSession) {
 }
 
 function moveToFinished(session: ProcessSession, status: ProcessStatus) {
-  runningSessions.delete(session.id);
+  deleteSession(session.id);
 
   // Clean up child process stdio streams to prevent FD leaks
   if (session.child) {
@@ -198,7 +214,7 @@ function moveToFinished(session: ProcessSession, status: ProcessStatus) {
   if (!session.backgrounded) {
     return;
   }
-  finishedSessions.set(session.id, {
+  const finished: FinishedSession = {
     id: session.id,
     command: session.command,
     scopeKey: session.scopeKey,
@@ -212,7 +228,8 @@ function moveToFinished(session: ProcessSession, status: ProcessStatus) {
     tail: session.tail,
     truncated: session.truncated,
     totalOutputChars: session.totalOutputChars,
-  });
+  };
+  sessions.set(session.id, { status: "finished", session: finished });
 }
 
 export function tail(text: string, max = 2000) {
@@ -253,20 +270,22 @@ function capPendingBuffer(buffer: string[], pendingChars: number, cap: number) {
 }
 
 export function listRunningSessions() {
-  return Array.from(runningSessions.values()).filter((s) => s.backgrounded);
+  return [...sessions.values()].flatMap((job) =>
+    job.status === "running" && job.session.backgrounded ? [job.session] : [],
+  );
 }
 
 export function listFinishedSessions() {
-  return Array.from(finishedSessions.values());
+  return [...sessions.values()].flatMap((job) => job.status === "finished" ? [job.session] : []);
 }
 
 export function clearFinished() {
-  finishedSessions.clear();
+  for (const session of listFinishedSessions()) sessions.delete(session.id);
 }
 
 export function resetProcessRegistryForTests() {
-  runningSessions.clear();
-  finishedSessions.clear();
+  for (const entry of sessions.values()) if (entry.status === "running") entry.settle();
+  sessions.clear();
   stopSweeper();
 }
 
@@ -281,9 +300,9 @@ export function setJobTtlMs(value?: number) {
 
 function pruneFinishedSessions() {
   const cutoff = Date.now() - jobTtlMs;
-  for (const [id, session] of finishedSessions.entries()) {
+  for (const session of listFinishedSessions()) {
     if (session.endedAt < cutoff) {
-      finishedSessions.delete(id);
+      sessions.delete(session.id);
     }
   }
 }

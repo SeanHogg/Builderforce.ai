@@ -22,6 +22,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 
   const confirm = useCallback<ConfirmFn>((raw) => {
     const next = typeof raw === 'string' ? { message: raw } : raw;
+    resolverRef.current?.(false);
     setOpts(next);
     return new Promise<boolean>((resolve) => { resolverRef.current = resolve; });
   }, []);

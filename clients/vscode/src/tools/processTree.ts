@@ -13,7 +13,7 @@
 
 import { spawn, type ChildProcess, type SpawnOptions } from "child_process";
 import { toBashNullDevice } from "@builderforce/agent-tools/node-posix-shell";
-import { killTree } from "@builderforce/agent-tools/node-process";
+import { killTree, treeSpawnOptions } from "@builderforce/agent-tools/node-process";
 
 /**
  * Start a command so {@link killTree} reaches everything it starts: in its own
@@ -25,7 +25,7 @@ import { killTree } from "@builderforce/agent-tools/node-process";
  * boundaries. Throws as `spawn` does.
  */
 export function spawnCommand(command: string, bash: string | null, options: SpawnOptions): ChildProcess {
-  const opts: SpawnOptions = { ...options, windowsHide: true, ...(process.platform === "win32" ? {} : { detached: true }) };
+  const opts = treeSpawnOptions(options);
   // Under bash a cmd-style `2>nul` would create an undeletable `nul` file — see toBashNullDevice.
   const child = bash ? spawn(bash, ["-c", toBashNullDevice(command)], opts) : spawn(command, { ...opts, shell: true });
   child.stdout?.setEncoding("utf8");

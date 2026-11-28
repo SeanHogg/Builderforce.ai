@@ -8,6 +8,8 @@
  * Config shape matches `projectEvermindConfig()` (gateway url + key + host id +
  * project id), so the knowledge loop reuses the one config getter for both.
  */
+import { builderforceAuthHeaders } from "./builderforce-http.js";
+
 export interface ProjectFactsSyncConfig {
   gatewayUrl: string;
   apiKey: string;
@@ -16,7 +18,7 @@ export interface ProjectFactsSyncConfig {
 }
 
 function authHeaders(cfg: ProjectFactsSyncConfig): Record<string, string> {
-  return { Authorization: `Bearer ${cfg.apiKey}`, "X-AgentHost-Id": String(cfg.agentHostId) };
+  return builderforceAuthHeaders(cfg.apiKey, cfg.agentHostId);
 }
 
 /** Write-through a belief to the shared project store (replace-on-write by key). */

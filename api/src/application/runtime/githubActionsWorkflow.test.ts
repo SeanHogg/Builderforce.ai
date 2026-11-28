@@ -83,7 +83,7 @@ describe('renderAgentWorkflow', () => {
   it('is what the committed template carries', () => {
     // A path, not `new URL(…, import.meta.url)`: the Workers-typed global URL is not Node's URL to the type checker.
     const template = readFileSync(resolve(__dirname, '../../../../.github/workflows/builderforce-agent.yml'), 'utf8');
-    const step = (s: string) => s.slice(s.indexOf('# Runs even when the job is cancelled'));
+    const step = (s: string) => s.slice(s.indexOf('# Runs even when the job is cancelled')).replace(/\r\n/g, '\n');
     expect(step(template)).toBe(step(workflow));
   });
 
@@ -142,8 +142,9 @@ describe('renderAgentRunnerScript', () => {
     expect(script).toContain('async function serveSandbox(');
     expect(script).toContain('async function absorbCommit(');
     // The shared glob: **/ matches zero directories, and a truncated miss is not absence.
-    expect(script).toContain("re += '(?:.*/)?'");
+    expect(script.includes('(?:.*/)?')).toBe(true);
     expect(script).toContain('function dirMayContainGlob');
+    expect(script).toContain('function createBackgroundJobRegistry(');
     expect(script).toContain('NOT proof the file does not exist');
   });
 

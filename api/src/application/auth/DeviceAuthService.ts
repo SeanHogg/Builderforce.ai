@@ -1,5 +1,5 @@
-import { and, eq, lt, sql } from 'drizzle-orm';
-import type { Db } from '../../infrastructure/database/connection';
+import { and, eq, gt, lt, sql } from 'drizzle-orm';
+import { inTransaction, type Db, type Tx } from '../../infrastructure/database/connection';
 import { deviceAuthorizations, tenantMembers } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hashSecret } from '../../infrastructure/auth/HashService';
@@ -77,12 +77,15 @@ export class DeviceAuthService {
   }
 
   /** Resolve the tenant to mint against: explicit, else the user's first active membership. */
-  private async resolveTenant(userId: string, tenantId?: number): Promise<number | undefined> {
-    if (tenantId) return tenantId;
-    const [membership] = await this.db
+  private async resolveTenant(db: Db | Tx, userId: string, tenantId?: number): Promise<number | undefined> {
+    const [membership] = await db
       .select({ tenantId: tenantMembers.tenantId })
       .from(tenantMembers)
-      .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.isActive, true)))
+      .where(and(
+        eq(tenantMembers.userId, userId),
+        eq(tenantMembers.isActive, true),
+        tenantId === undefined ? undefined : eq(tenantMembers.tenantId, tenantId),
+      ))
       .limit(1);
     return membership?.tenantId;
   }
@@ -97,10 +100,10 @@ export class DeviceAuthService {
     tenantId?: number;
     /** The device client that asked (any `DEVICE_CLIENTS` key: vscode, synapse, spawn, android, ios, macos, chrome); names the key after the app and is kept on it. */
     client?: string | null;
-  }): Promise<{ ok: true; key: string; tenantId: number } | { ok: false; error: string }> {
-    const tenantId = await this.resolveTenant(opts.userId, opts.tenantId);
+  }, db: Db | Tx = this.db): Promise<{ ok: true; key: string; tenantId: number } | { ok: false; error: string }> {
+    const tenantId = await this.resolveTenant(db, opts.userId, opts.tenantId);
     if (!tenantId) return { ok: false, error: 'no_tenant' };
-    const minted = await mintTenantApiKey(this.db, {
+    const minted = await mintTenantApiKey(db, {
       tenantId,
       name: deviceClientName(opts.client),
       createdByUserId: opts.userId,
@@ -117,35 +120,35 @@ export class DeviceAuthService {
     envSecret: string;
   }): Promise<DeviceApproveResult> {
     const code = opts.userCode.trim().toUpperCase();
-    const [row] = await this.db
-      .select()
-      .from(deviceAuthorizations)
-      .where(eq(deviceAuthorizations.userCode, code))
-      .limit(1);
+    return inTransaction(this.db, async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(deviceAuthorizations)
+        .where(eq(deviceAuthorizations.userCode, code))
+        .limit(1)
+        .for('update');
 
-    if (!row) return { ok: false, error: 'unknown_code' };
-    if (row.status !== 'pending') return { ok: false, error: 'already_resolved' };
-    if (row.expiresAt <= new Date()) return { ok: false, error: 'expired' };
+      if (!row) return { ok: false, error: 'unknown_code' };
+      if (row.status !== 'pending') return { ok: false, error: 'already_resolved' };
+      if (row.expiresAt <= new Date()) return { ok: false, error: 'expired' };
 
-    const minted = await this.mintEditorKey({ userId: opts.userId, tenantId: opts.tenantId, client: row.client });
-    if (!minted.ok) return { ok: false, error: minted.error };
-    // M2: seal the issued gateway key under the dedicated credential secret (caller
-    // passes credentialSecret(env) as envSecret), per-tenant-bound (v2). Legacy rows
-    // still decrypt in poll() via the JWT_SECRET fallback.
-    const enc = await encryptSecretForStorage(minted.key, opts.envSecret, { tenantId: minted.tenantId });
+      const minted = await this.mintEditorKey({ userId: opts.userId, tenantId: opts.tenantId, client: row.client }, tx);
+      if (!minted.ok) return { ok: false, error: minted.error };
+      const enc = await encryptSecretForStorage(minted.key, opts.envSecret, { tenantId: minted.tenantId });
 
-    await this.db
-      .update(deviceAuthorizations)
-      .set({
-        status: 'approved',
-        userId: opts.userId,
-        tenantId: minted.tenantId,
-        issuedKeyEnc: enc,
-        approvedAt: sql`now()`,
-      })
-      .where(eq(deviceAuthorizations.id, row.id));
+      await tx
+        .update(deviceAuthorizations)
+        .set({
+          status: 'approved',
+          userId: opts.userId,
+          tenantId: minted.tenantId,
+          issuedKeyEnc: enc,
+          approvedAt: sql`now()`,
+        })
+        .where(eq(deviceAuthorizations.id, row.id));
 
-    return { ok: true };
+      return { ok: true };
+    });
   }
 
   async deny(userCode: string): Promise<void> {
@@ -174,25 +177,35 @@ export class DeviceAuthService {
     if (!row) return { state: 'expired' };
     if (row.expiresAt <= new Date()) return { state: 'expired' };
     if (row.status === 'denied') return { state: 'denied' };
+    if (row.status === 'claimed') return { state: 'expired' };
 
     if (row.lastPolledAt && Date.now() - row.lastPolledAt.getTime() < row.intervalSecs * 1000) {
       return { state: 'slow_down' };
     }
-    await this.db
-      .update(deviceAuthorizations)
-      .set({ lastPolledAt: sql`now()` })
-      .where(eq(deviceAuthorizations.id, row.id));
+    const canPoll = and(
+      eq(deviceAuthorizations.id, row.id),
+      eq(deviceAuthorizations.status, row.status),
+      gt(deviceAuthorizations.expiresAt, sql`now()`),
+      sql`(${deviceAuthorizations.lastPolledAt} is null or ${deviceAuthorizations.lastPolledAt}
+        <= now() - ${deviceAuthorizations.intervalSecs} * interval '1 second')`,
+    );
 
     if (row.status === 'approved' && row.issuedKeyEnc && row.tenantId != null) {
       const accessKey = await decryptSecretFromStorage(row.issuedKeyEnc, envSecret, { tenantId: row.tenantId, legacySecret });
-      await this.db
+      const [claim] = await this.db
         .update(deviceAuthorizations)
-        .set({ status: 'claimed', issuedKeyEnc: null })
-        .where(eq(deviceAuthorizations.id, row.id));
+        .set({ status: 'claimed', issuedKeyEnc: null, lastPolledAt: sql`now()` })
+        .where(and(canPoll, eq(deviceAuthorizations.issuedKeyEnc, row.issuedKeyEnc)))
+        .returning({ id: deviceAuthorizations.id });
+      if (!claim) return { state: 'expired' };
       return { state: 'approved', accessKey, tenantId: row.tenantId };
     }
-    if (row.status === 'claimed') return { state: 'expired' };
-    return { state: 'pending' };
+    const [updated] = await this.db
+      .update(deviceAuthorizations)
+      .set({ lastPolledAt: sql`now()` })
+      .where(canPoll)
+      .returning({ id: deviceAuthorizations.id });
+    return { state: updated ? 'pending' : 'slow_down' };
   }
 
   /** Best-effort cleanup of long-expired rows. */

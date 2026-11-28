@@ -1,4 +1,5 @@
 import { flattenApiError } from '@builderforce/api-errors';
+import { resolvePlatformBaseUrl } from '@builderforce/device-auth';
 import type { FailoverEvent } from '../domain/types';
 
 export class BuilderforceApiError extends Error {
@@ -116,7 +117,7 @@ export class HttpClient {
 
   constructor(options: HttpClientOptions) {
     this.apiKey = options.apiKey;
-    this.baseUrl = options.baseUrl.replace(/\/$/, '');
+    this.baseUrl = resolvePlatformBaseUrl(options.baseUrl, '');
     // Bind to `globalThis` so calling via `this.fetchFn(...)` doesn't trip
     // Cloudflare Workers' "Illegal invocation" check — the platform's fetch
     // requires the global receiver, not an instance method `this`. Affects

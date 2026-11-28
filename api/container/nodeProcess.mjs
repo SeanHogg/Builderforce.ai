@@ -7,7 +7,7 @@
  * Regenerate with `node scripts/gen-container-shared.mjs` (from `api/`).
  * `--check` fails the build when the source no longer matches the hash below.
  *
- * @source-sha256 1620fed2bae1731726bcba991a10a0262407119f626bda1a6857476861b5a338
+ * @source-sha256 82423ae869f0864d126da305084d0d5d71b31a8e9161513ac4acbc3b59ad6b12
  */
 // ── node-process.ts ──
 /**
@@ -33,6 +33,10 @@
  * process warning), never swallowed.
  */
 import { spawn } from "node:child_process";
+/** Put a child in a process group on POSIX and keep Windows launches headless. */
+function treeSpawnOptions(options) {
+    return { ...options, windowsHide: true, detached: process.platform !== "win32" || options.detached === true };
+}
 const DEFAULT_KILL_GRACE_MS = 3000;
 const MAX_KILL_GRACE_MS = 60_000;
 /** `taskkill.exe` from the Windows system folder; undefined when the system folder is unknown. */
@@ -138,11 +142,10 @@ function runTree(file, args, opts) {
     return new Promise((resolve) => {
         let child;
         try {
-            child = spawn(file, [...args], {
-                cwd: opts.cwd, env: opts.env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
-                detached: process.platform !== "win32",
+            child = spawn(file, [...args], treeSpawnOptions({
+                cwd: opts.cwd, env: opts.env, stdio: ["ignore", "pipe", "pipe"],
                 ...(opts.windowsVerbatimArguments ? { windowsVerbatimArguments: true } : {}),
-            });
+            }));
         }
         catch {
             // A throwing spawn IS "not started": the result says so, and the caller reports it.
@@ -198,4 +201,4 @@ function runTree(file, args, opts) {
     });
 }
 
-export { killTree };
+export { killTree, treeSpawnOptions };

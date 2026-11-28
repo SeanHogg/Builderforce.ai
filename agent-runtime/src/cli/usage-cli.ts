@@ -1,4 +1,6 @@
+import { builderforceApiBase, fetchBuilderforce } from "../infra/builderforce-http.js";
 import type { Command } from "commander";
+import { readRuntimeEnvVar } from "../infra/env-file.js";
 import {
   formatUsageReportLines,
   loadProviderUsageSummary,
@@ -27,10 +29,10 @@ type UsageCliOptions = { json?: boolean };
 
 /** Resolve the gateway base URL + token, or null when not configured. */
 function resolveGateway(): { url: string; token: string } | null {
-  const url = process.env.BUILDERFORCE_GATEWAY_URL ?? process.env.BUILDERFORCE_URL;
-  const token = process.env.BUILDERFORCE_API_KEY;
+  const url = readRuntimeEnvVar("BUILDERFORCE_GATEWAY_URL") ?? readRuntimeEnvVar("BUILDERFORCE_URL");
+  const token = readRuntimeEnvVar("BUILDERFORCE_API_KEY");
   if (!url || !token) return null;
-  return { url: url.replace(/\/+$/, ""), token };
+  return { url: builderforceApiBase(url), token };
 }
 
 /** Fetch the builder snapshot from the gateway. Returns null on any failure. */
@@ -38,9 +40,8 @@ async function fetchBuilderInsights(): Promise<BuilderInsightsSnapshot | null> {
   const gw = resolveGateway();
   if (!gw) return null;
   try {
-    const res = await fetch(`${gw.url}/llm/v1/builder-insights`, {
-      headers: { authorization: `Bearer ${gw.token}` },
-    });
+    const res = await fetchBuilderforce(`${gw.url}/llm/v1/builder-insights`, {
+    }, gw.token);
     if (!res.ok) return null;
     return (await res.json()) as BuilderInsightsSnapshot;
   } catch {

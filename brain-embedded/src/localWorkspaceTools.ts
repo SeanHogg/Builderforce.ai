@@ -31,6 +31,7 @@
  * Framework-free (plain Sets and predicates) so it is safe in every bundle.
  */
 
+import { WORKSPACE_CODE_WRITE_TOOLS, WORKSPACE_INSPECTION_TOOLS } from '@builderforce/agent-tools';
 import { REPO_PUBLISH_TOOLS } from '@builderforce/run-guards';
 
 /**
@@ -40,15 +41,7 @@ import { REPO_PUBLISH_TOOLS } from '@builderforce/run-guards';
  * "working in the user's workspace" means, not a prefix match on whatever appears.
  */
 export const LOCAL_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
-  'read_file',
-  'list_files',
-  'search_code',
-  // Code navigation over the definition index. Pinned for the reason the file tools are,
-  // and more acutely: "where is the auth middleware?" shares no stem with "find_symbol",
-  // so relevance drops the one call that answers it and the run falls back to searching
-  // and paging through files — the pattern these two tools exist to replace.
-  'find_symbol',
-  'file_outline',
+  ...WORKSPACE_INSPECTION_TOOLS,
   // The semantic index (Builderforce Desktop). Pinned for the same reason and more so:
   // its whole purpose is the question phrased in words — "how do refunds reach the
   // ledger?" — which is exactly the turn whose text shares no stem with the tool name.
@@ -61,9 +54,7 @@ export const LOCAL_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
   // Inert where the host did not advertise them (no compressor / no local model).
   'read_compressed',
   'local_research',
-  'write_file',
-  'edit_file',
-  'delete_file',
+  ...WORKSPACE_CODE_WRITE_TOOLS,
   'run_command',
   // A background command's companions (PRD 35 E6): a turn that started `npm test` in the
   // background and now asks "did it pass?" shares no stem with `command_status`.
@@ -121,9 +112,7 @@ export const LOCAL_WORKSPACE_TOOLS: ReadonlySet<string> = new Set([
  * `in_review` (75%) with nothing in the loop that would ever move them.
  */
 export const CODE_CHANGE_TOOLS: ReadonlySet<string> = new Set([
-  'write_file',
-  'edit_file',
-  'delete_file',
+  ...WORKSPACE_CODE_WRITE_TOOLS,
   'canvas_write_build_file',
   'canvas_edit_build_file',
   'canvas_restore_build_file',

@@ -10,6 +10,7 @@
  *   grep '"kind":"task.fail"' .builderforce/telemetry/2026-03-21.jsonl | jq .
  */
 
+import { builderforceAuthHeaders, fetchBuilderforce } from "./builderforce-http.js";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -241,8 +242,7 @@ export class WorkflowTelemetryService {
     const base = normalizeBaseUrl(this.apiUrl);
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${this.apiKey}`,
-      "X-AgentHost-Id": this.agentNodeId,
+      ...builderforceAuthHeaders(this.apiKey, this.agentNodeId),
     };
     if (span.traceId) {
       headers["X-Trace-Id"] = span.traceId;
@@ -334,15 +334,14 @@ export class WorkflowTelemetryService {
     }
     // The server resolves a host from `Authorization: Bearer` + `X-AgentHost-Id` (or
     // `?agentHostId=`); a bare bearer key names no host and is refused with a 401.
-    fetch(`${normalizeBaseUrl(this.apiUrl)}/api/telemetry/spans`, {
+    fetchBuilderforce(`${normalizeBaseUrl(this.apiUrl)}/api/telemetry/spans`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
         "X-AgentHost-Id": this.agentNodeId,
       },
       body: JSON.stringify(batch),
-    }).catch((err) => logDebug(`[telemetry] otel proxy forward failed: ${String(err)}`));
+    }, this.apiKey).catch((err) => logDebug(`[telemetry] otel proxy forward failed: ${String(err)}`));
   }
 
   private spanToRelayEvent(kind: SpanKind): string | null {

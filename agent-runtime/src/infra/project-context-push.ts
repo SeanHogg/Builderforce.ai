@@ -3,6 +3,7 @@
  * to Builderforce so the portal and other agentNodes can access it.
  */
 
+import { fetchBuilderforce } from "./builderforce-http.js";
 import { logDebug } from "../logger.js";
 
 export type ProjectContextPushOptions = {
@@ -26,15 +27,14 @@ export async function pushProjectContextToBuilderforce(
   }
   const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/project-context`;
   try {
-    const res = await fetch(url, {
+    const res = await fetchBuilderforce(url, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${opts.apiKey}`,
       },
       body: JSON.stringify(context),
       signal: AbortSignal.timeout(15_000),
-    });
+    }, opts.apiKey);
     if (!res.ok) {
       logDebug(`[project-context-push] failed: HTTP ${res.status}`);
       return false;

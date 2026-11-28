@@ -12,6 +12,7 @@ import { headerHints, rememberUserLocale } from '../../application/email/emailLo
 import { localeFromHeaders } from '../../infrastructure/email/emailLocale';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { legacyAliasNotice } from '../middleware/legacyAlias';
+import { slidingWindowLimited } from '../middleware/rateLimitResponse';
 import { WORKSPACES_PATH, workspaceHandlers } from './workspaceHandlers';
 import { TenantRole, type UserId } from '../../domain/shared/types';
 import {
@@ -37,7 +38,7 @@ import { persistWebSessionToken } from '../../application/auth/webSessionStore';
 import { parseTokenTimeToDate } from '../../infrastructure/auth/MfaService';
 import { revokeTenantApiKeyByRawKey } from '../../application/llm/tenantApiKeyService';
 import { assertExchangeableKeyRow } from '../../application/llm/editorKeyGate';
-import { claimsFromContext, getClientIp, getUserAgent } from '../middleware/requestClaims';
+import { claimsFromContext, getClientIp, getCloudflareClientIp, getUserAgent } from '../middleware/requestClaims';
 import { issueVerificationCode, verifyVerificationCode, type VerifyResult } from '../../application/auth/EmailVerificationService';
 import { checkTermsAcceptance, invalidateAcceptedTermsVersion, recordAcceptance } from '../../application/legal/termsAcceptance';
 import { getActiveLegalDoc } from '../../application/legal/legalDocsService';
@@ -280,6 +281,9 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
 
   // POST /api/auth/device/code — public; start a device login.
   router.post('/device/code', async (c) => {
+    const ip = getCloudflareClientIp(c) ?? 'unidentified';
+    const limited = await slidingWindowLimited(c, `device-auth:start:${ip}`, 60);
+    if (limited) return limited;
     const body = await parseOptionalBody(c, DeviceCodeBody);
     const appUrl = c.env.APP_URL || 'https://builderforce.ai';
     const start = await deviceAuth.start(appUrl, body.client ?? undefined);
@@ -289,6 +293,8 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
   // POST /api/auth/device/approve — WebJWT; called by the /activate page.
   router.post('/device/approve', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
+    const limited = await slidingWindowLimited(c, `device-auth:approve:${userId}`, 20);
+    if (limited) return limited;
     const body = await parseBody(c, DeviceApproveBody);
     const userCode = (body.userCode ?? body.user_code ?? '').trim();
     if (!userCode) return c.json({ error: 'user_code is required' }, 400);
@@ -320,6 +326,9 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
 
   // POST /api/auth/device/token — public; polled by the extension.
   router.post('/device/token', async (c) => {
+    const ip = getCloudflareClientIp(c) ?? 'unidentified';
+    const limited = await slidingWindowLimited(c, `device-auth:poll:${ip}`, 600);
+    if (limited) return limited;
     const body = await parseBody(c, DeviceTokenBody);
     if (!body.device_code) return c.json({ error: 'device_code is required' }, 400);
     const res = await deviceAuth.poll(body.device_code, credentialSecret(c.env), c.env.JWT_SECRET);

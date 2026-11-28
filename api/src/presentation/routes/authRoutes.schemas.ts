@@ -36,19 +36,19 @@ export const RevokeKeyBody = z.object({ apiKey: z.string().nullish(), key: z.str
 
 // ── Device-code sign-in (RFC 8628-style, editor clients) ─────────────────────
 
-export const DeviceCodeBody = z.object({ client: z.string().nullish() });
+export const DeviceCodeBody = z.object({ client: z.string().max(64).nullish() });
 
 /** `decision` is only compared with `'deny'`; anything else approves, so no enum. */
 export const DeviceApproveBody = z.object({
-  userCode: z.string().nullish(),
-  user_code: z.string().nullish(),
+  userCode: z.string().max(64).nullish(),
+  user_code: z.string().max(64).nullish(),
   tenantId: z.number().nullish(),
   decision: z.string().nullish(),
 });
 
 export const EditorKeyBody = z.object({ tenantId: z.number().nullish() });
 
-export const DeviceTokenBody = z.object({ device_code: z.string().nullish() });
+export const DeviceTokenBody = z.object({ device_code: z.string().max(128).nullish() });
 
 // ── Web / marketplace auth ───────────────────────────────────────────────────
 

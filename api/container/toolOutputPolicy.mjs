@@ -7,7 +7,7 @@
  * Regenerate with `node scripts/gen-container-shared.mjs` (from `api/`).
  * `--check` fails the build when the source no longer matches the hash below.
  *
- * @source-sha256 155b979e8cd2bf8058ed076b91ea492f131d12421556dcbf5024626054bdc3dc
+ * @source-sha256 345f3f661fdfc7fc97cd43fefeb0e585c2587e5484a74fe75131cd2816fae25f
  */
 // ── caps.ts ──
 /**
@@ -64,6 +64,26 @@ function makeRoomForBackgroundJob(jobs) {
             return true;
     }
     return false;
+}
+/** Run-scoped job handles and a bounded registry shared by workspace shells. */
+function createBackgroundJobRegistry(prefix = '') {
+    const jobs = new Map();
+    const nextByOwner = new Map();
+    const keyOf = (id, owner) => JSON.stringify([owner, id]);
+    return {
+        reserve(owner) {
+            if (!makeRoomForBackgroundJob(jobs))
+                return undefined;
+            const next = (nextByOwner.get(owner) ?? 0) + 1;
+            nextByOwner.set(owner, next);
+            return `${prefix}job-${next}`;
+        },
+        get: (id, owner) => jobs.get(keyOf(id, owner)),
+        set: (id, job, owner) => jobs.set(keyOf(id, owner), job),
+        delete: (id, owner) => jobs.delete(keyOf(id, owner)),
+        clear: () => { jobs.clear(); nextByOwner.clear(); },
+        values: () => jobs.values(),
+    };
 }
 /** Host-specific limits for command and file-read protocols. */
 const EDITOR_COMMAND_OUTPUT_CHARS = 60_000;
@@ -891,4 +911,4 @@ function modelToolResultPolicy(opts) {
     return (toolName, data) => shapeToolResult(toolName, data ?? null, { summarize: opts.summarize, caps: opts.caps }).content;
 }
 
-export { DEFAULT_COMMAND_TIMEOUT_MS, BACKGROUND_JOB_LIMIT_ERROR, makeRoomForBackgroundJob, waitForBackgroundJob, SHELL_CAPTURE_CHARS, TOOL_OUTPUT_CAPS, toolOutputCap, keepTail, cutHead, cutHeadTail, summarizeShellOutput, detectRunner, projectJson, windowReadFile, fitToolText, shapeToolResult, modelToolResultPolicy, LIST_MAX_FILES, LIST_RETURN_MAX, READ_MAX_BYTES, SEARCH_MAX_MATCHES };
+export { DEFAULT_COMMAND_TIMEOUT_MS, BACKGROUND_JOB_LIMIT_ERROR, createBackgroundJobRegistry, waitForBackgroundJob, SHELL_CAPTURE_CHARS, TOOL_OUTPUT_CAPS, toolOutputCap, keepTail, cutHead, cutHeadTail, summarizeShellOutput, detectRunner, projectJson, windowReadFile, fitToolText, shapeToolResult, modelToolResultPolicy, LIST_MAX_FILES, LIST_RETURN_MAX, READ_MAX_BYTES, SEARCH_MAX_MATCHES };

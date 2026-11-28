@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import type { ExecAsk, ExecSecurity } from "@builderforce/agent-tools";
 import { DEFAULT_AGENT_ID } from "../routing/session-key.js";
 import { expandHomePrefix } from "./home-dir.js";
 import { requestJsonlSocket } from "./jsonl-socket.js";
@@ -8,8 +9,7 @@ export * from "./exec-approvals-analysis.js";
 export * from "./exec-approvals-allowlist.js";
 
 export type ExecHost = "sandbox" | "gateway" | "node";
-export type ExecSecurity = "deny" | "allowlist" | "full";
-export type ExecAsk = "off" | "on-miss" | "always";
+export { requiresExecApproval, type ExecAsk, type ExecSecurity } from "@builderforce/agent-tools";
 
 export type ExecApprovalRequest = {
   id: string;
@@ -417,20 +417,6 @@ export function resolveExecApprovalsFromFile(params: {
     allowlist,
     file,
   };
-}
-
-export function requiresExecApproval(params: {
-  ask: ExecAsk;
-  security: ExecSecurity;
-  analysisOk: boolean;
-  allowlistSatisfied: boolean;
-}): boolean {
-  return (
-    params.ask === "always" ||
-    (params.ask === "on-miss" &&
-      params.security === "allowlist" &&
-      (!params.analysisOk || !params.allowlistSatisfied))
-  );
 }
 
 export function recordAllowlistUse(

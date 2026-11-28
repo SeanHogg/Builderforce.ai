@@ -13,6 +13,7 @@
  * cron primitives so it works in any Node.js process without extra dependencies.
  */
 
+import { fetchBuilderforce } from "./builderforce-http.js";
 import { GatewayClient } from "../gateway/client.js";
 import { logDebug, logWarn } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
@@ -120,10 +121,9 @@ export class CronPollerService {
   private async fetchAndSchedule(): Promise<void> {
     const url = `${normalizeBaseUrl(this.opts.baseUrl)}/api/agent-hosts/${this.opts.agentNodeId}/cron`;
     try {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${this.opts.apiKey}` },
+      const res = await fetchBuilderforce(url, {
         signal: AbortSignal.timeout(10_000),
-      });
+      }, this.opts.apiKey);
       if (!res.ok) {
         logWarn(`[cron-poller] fetch failed: ${res.status}`);
         return;
@@ -196,18 +196,17 @@ export class CronPollerService {
   private async patchJobStatus(jobId: string, status: "success" | "error"): Promise<void> {
     const url = `${normalizeBaseUrl(this.opts.baseUrl)}/api/agent-hosts/${this.opts.agentNodeId}/cron/${jobId}`;
     try {
-      await fetch(url, {
+      await fetchBuilderforce(url, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.opts.apiKey}`,
         },
         body: JSON.stringify({
           lastRunAt: new Date().toISOString(),
           lastStatus: status,
         }),
         signal: AbortSignal.timeout(10_000),
-      });
+      }, this.opts.apiKey);
     } catch (err) {
       logDebug(`[cron-poller] status patch failed for job ${jobId}: ${String(err)}`);
     }

@@ -1,3 +1,4 @@
+import { NATIVE_FILE_TOOLS, NATIVE_PROCESS_TOOLS, normalizeNativeToolName } from "@builderforce/agent-tools";
 import type { AnyAgentTool } from "./tools/common.js";
 
 export type ToolProfileId = "minimal" | "coding" | "messaging" | "full";
@@ -7,20 +8,14 @@ type ToolProfilePolicy = {
   deny?: string[];
 };
 
-const TOOL_NAME_ALIASES: Record<string, string> = {
-  bash: "exec",
-  "apply-patch": "apply_patch",
-  str_replace_editor: "edit",
-};
-
 export const TOOL_GROUPS: Record<string, string[]> = {
   // NOTE: Keep canonical (lowercase) tool names here.
   "group:memory": ["memory_search", "memory_get"],
   "group:web": ["web_search", "web_fetch"],
   // Basic workspace/file tools
-  "group:fs": ["read", "write", "edit", "apply_patch"],
+  "group:fs": [...NATIVE_FILE_TOOLS],
   // Host/runtime execution tools
-  "group:runtime": ["exec", "process"],
+  "group:runtime": [...NATIVE_PROCESS_TOOLS],
   // Session management tools
   "group:sessions": [
     "sessions_list",
@@ -82,10 +77,8 @@ const TOOL_PROFILES: Record<ToolProfileId, ToolProfilePolicy> = {
   full: {},
 };
 
-export function normalizeToolName(name: string) {
-  const normalized = name.trim().toLowerCase();
-  return TOOL_NAME_ALIASES[normalized] ?? normalized;
-}
+export { normalizeNativeToolName as normalizeToolName };
+const normalizeToolName = normalizeNativeToolName;
 
 export function isOwnerOnlyToolName(name: string) {
   return OWNER_ONLY_TOOL_NAMES.has(normalizeToolName(name));

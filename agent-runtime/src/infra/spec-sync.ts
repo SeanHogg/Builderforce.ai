@@ -2,6 +2,7 @@
  * SpecSync — fetch assigned specs and push new specs to Builderforce.ai.
  */
 
+import { fetchBuilderforce } from "./builderforce-http.js";
 import { logDebug, logWarn } from "../logger.js";
 
 export type AssignedSpec = {
@@ -29,10 +30,9 @@ export type SpecSyncOptions = {
 export async function fetchAssignedSpec(opts: SpecSyncOptions): Promise<AssignedSpec | null> {
   const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/spec`;
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${opts.apiKey}` },
+    const res = await fetchBuilderforce(url, {
       signal: AbortSignal.timeout(10_000),
-    });
+    }, opts.apiKey);
     if (res.status === 404) {
       return null;
     }
@@ -60,10 +60,9 @@ export async function fetchAssignedSpecsForTask(
 ): Promise<AssignedSpec[]> {
   const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/tasks/${taskId}/specs`;
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${opts.apiKey}` },
+    const res = await fetchBuilderforce(url, {
       signal: AbortSignal.timeout(10_000),
-    });
+    }, opts.apiKey);
     if (!res.ok) {
       logDebug(`[spec-sync] task-specs fetch failed: HTTP ${res.status}`);
       return [];
@@ -96,16 +95,15 @@ export async function pushSpec(
 ): Promise<AssignedSpec | null> {
   const url = `${opts.baseUrl.replace(/\/$/, "")}/api/specs`;
   try {
-    const res = await fetch(url, {
+    const res = await fetchBuilderforce(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${opts.apiKey}`,
         "X-AgentHost-From": opts.agentNodeId,
       },
       body: JSON.stringify({ ...spec, agentNodeId: Number(opts.agentNodeId) }),
       signal: AbortSignal.timeout(15_000),
-    });
+    }, opts.apiKey);
     if (!res.ok) {
       logWarn(`[spec-sync] push failed: HTTP ${res.status}`);
       return null;

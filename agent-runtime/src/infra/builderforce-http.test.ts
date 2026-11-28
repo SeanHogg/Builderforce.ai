@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { builderforceApiBase, requestBuilderforce } from "./builderforce-http.js";
 
-vi.mock("./env-file.js", () => ({ readSharedEnvVar: () => "https://configured.example/gateway/" }));
+vi.mock("./env-file.js", () => ({ readRuntimeEnvVar: () => "https://configured.example/gateway/" }));
 
 afterEach(() => vi.unstubAllGlobals());
 

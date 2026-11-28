@@ -18,8 +18,8 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { accessSync, constants as fsConstants } from 'node:fs';
 import { userInfo } from 'node:os';
-import { killTree } from './nodeProcess.mjs';
-import { BACKGROUND_JOB_LIMIT_ERROR, SHELL_CAPTURE_CHARS, keepTail, makeRoomForBackgroundJob, waitForBackgroundJob } from './toolOutputPolicy.mjs';
+import { killTree, treeSpawnOptions } from './nodeProcess.mjs';
+import { BACKGROUND_JOB_LIMIT_ERROR, createBackgroundJobRegistry, SHELL_CAPTURE_CHARS, keepTail, waitForBackgroundJob } from './toolOutputPolicy.mjs';
 
 /**
  * The binaries THIS process (which holds the run's credentials) executes — git, sudo, id, kill, pkill, chown, rm —
@@ -166,7 +166,7 @@ export function shellInvocation(command, { env = process.env, user = shellUser(e
  *  the model can influence — foreground, background job, preview server and the workspace helper come through here. */
 export function spawnShell(command, { cwd, stdio, extraEnv, env = process.env } = {}) {
   const inv = shellInvocation(command, { env, extraEnv });
-  return spawn(inv.file, inv.args, { cwd, env: inv.env, detached: true, ...(stdio ? { stdio } : {}) });
+  return spawn(inv.file, inv.args, treeSpawnOptions({ cwd, env: inv.env, detached: true, ...(stdio ? { stdio } : {}) }));
 }
 
 /** Run `args` as the shell user (a kill has to be delivered by the uid that owns the target). */
@@ -341,17 +341,15 @@ export function bootJobIdPrefix() {
  * `idPrefix` (default none) is put before `job-N` in every id.
  */
 export function createJobTable({ maxWaitMs, idPrefix = '' }) {
-  const table = new Map();
+  const table = createBackgroundJobRegistry(idPrefix);
   /** Every job's process group leader, for the life of the table. NOT evicted with the
    *  job record, and kept after the job reads `exited`: `nohup srv &` ends its bash while
    *  `srv` runs on, and `kill` / `closeAll` must still reach it. */
   const groups = new Set();
-  let seq = 0;
-
   /** Start `command` in `cwd` (already resolved inside the clone). */
   function start(command, cwd) {
-    if (!makeRoomForBackgroundJob(table)) return { ok: false, error: BACKGROUND_JOB_LIMIT_ERROR };
-    const id = `${idPrefix}job-${++seq}`;
+    const id = table.reserve();
+    if (!id) return { ok: false, error: BACKGROUND_JOB_LIMIT_ERROR };
     const child = spawnShell(command, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
     let settle;
     const job = { id, child, status: 'running', output: '', truncated: false, done: new Promise((r) => { settle = r; }) };

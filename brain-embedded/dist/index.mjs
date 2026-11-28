@@ -417,7 +417,7 @@ import {
   workFiledNotStaffedVerdict,
   workFinishPorts,
   workSupportsRoutingSample
-} from "./chunk-5XKDK462.mjs";
+} from "./chunk-WRYZTXBS.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -1408,6 +1408,11 @@ function slotKeyedRows(rows, find) {
 }
 
 // ../packages/creation-canvas-contract/src/canvasTools.ts
+var CANVAS_SHELL_TOOLS = {
+  run: "canvas_run_build_command",
+  status: "canvas_build_command_status",
+  stop: "canvas_stop_build_command"
+};
 var GUEST_SAFE_CANVAS_TOOLS = [
   // Reads over the guest's own in-browser document.
   "canvas_read_snapshot",
@@ -1565,7 +1570,7 @@ var GUEST_SAFE_CANVAS_TOOLS = [
   // Runs one command (install, build, type-check, test) in the visitor's OWN browser
   // runtime over the same browser-held files (`lib/browserRuntime/workspaceShell.ts`) —
   // the runtime the preview already runs on, so nothing reaches a tenant.
-  "canvas_run_build_command",
+  ...Object.values(CANVAS_SHELL_TOOLS),
   // Measures the RUNNING preview in a hidden frame of the visitor's own browser
   // (`lib/previewProbe`). Reads nothing but the app the visitor is already looking at.
   "canvas_inspect_preview"

@@ -5,7 +5,7 @@
  * hashing, table layout, and origin-allowlist semantics.
  */
 import { and, desc, eq, isNull, lt, or } from 'drizzle-orm';
-import type { Db } from '../../infrastructure/database/connection';
+import type { Db, Tx } from '../../infrastructure/database/connection';
 import { readUsageRows, readUsageTotals, rollingWindowStart, tenantScope, type UsageFilter } from './usageQuery';
 import type { Env } from '../../env';
 import { tenantApiKeys } from '../../infrastructure/database/schema';
@@ -192,7 +192,7 @@ const deserializeOrigins = coerceStringArrayOrNull;
 
 /** Mint a new bfk_* key for a tenant. Returns the raw key once; only the hash is stored. */
 export async function mintTenantApiKey(
-  db: Db,
+  db: Db | Tx,
   input: MintTenantApiKeyInput,
 ): Promise<MintedTenantApiKey> {
   const prefix = input.prefix ?? 'bfk';
@@ -207,7 +207,9 @@ export async function mintTenantApiKey(
   const rawKey  = generateApiKey(prefix);
   const keyHash = await hashSecret(rawKey);
 
-  const [row] = await db
+  // Both Neon drivers support the same projected INSERT RETURNING. Their query
+  // builders encode the driver separately, which prevents calling the union overload.
+  const [row] = await (db as Pick<Db, 'insert'>)
     .insert(tenantApiKeys)
     .values({
       tenantId:        input.tenantId,

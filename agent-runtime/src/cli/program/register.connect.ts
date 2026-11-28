@@ -2,6 +2,15 @@ import type { Command } from "commander";
 import { connectAgentHeadless } from "../../commands/builderforce-connect.js";
 import { theme } from "../../terminal/theme.js";
 
+async function readTokenFromStdin(): Promise<string> {
+  let input = "";
+  for await (const chunk of process.stdin) {
+    input += String(chunk);
+    if (input.length > 16_384) throw new Error("The workspace token exceeds the input limit.");
+  }
+  return input.trim();
+}
+
 export function registerConnectCommand(program: Command) {
   program
     .command("connect")
@@ -9,6 +18,7 @@ export function registerConnectCommand(program: Command) {
       "Register this machine as an agent host in a Builderforce workspace (non-interactive)",
     )
     .option("--token <jwt>", "Workspace token (defaults to $BUILDERFORCE_TOKEN)")
+    .option("--token-stdin", "Read the workspace token from standard input")
     .option("--workspace <slug>", "Workspace slug (defaults to $BUILDERFORCE_WORKSPACE)")
     .option(
       "--api-url <url>",
@@ -16,9 +26,9 @@ export function registerConnectCommand(program: Command) {
     )
     .option("--name <name>", "Display name for this agent host (defaults to hostname)")
     .action(async (opts) => {
-      const token = (opts.token as string | undefined) ?? process.env.BUILDERFORCE_TOKEN;
       const apiUrl = (opts.apiUrl as string | undefined) ?? process.env.BUILDERFORCE_URL;
       try {
+        const token = opts.tokenStdin ? await readTokenFromStdin() : (opts.token as string | undefined) ?? process.env.BUILDERFORCE_TOKEN;
         const result = await connectAgentHeadless({
           token: token ?? "",
           apiUrl,

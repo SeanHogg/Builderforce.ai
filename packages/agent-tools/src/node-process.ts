@@ -21,7 +21,12 @@
  * process warning), never swallowed.
  */
 
-import { spawn } from "node:child_process";
+import { spawn, type SpawnOptions } from "node:child_process";
+
+/** Put a child in a process group on POSIX and keep Windows launches headless. */
+export function treeSpawnOptions(options: SpawnOptions): SpawnOptions & { detached: boolean } {
+  return { ...options, windowsHide: true, detached: process.platform !== "win32" || options.detached === true };
+}
 
 export const DEFAULT_KILL_GRACE_MS = 3000;
 const MAX_KILL_GRACE_MS = 60_000;
@@ -153,11 +158,10 @@ export function runTree(file: string, args: readonly string[], opts: TreeRunOpti
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(file, [...args], {
-        cwd: opts.cwd, env: opts.env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
-        detached: process.platform !== "win32",
+      child = spawn(file, [...args], treeSpawnOptions({
+        cwd: opts.cwd, env: opts.env, stdio: ["ignore", "pipe", "pipe"],
         ...(opts.windowsVerbatimArguments ? { windowsVerbatimArguments: true } : {}),
-      });
+      }));
     } catch {
       // A throwing spawn IS "not started": the result says so, and the caller reports it.
       resolve({ started: false, exitCode: null, stdout: "", stderr: "" });

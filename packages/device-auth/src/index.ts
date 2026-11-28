@@ -18,11 +18,11 @@
  */
 
 export {
-  derivePlatformWebBase, exchangeEditorKey, isTenantSessionFresh, readEditorTenantToken, requestWorkspaceToken, sendWithTenantSession, tenantSessionExpiresAt,
+  createEditorSessionCache, createEditorSessionFlights, exchangeEditorKey, isTenantSessionFresh, readEditorTenantToken, requestWorkspaceToken, resolveEditorWorkspaceToken, sendWithTenantSession, tenantSessionExpiresAt,
   type EditorTenantToken,
 } from './tenantSession.js';
 export { GATEWAY_WORKSPACE_HEADER, TENANT_SESSION_TTL_SECONDS, WORKSPACE_TOKEN_PATH, WORKSPACE_TOKEN_ROUTE } from './tenantSessionContract.js';
-export { BUILDERFORCE_API_ORIGIN, BUILDERFORCE_PLATFORM_ORIGINS, BUILDERFORCE_WEB_ORIGIN, EDITOR_GATEWAY_BASE } from './platformOrigins.js';
+export { BUILDERFORCE_API_ORIGIN, BUILDERFORCE_PLATFORM_ORIGINS, BUILDERFORCE_URL_ENV, BUILDERFORCE_WEB_ORIGIN, derivePlatformWebBase, EDITOR_GATEWAY_BASE, resolvePlatformBaseUrl } from './platformOrigins.js';
 
 export interface DeviceAuthDeps {
   baseUrl: string;

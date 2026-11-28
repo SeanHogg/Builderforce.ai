@@ -11,6 +11,7 @@
  * (default `https://api.builderforce.ai`).
  */
 
+import { builderforceApiBase, builderforceAuthHeaders } from "../../../infra/builderforce-http.js";
 import { readSharedEnvVar } from "../../../infra/env-file.js";
 import type {
   GovernanceAuditOptions,
@@ -57,16 +58,13 @@ export function hasGovernanceApiCredentials(): boolean {
 }
 
 export function createGovernanceApiClient(config: GovernanceApiConfig = {}): GovernanceApiClient {
-  const baseUrl = (config.baseUrl ?? readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai").replace(
-    /\/+$/,
-    "",
-  );
+  const baseUrl = builderforceApiBase(config.baseUrl);
   const apiKey = config.apiKey ?? readSharedEnvVar("BUILDERFORCE_API_KEY");
   const agentNodeId = config.agentNodeId ?? readSharedEnvVar("BUILDERFORCE_AGENT_NODE_ID");
   const fetchImpl = config.fetchImpl ?? fetch;
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  if (apiKey) Object.assign(headers, builderforceAuthHeaders(apiKey));
   if (agentNodeId) headers["X-AgentHost-Id"] = agentNodeId;
 
   const post = async (pathname: string, body: unknown, what: string): Promise<Response> => {

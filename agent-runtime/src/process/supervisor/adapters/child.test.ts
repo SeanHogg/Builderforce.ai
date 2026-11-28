@@ -12,7 +12,8 @@ vi.mock("../../spawn-utils.js", () => ({
   spawnWithFallback: (...args: unknown[]) => spawnWithFallbackMock(...args),
 }));
 
-vi.mock("@builderforce/agent-tools/node-process.js", () => ({
+vi.mock("@builderforce/agent-tools/node-process.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@builderforce/agent-tools/node-process.js")>(),
   killProcessTree: (...args: unknown[]) => killProcessTreeMock(...args),
 }));
 

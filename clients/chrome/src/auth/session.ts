@@ -17,7 +17,7 @@
  */
 import type { KeyValueStore } from '../platform/keyValue';
 import { isWrappedCredential, type CredentialVault } from './credentialVault';
-import { exchangeEditorKey, isTenantSessionFresh, readEditorTenantToken, requestWorkspaceToken, revokeKey, type EditorTenantToken } from '@builderforce/device-auth';
+import { createEditorSessionCache, createEditorSessionFlights, exchangeEditorKey, resolveEditorWorkspaceToken, revokeKey, type EditorTenantToken } from '@builderforce/device-auth';
 
 /** Where the credential lives in `chrome.storage.local` — read by the platform policy
  *  too, which derives the default inference mode from "signed in". */
@@ -58,7 +58,8 @@ export function createSession(deps: SessionDeps): Session {
   let key: string | null = null;
   let tenant: number | null = null;
   let user: string | null = null;
-  let jwtCache: EditorTenantToken | null = null;
+  const cache = createEditorSessionCache(deps.now);
+  const exchanges = createEditorSessionFlights<string | null>();
   let identityEpoch = 0;
   let loadSequence = 0;
   const listeners = new Set<() => void>();
@@ -71,21 +72,21 @@ export function createSession(deps: SessionDeps): Session {
     const [storedCredential, storedTenant, storedUser] = await Promise.all([
       deps.storage.get<unknown>(KEY), deps.storage.get<number>(TENANT), deps.storage.get<string>(USER),
     ]);
-    const storedKey = typeof storedCredential === 'string' ? storedCredential
+    const legacyKey = typeof storedCredential === 'string' ? storedCredential : null;
+    const migrated = legacyKey && deps.vault ? await deps.vault.wrap(legacyKey).catch(() => null) : null;
+    const storedKey = legacyKey ? (!deps.vault || migrated ? legacyKey : null)
       : isWrappedCredential(storedCredential) && deps.vault ? await deps.vault.unwrap(storedCredential).catch(() => null) : null;
     if (sequence !== loadSequence) return;
     if (key !== (storedKey ?? null) || tenant !== (storedKey ? storedTenant ?? null : null)) {
       identityEpoch += 1;
-      jwtCache = null;
+      cache.clear();
+      exchanges.clear();
     }
     key = storedKey ?? null;
     tenant = storedKey ? storedTenant ?? null : null;
     user = storedKey ? storedUser ?? null : null;
-    if (storedKey && typeof storedCredential === 'string' && deps.vault) {
-      const wrapped = await deps.vault.wrap(storedKey);
-      if (sequence === loadSequence && await deps.storage.get<unknown>(KEY) === storedCredential) {
-        await deps.storage.set(KEY, wrapped);
-      }
+    if (migrated && await deps.storage.get<unknown>(KEY) === storedCredential && sequence === loadSequence) {
+      await deps.storage.set(KEY, migrated);
     }
   };
   const loaded = load();
@@ -100,7 +101,8 @@ export function createSession(deps: SessionDeps): Session {
     key = null;
     tenant = null;
     user = null;
-    jwtCache = null;
+    cache.clear();
+    exchanges.clear();
     await deps.storage.remove(KEY);
     await deps.storage.remove(TENANT);
     await deps.storage.remove(USER);
@@ -111,37 +113,48 @@ export function createSession(deps: SessionDeps): Session {
     const exchangeKey = key;
     if (!exchangeKey) return null;
     const epoch = identityEpoch;
-    const result = await exchangeEditorKey(deps.baseUrl, exchangeKey, deps.fetch, deps.now);
-    if (epoch !== identityEpoch) return null;
-    if (!result.ok) {
+    const isCurrent = () => epoch === identityEpoch;
+    const refreshBase = async () => {
+      const result = await exchangeEditorKey(deps.baseUrl, exchangeKey, deps.fetch, deps.now);
+      if (!isCurrent()) return null;
+      if (result.ok) return result.jwt;
       if (result.rejected) await clear();
       return null;
-    }
-    const base = result.jwt;
+    };
+    const base = await refreshBase();
+    if (!base) return null;
     if (target === null || target === base.tenantId) return base;
-    try {
-      const response = await requestWorkspaceToken(deps.baseUrl, target, base.token, deps.fetch);
-      if (!response.ok) return null;
-      const scoped = await readEditorTenantToken(response, deps.now, target);
-      return epoch === identityEpoch && scoped ? { ...scoped, userId: base.userId } : null;
-    } catch {
-      return null;
-    }
+    const scoped = await resolveEditorWorkspaceToken({
+      baseUrl: deps.baseUrl, tenantId: target, baseToken: base.token,
+      fetch: deps.fetch, now: deps.now, isCurrent, refreshBase,
+    });
+    return scoped?.state === 'minted' ? { ...scoped.jwt, userId: base.userId } : null;
   }
 
   async function adopt(token: EditorTenantToken): Promise<void> {
     const tenantChanged = tenant !== token.tenantId;
     const userChanged = token.userId !== undefined && token.userId !== user;
-    if (tenantChanged) identityEpoch += 1;
+    if (tenantChanged) {
+      identityEpoch += 1;
+      exchanges.clear();
+    }
     loadSequence += 1;
     tenant = token.tenantId;
     if (token.userId !== undefined) user = token.userId;
-    jwtCache = token;
+    cache.tokens.active = token;
     await Promise.all([
       ...(tenantChanged ? [deps.storage.set(TENANT, token.tenantId)] : []),
       ...(userChanged ? [deps.storage.set(USER, token.userId)] : []),
     ]);
     if (tenantChanged || userChanged) notify();
+  }
+
+  async function mintAndAdopt(target: number | null): Promise<string | null> {
+    const epoch = identityEpoch;
+    const token = await mint(target);
+    if (!token || epoch !== identityEpoch) return null;
+    await adopt(token);
+    return cache.tokens.active?.token === token.token ? token.token : null;
   }
 
   return {
@@ -163,7 +176,8 @@ export function createSession(deps: SessionDeps): Session {
       key = input.accessKey;
       tenant = input.tenantId;
       user = null; // a new key may be another person's - relearned on the next exchange
-      jwtCache = null;
+      cache.clear();
+      exchanges.clear();
       await deps.storage.set(KEY, credential);
       await Promise.all([deps.storage.remove(USER), input.tenantId === null ? deps.storage.remove(TENANT) : deps.storage.set(TENANT, input.tenantId)]);
       notify();
@@ -176,25 +190,19 @@ export function createSession(deps: SessionDeps): Session {
     async switchWorkspace(target) {
       await loaded;
       if (!Number.isSafeInteger(target) || target <= 0) return false;
-      const epoch = identityEpoch;
-      const token = await mint(target);
-      if (!token || epoch !== identityEpoch) return false;
-      await adopt(token);
-      return jwtCache?.token === token.token;
+      return (await exchanges.run(`switch:${target}`, () => mintAndAdopt(target))) !== null;
     },
     async baseJwt() {
       await loaded;
-      return (await mint(null))?.token ?? null;
+      return exchanges.run('base', async () => (await mint(null))?.token ?? null);
     },
     async jwt(force = false) {
       await loaded;
       if (!key) return null;
-      if (!force && jwtCache && isTenantSessionFresh(jwtCache.exp, deps.now())) return jwtCache.token;
-      const epoch = identityEpoch;
-      const token = await mint(tenant);
-      if (!token || epoch !== identityEpoch) return null;
-      await adopt(token);
-      return jwtCache?.token === token.token ? token.token : null;
+      const cached = !force && cache.fresh('active');
+      if (cached) return cached.token;
+      const target = tenant;
+      return exchanges.run(`workspace:${target}:${force ? 'force' : 'cached'}`, () => mintAndAdopt(target));
     },
     subscribe(listener) {
       listeners.add(listener);

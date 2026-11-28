@@ -1,4 +1,5 @@
 import path from "node:path";
+import { NATIVE_FILE_TOOLS, NATIVE_PROCESS_TOOLS } from "@builderforce/agent-tools";
 import { CHANNEL_IDS } from "../../channels/registry.js";
 import { STATE_DIR } from "../../config/config.js";
 
@@ -11,12 +12,8 @@ export const DEFAULT_SANDBOX_IDLE_HOURS = 24;
 export const DEFAULT_SANDBOX_MAX_AGE_DAYS = 7;
 
 export const DEFAULT_TOOL_ALLOW = [
-  "exec",
-  "process",
-  "read",
-  "write",
-  "edit",
-  "apply_patch",
+  ...NATIVE_PROCESS_TOOLS,
+  ...NATIVE_FILE_TOOLS,
   "image",
   "sessions_list",
   "sessions_history",

@@ -27,6 +27,14 @@ export interface ShellRunOptions {
 
 export type ShellFailureCode = 'invalid' | 'refused' | 'aborted' | 'timeout' | 'not_found' | 'unsupported' | 'command_failed';
 
+export function shellFailure(code: ShellFailureCode, error: string) {
+  return { ok: false as const, code, error };
+}
+
+export function shellFailureError(code: ShellFailureCode, error: string, options?: ErrorOptions) {
+  return Object.assign(new Error(error, options), shellFailure(code, error));
+}
+
 /** A background job's state as `poll` / `kill` report it. */
 export interface ShellJobStatus {
   ok: boolean;

@@ -1,3 +1,4 @@
+import { WORKSPACE_INSPECTION_TOOLS } from '@builderforce/agent-tools';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * The PRD 39 §4b write-ahead RE-RUN ALLOWLIST — the ONE thing that decides whether a
@@ -19,11 +20,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 export const WRITE_AHEAD_ALLOWLIST: ReadonlySet<string> = new Set([
   // Read-only workspace / code inspection.
-  'read_file',
-  'list_files',
-  'search_code',
-  'find_symbol',
-  'file_outline',
+  ...WORKSPACE_INSPECTION_TOOLS,
   // Read-only platform lookups.
   'recall_facts',
 ]);

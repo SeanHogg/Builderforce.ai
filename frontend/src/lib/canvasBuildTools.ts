@@ -42,7 +42,7 @@
  */
 
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
-import { canvasRunBuildCommandAction } from '@/lib/canvasBuildCommandAction';
+import { canvasBuildCommandActions } from '@/lib/canvasBuildCommandAction';
 import { canvasReadBuildFileAction } from '@/lib/canvasBuildReads';
 import { canvasReadPreviewConsoleAction } from '@/lib/canvasPreviewConsoleAction';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
@@ -119,7 +119,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
     files.write,
     files.edit,
     ...canvasBuildHistoryActions(ctx, helpers),
-    canvasRunBuildCommandAction(ctx, (objectId) => resolveCanvasBuild(ctx.builds(), objectId)),
+    ...canvasBuildCommandActions(ctx, (objectId) => resolveCanvasBuild(ctx.builds(), objectId)),
     canvasReadPreviewConsoleAction((objectId) => resolveCanvasBuild(ctx.builds(), objectId)),
   ];
 }

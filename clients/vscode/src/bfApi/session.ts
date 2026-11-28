@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { exchangeEditorKey, isTenantSessionFresh, readEditorTenantToken, requestWorkspaceToken } from "@builderforce/device-auth";
+import { createEditorSessionCache, createEditorSessionFlights, exchangeEditorKey, resolveEditorWorkspaceToken } from "@builderforce/device-auth";
 import { getApiKey, getBaseUrl } from "../gateway/gateway";
 import { setOutboxScope, trackReachability } from "../sync/outboxStorage";
 import { setCurrentWorkspace } from "../workspace/workspaceSelection";
@@ -15,18 +15,17 @@ import { classifyWorkspaceRefusal, reportWorkspaceRefusal } from "../auth/gatewa
 // The editor key is bound to ONE tenant; its exchange yields the "base" JWT. To act on
 // another of the user's workspaces we re-scope that base JWT to the selected tenant via
 // /api/auth/workspace-token. Both tokens are cached with their tenant + expiry.
-let baseJwt: { token: string; exp: number; tenantId: number } | undefined;
-let scopedJwt: { token: string; exp: number; tenantId: number } | undefined;
+const cache = createEditorSessionCache(Date.now);
+const tokens = cache.tokens;
 let selectedTenantId: number | undefined;
 
 /** Set the active workspace (tenant) to act as. `undefined` = the key's own tenant. */
 export function setSelectedWorkspace(tenantId: number | undefined): void {
   if (tenantId === selectedTenantId) return;
   selectedTenantId = tenantId;
-  scopedJwt = undefined; // re-derive on next call
+  tokens.active = undefined; // re-derive on next call
   // A mint in flight resolved the OLD selection: the next call must start its own.
-  delete exchanges.cached;
-  delete exchanges.forced;
+  exchanges.clear();
   notifySessionChange("workspace");
   syncOutboxScope();
 }
@@ -80,23 +79,23 @@ function notifySessionChange(change: SessionChange): void {
 }
 
 /**
- * The tenant the editor is acting as once signed in — the selected workspace, else the
+ * The tenant the editor is acting as once signed in â€” the selected workspace, else the
  * key's own tenant. `undefined` until the key's base token has been minted.
  */
 export function signedInTenantId(): number | undefined {
-  return baseJwt ? selectedTenantId ?? baseJwt.tenantId : undefined;
+  return tokens.base ? selectedTenantId ?? tokens.base.tenantId : undefined;
 }
 
 /** The tenant calls are meant to act as: the selected workspace, else the key's own. `undefined` until known. */
 function effectiveTenantId(): number | undefined {
-  if (!baseJwt) return selectedTenantId;
-  return selectedTenantId ?? baseJwt.tenantId;
+  if (!tokens.base) return selectedTenantId;
+  return selectedTenantId ?? tokens.base.tenantId;
 }
 
-/** The workspace (tenant) `/api/*` calls act as right now — undefined until signed in.
+/** The workspace (tenant) `/api/*` calls act as right now â€” undefined until signed in.
  *  What a local chat binds into (PRD 36, `chatAccount.ts`). */
 export function workspaceTenantId(): number | undefined {
-  return baseJwt ? effectiveTenantId() : undefined;
+  return tokens.base ? effectiveTenantId() : undefined;
 }
 
 /**
@@ -117,9 +116,9 @@ export function boundToken(token: string | undefined): { token: string; tenantId
  * workspace B can never ride the key tenant's token into tenant A.
  */
 function outboxTenantId(): number | undefined {
-  if (!baseJwt) return undefined;
-  if (selectedTenantId === undefined || selectedTenantId === baseJwt.tenantId) return baseJwt.tenantId;
-  return scopedJwt?.tenantId === selectedTenantId ? selectedTenantId : undefined;
+  if (!tokens.base) return undefined;
+  if (selectedTenantId === undefined || selectedTenantId === tokens.base.tenantId) return tokens.base.tenantId;
+  return tokens.active?.tenantId === selectedTenantId ? selectedTenantId : undefined;
 }
 
 /** Tell the durable outboxes which tenants writes now go to (see `outboxStorage.ts`). */
@@ -137,21 +136,21 @@ function syncOutboxScope(): void {
  * hand out.
  */
 function parkWorkspaceWrites(): void {
-  scopedJwt = undefined;
+  tokens.active = undefined;
   setOutboxScope({ workspace: undefined });
 }
 
 /** The tenant a token we minted acts as, or undefined when it is not one of ours. */
 export function tenantOfToken(token: string): number | undefined {
-  if (scopedJwt?.token === token) return scopedJwt.tenantId;
-  if (baseJwt?.token === token) return baseJwt.tenantId;
+  if (tokens.active?.token === token) return tokens.active.tenantId;
+  if (tokens.base?.token === token) return tokens.base.tenantId;
   return undefined;
 }
 
 /**
  * Fired with the refused key when the gateway REJECTS the stored editor key (revoked,
  * deleted, or a key with no user behind it). Distinct from "unreachable": a rejection is
- * a verdict on the key, so the editor must stop presenting itself as signed in — see
+ * a verdict on the key, so the editor must stop presenting itself as signed in â€” see
  * `editorKeyGuard.ts`.
  */
 const editorKeyRejected = new vscode.EventEmitter<string>();
@@ -166,7 +165,8 @@ async function exchangeBaseJwt(
   secrets: vscode.SecretStorage,
   force: boolean,
 ): Promise<{ token: string; tenantId: number } | undefined> {
-  if (!force && baseJwt && isTenantSessionFresh(baseJwt.exp, Date.now())) return baseJwt;
+  const cached = !force && cache.fresh("base");
+  if (cached) return cached;
   const epoch = jwtEpoch;
   const key = await getApiKey(secrets);
   if (!key) return undefined;
@@ -177,24 +177,26 @@ async function exchangeBaseJwt(
     if (result.rejected) editorKeyRejected.fire(key);
     return undefined;
   }
-  baseJwt = result.jwt;
+  tokens.base = result.jwt;
   syncOutboxScope();
-  return baseJwt;
+  return tokens.base;
 }
 
 /**
  * Does the stored editor key still work? `none` = no key; `rejected` = the gateway
  * refused it; `unreachable` = no verdict (offline / gateway error). Does NOT fire
- * {@link onEditorKeyRejected} — the sign-in flow probes and handles the answer itself.
+ * {@link onEditorKeyRejected} â€” the sign-in flow probes and handles the answer itself.
  */
 export async function probeEditorKey(
   secrets: vscode.SecretStorage,
 ): Promise<"ok" | "rejected" | "unreachable" | "none"> {
+  const epoch = jwtEpoch;
   const key = await getApiKey(secrets);
   if (!key) return "none";
   const result = await requestBaseJwt(key);
+  if (epoch !== jwtEpoch) return "none";
   if (result.ok) {
-    baseJwt = result.jwt;
+    tokens.base = result.jwt;
     syncOutboxScope();
     return "ok";
   }
@@ -205,93 +207,61 @@ export async function probeEditorKey(
  * The exchange in flight, per mode: a burst of reads on a cold cache, or of 401s (a
  * panel's parallel reads), shares one mint instead of one each.
  */
-const exchanges: { cached?: Promise<string | undefined>; forced?: Promise<string | undefined> } = {};
+const exchanges = createEditorSessionFlights<string | undefined>();
 /** Bumped by {@link clearJwt}: an exchange that started before it does not write its token. */
 let jwtEpoch = 0;
 
 export function exchangeJwt(secrets: vscode.SecretStorage, force = false): Promise<string | undefined> {
   const mode = force ? "forced" : "cached";
-  const running = exchanges[mode];
-  if (running) return running;
-  const next = mintJwt(secrets, force).finally(() => { if (exchanges[mode] === next) delete exchanges[mode]; });
-  exchanges[mode] = next;
-  return next;
+  return exchanges.run(mode, () => mintJwt(secrets, force));
 }
 
 async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<string | undefined> {
   const epoch = jwtEpoch;
-  let base = await exchangeBaseJwt(secrets, force);
+  const base = await exchangeBaseJwt(secrets, force);
   if (!base) return undefined;
   const target = selectedTenantId ?? base.tenantId;
   if (target === base.tenantId) return base.token;
-  if (!force && scopedJwt && scopedJwt.tenantId === target && isTenantSessionFresh(scopedJwt.exp, Date.now())) {
-    return scopedJwt.token;
-  }
+  const cached = !force && cache.fresh("active", target);
+  if (cached) return cached.token;
   // Re-scope to another of the user's workspaces. Degrades to the base token:
   // 403 = no longer a member (drop the selection); any other refusal parks.
-  try {
-    // A stale base token (minted before the server stamped its key id, or its key just
-    // renewed) is answered 401 / `session_stale`: re-mint the base ONCE and ask again.
-    for (let attempt = 0; ; attempt++) {
-      const res = await requestWorkspaceToken(getBaseUrl(), target, base.token, fetch);
-      // Signed out or re-keyed meanwhile (as in `exchangeBaseJwt`): nothing here is ours to keep.
-      if (epoch !== jwtEpoch) return undefined;
-      const errorBody = res.status === 403 || res.status === 401 ? await res.json().catch(() => null) : null;
-      const stale = res.status === 401 || (res.status === 403 && (errorBody as { code?: unknown } | null)?.code === "session_stale");
-      if (stale && attempt === 0) {
-        // A revoked key is rejected by this exchange (the editor-key guard signs out).
-        const fresh = await exchangeBaseJwt(secrets, true);
-        if (!fresh) {
-          // Unreachable (or the key was just rejected and the editor is signing out): the
-          // old base token is still valid in its own tenant.
-          if (epoch !== jwtEpoch) return undefined;
-          parkWorkspaceWrites();
-          return base.token;
-        }
-        base = fresh;
-        continue;
-      }
-      if (res.status === 403 && !stale) {
-        // The server says WHY. This key can never switch workspaces: the same refusal path
-        // as the gateway's (sign in again). Otherwise the person left the workspace: drop it.
-        const refusal = classifyWorkspaceRefusal(403, errorBody);
-        if (refusal === "editor_key_required") {
-          // Park FIRST, synchronously: the sign-out that follows is async (and fires once
-          // per key), and until it lands the base token must not carry workspace writes.
-          parkWorkspaceWrites();
-          const key = await getApiKey(secrets);
-          if (key) reportWorkspaceRefusal(refusal, key, target);
-        } else {
-          dropWorkspaceSelection(target);
-        }
-        return base.token;
-      }
-      if (!res.ok) {
-        parkWorkspaceWrites();
-        return base.token;
-      }
-      const token = await readEditorTenantToken(res, Date.now, target);
-      if (epoch !== jwtEpoch) return undefined;
-      if (!token) {
-        parkWorkspaceWrites();
-        return base.token;
-      }
-      scopedJwt = token;
-      syncOutboxScope();
-      return scopedJwt.token;
-    }
-  } catch {
-    parkWorkspaceWrites();
-    return base.token;
+  const isCurrent = () => epoch === jwtEpoch && selectedTenantId === target;
+  const result = await resolveEditorWorkspaceToken({
+    baseUrl: getBaseUrl(),
+    tenantId: target,
+    baseToken: base.token,
+    fetch,
+    now: Date.now,
+    isCurrent,
+    refreshBase: () => exchangeBaseJwt(secrets, true),
+  });
+  if (!result || !isCurrent()) return undefined;
+  if (result.state === "minted") {
+    tokens.active = result.jwt;
+    syncOutboxScope();
+    return tokens.active.token;
   }
+  if (result.state === "forbidden") {
+    const refusal = classifyWorkspaceRefusal(403, result.error);
+    if (refusal === "editor_key_required") {
+      parkWorkspaceWrites();
+      const key = await getApiKey(secrets);
+      if (!isCurrent()) return undefined;
+      if (key) reportWorkspaceRefusal(refusal, key, target);
+    } else {
+      dropWorkspaceSelection(target);
+    }
+  } else {
+    parkWorkspaceWrites();
+  }
+  return result.baseToken;
 }
 
 export function clearJwt(): void {
   jwtEpoch++;
-  delete exchanges.cached;
-  delete exchanges.forced;
-  baseJwt = undefined;
-  scopedJwt = undefined;
+  exchanges.clear();
+  cache.clear();
   // Signed out (or re-keying): durable writes hold until the next identity is known.
   setOutboxScope({ workspace: undefined });
   // The SELECTION survives a re-key: gateway calls keep naming it until the next exchange.
@@ -308,7 +278,7 @@ export function getTenantJwt(secrets: vscode.SecretStorage): Promise<string | un
 /**
  * A FRESH tenant JWT, for a caller the gateway just answered 401. The cached token is
  * still unexpired by the client's clock, so {@link getTenantJwt} would hand back the very
- * token the server rejected — a webview "re-mint" that re-sent it on every read.
+ * token the server rejected â€” a webview "re-mint" that re-sent it on every read.
  */
 export function refreshTenantJwt(secrets: vscode.SecretStorage): Promise<string | undefined> {
   return exchangeJwt(secrets, true);

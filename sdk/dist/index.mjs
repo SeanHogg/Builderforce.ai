@@ -1,3 +1,15 @@
+// ../packages/device-auth/src/tenantSessionContract.ts
+var WORKSPACE_TOKEN_ROUTE = "/workspace-token";
+var WORKSPACE_TOKEN_PATH = `/api/auth${WORKSPACE_TOKEN_ROUTE}`;
+
+// ../packages/device-auth/src/platformOrigins.ts
+var BUILDERFORCE_WEB_ORIGIN = "https://builderforce.ai";
+var BUILDERFORCE_API_ORIGIN = "https://api.builderforce.ai";
+var EDITOR_GATEWAY_BASE = `${BUILDERFORCE_WEB_ORIGIN}/gateway`;
+function resolvePlatformBaseUrl(configured, fallback) {
+  return (configured?.trim() || fallback).replace(/\/+$/, "");
+}
+
 // src/infrastructure/sse.ts
 async function* parseSseJson(stream) {
   const reader = stream.getReader();
@@ -201,6 +213,25 @@ var UsageApi = class {
   }
 };
 
+// ../packages/api-errors/src/index.ts
+function fields(value) {
+  return value && typeof value === "object" ? value : void 0;
+}
+function flattenApiError(value, preferNested = false) {
+  const outer = fields(value);
+  const nested = fields(outer?.error);
+  const primary = preferNested ? nested ?? outer : outer;
+  const secondary = preferNested ? void 0 : nested;
+  const message = [primary?.message, secondary?.message, primary?.error, secondary?.error].find((entry) => typeof entry === "string" && entry.length > 0);
+  const code = [primary?.code, secondary?.code].find((entry) => typeof entry === "string" || typeof entry === "number");
+  return {
+    message,
+    code: code === void 0 ? void 0 : String(code),
+    details: primary?.details ?? secondary?.details,
+    metadata: primary
+  };
+}
+
 // src/infrastructure/httpClient.ts
 var BuilderforceApiError = class extends Error {
   status;
@@ -287,7 +318,7 @@ var HttpClient = class {
   defaultTimeoutMs;
   constructor(options) {
     this.apiKey = options.apiKey;
-    this.baseUrl = options.baseUrl.replace(/\/$/, "");
+    this.baseUrl = resolvePlatformBaseUrl(options.baseUrl, "");
     const fetchImpl = options.fetchFn ?? fetch;
     this.fetchFn = fetchImpl.bind(globalThis);
     this.defaultTimeoutMs = options.timeoutMs ?? 18e4;
@@ -360,24 +391,19 @@ var HttpClient = class {
     const requestId = res.headers.get("x-request-id") ?? void 0;
     const headerRetryAfter = parsePositiveInt(res.headers.get("retry-after"));
     try {
-      const payload = await res.json();
-      const errorObj = payload !== null && typeof payload === "object" && typeof payload.error === "object" && payload.error !== null ? payload.error : null;
-      const isWrapped = payload !== null && typeof payload === "object" && payload.success === false && errorObj !== null;
-      const inner = isWrapped || errorObj !== null ? errorObj : payload;
-      const message = typeof inner?.message === "string" && inner.message || typeof inner?.error === "string" && inner.error || fallback;
-      const code = typeof inner?.code === "number" ? String(inner.code) : inner?.code;
-      const detailsObj = inner?.details && typeof inner.details === "object" ? inner.details : null;
-      const vendor = typeof inner?.vendor === "string" ? inner.vendor : typeof detailsObj?.vendor === "string" ? detailsObj.vendor : void 0;
-      const model = typeof inner?.model === "string" ? inner.model : typeof detailsObj?.model === "string" ? detailsObj.model : typeof detailsObj?.requestedModel === "string" ? detailsObj.requestedModel : void 0;
+      const { message, code, details, metadata } = flattenApiError(await res.json(), true);
+      const detailsObj = details && typeof details === "object" ? details : null;
+      const vendor = typeof metadata?.vendor === "string" ? metadata.vendor : typeof detailsObj?.vendor === "string" ? detailsObj.vendor : void 0;
+      const model = typeof metadata?.model === "string" ? metadata.model : typeof detailsObj?.model === "string" ? detailsObj.model : typeof detailsObj?.requestedModel === "string" ? detailsObj.requestedModel : void 0;
       return new BuilderforceApiError(
-        message,
+        message ?? fallback,
         res.status,
         code,
-        inner?.details,
+        details,
         requestId,
         {
-          terminal: inner?.terminal,
-          retryAfter: headerRetryAfter ?? inner?.retryAfter,
+          terminal: typeof metadata?.terminal === "boolean" ? metadata.terminal : void 0,
+          retryAfter: headerRetryAfter ?? (typeof metadata?.retryAfter === "number" ? metadata.retryAfter : void 0),
           vendor,
           model
         }
@@ -436,7 +462,7 @@ var BuilderforceClient = class {
     }
     const http = new HttpClient({
       apiKey,
-      baseUrl: options.baseUrl ?? "https://api.builderforce.ai",
+      baseUrl: options.baseUrl ?? BUILDERFORCE_API_ORIGIN,
       fetchFn: options.fetch,
       timeoutMs: options.timeoutMs
     });

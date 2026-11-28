@@ -9,6 +9,7 @@
  * layer — plain `fetch`, same as the rest of `infra/`.
  */
 
+import { fetchBuilderforce } from "./builderforce-http.js";
 import { logDebug } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 
@@ -50,11 +51,10 @@ export async function triggerWorkflow(
 ): Promise<WorkflowTriggerResult> {
   const url = `${normalizeBaseUrl(opts.baseUrl)}/api/workflows/trigger`;
   try {
-    const res = await fetch(url, {
+    const res = await fetchBuilderforce(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${opts.apiKey}`,
         "X-AgentHost-Id": opts.agentNodeId,
       },
       body: JSON.stringify({
@@ -63,7 +63,7 @@ export async function triggerWorkflow(
         ...(req.inputs ? { inputs: req.inputs } : {}),
       }),
       signal: AbortSignal.timeout(20_000),
-    });
+    }, opts.apiKey);
 
     let body: unknown;
     try {

@@ -699,8 +699,8 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
   "~deepseek/deepseek-flash-latest": [36e-9, 5e-7],
-  "~deepseek/deepseek-pro-latest": [111e-9, 444e-8],
-  "~deepseek/deepseek-v4-flash-latest": [47e-9, 3e-7],
+  "~deepseek/deepseek-pro-latest": [999e-10, 5e-6],
+  "~deepseek/deepseek-v4-flash-latest": [4532e-11, 13596e-11],
   "~google/gemini-flash-latest": [15e-7, 75e-7],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
   "~moonshotai/kimi-latest": [1824e-10, 110055e-10],
@@ -777,12 +777,12 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2": [26e-8, 38e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [9e-8, 18e-8],
-  "deepseek/deepseek-v4-flash-0731": [6e-8, 18e-8],
+  "deepseek/deepseek-v4-flash-0731": [456e-10, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
-  "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
-  "deepseek/deepseek-v4-pro": [888188e-12, 15082e-10],
-  "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
-  "deepseek/deepseek-v4.1-flash": [14e-8, 42e-8],
+  "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
+  "deepseek/deepseek-v4-pro": [42095e-11, 15509e-10],
+  "deepseek/deepseek-v4-pro-0813": [999e-10, 5e-6],
+  "deepseek/deepseek-v4.1-flash": [51e-9, 567e-9],
   "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
   "deepseek/deepseek-v4.1-flash-1017:batch": [35e-9, 149e-9],
   "deepseek/deepseek-v4.1-flash:batch": [5e-8, 15e-8],
@@ -829,9 +829,9 @@ var PRICE_SNAPSHOT = {
   "google/gemini-omni-1.2-flash": [15e-7, 9e-6],
   "google/gemma-2-27b-it": [65e-8, 65e-8],
   "google/gemma-3-12b-it": [5e-8, 15e-8],
-  "google/gemma-3-27b-it": [8e-8, 45e-8],
+  "google/gemma-3-27b-it": [8e-8, 16e-8],
   "google/gemma-3-4b-it": [4e-8, 5e-8],
-  "google/gemma-4-26b-a4b-it": [9e-8, 3e-7],
+  "google/gemma-4-26b-a4b-it": [675e-10, 225e-9],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
@@ -843,7 +843,8 @@ var PRICE_SNAPSHOT = {
   "inclusionai/ling-3.0-flash-vl": [6e-8, 18e-8],
   "inclusionai/ling-3.0-tiny": [15e-9, 45e-9],
   "inclusionai/ling-3.1-flash": [75e-9, 225e-9],
-  "inclusionai/ling-3.2-flash:free": [0, 0],
+  "inclusionai/ling-3.2-flash": [3e-7, 9e-7],
+  "inclusionai/lingsante-3.1-air-vl": [6e-8, 18e-8],
   "inference-net/schematron-v2-small": [5e-8, 23e-8],
   "inference-net/schematron-v2-turbo": [3e-8, 15e-8],
   "kt/midm-k-3.0-pro": [2e-7, 8e-7],
@@ -854,12 +855,12 @@ var PRICE_SNAPSHOT = {
   "meta-llama/llama-3.1-70b-instruct": [72e-8, 72e-8],
   "meta-llama/llama-3.1-8b-instruct": [5e-8, 8e-8],
   "meta-llama/llama-3.2-3b-instruct": [5e-8, 33e-8],
-  "meta-llama/llama-3.3-70b-instruct": [71e-8, 71e-8],
+  "meta-llama/llama-3.3-70b-instruct": [59e-8, 79e-8],
   "meta-llama/llama-4-maverick": [35e-8, 1e-6],
   "meta-llama/llama-4-scout": [1e-7, 3e-7],
   "meta-llama/llama-guard-4-12b": [18e-8, 18e-8],
   "meta/muse-ember": [1e-7, 5e-7],
-  "meta/muse-glimmer-30b": [35e-8, 15e-7],
+  "meta/muse-glimmer-30b": [3e-7, 12e-7],
   "meta/muse-glimmer-30b:batch": [24e-8, 96e-8],
   "meta/muse-spark-1.1": [125e-8, 425e-8],
   "meta/muse-spark-1.2": [125e-8, 425e-8],
@@ -900,7 +901,9 @@ var PRICE_SNAPSHOT = {
   "mistralai/voxtral-small-24b-2507": [1e-7, 3e-7],
   "moondream/moondream3-preview": [3e-7, 25e-7],
   "moondream/moondream3.1-9b-a2b": [3e-7, 25e-7],
-  "moonshotai/kimi-k2.5": [5e-7, 25e-7],
+  "moonshotai/kimi-k2": [57e-8, 23e-7],
+  "moonshotai/kimi-k2-0905": [6e-7, 25e-7],
+  "moonshotai/kimi-k2.5": [6e-7, 3e-6],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
   "moonshotai/kimi-k2.7-code": [6e-7, 3e-6],
   "moonshotai/kimi-k3": [192e-9, 16e-6],
@@ -922,9 +925,9 @@ var PRICE_SNAPSHOT = {
   "nvidia/nemotron-3-ultra-550b-a55b": [5e-7, 22e-7],
   "nvidia/nemotron-3-ultra-550b-a55b:free": [0, 0],
   "nvidia/nemotron-3.5-content-safety": [2e-7, 2e-7],
-  "nvidia/nemotron-3.5-lightning": [7e-8, 2e-7],
+  "nvidia/nemotron-3.5-lightning": [5e-8, 2e-7],
   "nvidia/nemotron-3.5-lightning:free": [0, 0],
-  "nvidia/nemotron-3.5-super-vl": [15e-8, 47e-8],
+  "nvidia/nemotron-3.5-super-vl": [15e-8, 45e-8],
   "nvidia/nemotron-3.5-super-vl:free": [0, 0],
   "nvidia/switchyard": [0, 0],
   "openai/gpt-3.5-turbo-0613": [1e-6, 2e-6],
@@ -1057,7 +1060,6 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen2.5-vl-72b-instruct": [8e-7, 1e-6],
   "qwen/qwen3-14b": [12e-8, 24e-8],
   "qwen/qwen3-235b-a22b-2507": [14e-8, 8e-7],
-  "qwen/qwen3-235b-a22b-thinking-2507": [45e-8, 35e-7],
   "qwen/qwen3-30b-a3b": [12e-8, 5e-7],
   "qwen/qwen3-30b-a3b-instruct-2507": [1e-7, 3e-7],
   "qwen/qwen3-32b": [8e-8, 28e-8],
@@ -1073,7 +1075,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.5-27b": [26e-8, 26e-7],
   "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
   "qwen/qwen3.5-397b-a17b": [5e-7, 36e-7],
-  "qwen/qwen3.5-9b": [1e-7, 25e-8],
+  "qwen/qwen3.5-9b": [85e-9, 125e-9],
   "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
@@ -1096,7 +1098,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen4-max": [1425e-9, 4275e-9],
   "radixark/daisyrose-27b": [15e-8, 1875e-9],
   "recursive/flint-v1.0:free": [0, 0],
-  "reflection/beam-1.0-501b-a23b": [3e-7, 1e-6],
+  "reflection/beam-1.0-501b-a23b": [25e-8, 1e-6],
   "rekaai/reka-edge": [1e-7, 1e-7],
   "rekaai/reka-flash-3": [1e-7, 2e-7],
   "relace/relace-apply-3": [85e-8, 125e-8],
@@ -1123,8 +1125,8 @@ var PRICE_SNAPSHOT = {
   "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
   "thinkingmachines/inkling": [1e-6, 405e-8],
-  "thinkingmachines/inkling-2-mini": [75e-9, 3e-7],
-  "thinkingmachines/inkling-2-small": [3e-7, 1e-6],
+  "thinkingmachines/inkling-2-mini": [6e-8, 24e-8],
+  "thinkingmachines/inkling-2-small": [15e-8, 5e-7],
   "thinkingmachines/inkling-small": [45e-8, 12e-7],
   "thinkingmachines/inkling-small:batch": [36e-8, 96e-8],
   "tngtech/deepseek-r1t2-chimera": [1e-6, 2625e-9],
@@ -2665,6 +2667,536 @@ function stableStringify(value) {
   return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record5[k])}`).join(",")}}`;
 }
 
+// ../packages/tool-output-policy/src/textCut.ts
+function keepTail(text, max) {
+  if (text.length <= max) return text;
+  return text.slice(text.length - max);
+}
+var DEFAULT_TRUNCATION_SUFFIX = "\n\n\u26A0\uFE0F [Content truncated \u2014 original was too large for the model's context window. The content above is a partial view. If you need more, request specific sections or use offset/limit parameters to read smaller chunks.]";
+function cutHead(text, maxChars, opts = {}) {
+  if (text.length <= maxChars) return text;
+  const suffix = opts.suffix ?? DEFAULT_TRUNCATION_SUFFIX;
+  const snap = opts.snap ?? 0.8;
+  const keep = Math.max(opts.minKeep ?? 0, maxChars - suffix.length);
+  if (keep <= 0) return opts.emptyNotice ?? suffix.trim();
+  let cutPoint = keep;
+  const lastNewline = text.lastIndexOf("\n", keep);
+  if (lastNewline > keep * snap) cutPoint = lastNewline;
+  return text.slice(0, cutPoint) + suffix;
+}
+var MARKER_RESERVE = 160;
+function countLines(text) {
+  let n = 0;
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) n++;
+  return n;
+}
+function cutHeadTail(text, maxChars, opts = {}) {
+  if (text.length <= maxChars) return text;
+  const budget = maxChars - MARKER_RESERVE;
+  if (budget <= 0) return keepTail(text, Math.max(0, maxChars));
+  const headShare = Math.min(1, Math.max(0, opts.headShare ?? 0.25));
+  const headBudget = Math.floor(budget * headShare);
+  const tailBudget = budget - headBudget;
+  let headEnd = headBudget;
+  const nl = text.lastIndexOf("\n", headBudget);
+  if (nl > headBudget * 0.8) headEnd = nl;
+  let tailStart = text.length - tailBudget;
+  const nextNl = text.indexOf("\n", tailStart);
+  if (nextNl >= 0 && nextNl - tailStart < tailBudget * 0.2) tailStart = nextNl + 1;
+  const head = text.slice(0, headEnd);
+  const tail = text.slice(tailStart);
+  const elided = text.slice(headEnd, tailStart);
+  const marker = `
+\u2026[${elided.length.toLocaleString("en-US")} chars (${countLines(elided).toLocaleString("en-US")} lines) elided \u2014 showing the first ${head.length.toLocaleString("en-US")} and the last ${tail.length.toLocaleString("en-US")} of ${text.length.toLocaleString("en-US")} chars]\u2026
+`;
+  return `${head}${marker}${tail}`;
+}
+var defaultMiddleMarker = (omitted) => `
+\u2026(${omitted.toLocaleString("en-US")} chars omitted from the middle)\u2026
+`;
+var isHighSurrogate = (c) => c >= 55296 && c <= 56319;
+var isLowSurrogate = (c) => c >= 56320 && c <= 57343;
+function safePrefix(s, n) {
+  let end = Math.max(0, Math.min(n, s.length));
+  if (end > 0 && end < s.length && isHighSurrogate(s.charCodeAt(end - 1))) end -= 1;
+  return s.slice(0, end);
+}
+function safeSuffix(s, n) {
+  if (n <= 0) return "";
+  let start = Math.max(0, s.length - n);
+  if (start > 0 && isLowSurrogate(s.charCodeAt(start))) start += 1;
+  return s.slice(start);
+}
+function truncateMiddle(text, max, opts = {}) {
+  if (text.length <= max) return text;
+  const { marker = defaultMiddleMarker, symmetric = false } = opts;
+  const markerFor = typeof marker === "string" ? () => marker : marker;
+  const room = Math.max(0, max - markerFor(text.length).length);
+  if (room === 0) return safePrefix(text, max);
+  const tailShare = Math.floor(room / 2);
+  const head = safePrefix(text, symmetric ? tailShare : room - tailShare);
+  const tail = safeSuffix(text, tailShare);
+  return `${head}${markerFor(text.length - head.length - tail.length)}${tail}`;
+}
+
+// ../packages/tool-output-policy/src/caps.ts
+var DEFAULT_TOOL_OUTPUT_CHARS = 6e3;
+var DEFAULT_COMMAND_TIMEOUT_MS = 10 * 6e4;
+var MAX_BACKGROUND_JOBS = 32;
+var BACKGROUND_JOB_LIMIT_ERROR = `too many running background jobs (${MAX_BACKGROUND_JOBS}); stop one with command_stop first`;
+var EDITOR_COMMAND_BUFFER_CHARS = 4 * 1024 * 1024;
+var NATIVE_FILE_READ_MAX_BYTES = 50 * 1024;
+var TOOL_OUTPUT_CAPS = {
+  read_file: 16e3,
+  run_command: 2e4,
+  exec: 2e4,
+  bash: 2e4,
+  git_status: 2e4,
+  git_diff: 2e4,
+  git_history: 2e4,
+  git_sync_latest: 2e4,
+  git_undo: 2e4,
+  git_redo: 2e4,
+  // Up to four children's reports in one result, each capped by agent-tools'
+  // `SUBAGENT_REPORT_CHARS`. A research child's report IS its deliverable: under the 6K
+  // default a wait on four left the owner ~1.5K of each, and it re-spawned researchers
+  // to recover what was cut (VS Code chat #6). Four full reports plus each one's header
+  // and cut marker; `subagentReportBudget.test.ts` (brain-embedded) holds the two together.
+  wait_agents: 34e3,
+  // The Creation Canvas's reads. A board snapshot is the whole board as JSON and a real
+  // board runs to tens of KB; under the 6K default the model was handed a sliver of it and
+  // asked the user to re-select objects that were already there. A build file is paged
+  // like `read_file` (see {@link PAGED_READ_TOOLS}).
+  canvas_read_snapshot: 64e3,
+  canvas_read_object: 32e3,
+  canvas_read_build_file: 16e3
+};
+var INDEX_RESULT_CHARS = 24e3;
+var TASK_INDEX_FORMAT = "id|status|type|parent|title";
+var INDEX_FORMATS = /* @__PURE__ */ new Set([TASK_INDEX_FORMAT]);
+var INDEX_RESULT_TOOLS = /* @__PURE__ */ new Set(["tasks.list", "builtin_tasks_list"]);
+function isIndexResult(tool, out) {
+  if (!INDEX_RESULT_TOOLS.has(tool)) return false;
+  if (!out || typeof out !== "object" || Array.isArray(out)) return false;
+  const r = out;
+  return typeof r.format === "string" && INDEX_FORMATS.has(r.format) && typeof r.lines === "string";
+}
+function resultTableCap(tool, out, caps = TOOL_OUTPUT_CAPS) {
+  return isIndexResult(tool, out) ? Math.max(DEFAULT_TOOL_OUTPUT_CHARS, INDEX_RESULT_CHARS) : toolOutputCap(tool, caps);
+}
+var READ_FILE_TOOL = "read_file";
+var PAGED_READ_TOOLS = {
+  // `read_file`'s `offset` applies to each path of a `paths[]` read (agent-tools core-tools).
+  [READ_FILE_TOOL]: { search: "search_code", perPathOffset: true },
+  // The canvas's `offset` is honoured for a SINGLE path only.
+  canvas_read_build_file: { search: "canvas_search_build_files", perPathOffset: false }
+};
+function isPagedReadTool(tool) {
+  return Object.prototype.hasOwnProperty.call(PAGED_READ_TOOLS, tool);
+}
+function pagedReadSearchTool(tool) {
+  return PAGED_READ_TOOLS[tool]?.search ?? "search_code";
+}
+function pagedReadOffsetsPerPath(tool) {
+  return PAGED_READ_TOOLS[tool]?.perPathOffset ?? true;
+}
+var SHELL_TOOLS = /* @__PURE__ */ new Set(["run_command", "exec", "bash", "shell", "process"]);
+var HARD_MAX_TOOL_RESULT_CHARS = 4e5;
+var TOOL_RESULT_WINDOW_SHARE = 0.3;
+var TOOL_RESULT_CHARS_PER_TOKEN = 4;
+function toolOutputCap(tool, caps = TOOL_OUTPUT_CAPS) {
+  return caps[tool] ?? DEFAULT_TOOL_OUTPUT_CHARS;
+}
+function windowToolResultCap(contextWindowTokens) {
+  const maxTokens = Math.floor(contextWindowTokens * TOOL_RESULT_WINDOW_SHARE);
+  return Math.min(maxTokens * TOOL_RESULT_CHARS_PER_TOKEN, HARD_MAX_TOOL_RESULT_CHARS);
+}
+var READ_FILE_MAX_CHARS = 64e3;
+function windowedCap(tool, tableCap, contextWindowTokens) {
+  if (typeof contextWindowTokens !== "number" || !Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0) return tableCap;
+  const share = windowToolResultCap(contextWindowTokens);
+  if (isPagedReadTool(tool)) return Math.min(READ_FILE_MAX_CHARS, Math.max(tableCap, share));
+  return Math.min(tableCap, share);
+}
+var READ_MAX_BYTES = 2 * 1024 * 1024;
+function isShellTool(tool) {
+  return SHELL_TOOLS.has(tool);
+}
+
+// ../packages/tool-output-policy/src/shellSummary.ts
+var DEFAULT_TAIL_LINES = 40;
+var MAX_DIFF_LINES = 24;
+var ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
+function stripAnsi(text) {
+  return text.replace(ANSI, "");
+}
+var RUNNER_SIGNATURES = [
+  ["vitest", /\bvitest\b|^\s*(?:Test Files|Tests)\s+\d+\s+(?:failed|passed)|^\s*[❯›]\s+\S+\.(?:test|spec)\.[cm]?[jt]sx?/m],
+  ["jest", /^\s*(?:PASS|FAIL)\s+\S+\.(?:test|spec)\.[cm]?[jt]sx?|^Test Suites:\s+\d+/m],
+  ["pytest", /=+ test session starts =+|^(?:FAILED|ERROR) \S+::|=+ .*\b(?:passed|failed)\b.* in [\d.]+s =+/m],
+  ["cargo", /^\s*(?:Compiling|Finished|Running) .*|^test result: (?:ok|FAILED)\.|^error(?:\[E\d+\])?: /m],
+  ["tsc", /\berror TS\d+:/],
+  ["go", /^(?:---|===) (?:FAIL|RUN|PASS):|^(?:ok|FAIL)\s+\S+\s+[\d.]+s/m]
+];
+function detectRunner(text) {
+  for (const [runner, re] of RUNNER_SIGNATURES) if (re.test(text)) return runner;
+  return "unknown";
+}
+var NOISE = [
+  /^\s*[✓√✔]\s/,
+  /^\s*PASS\s/,
+  /^\s*PASSED\b/,
+  /\bPASSED\s*(?:\[\s*\d+%\])?$/,
+  /^test .* \.\.\. ok$/,
+  /^ok\s+\S+\s+[\d.]+s/,
+  /^=== RUN\s/,
+  /^--- PASS:/,
+  /^\s*Compiling\s/,
+  /^\s*Downloaded?\s/,
+  /^\s*$/
+];
+var ERROR_LINE = [
+  /\berror\b|\bERROR\b|\bError\b/,
+  /\bFAIL(?:ED|URE)?\b|\bfailed\b/,
+  /^\s*[✗×✕❌]\s/,
+  /\bpanic(?:ked)?\b|^Traceback \(most recent call last\)/,
+  /\bAssertion(?:Error)?\b|\bassert(?:ion)?\b/,
+  /^E\s{2,}/,
+  // pytest assertion detail
+  /^\s*●\s/,
+  // jest failing test header
+  /\berror TS\d+:/,
+  /^\s*-->\s.+:\d+:\d+$/
+  // cargo error location
+];
+var DIFF_HEADER = /^\s*(?:[-+]\s*Expected|[-+]\s*Received|Expected:|Received:|expected:|actual:|Difference:|- expected|\+ actual|assert .* ==)/;
+var DIFF_BODY = /^\s*[-+](?!-)|^\s{2,}\S/;
+var FAILING_TEST = [
+  /^\s*(?:FAIL|×|✕|✗)\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?(?:\s+>\s+.+?)?)(?:\s+\d+ms)?$/,
+  // vitest/jest file (+ test path)
+  /^\s*●\s+(.+?)\s*$/,
+  // jest
+  /^\s*[×✕✗]\s+(.+?)(?:\s+\d+ms)?$/,
+  // vitest/jest test line
+  /^FAILED\s+(\S+::\S+)/,
+  // pytest
+  /^test\s+(\S+)\s+\.\.\.\s+FAILED$/,
+  // cargo
+  /^---\s+FAIL:\s+(\S+)/
+  // go
+];
+function isNoise(line) {
+  return NOISE.some((re) => re.test(line));
+}
+function isErrorLine(line) {
+  return ERROR_LINE.some((re) => re.test(line));
+}
+function failingTestName(line) {
+  for (const re of FAILING_TEST) {
+    const m = re.exec(line);
+    if (m && m[1]) return m[1].trim();
+  }
+  return null;
+}
+function summarizeShellOutput(raw, opts) {
+  const tailLines = opts.tailLines ?? DEFAULT_TAIL_LINES;
+  if (raw.length <= opts.maxChars) {
+    return { text: raw, runner: detectRunner(raw), failingTests: [], droppedNoise: 0 };
+  }
+  const text = stripAnsi(raw).replace(/\r\n?/g, "\n");
+  const runner = detectRunner(text);
+  const lines = text.split("\n");
+  const tailFrom = Math.max(0, lines.length - tailLines);
+  const tail = lines.slice(tailFrom);
+  const failing = [];
+  const seenFailing = /* @__PURE__ */ new Set();
+  const kept = [];
+  const seenKept = /* @__PURE__ */ new Set();
+  let droppedNoise = 0;
+  let diffLeft = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const name = failingTestName(line);
+    if (name && !seenFailing.has(name)) {
+      seenFailing.add(name);
+      failing.push(name);
+    }
+    if (i >= tailFrom) continue;
+    if (DIFF_HEADER.test(line)) {
+      diffLeft = MAX_DIFF_LINES;
+      kept.push(line);
+      continue;
+    }
+    if (diffLeft > 0) {
+      if (DIFF_BODY.test(line) && !isNoise(line)) {
+        kept.push(line);
+        diffLeft--;
+        continue;
+      }
+      diffLeft = 0;
+    }
+    if (isNoise(line)) {
+      droppedNoise++;
+      continue;
+    }
+    if (isErrorLine(line)) {
+      const key = line.trim();
+      if (seenKept.has(key)) continue;
+      seenKept.add(key);
+      kept.push(line);
+    }
+  }
+  const header = `[output summarised${runner === "unknown" ? "" : ` (${runner})`}: ${lines.length.toLocaleString("en-US")} lines / ${raw.length.toLocaleString("en-US")} chars \u2192 failing tests, error lines, assertion diffs and the last ${tail.length} lines; ${droppedNoise.toLocaleString("en-US")} passing/progress lines dropped. Re-run a narrower command (one test file, grep) for more.]`;
+  const failingBlock = failing.length > 0 ? `Failing tests (${failing.length}):
+${failing.slice(0, 50).map((n) => `  - ${n}`).join("\n")}${failing.length > 50 ? `
+  \u2026 +${failing.length - 50} more` : ""}` : "";
+  const tailBlock = `--- last ${tail.length} lines ---
+${tail.join("\n")}`;
+  const fixed = [header, failingBlock, tailBlock].filter(Boolean).join("\n\n");
+  const room = opts.maxChars - fixed.length - 40;
+  let errorsBlock = "";
+  if (kept.length > 0 && room > 200) {
+    const body = `--- errors (${kept.length} lines) ---
+${kept.join("\n")}`;
+    errorsBlock = body.length <= room ? body : cutHead(body, room, { suffix: "\n\u2026[more error lines elided]" });
+  }
+  const assembled = [header, failingBlock, errorsBlock, tailBlock].filter(Boolean).join("\n\n");
+  const fitted = assembled.length <= opts.maxChars ? assembled : cutHeadTail(assembled, opts.maxChars, { headShare: 0.5 });
+  return { text: fitted, runner, failingTests: failing, droppedNoise };
+}
+
+// ../packages/tool-output-policy/src/jsonProjection.ts
+var STEPS = [
+  { depth: 4, arrayItems: 10, stringChars: 400 },
+  { depth: 3, arrayItems: 5, stringChars: 200 },
+  { depth: 2, arrayItems: 3, stringChars: 120 },
+  { depth: 2, arrayItems: 1, stringChars: 80 },
+  { depth: 1, arrayItems: 1, stringChars: 60 }
+];
+function describe(value) {
+  if (Array.isArray(value)) return `[array: ${value.length} items]`;
+  if (value && typeof value === "object") return `{object: ${Object.keys(value).length} keys}`;
+  return String(value);
+}
+function projectValue(value, step, depth) {
+  if (typeof value === "string") {
+    return value.length > step.stringChars ? `${value.slice(0, step.stringChars)}\u2026(+${value.length - step.stringChars} chars)` : value;
+  }
+  if (value === null || typeof value !== "object") return value;
+  if (depth >= step.depth) return describe(value);
+  if (Array.isArray(value)) {
+    const head = value.slice(0, step.arrayItems).map((v) => projectValue(v, step, depth + 1));
+    if (value.length > step.arrayItems) head.push(`\u2026(+${value.length - step.arrayItems} more of ${value.length} items)`);
+    return head;
+  }
+  const out = {};
+  for (const [k, v] of Object.entries(value)) out[k] = projectValue(v, step, depth + 1);
+  return out;
+}
+function projectJson(value, maxChars) {
+  let last = { value: void 0, json: "", fits: false };
+  for (const step of STEPS) {
+    const projected = projectValue(value, step, 0);
+    const json = JSON.stringify(projected);
+    last = { value: projected, json, fits: json.length <= maxChars };
+    if (last.fits) return last;
+  }
+  return last;
+}
+
+// ../packages/tool-output-policy/src/readFileWindow.ts
+var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;
+function isReadFileResult(out) {
+  return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && typeof out.content === "string";
+}
+function windowReadFile(out, opts = {}) {
+  const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
+  const tool = opts.tool ?? "read_file";
+  const withNote2 = (result) => opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(result, opts.advisory) : result;
+  const done = (served2, truncated) => ({ value: withNote2(served2), served: served2, truncated });
+  const lines = out.content.split("\n");
+  const offset = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
+  const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : offset + lines.length - 1;
+  const alreadyPartial = out.truncated === true;
+  const served = (kept, note) => {
+    const lastLine = offset + kept.length - 1;
+    return { ...out, content: kept.join("\n"), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note };
+  };
+  const build = (kept, note) => withNote2(served(kept, note));
+  const fits = (value) => JSON.stringify(value).length <= maxChars;
+  if (fits(withNote2({ ...out }))) return done({ ...out }, false);
+  const how = (next) => opts.alone !== void 0 ? `call ${tool} again with ONLY the path ${JSON.stringify(opts.alone)} (offset applies to a single file) and offset ${next}` : `call ${tool} again with offset ${next}`;
+  const continuation = (lastLine) => `Showing lines ${offset}\u2013${lastLine} of ${totalLines}. This surface returns at most ~${maxChars.toLocaleString("en-US")} chars per read, so a large file arrives in several windows \u2014 ${how(lastLine + 1)} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
+  let lo = 1;
+  let hi = lines.length;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = lo + hi >> 1;
+    if (fits(build(lines.slice(0, mid), continuation(offset + mid - 1)))) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  if (best === 0) {
+    const first = lines[0] ?? "";
+    const room = maxChars - 600;
+    const head = room >= 200 ? first.slice(0, room) : "";
+    const more = lines.length > 1 ? ` The lines AFTER it continue at offset ${offset + 1}: ${how(offset + 1)}.` : "";
+    const note = head ? `Line ${offset} of ${totalLines} is longer than the ~${maxChars.toLocaleString("en-US")}-char read budget; the first ${head.length.toLocaleString("en-US")} of its ${first.length.toLocaleString("en-US")} chars are shown. Paging by offset cannot reach the rest of this line \u2014 use ${pagedReadSearchTool(tool)} for the specific symbol instead.${more}` : `Skipped: this file's share of the read budget (~${Math.max(0, maxChars).toLocaleString("en-US")} chars) is too small for even its first line (${first.length.toLocaleString("en-US")} chars). Read it ${opts.alone !== void 0 ? "on its own" : "again with a larger budget"}: ${how(offset)}, or use ${pagedReadSearchTool(tool)} for the specific symbol.`;
+    return done({ ...out, content: head, offset, totalLines, truncated: true, note }, true);
+  }
+  return done(served(lines.slice(0, best), continuation(offset + best - 1)), true);
+}
+function isReadFilesResult(out) {
+  return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && Array.isArray(out.files);
+}
+function windowReadFiles(out, opts = {}) {
+  const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
+  const files = out.files;
+  const overhead = JSON.stringify({ ...out, files: [] }).length + files.length + (opts.advisory ? opts.advisory.length + 16 : 0);
+  const order = files.map((f, i) => ({ i, size: JSON.stringify(f ?? null).length })).sort((a, b) => a.size - b.size);
+  const servedFiles = files.slice();
+  let remaining2 = Math.max(0, maxChars - overhead);
+  let truncated = false;
+  order.forEach(({ i, size }, n) => {
+    const file = files[i];
+    const alone = !pagedReadOffsetsPerPath(opts.tool ?? "read_file") && isReadFileResult(file) && typeof file.path === "string" ? file.path : void 0;
+    const share = Math.floor(remaining2 / (order.length - n));
+    if (isReadFileResult(file) && size > share) {
+      const windowed = windowReadFile(file, { ...opts.tool ? { tool: opts.tool } : {}, ...alone ? { alone } : {}, maxChars: share });
+      servedFiles[i] = windowed.served;
+      truncated = truncated || windowed.truncated;
+    }
+    remaining2 -= JSON.stringify(servedFiles[i] ?? null).length;
+  });
+  const served = { ...out, files: servedFiles };
+  const value = opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(served, opts.advisory) : served;
+  return { value, served, truncated };
+}
+function sliceReadFile(out, start, end) {
+  const lines = out.content.split("\n");
+  const first = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
+  const from = Math.max(first, Math.floor(start));
+  const kept = lines.slice(from - first, Math.max(from - first, Math.floor(end) - first + 1));
+  const lastLine = from + kept.length - 1;
+  const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : void 0;
+  const truncated = totalLines !== void 0 ? lastLine < totalLines : out.truncated === true;
+  const { note: _coveringNote, ...rest } = out;
+  return {
+    ...rest,
+    content: kept.join("\n"),
+    offset: from,
+    ...totalLines !== void 0 ? { totalLines } : {},
+    truncated,
+    ...truncated ? { note: `Showing lines ${from}\u2013${lastLine}${totalLines !== void 0 ? ` of ${totalLines}` : ""}. To continue, call read_file again with offset ${lastLine + 1}.` } : {}
+  };
+}
+
+// ../packages/tool-output-policy/src/policy.ts
+var LOG_FIELDS = ["output", "stdout", "stderr"];
+function isLogLike(text, tool) {
+  return tool !== void 0 && isShellTool(tool) || detectRunner(text) !== "unknown";
+}
+function fitToolText(text, maxChars, opts = {}) {
+  if (text.length <= maxChars) return text;
+  if (opts.summarize && isLogLike(text, opts.tool)) return summarizeShellOutput(text, { maxChars }).text;
+  return (opts.fallback ?? cutHeadTail)(text, maxChars);
+}
+function attach(value, opts) {
+  return opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(value, opts.advisory) : value;
+}
+function capFor(tool, out, opts) {
+  if (opts.maxChars !== void 0) return opts.maxChars;
+  const tableCap = isIndexResult(tool, out) ? resultTableCap(tool, out, opts.caps) : !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
+  return windowedCap(tool, tableCap, opts.contextWindowTokens);
+}
+function pageIndexResult(out, fits) {
+  const all = out.lines ? out.lines.split("\n") : [];
+  const offset = typeof out.offset === "number" ? out.offset : 0;
+  const pageOf = (n) => {
+    const envelope = { ...out };
+    delete envelope.lines;
+    delete envelope.nextOffset;
+    return { ...envelope, returned: n, truncated: true, nextOffset: offset + n, lines: all.slice(0, n).join("\n") };
+  };
+  let lo = 0;
+  let hi = all.length - 1;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (fits(pageOf(mid))) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo > 0 && fits(pageOf(lo)) ? pageOf(lo) : null;
+}
+function shrinkLogFields(tool, out, cap2, overhead) {
+  const fields = LOG_FIELDS.filter((f) => typeof out[f] === "string" && out[f].length > 0);
+  if (fields.length === 0) return null;
+  const logChars = fields.reduce((n, f) => n + out[f].length, 0);
+  const rest = JSON.stringify({ ...out, ...Object.fromEntries(fields.map((f) => [f, ""])) }).length;
+  const escapedLog = fields.reduce((n, f) => n + JSON.stringify(out[f]).length - 2, 0);
+  const inflation = logChars > 0 ? escapedLog / logChars : 1;
+  const budget = Math.floor((cap2 - rest - overhead) / inflation);
+  if (budget < 500) return null;
+  const shrunk = { ...out };
+  for (const f of fields) {
+    const text = out[f];
+    const share = Math.max(200, Math.floor(budget * (text.length / logChars)));
+    shrunk[f] = fitToolText(text, share, { tool, summarize: true });
+  }
+  return shrunk;
+}
+function truncatedResultNote(originalChars, maxChars) {
+  if (maxChars < 600) return "Truncated: NOT the whole result \u2014 do not treat it as complete.";
+  return `Truncated: the full result was ${originalChars.toLocaleString("en-US")} chars and this surface returns at most ~${maxChars.toLocaleString("en-US")}. \`output\` is only a cut of it, NOT the whole \u2014 never treat it as complete or write it back as if it were. Re-call with a narrower query, id or filter to see the rest.`;
+}
+function shapeToolResult(tool, out, opts = {}) {
+  const bytes = JSON.stringify(out ?? null).length;
+  if (isPagedReadTool(tool) && (isReadFileResult(out) || isReadFilesResult(out))) {
+    const maxChars = opts.maxChars ?? windowedCap(tool, toolOutputCap(tool), opts.contextWindowTokens);
+    const windowOpts = { tool, maxChars, advisory: opts.advisory, attachAdvisory: opts.attachAdvisory };
+    const windowed = isReadFileResult(out) ? windowReadFile(out, windowOpts) : windowReadFiles(out, windowOpts);
+    return { content: JSON.stringify(windowed.value), bytes, truncated: windowed.truncated, served: windowed.served };
+  }
+  const cap2 = capFor(tool, out, opts);
+  const full = JSON.stringify(attach(out ?? null, opts));
+  if (full.length <= cap2) return { content: full, bytes, truncated: false };
+  const advisoryChars = opts.advisory ? opts.advisory.length + 16 : 0;
+  if (isIndexResult(tool, out)) {
+    const paged = pageIndexResult(out, (shaped) => JSON.stringify(attach(shaped, opts)).length <= cap2);
+    if (paged) return { content: JSON.stringify(attach(paged, opts)), bytes, truncated: true };
+  }
+  if (opts.summarize) {
+    if (typeof out === "string") {
+      const inflation = out.length > 0 ? (bytes - 2) / out.length : 1;
+      const shaped = fitToolText(out, Math.max(500, Math.floor((cap2 - advisoryChars - 32) / Math.max(1, inflation))), { tool, summarize: true });
+      const content2 = JSON.stringify(attach(shaped, opts));
+      if (content2.length <= cap2) return { content: content2, bytes, truncated: true };
+    } else if (out && typeof out === "object" && !Array.isArray(out)) {
+      const shrunk = shrinkLogFields(tool, out, cap2, advisoryChars + 64);
+      if (shrunk) {
+        const content2 = JSON.stringify(attach(shrunk, opts));
+        if (content2.length <= cap2) return { content: content2, bytes, truncated: true };
+      }
+    }
+    const marker2 = `
+[projected to fit the ~${cap2.toLocaleString("en-US")}-char tool-result budget (original ${bytes.toLocaleString("en-US")} chars): every top-level key is kept; arrays show their first items with a count of the rest and long strings are clipped. Re-call with a narrower filter, limit or id to see specific items.]`;
+    const projection = projectJson(out ?? null, cap2 - marker2.length - advisoryChars);
+    if (projection.fits) {
+      return { content: `${projection.json}${marker2}${opts.advisory ? `
+${opts.advisory}` : ""}`, bytes, truncated: true };
+    }
+  }
+  const itemNote = Array.isArray(out) ? ` The full result had ${out.length} items; re-call this tool with a narrower filter (e.g. status, projectId, or limit) to see specific ones.` : " The full result was large; re-call with a narrower query if you need the elided fields.";
+  const head = JSON.stringify(out ?? null).slice(0, cap2);
+  const marker = `\u2026[truncated ${bytes - cap2} of ${bytes} chars to protect the context window.${itemNote}]`;
+  const content = `${head}
+${marker}${opts.advisory ? `
+${opts.advisory}` : ""}`;
+  return { content, bytes, truncated: true };
+}
+
 // ../packages/agent-tools/src/toolFailure.ts
 function isFailedToolResult(result) {
   if (result == null) return false;
@@ -3389,7 +3921,7 @@ function within(folder, target, workspaceRoot) {
   const withoutDot = folderRel.replace(/^\.builderforce\//, "");
   return raw === withoutDot || raw.startsWith(`${withoutDot}/`);
 }
-function describe(entry) {
+function describe2(entry) {
   if (entry.key === "root") return "the workspace root";
   return entry.sub ? `${entry.key}/${entry.sub}` : entry.key;
 }
@@ -3400,7 +3932,7 @@ function writeAllowed(scope, paths, target, roleName) {
   }
   const folders = scope.map((entry) => resolveScope(entry, paths));
   if (folders.some((folder) => within(folder, target, paths.root))) return { allowed: true };
-  const where = scope.map(describe).join(" or ");
+  const where = scope.map(describe2).join(" or ");
   return { allowed: false, reason: `${roleName} may only write under ${where}` };
 }
 
@@ -3557,6 +4089,16 @@ var TOOL_NAME_ALIASES = {
 function normalizeToolName(name) {
   return name.trim().toLowerCase();
 }
+var WORKSPACE_INSPECTION_TOOLS = [
+  "read_file",
+  "list_files",
+  "search_code",
+  "find_symbol",
+  "file_outline"
+];
+var WORKSPACE_CODE_WRITE_TOOLS = ["write_file", "edit_file", "delete_file"];
+var NATIVE_FILE_WRITE_TOOLS = ["write", "edit", "apply_patch"];
+var NATIVE_FILE_TOOLS = ["read", ...NATIVE_FILE_WRITE_TOOLS];
 function resolveToolAlias(name) {
   const key = name.trim().toLowerCase();
   return TOOL_NAME_ALIASES[key] ?? name;
@@ -3976,14 +4518,18 @@ var workspaceMemoryReadTool = defineTool({
 
 // ../packages/agent-tools/src/fileWindow.ts
 var READ_DEFAULT_LINE_LIMIT = 2e3;
-function windowFileContent(content, opts) {
+function sliceFileLines(content, start, end) {
   const lines = content.split("\n");
-  const totalLines = lines.length;
-  const start = opts?.offset && opts.offset > 1 ? Math.min(Math.floor(opts.offset), totalLines + 1) : 1;
+  const selected = lines.slice(start, end);
+  return { content: selected.join("\n"), totalLines: lines.length, returnedLines: selected.length };
+}
+function windowFileContent(content, opts) {
+  const start = opts?.offset && opts.offset > 1 ? Math.floor(opts.offset) : 1;
   const limit = opts?.limit && opts.limit > 0 ? Math.floor(opts.limit) : READ_DEFAULT_LINE_LIMIT;
-  const slice = lines.slice(start - 1, start - 1 + limit);
-  const end = start - 1 + slice.length;
-  return { content: slice.join("\n"), truncated: end < totalLines, totalLines, offset: start, returnedLines: slice.length };
+  const slice = sliceFileLines(content, start - 1, start - 1 + limit);
+  const offset = Math.min(start, slice.totalLines + 1);
+  const last = offset - 1 + slice.returnedLines;
+  return { ...slice, offset, truncated: last < slice.totalLines };
 }
 function fileWindowNote(win) {
   if (!win.truncated) return void 0;
@@ -4618,7 +5164,7 @@ var SYMBOL_TOOLS = [findSymbolTool, fileOutlineTool];
 // ../packages/agent-tools/src/fileRead.ts
 var WHOLE_READ_MAX_CHARS = 64e3;
 var WIDEN_WINDOW_MIN_LINES = 150;
-var OUTLINE_FIRST_PREFIX_LINES = 40;
+var OUTLINE_FIRST_PREFIX_LINES2 = 40;
 function outlineFirstApplies(content, leverOn2) {
   if (leverOn2 !== true) return false;
   return content.length > WHOLE_READ_MAX_CHARS;
@@ -4665,7 +5211,7 @@ async function readOneFile(path, opts, caps, leverOn2) {
   const content = r.content ?? "";
   if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn2) && r.truncated !== true) {
     const symbols = extractSymbols(path, content).slice(0, 150).map((s) => `L${s.line} ${s.kind} ${s.name}${s.exported && s.kind !== "heading" ? " (export)" : ""}`);
-    const head = windowFileContent(content, { offset: 1, limit: OUTLINE_FIRST_PREFIX_LINES });
+    const head = windowFileContent(content, { offset: 1, limit: OUTLINE_FIRST_PREFIX_LINES2 });
     return {
       ok: true,
       path: r.path ?? path,
@@ -4674,7 +5220,7 @@ async function readOneFile(path, opts, caps, leverOn2) {
       content: head.content,
       truncated: true,
       offset: 1,
-      note: (symbols.length > 0 ? `This file is larger than one read: \`outline\` lists its ${symbols.length} definitions with line numbers. ` : "This file is larger than one read. ") + `The first ${OUTLINE_FIRST_PREFIX_LINES} lines follow. To read a span, call read_file again with \`offset\` (the outline's line) and no \`limit\` \u2014 each read returns as much as fits.`
+      note: (symbols.length > 0 ? `This file is larger than one read: \`outline\` lists its ${symbols.length} definitions with line numbers. ` : "This file is larger than one read. ") + `The first ${OUTLINE_FIRST_PREFIX_LINES2} lines follow. To read a span, call read_file again with \`offset\` (the outline's line) and no \`limit\` \u2014 each read returns as much as fits.`
     };
   }
   const limitDropped = dropsLimit(content, opts, r.truncated === true);
@@ -4904,6 +5450,11 @@ async function runInRepoScope(ctx, scope, run) {
     if (!attempt.repo && ctx.caps.shell) rootNotARepo.add(ctx.caps.shell);
   }
   return null;
+}
+
+// ../packages/agent-tools/src/shell-job-types.ts
+function shellFailure(code, error) {
+  return { ok: false, code, error };
 }
 
 // ../packages/agent-tools/src/shell-command-shape.ts
@@ -5474,8 +6025,26 @@ async function refuseBranchSwitchOverChanges(command, dir, ctx) {
   return branchSwitchRefusal(command, found, paths);
 }
 
+// ../packages/agent-tools/src/workspaceCommandPolicy.ts
+var SYSTEM_MAINTENANCE = /^(?:mkfs(?:\.[\w-]+)?|mkswap|diskpart(?:\.exe)?|format\.com|format-volume|clear-disk|shutdown(?:\.exe)?|reboot|poweroff)$/i;
+function workspaceInvocations(command) {
+  return (splitShellSegments(command) ?? []).map((segment) => {
+    const [program, ...args] = commandWords(shellTokens(segment));
+    return { name: program?.split(/[\\/]/).at(-1)?.toLowerCase(), args };
+  });
+}
+function workspaceCommandRefusal(command) {
+  if (command.includes("\0")) return shellFailure("invalid", "The shell command contains a null character.");
+  for (const { name } of workspaceInvocations(command)) {
+    if (name && SYSTEM_MAINTENANCE.test(name)) {
+      return shellFailure("refused", "System maintenance commands are outside the workspace shell policy.");
+    }
+  }
+  return void 0;
+}
+
 // ../packages/agent-tools/src/shell-tools.ts
-var SHELL_WAIT_MAX_MS = 10 * 60 * 1e3;
+var SHELL_WAIT_MAX_MS = DEFAULT_COMMAND_TIMEOUT_MS;
 function waitArg(v) {
   return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.min(Math.floor(v), SHELL_WAIT_MAX_MS) : void 0;
 }
@@ -5492,40 +6061,52 @@ function commandDir(command, cwd, defaultRepo) {
   return safeRepoArg(defaultRepo) ?? void 0;
 }
 var jobNote = (id) => `Running in the background (job ${id}). Keep working; check it with command_status { "id": "${id}" } (pass waitMs to wait for it), stop it with command_stop { "id": "${id}" }.`;
+function withShellFailure(result, code = "command_failed") {
+  if (result.ok) return result;
+  const message = result.exitCode === void 0 ? "The command failed" : `The command exited with code ${result.exitCode}`;
+  return { ...result, ...shellFailure(result.code ?? code, result.error ?? message) };
+}
 function finishedJob(st) {
   return {
     ok: st.status === "exited" && st.exitCode === 0,
     ...st.exitCode !== void 0 ? { exitCode: st.exitCode } : {},
     stdout: st.output ?? "",
     ...st.outputId ? { outputId: st.outputId } : {},
+    ...st.code ? { code: st.code } : st.status === "unknown" ? { code: "not_found" } : {},
     ...st.status === "killed" ? { aborted: true, error: st.error ?? "the job was stopped" } : st.error ? { error: st.error } : {}
   };
 }
 function shapeResult(command, r) {
-  return searchNoMatch(command, r);
+  return withShellFailure(searchNoMatch(command, r), r.aborted ? "aborted" : "command_failed");
 }
 async function runShellCommand(args, ctx) {
   const stripped = stripTailLimit(typeof args.command === "string" ? args.command : "");
   const command = stripped.command;
   const tailNote = stripped.stripped ? `ran without the trailing \`| tail -${stripped.tail}\` \u2014 the full output is retained under \`outputId\`; read its head with output_filter { outputId, head: \u2026 }. ` : "";
-  if (!command.trim()) return { data: { ok: false, error: "command is required" } };
+  if (!command.trim()) return { data: shellFailure("invalid", "command is required") };
   const cwd = cwdArg(args.cwd);
   if (cwd === null) {
-    return { data: { ok: false, error: "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path)." } };
+    return { data: shellFailure("invalid", "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path).") };
   }
   const shell = ctx.caps.shell;
   const dir = commandDir(command, cwd, shell.defaultRepo);
   const where = dir ? { cwd: dir } : {};
+  const policyRefusal = workspaceCommandRefusal(command);
+  if (policyRefusal) return { data: { ...policyRefusal, ...where } };
+  const decision = await shell.authorize?.(command, { ...where, signal: ctx.signal });
+  if (decision && !decision.allowed) {
+    return { data: { ...shellFailure("refused", decision.reason ?? "The shell command was not approved."), ...where } };
+  }
   const background = args.background === true;
   const yieldMs = waitArg(args.yieldMs);
   let note;
   const refused = await refuseBranchSwitchOverChanges(command, dir, ctx);
-  if (refused) return { data: { ok: false, refused: "branch-switch", error: refused, ...where } };
+  if (refused) return { data: { ...shellFailure("refused", refused), refused: "branch-switch", ...where } };
   if (background || yieldMs !== void 0) {
     if (shell.start && shell.poll) {
-      if (ctx.signal?.aborted) return { data: { ok: false, aborted: true, error: "stopped before the command started", ...where } };
+      if (ctx.signal?.aborted) return { data: { ...shellFailure("aborted", "stopped before the command started"), aborted: true, ...where } };
       const started = await (dir ? shell.start(command, { cwd: dir }) : shell.start(command));
-      if (!started.ok || !started.id) return { data: { ok: false, error: started.error ?? "the background job did not start", ...where } };
+      if (!started.ok || !started.id) return { data: { ...shellFailure(started.code ?? "command_failed", started.error ?? "the background job did not start"), ...where } };
       const id = started.id;
       if (background) return { data: { ok: true, background: true, id, status: "running", note: jobNote(id), ...where } };
       const st = await shell.poll(id, { waitMs: yieldMs, ...ctx.signal ? { signal: ctx.signal } : {} });
@@ -5544,6 +6125,7 @@ async function runShellCommand(args, ctx) {
   return { data: { ...r, ...where, ...notes ? { note: notes } : {} } };
 }
 async function compressedJobStatus(st, ctx) {
+  st = withShellFailure(st, st.status === "killed" ? "aborted" : st.status === "unknown" ? "not_found" : "command_failed");
   if (st.status === "running" || typeof st.output !== "string") return st;
   const r = await compressShellResult(finishedJob(st), ctx);
   return r.compressed && typeof r.stdout === "string" ? { ...st, output: r.stdout } : st;
@@ -5565,9 +6147,9 @@ var commandStatusTool = defineTool({
   requires: ["shell.jobs"],
   async execute(args, ctx) {
     const id = jobId(args);
-    if (!id) return { data: { ok: false, error: "id is required" } };
+    if (!id) return { data: shellFailure("invalid", "id is required") };
     const poll = ctx.caps.shell?.poll;
-    if (!poll) return { data: { ok: false, error: "background commands are not available on this surface" } };
+    if (!poll) return { data: shellFailure("unsupported", "background commands are not available on this surface") };
     const waitMs = waitArg(args.waitMs);
     const st = await poll.call(ctx.caps.shell, id, { ...waitMs !== void 0 ? { waitMs } : {}, ...ctx.signal ? { signal: ctx.signal } : {} });
     return { data: await compressedJobStatus(st, ctx) };
@@ -5584,9 +6166,9 @@ var commandStopTool = defineTool({
   requires: ["shell.jobs"],
   async execute(args, ctx) {
     const id = jobId(args);
-    if (!id) return { data: { ok: false, error: "id is required" } };
+    if (!id) return { data: shellFailure("invalid", "id is required") };
     const kill = ctx.caps.shell?.kill;
-    if (!kill) return { data: { ok: false, error: "background commands are not available on this surface" } };
+    if (!kill) return { data: shellFailure("unsupported", "background commands are not available on this surface") };
     const st = await kill.call(ctx.caps.shell, id);
     return { data: await compressedJobStatus(st, ctx) };
   }
@@ -8721,6 +9303,9 @@ import { InMemoryIngestManifest } from "@seanhogg/builderforce-memory/ingest";
 
 // ../packages/agent-tools/src/knowledge/codeGraphFindings.ts
 import { partitionOf } from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/knowledge/runTraces.ts
+var MAX_TRACE_FILE_BYTES = 2 * 1024 * 1024;
 
 // ../packages/agent-tools/src/knowledge/pinpointMatch.ts
 import { srcRef as srcRef11 } from "@seanhogg/builderforce-memory/knowledge";
@@ -12396,536 +12981,6 @@ function selectToolsForTurn(tools, options = {}) {
     pinnedOut.push(tool);
   }
   return { tools: [...fixed, ...pinnedOut], trimmed: true, available };
-}
-
-// ../packages/tool-output-policy/src/textCut.ts
-function keepTail(text, max) {
-  if (text.length <= max) return text;
-  return text.slice(text.length - max);
-}
-var DEFAULT_TRUNCATION_SUFFIX = "\n\n\u26A0\uFE0F [Content truncated \u2014 original was too large for the model's context window. The content above is a partial view. If you need more, request specific sections or use offset/limit parameters to read smaller chunks.]";
-function cutHead(text, maxChars, opts = {}) {
-  if (text.length <= maxChars) return text;
-  const suffix = opts.suffix ?? DEFAULT_TRUNCATION_SUFFIX;
-  const snap = opts.snap ?? 0.8;
-  const keep = Math.max(opts.minKeep ?? 0, maxChars - suffix.length);
-  if (keep <= 0) return opts.emptyNotice ?? suffix.trim();
-  let cutPoint = keep;
-  const lastNewline = text.lastIndexOf("\n", keep);
-  if (lastNewline > keep * snap) cutPoint = lastNewline;
-  return text.slice(0, cutPoint) + suffix;
-}
-var MARKER_RESERVE = 160;
-function countLines(text) {
-  let n = 0;
-  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) n++;
-  return n;
-}
-function cutHeadTail(text, maxChars, opts = {}) {
-  if (text.length <= maxChars) return text;
-  const budget = maxChars - MARKER_RESERVE;
-  if (budget <= 0) return keepTail(text, Math.max(0, maxChars));
-  const headShare = Math.min(1, Math.max(0, opts.headShare ?? 0.25));
-  const headBudget = Math.floor(budget * headShare);
-  const tailBudget = budget - headBudget;
-  let headEnd = headBudget;
-  const nl = text.lastIndexOf("\n", headBudget);
-  if (nl > headBudget * 0.8) headEnd = nl;
-  let tailStart = text.length - tailBudget;
-  const nextNl = text.indexOf("\n", tailStart);
-  if (nextNl >= 0 && nextNl - tailStart < tailBudget * 0.2) tailStart = nextNl + 1;
-  const head = text.slice(0, headEnd);
-  const tail = text.slice(tailStart);
-  const elided = text.slice(headEnd, tailStart);
-  const marker = `
-\u2026[${elided.length.toLocaleString("en-US")} chars (${countLines(elided).toLocaleString("en-US")} lines) elided \u2014 showing the first ${head.length.toLocaleString("en-US")} and the last ${tail.length.toLocaleString("en-US")} of ${text.length.toLocaleString("en-US")} chars]\u2026
-`;
-  return `${head}${marker}${tail}`;
-}
-var defaultMiddleMarker = (omitted) => `
-\u2026(${omitted.toLocaleString("en-US")} chars omitted from the middle)\u2026
-`;
-var isHighSurrogate = (c) => c >= 55296 && c <= 56319;
-var isLowSurrogate = (c) => c >= 56320 && c <= 57343;
-function safePrefix(s, n) {
-  let end = Math.max(0, Math.min(n, s.length));
-  if (end > 0 && end < s.length && isHighSurrogate(s.charCodeAt(end - 1))) end -= 1;
-  return s.slice(0, end);
-}
-function safeSuffix(s, n) {
-  if (n <= 0) return "";
-  let start = Math.max(0, s.length - n);
-  if (start > 0 && isLowSurrogate(s.charCodeAt(start))) start += 1;
-  return s.slice(start);
-}
-function truncateMiddle(text, max, opts = {}) {
-  if (text.length <= max) return text;
-  const { marker = defaultMiddleMarker, symmetric = false } = opts;
-  const markerFor = typeof marker === "string" ? () => marker : marker;
-  const room = Math.max(0, max - markerFor(text.length).length);
-  if (room === 0) return safePrefix(text, max);
-  const tailShare = Math.floor(room / 2);
-  const head = safePrefix(text, symmetric ? tailShare : room - tailShare);
-  const tail = safeSuffix(text, tailShare);
-  return `${head}${markerFor(text.length - head.length - tail.length)}${tail}`;
-}
-
-// ../packages/tool-output-policy/src/caps.ts
-var DEFAULT_TOOL_OUTPUT_CHARS = 6e3;
-var DEFAULT_COMMAND_TIMEOUT_MS = 10 * 6e4;
-var MAX_BACKGROUND_JOBS = 32;
-var BACKGROUND_JOB_LIMIT_ERROR = `too many running background jobs (${MAX_BACKGROUND_JOBS}); stop one with command_stop first`;
-var EDITOR_COMMAND_BUFFER_CHARS = 4 * 1024 * 1024;
-var NATIVE_FILE_READ_MAX_BYTES = 50 * 1024;
-var TOOL_OUTPUT_CAPS = {
-  read_file: 16e3,
-  run_command: 2e4,
-  exec: 2e4,
-  bash: 2e4,
-  git_status: 2e4,
-  git_diff: 2e4,
-  git_history: 2e4,
-  git_sync_latest: 2e4,
-  git_undo: 2e4,
-  git_redo: 2e4,
-  // Up to four children's reports in one result, each capped by agent-tools'
-  // `SUBAGENT_REPORT_CHARS`. A research child's report IS its deliverable: under the 6K
-  // default a wait on four left the owner ~1.5K of each, and it re-spawned researchers
-  // to recover what was cut (VS Code chat #6). Four full reports plus each one's header
-  // and cut marker; `subagentReportBudget.test.ts` (brain-embedded) holds the two together.
-  wait_agents: 34e3,
-  // The Creation Canvas's reads. A board snapshot is the whole board as JSON and a real
-  // board runs to tens of KB; under the 6K default the model was handed a sliver of it and
-  // asked the user to re-select objects that were already there. A build file is paged
-  // like `read_file` (see {@link PAGED_READ_TOOLS}).
-  canvas_read_snapshot: 64e3,
-  canvas_read_object: 32e3,
-  canvas_read_build_file: 16e3
-};
-var INDEX_RESULT_CHARS = 24e3;
-var TASK_INDEX_FORMAT = "id|status|type|parent|title";
-var INDEX_FORMATS = /* @__PURE__ */ new Set([TASK_INDEX_FORMAT]);
-var INDEX_RESULT_TOOLS = /* @__PURE__ */ new Set(["tasks.list", "builtin_tasks_list"]);
-function isIndexResult(tool, out) {
-  if (!INDEX_RESULT_TOOLS.has(tool)) return false;
-  if (!out || typeof out !== "object" || Array.isArray(out)) return false;
-  const r = out;
-  return typeof r.format === "string" && INDEX_FORMATS.has(r.format) && typeof r.lines === "string";
-}
-function resultTableCap(tool, out, caps = TOOL_OUTPUT_CAPS) {
-  return isIndexResult(tool, out) ? Math.max(DEFAULT_TOOL_OUTPUT_CHARS, INDEX_RESULT_CHARS) : toolOutputCap(tool, caps);
-}
-var READ_FILE_TOOL = "read_file";
-var PAGED_READ_TOOLS = {
-  // `read_file`'s `offset` applies to each path of a `paths[]` read (agent-tools core-tools).
-  [READ_FILE_TOOL]: { search: "search_code", perPathOffset: true },
-  // The canvas's `offset` is honoured for a SINGLE path only.
-  canvas_read_build_file: { search: "canvas_search_build_files", perPathOffset: false }
-};
-function isPagedReadTool(tool) {
-  return Object.prototype.hasOwnProperty.call(PAGED_READ_TOOLS, tool);
-}
-function pagedReadSearchTool(tool) {
-  return PAGED_READ_TOOLS[tool]?.search ?? "search_code";
-}
-function pagedReadOffsetsPerPath(tool) {
-  return PAGED_READ_TOOLS[tool]?.perPathOffset ?? true;
-}
-var SHELL_TOOLS = /* @__PURE__ */ new Set(["run_command", "exec", "bash", "shell", "process"]);
-var HARD_MAX_TOOL_RESULT_CHARS = 4e5;
-var TOOL_RESULT_WINDOW_SHARE = 0.3;
-var TOOL_RESULT_CHARS_PER_TOKEN = 4;
-function toolOutputCap(tool, caps = TOOL_OUTPUT_CAPS) {
-  return caps[tool] ?? DEFAULT_TOOL_OUTPUT_CHARS;
-}
-function windowToolResultCap(contextWindowTokens) {
-  const maxTokens = Math.floor(contextWindowTokens * TOOL_RESULT_WINDOW_SHARE);
-  return Math.min(maxTokens * TOOL_RESULT_CHARS_PER_TOKEN, HARD_MAX_TOOL_RESULT_CHARS);
-}
-var READ_FILE_MAX_CHARS = 64e3;
-function windowedCap(tool, tableCap, contextWindowTokens) {
-  if (typeof contextWindowTokens !== "number" || !Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0) return tableCap;
-  const share = windowToolResultCap(contextWindowTokens);
-  if (isPagedReadTool(tool)) return Math.min(READ_FILE_MAX_CHARS, Math.max(tableCap, share));
-  return Math.min(tableCap, share);
-}
-var READ_MAX_BYTES = 2 * 1024 * 1024;
-function isShellTool(tool) {
-  return SHELL_TOOLS.has(tool);
-}
-
-// ../packages/tool-output-policy/src/shellSummary.ts
-var DEFAULT_TAIL_LINES = 40;
-var MAX_DIFF_LINES = 24;
-var ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
-function stripAnsi(text) {
-  return text.replace(ANSI, "");
-}
-var RUNNER_SIGNATURES = [
-  ["vitest", /\bvitest\b|^\s*(?:Test Files|Tests)\s+\d+\s+(?:failed|passed)|^\s*[❯›]\s+\S+\.(?:test|spec)\.[cm]?[jt]sx?/m],
-  ["jest", /^\s*(?:PASS|FAIL)\s+\S+\.(?:test|spec)\.[cm]?[jt]sx?|^Test Suites:\s+\d+/m],
-  ["pytest", /=+ test session starts =+|^(?:FAILED|ERROR) \S+::|=+ .*\b(?:passed|failed)\b.* in [\d.]+s =+/m],
-  ["cargo", /^\s*(?:Compiling|Finished|Running) .*|^test result: (?:ok|FAILED)\.|^error(?:\[E\d+\])?: /m],
-  ["tsc", /\berror TS\d+:/],
-  ["go", /^(?:---|===) (?:FAIL|RUN|PASS):|^(?:ok|FAIL)\s+\S+\s+[\d.]+s/m]
-];
-function detectRunner(text) {
-  for (const [runner, re] of RUNNER_SIGNATURES) if (re.test(text)) return runner;
-  return "unknown";
-}
-var NOISE = [
-  /^\s*[✓√✔]\s/,
-  /^\s*PASS\s/,
-  /^\s*PASSED\b/,
-  /\bPASSED\s*(?:\[\s*\d+%\])?$/,
-  /^test .* \.\.\. ok$/,
-  /^ok\s+\S+\s+[\d.]+s/,
-  /^=== RUN\s/,
-  /^--- PASS:/,
-  /^\s*Compiling\s/,
-  /^\s*Downloaded?\s/,
-  /^\s*$/
-];
-var ERROR_LINE = [
-  /\berror\b|\bERROR\b|\bError\b/,
-  /\bFAIL(?:ED|URE)?\b|\bfailed\b/,
-  /^\s*[✗×✕❌]\s/,
-  /\bpanic(?:ked)?\b|^Traceback \(most recent call last\)/,
-  /\bAssertion(?:Error)?\b|\bassert(?:ion)?\b/,
-  /^E\s{2,}/,
-  // pytest assertion detail
-  /^\s*●\s/,
-  // jest failing test header
-  /\berror TS\d+:/,
-  /^\s*-->\s.+:\d+:\d+$/
-  // cargo error location
-];
-var DIFF_HEADER = /^\s*(?:[-+]\s*Expected|[-+]\s*Received|Expected:|Received:|expected:|actual:|Difference:|- expected|\+ actual|assert .* ==)/;
-var DIFF_BODY = /^\s*[-+](?!-)|^\s{2,}\S/;
-var FAILING_TEST = [
-  /^\s*(?:FAIL|×|✕|✗)\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?(?:\s+>\s+.+?)?)(?:\s+\d+ms)?$/,
-  // vitest/jest file (+ test path)
-  /^\s*●\s+(.+?)\s*$/,
-  // jest
-  /^\s*[×✕✗]\s+(.+?)(?:\s+\d+ms)?$/,
-  // vitest/jest test line
-  /^FAILED\s+(\S+::\S+)/,
-  // pytest
-  /^test\s+(\S+)\s+\.\.\.\s+FAILED$/,
-  // cargo
-  /^---\s+FAIL:\s+(\S+)/
-  // go
-];
-function isNoise(line) {
-  return NOISE.some((re) => re.test(line));
-}
-function isErrorLine(line) {
-  return ERROR_LINE.some((re) => re.test(line));
-}
-function failingTestName(line) {
-  for (const re of FAILING_TEST) {
-    const m = re.exec(line);
-    if (m && m[1]) return m[1].trim();
-  }
-  return null;
-}
-function summarizeShellOutput(raw, opts) {
-  const tailLines = opts.tailLines ?? DEFAULT_TAIL_LINES;
-  if (raw.length <= opts.maxChars) {
-    return { text: raw, runner: detectRunner(raw), failingTests: [], droppedNoise: 0 };
-  }
-  const text = stripAnsi(raw).replace(/\r\n?/g, "\n");
-  const runner = detectRunner(text);
-  const lines = text.split("\n");
-  const tailFrom = Math.max(0, lines.length - tailLines);
-  const tail = lines.slice(tailFrom);
-  const failing = [];
-  const seenFailing = /* @__PURE__ */ new Set();
-  const kept = [];
-  const seenKept = /* @__PURE__ */ new Set();
-  let droppedNoise = 0;
-  let diffLeft = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const name = failingTestName(line);
-    if (name && !seenFailing.has(name)) {
-      seenFailing.add(name);
-      failing.push(name);
-    }
-    if (i >= tailFrom) continue;
-    if (DIFF_HEADER.test(line)) {
-      diffLeft = MAX_DIFF_LINES;
-      kept.push(line);
-      continue;
-    }
-    if (diffLeft > 0) {
-      if (DIFF_BODY.test(line) && !isNoise(line)) {
-        kept.push(line);
-        diffLeft--;
-        continue;
-      }
-      diffLeft = 0;
-    }
-    if (isNoise(line)) {
-      droppedNoise++;
-      continue;
-    }
-    if (isErrorLine(line)) {
-      const key = line.trim();
-      if (seenKept.has(key)) continue;
-      seenKept.add(key);
-      kept.push(line);
-    }
-  }
-  const header = `[output summarised${runner === "unknown" ? "" : ` (${runner})`}: ${lines.length.toLocaleString("en-US")} lines / ${raw.length.toLocaleString("en-US")} chars \u2192 failing tests, error lines, assertion diffs and the last ${tail.length} lines; ${droppedNoise.toLocaleString("en-US")} passing/progress lines dropped. Re-run a narrower command (one test file, grep) for more.]`;
-  const failingBlock = failing.length > 0 ? `Failing tests (${failing.length}):
-${failing.slice(0, 50).map((n) => `  - ${n}`).join("\n")}${failing.length > 50 ? `
-  \u2026 +${failing.length - 50} more` : ""}` : "";
-  const tailBlock = `--- last ${tail.length} lines ---
-${tail.join("\n")}`;
-  const fixed = [header, failingBlock, tailBlock].filter(Boolean).join("\n\n");
-  const room = opts.maxChars - fixed.length - 40;
-  let errorsBlock = "";
-  if (kept.length > 0 && room > 200) {
-    const body = `--- errors (${kept.length} lines) ---
-${kept.join("\n")}`;
-    errorsBlock = body.length <= room ? body : cutHead(body, room, { suffix: "\n\u2026[more error lines elided]" });
-  }
-  const assembled = [header, failingBlock, errorsBlock, tailBlock].filter(Boolean).join("\n\n");
-  const fitted = assembled.length <= opts.maxChars ? assembled : cutHeadTail(assembled, opts.maxChars, { headShare: 0.5 });
-  return { text: fitted, runner, failingTests: failing, droppedNoise };
-}
-
-// ../packages/tool-output-policy/src/jsonProjection.ts
-var STEPS = [
-  { depth: 4, arrayItems: 10, stringChars: 400 },
-  { depth: 3, arrayItems: 5, stringChars: 200 },
-  { depth: 2, arrayItems: 3, stringChars: 120 },
-  { depth: 2, arrayItems: 1, stringChars: 80 },
-  { depth: 1, arrayItems: 1, stringChars: 60 }
-];
-function describe2(value) {
-  if (Array.isArray(value)) return `[array: ${value.length} items]`;
-  if (value && typeof value === "object") return `{object: ${Object.keys(value).length} keys}`;
-  return String(value);
-}
-function projectValue(value, step, depth) {
-  if (typeof value === "string") {
-    return value.length > step.stringChars ? `${value.slice(0, step.stringChars)}\u2026(+${value.length - step.stringChars} chars)` : value;
-  }
-  if (value === null || typeof value !== "object") return value;
-  if (depth >= step.depth) return describe2(value);
-  if (Array.isArray(value)) {
-    const head = value.slice(0, step.arrayItems).map((v) => projectValue(v, step, depth + 1));
-    if (value.length > step.arrayItems) head.push(`\u2026(+${value.length - step.arrayItems} more of ${value.length} items)`);
-    return head;
-  }
-  const out = {};
-  for (const [k, v] of Object.entries(value)) out[k] = projectValue(v, step, depth + 1);
-  return out;
-}
-function projectJson(value, maxChars) {
-  let last = { value: void 0, json: "", fits: false };
-  for (const step of STEPS) {
-    const projected = projectValue(value, step, 0);
-    const json = JSON.stringify(projected);
-    last = { value: projected, json, fits: json.length <= maxChars };
-    if (last.fits) return last;
-  }
-  return last;
-}
-
-// ../packages/tool-output-policy/src/readFileWindow.ts
-var READ_FILE_RESULT_CHARS = TOOL_OUTPUT_CAPS.read_file ?? 16e3;
-function isReadFileResult(out) {
-  return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && typeof out.content === "string";
-}
-function windowReadFile(out, opts = {}) {
-  const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
-  const tool = opts.tool ?? "read_file";
-  const withNote2 = (result) => opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(result, opts.advisory) : result;
-  const done = (served2, truncated) => ({ value: withNote2(served2), served: served2, truncated });
-  const lines = out.content.split("\n");
-  const offset = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
-  const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : offset + lines.length - 1;
-  const alreadyPartial = out.truncated === true;
-  const served = (kept, note) => {
-    const lastLine = offset + kept.length - 1;
-    return { ...out, content: kept.join("\n"), offset, totalLines, truncated: lastLine < totalLines || alreadyPartial, note };
-  };
-  const build = (kept, note) => withNote2(served(kept, note));
-  const fits = (value) => JSON.stringify(value).length <= maxChars;
-  if (fits(withNote2({ ...out }))) return done({ ...out }, false);
-  const how = (next) => opts.alone !== void 0 ? `call ${tool} again with ONLY the path ${JSON.stringify(opts.alone)} (offset applies to a single file) and offset ${next}` : `call ${tool} again with offset ${next}`;
-  const continuation = (lastLine) => `Showing lines ${offset}\u2013${lastLine} of ${totalLines}. This surface returns at most ~${maxChars.toLocaleString("en-US")} chars per read, so a large file arrives in several windows \u2014 ${how(lastLine + 1)} to continue from exactly where this one stopped. Do not re-request lines you already have.`;
-  let lo = 1;
-  let hi = lines.length;
-  let best = 0;
-  while (lo <= hi) {
-    const mid = lo + hi >> 1;
-    if (fits(build(lines.slice(0, mid), continuation(offset + mid - 1)))) {
-      best = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  if (best === 0) {
-    const first = lines[0] ?? "";
-    const room = maxChars - 600;
-    const head = room >= 200 ? first.slice(0, room) : "";
-    const more = lines.length > 1 ? ` The lines AFTER it continue at offset ${offset + 1}: ${how(offset + 1)}.` : "";
-    const note = head ? `Line ${offset} of ${totalLines} is longer than the ~${maxChars.toLocaleString("en-US")}-char read budget; the first ${head.length.toLocaleString("en-US")} of its ${first.length.toLocaleString("en-US")} chars are shown. Paging by offset cannot reach the rest of this line \u2014 use ${pagedReadSearchTool(tool)} for the specific symbol instead.${more}` : `Skipped: this file's share of the read budget (~${Math.max(0, maxChars).toLocaleString("en-US")} chars) is too small for even its first line (${first.length.toLocaleString("en-US")} chars). Read it ${opts.alone !== void 0 ? "on its own" : "again with a larger budget"}: ${how(offset)}, or use ${pagedReadSearchTool(tool)} for the specific symbol.`;
-    return done({ ...out, content: head, offset, totalLines, truncated: true, note }, true);
-  }
-  return done(served(lines.slice(0, best), continuation(offset + best - 1)), true);
-}
-function isReadFilesResult(out) {
-  return !!out && typeof out === "object" && !Array.isArray(out) && out.ok !== false && Array.isArray(out.files);
-}
-function windowReadFiles(out, opts = {}) {
-  const maxChars = opts.maxChars ?? READ_FILE_RESULT_CHARS;
-  const files = out.files;
-  const overhead = JSON.stringify({ ...out, files: [] }).length + files.length + (opts.advisory ? opts.advisory.length + 16 : 0);
-  const order = files.map((f, i) => ({ i, size: JSON.stringify(f ?? null).length })).sort((a, b) => a.size - b.size);
-  const servedFiles = files.slice();
-  let remaining2 = Math.max(0, maxChars - overhead);
-  let truncated = false;
-  order.forEach(({ i, size }, n) => {
-    const file = files[i];
-    const alone = !pagedReadOffsetsPerPath(opts.tool ?? "read_file") && isReadFileResult(file) && typeof file.path === "string" ? file.path : void 0;
-    const share = Math.floor(remaining2 / (order.length - n));
-    if (isReadFileResult(file) && size > share) {
-      const windowed = windowReadFile(file, { ...opts.tool ? { tool: opts.tool } : {}, ...alone ? { alone } : {}, maxChars: share });
-      servedFiles[i] = windowed.served;
-      truncated = truncated || windowed.truncated;
-    }
-    remaining2 -= JSON.stringify(servedFiles[i] ?? null).length;
-  });
-  const served = { ...out, files: servedFiles };
-  const value = opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(served, opts.advisory) : served;
-  return { value, served, truncated };
-}
-function sliceReadFile(out, start, end) {
-  const lines = out.content.split("\n");
-  const first = typeof out.offset === "number" && out.offset > 0 ? Math.floor(out.offset) : 1;
-  const from = Math.max(first, Math.floor(start));
-  const kept = lines.slice(from - first, Math.max(from - first, Math.floor(end) - first + 1));
-  const lastLine = from + kept.length - 1;
-  const totalLines = typeof out.totalLines === "number" && out.totalLines > 0 ? Math.floor(out.totalLines) : void 0;
-  const truncated = totalLines !== void 0 ? lastLine < totalLines : out.truncated === true;
-  const { note: _coveringNote, ...rest } = out;
-  return {
-    ...rest,
-    content: kept.join("\n"),
-    offset: from,
-    ...totalLines !== void 0 ? { totalLines } : {},
-    truncated,
-    ...truncated ? { note: `Showing lines ${from}\u2013${lastLine}${totalLines !== void 0 ? ` of ${totalLines}` : ""}. To continue, call read_file again with offset ${lastLine + 1}.` } : {}
-  };
-}
-
-// ../packages/tool-output-policy/src/policy.ts
-var LOG_FIELDS = ["output", "stdout", "stderr"];
-function isLogLike(text, tool) {
-  return tool !== void 0 && isShellTool(tool) || detectRunner(text) !== "unknown";
-}
-function fitToolText(text, maxChars, opts = {}) {
-  if (text.length <= maxChars) return text;
-  if (opts.summarize && isLogLike(text, opts.tool)) return summarizeShellOutput(text, { maxChars }).text;
-  return (opts.fallback ?? cutHeadTail)(text, maxChars);
-}
-function attach(value, opts) {
-  return opts.advisory && opts.attachAdvisory ? opts.attachAdvisory(value, opts.advisory) : value;
-}
-function capFor(tool, out, opts) {
-  if (opts.maxChars !== void 0) return opts.maxChars;
-  const tableCap = isIndexResult(tool, out) ? resultTableCap(tool, out, opts.caps) : !opts.summarize && !isPagedReadTool(tool) ? DEFAULT_TOOL_OUTPUT_CHARS : toolOutputCap(tool, opts.caps);
-  return windowedCap(tool, tableCap, opts.contextWindowTokens);
-}
-function pageIndexResult(out, fits) {
-  const all = out.lines ? out.lines.split("\n") : [];
-  const offset = typeof out.offset === "number" ? out.offset : 0;
-  const pageOf = (n) => {
-    const envelope = { ...out };
-    delete envelope.lines;
-    delete envelope.nextOffset;
-    return { ...envelope, returned: n, truncated: true, nextOffset: offset + n, lines: all.slice(0, n).join("\n") };
-  };
-  let lo = 0;
-  let hi = all.length - 1;
-  while (lo < hi) {
-    const mid = Math.ceil((lo + hi) / 2);
-    if (fits(pageOf(mid))) lo = mid;
-    else hi = mid - 1;
-  }
-  return lo > 0 && fits(pageOf(lo)) ? pageOf(lo) : null;
-}
-function shrinkLogFields(tool, out, cap2, overhead) {
-  const fields = LOG_FIELDS.filter((f) => typeof out[f] === "string" && out[f].length > 0);
-  if (fields.length === 0) return null;
-  const logChars = fields.reduce((n, f) => n + out[f].length, 0);
-  const rest = JSON.stringify({ ...out, ...Object.fromEntries(fields.map((f) => [f, ""])) }).length;
-  const escapedLog = fields.reduce((n, f) => n + JSON.stringify(out[f]).length - 2, 0);
-  const inflation = logChars > 0 ? escapedLog / logChars : 1;
-  const budget = Math.floor((cap2 - rest - overhead) / inflation);
-  if (budget < 500) return null;
-  const shrunk = { ...out };
-  for (const f of fields) {
-    const text = out[f];
-    const share = Math.max(200, Math.floor(budget * (text.length / logChars)));
-    shrunk[f] = fitToolText(text, share, { tool, summarize: true });
-  }
-  return shrunk;
-}
-function truncatedResultNote(originalChars, maxChars) {
-  if (maxChars < 600) return "Truncated: NOT the whole result \u2014 do not treat it as complete.";
-  return `Truncated: the full result was ${originalChars.toLocaleString("en-US")} chars and this surface returns at most ~${maxChars.toLocaleString("en-US")}. \`output\` is only a cut of it, NOT the whole \u2014 never treat it as complete or write it back as if it were. Re-call with a narrower query, id or filter to see the rest.`;
-}
-function shapeToolResult(tool, out, opts = {}) {
-  const bytes = JSON.stringify(out ?? null).length;
-  if (isPagedReadTool(tool) && (isReadFileResult(out) || isReadFilesResult(out))) {
-    const maxChars = opts.maxChars ?? windowedCap(tool, toolOutputCap(tool), opts.contextWindowTokens);
-    const windowOpts = { tool, maxChars, advisory: opts.advisory, attachAdvisory: opts.attachAdvisory };
-    const windowed = isReadFileResult(out) ? windowReadFile(out, windowOpts) : windowReadFiles(out, windowOpts);
-    return { content: JSON.stringify(windowed.value), bytes, truncated: windowed.truncated, served: windowed.served };
-  }
-  const cap2 = capFor(tool, out, opts);
-  const full = JSON.stringify(attach(out ?? null, opts));
-  if (full.length <= cap2) return { content: full, bytes, truncated: false };
-  const advisoryChars = opts.advisory ? opts.advisory.length + 16 : 0;
-  if (isIndexResult(tool, out)) {
-    const paged = pageIndexResult(out, (shaped) => JSON.stringify(attach(shaped, opts)).length <= cap2);
-    if (paged) return { content: JSON.stringify(attach(paged, opts)), bytes, truncated: true };
-  }
-  if (opts.summarize) {
-    if (typeof out === "string") {
-      const inflation = out.length > 0 ? (bytes - 2) / out.length : 1;
-      const shaped = fitToolText(out, Math.max(500, Math.floor((cap2 - advisoryChars - 32) / Math.max(1, inflation))), { tool, summarize: true });
-      const content2 = JSON.stringify(attach(shaped, opts));
-      if (content2.length <= cap2) return { content: content2, bytes, truncated: true };
-    } else if (out && typeof out === "object" && !Array.isArray(out)) {
-      const shrunk = shrinkLogFields(tool, out, cap2, advisoryChars + 64);
-      if (shrunk) {
-        const content2 = JSON.stringify(attach(shrunk, opts));
-        if (content2.length <= cap2) return { content: content2, bytes, truncated: true };
-      }
-    }
-    const marker2 = `
-[projected to fit the ~${cap2.toLocaleString("en-US")}-char tool-result budget (original ${bytes.toLocaleString("en-US")} chars): every top-level key is kept; arrays show their first items with a count of the rest and long strings are clipped. Re-call with a narrower filter, limit or id to see specific items.]`;
-    const projection = projectJson(out ?? null, cap2 - marker2.length - advisoryChars);
-    if (projection.fits) {
-      return { content: `${projection.json}${marker2}${opts.advisory ? `
-${opts.advisory}` : ""}`, bytes, truncated: true };
-    }
-  }
-  const itemNote = Array.isArray(out) ? ` The full result had ${out.length} items; re-call this tool with a narrower filter (e.g. status, projectId, or limit) to see specific ones.` : " The full result was large; re-call with a narrower query if you need the elided fields.";
-  const head = JSON.stringify(out ?? null).slice(0, cap2);
-  const marker = `\u2026[truncated ${bytes - cap2} of ${bytes} chars to protect the context window.${itemNote}]`;
-  const content = `${head}
-${marker}${opts.advisory ? `
-${opts.advisory}` : ""}`;
-  return { content, bytes, truncated: true };
 }
 
 // ../packages/agent-run/src/contractModel.ts
@@ -19424,15 +19479,7 @@ function traceWithPersistedSteps(messages, trace) {
 
 // src/localWorkspaceTools.ts
 var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
-  "read_file",
-  "list_files",
-  "search_code",
-  // Code navigation over the definition index. Pinned for the reason the file tools are,
-  // and more acutely: "where is the auth middleware?" shares no stem with "find_symbol",
-  // so relevance drops the one call that answers it and the run falls back to searching
-  // and paging through files — the pattern these two tools exist to replace.
-  "find_symbol",
-  "file_outline",
+  ...WORKSPACE_INSPECTION_TOOLS,
   // The semantic index (Builderforce Desktop). Pinned for the same reason and more so:
   // its whole purpose is the question phrased in words — "how do refunds reach the
   // ledger?" — which is exactly the turn whose text shares no stem with the tool name.
@@ -19445,9 +19492,7 @@ var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
   // Inert where the host did not advertise them (no compressor / no local model).
   "read_compressed",
   "local_research",
-  "write_file",
-  "edit_file",
-  "delete_file",
+  ...WORKSPACE_CODE_WRITE_TOOLS,
   "run_command",
   // A background command's companions (PRD 35 E6): a turn that started `npm test` in the
   // background and now asks "did it pass?" shares no stem with `command_status`.
@@ -19490,9 +19535,7 @@ var LOCAL_WORKSPACE_TOOLS = /* @__PURE__ */ new Set([
   "stop_agent"
 ]);
 var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
-  "write_file",
-  "edit_file",
-  "delete_file",
+  ...WORKSPACE_CODE_WRITE_TOOLS,
   "canvas_write_build_file",
   "canvas_edit_build_file",
   "canvas_restore_build_file"
@@ -21671,6 +21714,7 @@ export {
   isMutatingTool,
   renderPolicyDirectives,
   stableStringify,
+  truncateMiddle,
   limbicTraits,
   isFailedToolResult,
   fileToolKind,
@@ -21798,7 +21842,6 @@ export {
   isCappedToolRole,
   roleToolLimit,
   roleCappedSelection,
-  truncateMiddle,
   runBudgetCapMillicents,
   CacheServedStreak,
   defaultPipelineRouting,
@@ -21915,4 +21958,4 @@ export {
   computeBrainDiagnostics,
   buildBrainTriageReport
 };
-//# sourceMappingURL=chunk-5XKDK462.mjs.map
+//# sourceMappingURL=chunk-WRYZTXBS.mjs.map

@@ -37,6 +37,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { readSkillPackage, writeSkillPackage, type SkillFile } from "@builderforce/agent-skills";
+import { builderforceApiBase, builderforceAuthHeaders } from "../../infra/builderforce-http.js";
 import { readSharedEnvVar } from "../../infra/env-file.js";
 import { CONFIG_DIR } from "../../utils.js";
 import { liveRunAssignedSkills, readAssignedArtifactSlugsSync } from "../assigned-artifacts-sidecar.js";
@@ -74,7 +75,7 @@ interface HostSkill {
 function resolveGateway(): { base: string; apiKey: string } | null {
   const apiKey = readSharedEnvVar("BUILDERFORCE_API_KEY");
   if (!apiKey) return null;
-  const base = (readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai").replace(/\/+$/, "");
+  const base = builderforceApiBase();
   return { base, apiKey };
 }
 
@@ -85,7 +86,7 @@ async function getJson(
 ): Promise<unknown | string> {
   try {
     const res = await fetchImpl(`${gateway.base}${route}`, {
-      headers: { Accept: "application/json", Authorization: `Bearer ${gateway.apiKey}` },
+      headers: { Accept: "application/json", ...builderforceAuthHeaders(gateway.apiKey) },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return `gateway returned ${res.status}`;

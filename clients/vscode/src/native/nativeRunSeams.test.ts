@@ -4,13 +4,15 @@
  * (`nativeGatewayStream.ts`). Moved unchanged from the retired participant runner's test.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PolicyGate } from "@builderforce/agent-tools";
 import { shipPolicyOf } from "@builderforce/run-guards";
 import type { ToolDef } from "../tools/fileTools";
 import { nativeNeedsConfirm, parseToolOutput, toolLabel } from "./nativeRunTool";
 import { createStreamRelay, exhaustedToolBudget, transientRunPersistence } from "./nativeRunStream";
 import { createNativeStream, SURFACE_HEADER, SURFACE_VALUE } from "./nativeGatewayStream";
+
+vi.mock("../workspace/workspaceSymbolWatch", () => ({ vscodeWatchPort: () => undefined }));
 
 function toolDef(name: string, opts: { mutating?: boolean; remote?: boolean } = {}): ToolDef {
   return {
@@ -40,6 +42,12 @@ describe("toolLabel", () => {
 
 describe("nativeNeedsConfirm", () => {
   const defs = [toolDef("write_file", { mutating: true }), toolDef("read_file")];
+
+  it("routes destructive shell commands through confirmation even under acceptEdits", () => {
+    const confirm = nativeNeedsConfirm([toolDef("run_command", { mutating: true })], "acceptEdits", undefined);
+    expect(confirm({ name: "bash", args: { command: "git reset --hard" } })).toBe(true);
+    expect(confirm({ name: "run_command", args: { command: "echo fixture" } })).toBe(false);
+  });
 
   it("pauses on a mutating tool in ask mode and not in acceptEdits", () => {
     expect(nativeNeedsConfirm(defs, "ask", undefined)({ name: "write_file", args: {} })).toBe(true);

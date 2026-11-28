@@ -10,6 +10,7 @@
  * platform-sourced personas are already known to the portal.
  */
 
+import { fetchBuilderforce } from "./builderforce-http.js";
 import type { PersonaPlugin } from "../builderforce/types.js";
 import { logDebug } from "../logger.js";
 
@@ -66,15 +67,14 @@ export async function syncPersonasToBuilderforce(
   }
   const url = `${opts.baseUrl.replace(/\/$/, "")}/api/agent-hosts/${opts.agentNodeId}/personas`;
   try {
-    const res = await fetch(url, {
+    const res = await fetchBuilderforce(url, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${opts.apiKey}`,
       },
       body: JSON.stringify({ personas }),
       signal: AbortSignal.timeout(15_000),
-    });
+    }, opts.apiKey);
     if (!res.ok) {
       logDebug(`[persona-sync] push failed: HTTP ${res.status}`);
       return false;

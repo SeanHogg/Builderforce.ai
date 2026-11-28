@@ -1,5 +1,5 @@
-import type { ChildProcessWithoutNullStreams, SpawnOptions } from "node:child_process";
-import { killProcessTree } from "@builderforce/agent-tools/node-process.js";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { killProcessTree, treeSpawnOptions } from "@builderforce/agent-tools/node-process.js";
 import { spawnWithFallback } from "../../spawn-utils.js";
 import type { ManagedRunStdin } from "../types.js";
 import { toStringEnv } from "./env.js";
@@ -42,30 +42,17 @@ export async function createChildAdapter(params: {
 
   const stdinMode = params.stdinMode ?? (params.input !== undefined ? "pipe-closed" : "inherit");
 
-  // On Windows, `detached: true` creates a new process group and can prevent
-  // stdout/stderr pipes from connecting when running under a Scheduled Task
-  // (headless, no console). Default to `detached: false` on Windows; on
-  // POSIX systems keep `detached: true` so the child survives parent exit.
-  const useDetached = process.platform !== "win32";
-
-  const options: SpawnOptions = {
+  const options = treeSpawnOptions({
     cwd: params.cwd,
     env: params.env ? toStringEnv(params.env) : undefined,
-    stdio: ["pipe", "pipe", "pipe"],
-    detached: useDetached,
-    windowsHide: true,
+    stdio: [stdinMode === "inherit" ? "inherit" : "pipe", "pipe", "pipe"],
     windowsVerbatimArguments: params.windowsVerbatimArguments,
-  };
-  if (stdinMode === "inherit") {
-    options.stdio = ["inherit", "pipe", "pipe"];
-  } else {
-    options.stdio = ["pipe", "pipe", "pipe"];
-  }
+  });
 
   const spawned = await spawnWithFallback({
     argv: resolvedArgv,
     options,
-    fallbacks: useDetached
+    fallbacks: options.detached
       ? [
           {
             label: "no-detach",

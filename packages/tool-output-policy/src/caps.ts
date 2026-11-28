@@ -46,7 +46,7 @@ export function backgroundWaitAbort(signal: AbortSignal | undefined): (wake: () 
 }
 
 /** Evict the oldest finished entries and reserve space for a new job. */
-export function makeRoomForBackgroundJob<K>(jobs: Map<K, { status: string }>): boolean {
+function makeRoomForBackgroundJob<K>(jobs: Map<K, { status: string }>): boolean {
   if (jobs.size < MAX_BACKGROUND_JOBS) return true;
   for (const [id, job] of jobs) {
     if (job.status === 'running') continue;
@@ -54,6 +54,28 @@ export function makeRoomForBackgroundJob<K>(jobs: Map<K, { status: string }>): b
     if (jobs.size < MAX_BACKGROUND_JOBS) return true;
   }
   return false;
+}
+
+/** Run-scoped job handles and a bounded registry shared by workspace shells. */
+export function createBackgroundJobRegistry<Job extends { status: string }, Owner extends string | number = never>(
+  prefix = '',
+) {
+  const jobs = new Map<string, Job>();
+  const nextByOwner = new Map<Owner | undefined, number>();
+  const keyOf = (id: string, owner: Owner | undefined): string => JSON.stringify([owner, id]);
+  return {
+    reserve(owner?: Owner): string | undefined {
+      if (!makeRoomForBackgroundJob(jobs)) return undefined;
+      const next = (nextByOwner.get(owner) ?? 0) + 1;
+      nextByOwner.set(owner, next);
+      return `${prefix}job-${next}`;
+    },
+    get: (id: string, owner?: Owner) => jobs.get(keyOf(id, owner)),
+    set: (id: string, job: Job, owner?: Owner) => jobs.set(keyOf(id, owner), job),
+    delete: (id: string, owner?: Owner) => jobs.delete(keyOf(id, owner)),
+    clear: () => { jobs.clear(); nextByOwner.clear(); },
+    values: () => jobs.values(),
+  };
 }
 
 /** Host-specific limits for command and file-read protocols. */

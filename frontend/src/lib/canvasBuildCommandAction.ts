@@ -12,12 +12,13 @@
  * Its own module so `canvasBuildTools.ts` grows by one spread, not another tool body.
  */
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
-import { runCommandTool, type Capability } from '@builderforce/agent-tools';
+import { commandStatusTool, commandStopTool, runCommandTool, workspaceCommandNeedsConfirmation, type Capability, type ShellCapability } from '@builderforce/agent-tools';
 import { createWorkspaceShell } from '@/lib/browserRuntime/workspaceShell';
 import { recordBuildFailure } from '@/lib/buildDiagnostics';
 import type { BoundCanvasBuild, CanvasBuildToolsContext } from '@/lib/canvasBuildTools';
 import { toolErrorMessage } from '@/lib/toolErrorMessage';
 import type { WorkspaceId } from '@/lib/workspace/workspaceId';
+import { CANVAS_SHELL_TOOLS } from '@builderforce/creation-canvas-contract';
 
 const SHARED = runCommandTool.schema.function;
 
@@ -50,9 +51,6 @@ function recordFailedCommand(workspaceId: WorkspaceId, command: unknown, data: R
   });
 }
 
-/** The shared tool's own description of its one argument. */
-const COMMAND_PARAMETER = (SHARED.parameters.properties as { command: Record<string, unknown> }).command;
-
 /**
  * The shared description, re-pointed at this surface: it was written for a checked-out
  * repository and a run that ends in `finish`; here it is a Builder object's workspace and
@@ -68,44 +66,71 @@ const SHARED_DESCRIPTION = SHARED.description
  * injected rather than imported so this module and `canvasBuildTools.ts` (which spreads
  * this action in) do not import each other's values.
  */
-export function canvasRunBuildCommandAction(
-  ctx: Pick<CanvasBuildToolsContext, 'onFilesChanged' | 'onBuildWritten'>,
+export function canvasBuildCommandActions(
+  ctx: Pick<CanvasBuildToolsContext, 'onFilesChanged' | 'onBuildWritten' | 'confirmShellCommand'>,
   resolve: (objectId: unknown) => { build: BoundCanvasBuild } | { error: string },
-): BrainAction {
-  return {
-    name: 'canvas_run_build_command',
-    description: `${SHARED_DESCRIPTION} It runs in this browser's own Node runtime against the build's current files — npm, node, npx and the usual shell built-ins, pipes and && work; native addons and system binaries do not. Unlike the VSIX, which uses the user's real shell and follows that shell's pipefail setting, this in-browser shell fails a pipeline when any stage exits non-zero. Files the command creates, changes or deletes are saved back to the workspace (dependencies and build output are not). Do NOT start a long-running server or watcher (npm run dev, vite): it never exits and is stopped at the timeout — the live preview already runs the app. A command that fails, including that timeout, is recorded for canvas_read_build_diagnostics; use that for the preview's own errors too.`,
-    mutates: true,
+): BrainAction[] {
+  const shells = new Map<string, ShellCapability>();
+  const capabilities = new Set<Capability>(['shell', 'shell.jobs']);
+  const forSurface = (description: string) => description
+    .replace(/\brun_command\b/g, CANVAS_SHELL_TOOLS.run)
+    .replace(/\bcommand_status\b/g, CANVAS_SHELL_TOOLS.status)
+    .replace(/\bcommand_stop\b/g, CANVAS_SHELL_TOOLS.stop);
+  const definitions = [
+    {
+      name: CANVAS_SHELL_TOOLS.run, tool: runCommandTool, mutates: true,
+      description: `${SHARED_DESCRIPTION} Run npm, node, npx and shell commands against this build's files. Pipeline failures keep their nonzero status. File changes are saved to the workspace. Use background mode for a long build or test, then check it with ${CANVAS_SHELL_TOOLS.status}. The live preview already runs the app. Check failed builds and preview errors with canvas_read_build_diagnostics.`,
+    },
+    { name: CANVAS_SHELL_TOOLS.status, tool: commandStatusTool, mutates: false },
+    { name: CANVAS_SHELL_TOOLS.stop, tool: commandStopTool, mutates: true },
+  ];
+  return definitions.map(({ name, tool, mutates, description }) => ({
+    name,
+    mutates,
+    description: forSurface(description ?? tool.schema.function.description),
     parameters: {
-      type: 'object', required: ['command'], additionalProperties: false,
+      ...tool.schema.function.parameters,
+      additionalProperties: false,
       properties: {
-        command: COMMAND_PARAMETER,
+        ...tool.schema.function.parameters.properties,
         objectId: { type: 'string', description: 'Builder object id. Omit when the board has one.' },
       },
     },
     run: async (raw: unknown) => {
-      const args = raw as { command?: unknown; objectId?: unknown };
+      const args = raw as Record<string, unknown>;
       const resolved = resolve(args.objectId);
       if ('error' in resolved) return resolved;
       const { build } = resolved;
-      const shell = createWorkspaceShell(build.store, {
-        onFilesChanged: (workspaceId, paths) => {
-          ctx.onFilesChanged?.(workspaceId, paths);
-          ctx.onBuildWritten?.(build.objectId);
-        },
-      });
+      const scope = JSON.stringify([build.objectId, build.store.kind, build.store.id]);
+      let shell = shells.get(scope);
+      if (!shell) {
+        const workspace = createWorkspaceShell(build.store, {
+          onFilesChanged: (workspaceId, paths) => {
+            ctx.onFilesChanged?.(workspaceId, paths);
+            ctx.onBuildWritten?.(build.objectId);
+          },
+          onBackgroundComplete: (command, result) => recordFailedCommand(build.store.id, command, { ...result }),
+        });
+        shell = {
+          ...workspace,
+          async authorize(command) {
+            const allowed = !workspaceCommandNeedsConfirmation(command) ||
+              (await ctx.confirmShellCommand?.(command)) === true;
+            return { allowed };
+          },
+        };
+        shells.set(scope, shell);
+      }
       try {
-        const result = await runCommandTool.execute(
-          { command: args.command },
-          { caps: { capabilities: new Set<Capability>(['shell']), shell } },
-        );
-        recordFailedCommand(build.store.id, args.command, result.data);
-        return result.data;
+        const result = await tool.execute(args, { caps: { capabilities, shell } });
+        const { data } = result;
+        if (tool === runCommandTool && args.yieldMs === undefined) recordFailedCommand(build.store.id, args.command, data);
+        return typeof data.note === 'string' ? { ...data, note: forSurface(data.note) } : data;
       } catch (error) {
         const message = toolErrorMessage(error, 'The command could not be run.');
-        recordFailedCommand(build.store.id, args.command, { ok: false, error: message });
+        if (tool === runCommandTool) recordFailedCommand(build.store.id, args.command, { ok: false, error: message });
         return { ok: false, error: message };
       }
     },
-  };
+  }));
 }

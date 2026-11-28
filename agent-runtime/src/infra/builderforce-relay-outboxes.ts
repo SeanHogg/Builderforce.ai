@@ -11,6 +11,7 @@
  *
  * Both stay best-effort, as before: a failed send is logged and dropped, never thrown.
  */
+import { builderforceAuthHeaders } from "./builderforce-http.js";
 import { createOutbox, type Outbox } from "@builderforce/write-outbox/core";
 
 /** Events per POST, and the count that sends without waiting. */
@@ -78,7 +79,7 @@ export function createToolAuditPersister(opts: {
   const post = (body: unknown): Promise<Response> =>
     doFetch(opts.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${opts.apiKey}` },
+      headers: { "Content-Type": "application/json", ...builderforceAuthHeaders(opts.apiKey) },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(TOOL_AUDIT_TIMEOUT_MS),
     });

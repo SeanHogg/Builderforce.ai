@@ -16,10 +16,10 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { resolveBuilderForceAgentsDir } from "../builderforce/project-context.js";
 import type { MambaStateSnapshot } from "../builderforce/types.js";
+import { builderforceAuthHeaders, builderforceRegistryBase } from "../infra/builderforce-http.js";
 import { readSharedEnvVar } from "../infra/env-file.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { fetchWithTimeout } from "../utils/fetch-timeout.js";
-import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 
 const log = createSubsystemLogger("mamba-state");
 
@@ -163,16 +163,14 @@ export async function syncMambaStateToRegistry(params: {
     log.debug("No BUILDERFORCE_AGENTS_LINK_API_KEY — skipping mamba state sync");
     return;
   }
-  const base = normalizeBaseUrl(
-    params.registryUrl ?? readSharedEnvVar("BUILDERFORCE_AGENTS_LINK_URL") ?? "https://api.builderforce.ai",
-  );
+  const base = builderforceRegistryBase(params.registryUrl);
   const url = `${base}/api/ide/agents/${encodeURIComponent(params.agentId)}/mamba-state`;
   try {
     const res = await fetchWithTimeout(
       url,
       {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        headers: { "Content-Type": "application/json", ...builderforceAuthHeaders(apiKey) },
         body: JSON.stringify(params.state),
       },
       SYNC_TIMEOUT_MS,

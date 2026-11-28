@@ -9,19 +9,11 @@
  * auto-create was how users ended up attached to the wrong (or no) project.
  */
 import { note, password, select, spinner, text } from "@clack/prompts";
+import { flattenApiError } from "@builderforce/api-errors";
+import { fetchBuilderforce } from "../infra/builderforce-http.js";
 
-/**
- * The API answers errors as flat `{error:"msg"}` or nested
- * `{error:{message,code,details}}`. Reading `error` as a string only renders
- * "[object Object]" for the nested form. Same rule as the web client's
- * flattenErrorBody and the Chrome client's copy (no package all three runtimes
- * can import, so one copy per runtime).
- */
 export function flattenErrorMessage(body: Record<string, unknown>): string | undefined {
-  const err = body.error;
-  const nested = typeof err === "object" && err !== null ? (err as { message?: unknown }) : null;
-  const candidates = [body.message, nested?.message, err];
-  return candidates.find((c): c is string => typeof c === "string" && c.length > 0);
+  return flattenApiError(body).message;
 }
 
 /** Thin fetch wrapper — throws a descriptive error on non-2xx. */
@@ -29,12 +21,10 @@ export async function builderforceApiFetch<T>(
   url: string,
   opts: RequestInit & { token?: string } = {},
 ): Promise<T> {
-  const { token, ...rest } = opts;
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-  const res = await fetch(url, { ...rest, headers });
+  const { token, headers: providedHeaders, ...rest } = opts;
+  const headers = new Headers(providedHeaders);
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const res = await fetchBuilderforce(url, { ...rest, headers }, token);
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     throw new Error(`${res.status} ${flattenErrorMessage(body) ?? res.statusText}`);

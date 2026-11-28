@@ -3,9 +3,13 @@ import type { DeviceClient } from '@builderforce/creation-canvas-contract';
 import type { HonoEnv } from '../../env';
 
 /** The request's client IP: Cloudflare's header, else the first `X-Forwarded-For` hop. */
+export function getCloudflareClientIp(c: Context<HonoEnv>): string | null {
+  return c.req.header('CF-Connecting-IP')?.trim() || null;
+}
+
 export function getClientIp(c: Context<HonoEnv>): string | null {
-  const cfIp = c.req.header('CF-Connecting-IP');
-  if (cfIp) return cfIp.trim();
+  const cfIp = getCloudflareClientIp(c);
+  if (cfIp) return cfIp;
 
   const xff = c.req.header('X-Forwarded-For');
   if (!xff) return null;

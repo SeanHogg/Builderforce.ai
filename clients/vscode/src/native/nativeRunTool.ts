@@ -4,10 +4,9 @@
  * the dispatcher that enforces the governance gates at the tool seam. No `vscode` import.
  */
 
-import { resolveCallName, toolNameSet } from "@builderforce/agent-tools";
+import { evaluatePolicyGate, resolveCallName, toolCallPaths, toolNameSet, workspaceCommandNeedsConfirmation, type PolicyGate } from "@builderforce/agent-tools";
 import { toolSpecsFor, type BrainAction, type BrainToolSpec } from "@seanhogg/builderforce-brain-embedded";
 import { describeTool, type ToolDef } from "../tools/fileTools";
-import { evaluatePolicyGate, toolCallPaths, type PolicyGate } from "@builderforce/agent-tools";
 import { publishAllowed, publishVerbOf, type ShipPolicy } from "@builderforce/run-guards";
 import type { RunHooks } from "../hooks/runHooks";
 import type { NativeApprovalRequest, NativeRunEvents, NativeRunLabels } from "./nativeRunTypes";
@@ -97,6 +96,8 @@ export function nativeNeedsConfirm(
   gates: readonly PolicyGate[] | undefined,
 ): (req: { name: string; args: unknown; shipPolicy?: ShipPolicy }) => boolean {
   return ({ name, args, shipPolicy }) => {
+    const resolved = resolveCallName(name, toolNameSet(defs, (tool) => tool.name));
+    if (resolved === "run_command" && workspaceCommandNeedsConfirmation(argsRecord(args).command)) return true;
     if (permissionMode === "acceptEdits") return false;
     const gate = evaluatePolicyGate(gates, name, toolCallPaths(argsRecord(args)), undefined, declaredOf(defs, name)).action;
     if (gate === "require-approval") return true;

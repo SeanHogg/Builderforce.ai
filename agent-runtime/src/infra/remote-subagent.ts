@@ -12,6 +12,7 @@
  * which is the orchestrator's `IAgentTransport` adapter.
  */
 
+import { fetchBuilderforce } from "./builderforce-http.js";
 import { createHmac } from "node:crypto";
 import { logDebug } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
@@ -63,13 +64,12 @@ export type FleetEntry = {
 export async function fetchFleetEntries(opts: RemoteDispatchOptions): Promise<FleetEntry[]> {
   const url = `${normalizeBaseUrl(opts.baseUrl)}/api/agent-hosts/fleet`;
   try {
-    const res = await fetch(url, {
+    const res = await fetchBuilderforce(url, {
       headers: {
-        Authorization: `Bearer ${opts.apiKey}`,
         "X-AgentHost-From": opts.myAgentNodeId,
       },
       signal: AbortSignal.timeout(15_000),
-    });
+    }, opts.apiKey);
     if (!res.ok) {
       logDebug(`[remote-subagent] fleet query failed: HTTP ${res.status}`);
       return [];
@@ -181,18 +181,17 @@ export async function dispatchToRemoteAgentNode(
     }
 
     try {
-      const res = await fetch(url, {
+      const res = await fetchBuilderforce(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${opts.apiKey}`,
           "X-AgentHost-From": opts.myAgentNodeId,
           // SHA-256 HMAC of the exact body bytes — receiver should verify before accepting
           "X-AgentHost-Signature": `sha256=${signature}`,
         },
         body,
         signal: AbortSignal.timeout(extOpts?.timeoutMs ?? 30_000),
-      });
+      }, opts.apiKey);
 
       // Retry on 5xx server errors
       if (res.status >= 500) {
@@ -258,17 +257,16 @@ async function postRemoteCallback(
   });
   const signature = signPayload(body, opts.apiKey);
   try {
-    await fetch(url, {
+    await fetchBuilderforce(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${opts.apiKey}`,
         "X-AgentHost-From": opts.myAgentNodeId,
         "X-AgentHost-Signature": `sha256=${signature}`,
       },
       body,
       signal: AbortSignal.timeout(15_000),
-    });
+    }, opts.apiKey);
     logDebug(
       `[remote-subagent] ${String(frame.type)} dispatched to callback agentNode ${callbackAgentNodeId}`,
     );

@@ -64,10 +64,10 @@ test("process poll waits for completion when timeout is provided", async () => {
       resolved = true;
     });
 
-    await vi.advanceTimersByTimeAsync(200);
+    await vi.advanceTimersByTimeAsync(1);
     expect(resolved).toBe(false);
 
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(10);
     const poll = await pollPromise;
     const details = poll.details as { status?: string; aggregated?: string };
     expect(details.status).toBe("completed");

@@ -55,6 +55,7 @@ export interface CanvasBuildToolsContext {
    * app being built (`writtenAppTakesPrimary`) rather than one beside it.
    */
   onBuildWritten?: (objectId: string) => void;
+  confirmShellCommand?: (command: string) => Promise<boolean>;
 }
 
 /**

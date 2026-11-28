@@ -21,6 +21,7 @@
  *   if (r.decision === "answered") use(r.responseText);
  */
 
+import { fetchBuilderforce } from "./builderforce-http.js";
 import { logDebug, logWarn } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 
@@ -156,11 +157,10 @@ export class ApprovalGate {
 
     let approvalId: string;
     try {
-      const res = await fetch(`${this.baseUrl}/api/agent-hosts/${this.agentNodeId}/approval-request`, {
+      const res = await fetchBuilderforce(`${this.baseUrl}/api/agent-hosts/${this.agentNodeId}/approval-request`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify({
           kind,
@@ -171,7 +171,7 @@ export class ApprovalGate {
         }),
         // The post is bounded AND ends with the run: a Stop while it is in flight abandons it.
         signal: opts.signal ? AbortSignal.any([AbortSignal.timeout(10_000), opts.signal]) : AbortSignal.timeout(10_000),
-      });
+      }, this.apiKey);
       if (!res.ok) {
         if (opts.failClosed) {
           logWarn(`[approval-gate] request failed (${res.status}) — refusing (fail closed)`);

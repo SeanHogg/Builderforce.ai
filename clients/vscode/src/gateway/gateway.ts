@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import nodeFs from "node:fs";
 import nodeOs from "node:os";
 import nodePath from "node:path";
-import { derivePlatformWebBase, EDITOR_GATEWAY_BASE } from "@builderforce/device-auth";
+import { derivePlatformWebBase, EDITOR_GATEWAY_BASE, resolvePlatformBaseUrl } from "@builderforce/device-auth";
 import { gatewayCanChooseModel, gatewayModelIdentity, gatewayPlanModels, type ModelIdentityContext, NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import {
   BFI_DISCOVERY_ENV,
@@ -46,10 +46,8 @@ export interface ChatMessage {
  * only hit if a user explicitly blanks the setting.
  */
 export function getBaseUrl(): string {
-  const raw =
-    vscode.workspace.getConfiguration("builderforce").get<string>("baseUrl") ||
-    EDITOR_GATEWAY_BASE;
-  return raw.replace(/\/+$/, "");
+  const configured = vscode.workspace.getConfiguration("builderforce").get<string>("baseUrl");
+  return resolvePlatformBaseUrl(configured, EDITOR_GATEWAY_BASE);
 }
 
 export function getApiKey(secrets: vscode.SecretStorage): Thenable<string | undefined> {
@@ -211,8 +209,7 @@ export function getSessionTabMode(): SessionTabMode {
  */
 export function getWebBaseUrl(): string {
   const override = vscode.workspace.getConfiguration("builderforce").get<string>("webUrl");
-  if (override) return override.replace(/\/+$/, "");
-  return derivePlatformWebBase(getBaseUrl());
+  return resolvePlatformBaseUrl(override, derivePlatformWebBase(getBaseUrl()));
 }
 
 /**
