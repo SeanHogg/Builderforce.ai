@@ -397,7 +397,12 @@ const nextConfig = {
     // their bare imports from the frontend's node_modules. Appended, so every module that
     // resolves today resolves the same way; only a lookup that would otherwise FAIL from a
     // package directory falls through to here.
-    config.resolve.modules = [...(config.resolve.modules ?? ['node_modules']), path.join(__dirname, 'node_modules')];
+    const frontendModules = path.join(__dirname, 'node_modules');
+    const mcpSdk = path.join(__dirname, '../packages/builderforce-mcp/node_modules/@modelcontextprotocol/sdk');
+    // With symlinks disabled, SDK imports start at the linked path and miss
+    // pnpm's virtual directory containing the SDK's own dependencies.
+    const sdkModules = fs.existsSync(mcpSdk) ? [path.resolve(fs.realpathSync(mcpSdk), '../..')] : [];
+    config.resolve.modules = [...(config.resolve.modules ?? ['node_modules']), frontendModules, ...sdkModules];
     // NodeNext source packages: `./x.js` on disk is `./x.ts`.
     //
     // The source-only packages under `packages/` are consumed as TypeScript (their
