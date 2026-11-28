@@ -12,6 +12,7 @@
  * from `presentation/routes/llmRoutes.ts`, so no importer changed.
  */
 import type { Context } from 'hono';
+import { GATEWAY_WORKSPACE_HEADER } from '@builderforce/device-auth';
 import { eq } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -158,7 +159,7 @@ function resolveMembership(c: Context<HonoEnv>, tenantId: number, userId: string
 }
 
 /** Request header a `bfk_*` caller sets to act in a workspace other than the key's own. */
-export const WORKSPACE_HEADER = 'x-builderforce-workspace';
+export const WORKSPACE_HEADER = GATEWAY_WORKSPACE_HEADER;
 
 /** The workspace the caller names in {@link WORKSPACE_HEADER} when it differs from the key's
  *  own tenant; `null` when the header is absent, empty or the key's tenant (the default). */

@@ -14,14 +14,15 @@
 import { defineTool, type ToolContext, type ToolDefinition, type ToolResult } from "./tool.js";
 import { safeRepoArg, shellRunWithStop } from "./git-repo-scope.js";
 import { compressShellResult } from "./compress.js";
-import type { ShellJobStatus, ShellResult } from "./capabilities.js";
+import type { ShellFailureCode, ShellJobStatus, ShellResult } from "./capabilities.js";
+import { DEFAULT_COMMAND_TIMEOUT_MS } from "@builderforce/tool-output-policy";
 import { searchNoMatch } from "./shell-command-shape.js";
 import { stripTailLimit } from "./shell-pipe.js";
 import { outputFilterTool } from "./shell-output-filter.js";
 import { refuseBranchSwitchOverChanges } from "./branch-switch-guard.js";
 
 /** The longest a `yieldMs` / `waitMs` may hold the call (the foreground ceiling). */
-const SHELL_WAIT_MAX_MS = 10 * 60 * 1000;
+const SHELL_WAIT_MAX_MS = DEFAULT_COMMAND_TIMEOUT_MS;
 
 /** A wait argument clamped to [0, SHELL_WAIT_MAX_MS]; undefined when absent/invalid. */
 function waitArg(v: unknown): number | undefined {
@@ -51,6 +52,19 @@ function commandDir(command: string, cwd: string | undefined, defaultRepo: strin
 const jobNote = (id: string): string =>
   `Running in the background (job ${id}). Keep working; check it with command_status { "id": "${id}" } (pass waitMs to wait for it), stop it with command_stop { "id": "${id}" }.`;
 
+function shellFailure(code: ShellFailureCode, error: string) {
+  return { ok: false as const, code, error };
+}
+
+function withShellFailure<T extends { ok: boolean; error?: string; code?: ShellFailureCode; exitCode?: number }>(
+  result: T,
+  code: ShellFailureCode = 'command_failed',
+): T {
+  if (result.ok) return result;
+  const message = result.exitCode === undefined ? 'The command failed' : `The command exited with code ${result.exitCode}`;
+  return { ...result, ...shellFailure(result.code ?? code, result.error ?? message) };
+}
+
 /** A finished job, shaped like a foreground result so the model reads one shape. */
 function finishedJob(st: ShellJobStatus): ShellResult {
   return {
@@ -58,6 +72,7 @@ function finishedJob(st: ShellJobStatus): ShellResult {
     ...(st.exitCode !== undefined ? { exitCode: st.exitCode } : {}),
     stdout: st.output ?? "",
     ...(st.outputId ? { outputId: st.outputId } : {}),
+    ...(st.code ? { code: st.code } : st.status === 'unknown' ? { code: 'not_found' } : {}),
     ...(st.status === "killed" ? { aborted: true, error: st.error ?? "the job was stopped" } : st.error ? { error: st.error } : {}),
   };
 }
@@ -68,7 +83,7 @@ function finishedJob(st: ShellJobStatus): ShellResult {
  * real limit, and the shell's pipefail already reports a failing stage's exit code.
  */
 function shapeResult(command: string, r: ShellResult): ShellResult {
-  return searchNoMatch(command, r);
+  return withShellFailure(searchNoMatch(command, r), r.aborted ? 'aborted' : 'command_failed');
 }
 
 /** `run_command`'s body. */
@@ -81,10 +96,10 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
   const tailNote = stripped.stripped
     ? `ran without the trailing \`| tail -${stripped.tail}\` — the full output is retained under \`outputId\`; read its head with output_filter { outputId, head: … }. `
     : "";
-  if (!command.trim()) return { data: { ok: false, error: "command is required" } };
+  if (!command.trim()) return { data: shellFailure('invalid', "command is required") };
   const cwd = cwdArg(args.cwd);
   if (cwd === null) {
-    return { data: { ok: false, error: "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path)." } };
+    return { data: shellFailure('invalid', "`cwd` must be a directory inside the workspace, relative to its root (no `..`, no absolute path).") };
   }
   const shell = ctx.caps.shell!;
   // The directory is handed to the shell as its working directory, never written into the
@@ -96,15 +111,15 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
   let note: string | undefined;
   // Never switch the branch of a checkout with uncommitted changes (foreground AND background).
   const refused = await refuseBranchSwitchOverChanges(command, dir, ctx);
-  if (refused) return { data: { ok: false, refused: "branch-switch", error: refused, ...where } };
+  if (refused) return { data: { ...shellFailure('refused', refused), refused: "branch-switch", ...where } };
 
   if (background || yieldMs !== undefined) {
     if (shell.start && shell.poll) {
-      if (ctx.signal?.aborted) return { data: { ok: false, aborted: true, error: "stopped before the command started", ...where } };
+      if (ctx.signal?.aborted) return { data: { ...shellFailure('aborted', "stopped before the command started"), aborted: true, ...where } };
       // The job is the RUN's (the surface kills it when the run settles), so the call's
       // signal is NOT its lifetime: it only bounds the yieldMs wait below.
       const started = await (dir ? shell.start(command, { cwd: dir }) : shell.start(command));
-      if (!started.ok || !started.id) return { data: { ok: false, error: started.error ?? "the background job did not start", ...where } };
+      if (!started.ok || !started.id) return { data: { ...shellFailure(started.code ?? 'command_failed', started.error ?? "the background job did not start"), ...where } };
       const id = started.id;
       if (background) return { data: { ok: true, background: true, id, status: "running", note: jobNote(id), ...where } };
       const st = await shell.poll(id, { waitMs: yieldMs, ...(ctx.signal ? { signal: ctx.signal } : {}) });
@@ -131,6 +146,7 @@ export async function runShellCommand(args: Record<string, unknown>, ctx: ToolCo
 /** A finished job's status, its `output` compressed like a foreground command's (C8: a
  *  successful run's prose only; a failing one stays verbatim). A running job is unchanged. */
 async function compressedJobStatus(st: ShellJobStatus, ctx: ToolContext): Promise<ShellJobStatus> {
+  st = withShellFailure(st, st.status === 'killed' ? 'aborted' : st.status === 'unknown' ? 'not_found' : 'command_failed');
   if (st.status === "running" || typeof st.output !== "string") return st;
   const r = await compressShellResult(finishedJob(st), ctx);
   return r.compressed && typeof r.stdout === "string" ? { ...st, output: r.stdout } : st;
@@ -155,9 +171,9 @@ export const commandStatusTool: ToolDefinition = defineTool({
   requires: ["shell.jobs"],
   async execute(args, ctx): Promise<ToolResult> {
     const id = jobId(args);
-    if (!id) return { data: { ok: false, error: "id is required" } };
+    if (!id) return { data: shellFailure('invalid', "id is required") };
     const poll = ctx.caps.shell?.poll;
-    if (!poll) return { data: { ok: false, error: "background commands are not available on this surface" } };
+    if (!poll) return { data: shellFailure('unsupported', "background commands are not available on this surface") };
     const waitMs = waitArg(args.waitMs);
     // The call's signal ends the WAIT (a steer, Stop), never the job.
     const st = await poll.call(ctx.caps.shell, id, { ...(waitMs !== undefined ? { waitMs } : {}), ...(ctx.signal ? { signal: ctx.signal } : {}) });
@@ -176,9 +192,9 @@ export const commandStopTool: ToolDefinition = defineTool({
   requires: ["shell.jobs"],
   async execute(args, ctx): Promise<ToolResult> {
     const id = jobId(args);
-    if (!id) return { data: { ok: false, error: "id is required" } };
+    if (!id) return { data: shellFailure('invalid', "id is required") };
     const kill = ctx.caps.shell?.kill;
-    if (!kill) return { data: { ok: false, error: "background commands are not available on this surface" } };
+    if (!kill) return { data: shellFailure('unsupported', "background commands are not available on this surface") };
     const st = await kill.call(ctx.caps.shell, id);
     return { data: (await compressedJobStatus(st, ctx)) as unknown as Record<string, unknown> };
   },

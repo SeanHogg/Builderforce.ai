@@ -19,6 +19,7 @@ import { bootDeniedHost, replayDeniedBatch, type DeniedReplayPorts, type DeniedR
 import { createIndexedDbOutboxStore, createOnlineSignal } from '@builderforce/write-outbox';
 import { createApiClient } from '../api/apiClient';
 import { createSession } from '../auth/session';
+import { createCredentialVault } from '../auth/credentialVault';
 import { DEFAULT_BASE_URL, ERROR_OUTBOX_DB, LOCAL_DB, SYNC_ALARM, SYNC_ALARM_MINUTES, SYNC_OUTBOX_DB } from '../config';
 import { createRovrGuardedFetch } from '../platform/guardedFetch';
 import { chromeKeyValue, type KeyValueStore } from '../platform/keyValue';
@@ -99,8 +100,8 @@ export function bootRovrServiceWorker(options: BootRovrServiceWorkerOptions = {}
       .catch((error: unknown) => console.error('Rovr network-denial self-check: failed to run', error));
   }
 
-  const session = createSession({ storage: local, baseUrl: DEFAULT_BASE_URL, fetch: fetchImpl, now: Date.now });
-  const settings = createSettings(local);
+  const session = createSession({ storage: local, baseUrl: DEFAULT_BASE_URL, fetch: fetchImpl, now: Date.now, vault: createCredentialVault(indexedDB) });
+  const settings = createSettings(local, session);
   const api = createApiClient({ session, baseUrl: DEFAULT_BASE_URL, fetch: fetchImpl });
   const records = createIdbRecords(indexedDB, LOCAL_DB);
   const syncStore = createIndexedDbOutboxStore<SyncItem, number>({ indexedDB, dbName: SYNC_OUTBOX_DB, partition: 'chats' });
@@ -194,10 +195,12 @@ export function bootRovrServiceWorker(options: BootRovrServiceWorkerOptions = {}
       if (sender.id !== chrome.runtime.id || sender.tab || !isRovrRuntimeMessage(message)) return false;
       switch (message.type) {
         case 'rovr.sync.enqueue':
-          for (const item of message.items) chatSync.enqueue(message.chatId, item);
-          void keepAlarm();
-          sendResponse(true);
-          return false;
+          void records.getChat(message.chatId).then((chat) => {
+            for (const item of message.items) chatSync.enqueue(message.chatId, item, undefined, chat?.scope);
+            void keepAlarm();
+            sendResponse(true);
+          }, () => sendResponse(false));
+          return true;
         case 'rovr.sync.flush':
           void flushAll().then(() => sendResponse(stats()));
           return true;

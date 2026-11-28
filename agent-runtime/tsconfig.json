@@ -24,6 +24,7 @@
     "target": "es2023",
     "useDefineForClassFields": false,
     "paths": {
+      "@builderforce/device-auth": ["../packages/device-auth/src/index.ts"],
       "@builderforce/workspace-mcp": ["../packages/workspace-mcp/src/index.ts"],
       "@seanhogg/builderforce-code-index": ["../packages/code-index/src/index.ts"],
       "@builderforce/agent-tools/node-tree-sitter": ["../packages/agent-tools/src/node-tree-sitter.ts"],

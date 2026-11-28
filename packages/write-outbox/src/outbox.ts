@@ -397,7 +397,7 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
     return keep.length === 0;
   };
 
-  const enqueueEntry = (key: K, item: T, work: string | undefined, path: "enqueue" | "enqueueDurable"): { id: string; persisted: Promise<void> } => {
+  const enqueueEntry = (key: K, item: T, work: string | undefined, path: "enqueue" | "enqueueDurable", ownerScope?: string): { id: string; persisted: Promise<void> } => {
     const retention = resolveRetention(work, path);
     if (retention === "durable") {
       evictBestEffortWhileOver(Math.max(0, maxEntries - 1));
@@ -407,7 +407,7 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
       }
     }
     const l = lane(key);
-    const scope = currentScope();
+    const scope = ownerScope ?? currentScope();
     const entry: OutboxEntry<T, K> = {
       id: newId(),
       key,
@@ -426,11 +426,11 @@ export function createOutbox<T, K = string>(opts: OutboxOptions<T, K>): Outbox<T
   };
 
   return {
-    enqueue(key, item, work) {
-      return enqueueEntry(key, item, work, "enqueue").id;
+    enqueue(key, item, work, scope) {
+      return enqueueEntry(key, item, work, "enqueue", scope).id;
     },
-    async enqueueDurable(key, item, work) {
-      const enqueued = enqueueEntry(key, item, work, "enqueueDurable");
+    async enqueueDurable(key, item, work, scope) {
+      const enqueued = enqueueEntry(key, item, work, "enqueueDurable", scope);
       await enqueued.persisted;
       if (storeFailure) throw storeFailure;
       return enqueued.id;

@@ -8,14 +8,17 @@
 import { earliestMapping, type EntityScope, type LocalEntityType, type ServerMapping } from './records.js';
 import { parseEntityRef, parseSyncId, syncIdText, tierRefText } from './entityId.js';
 
+/** `mappings` is a function: a lookup may walk the rows twice, and an iterator is spent after one walk. */
+type MappingRows = () => Iterable<ServerMapping>;
+
 export function findByServerId(
-  mappings: Iterable<ServerMapping>,
+  mappings: MappingRows,
   entityType: LocalEntityType,
   serverId: string | number,
   scope?: EntityScope,
 ): ServerMapping | undefined {
   const earliest = (match: (mapping: ServerMapping) => boolean): ServerMapping | undefined =>
-    earliestMapping(mappings, entityType, scope, match);
+    earliestMapping(mappings(), entityType, scope, match);
   const syncId = parseSyncId(serverId);
   if (syncId !== null) {
     // A row carrying the SyncId wins. Failing that, a row whose server said "not a SyncId of this
@@ -32,11 +35,11 @@ export function findByServerId(
 }
 
 export function findByExternalRef(
-  mappings: Iterable<ServerMapping>,
+  mappings: MappingRows,
   entityType: LocalEntityType,
   externalRef: string,
   scope?: EntityScope,
 ): ServerMapping | undefined {
   if (typeof externalRef !== 'string' || externalRef.trim() === '') return undefined;
-  return earliestMapping(mappings, entityType, scope, (mapping) => mapping.externalRef === externalRef);
+  return earliestMapping(mappings(), entityType, scope, (mapping) => mapping.externalRef === externalRef);
 }

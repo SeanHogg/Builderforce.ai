@@ -61,8 +61,8 @@ __export(src_exports, {
   CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
   CODE_NAVIGATION_DIRECTIVE: () => CODE_NAVIGATION_DIRECTIVE,
   CONNECT_RETRY_DELAYS_MS: () => CONNECT_RETRY_DELAYS_MS,
-  CONSOLIDATION_MARKER_PREFIX: () => import_working23.CONSOLIDATION_MARKER_PREFIX,
-  CONSOLIDATION_META: () => import_working23.CONSOLIDATION_META,
+  CONSOLIDATION_MARKER_PREFIX: () => import_working24.CONSOLIDATION_MARKER_PREFIX,
+  CONSOLIDATION_META: () => import_working24.CONSOLIDATION_META,
   DEFAULT_AGENT_MODEL_SENTINEL: () => DEFAULT_AGENT_MODEL_SENTINEL,
   DEFAULT_CHAT_ACTIVITY_LABELS: () => DEFAULT_CHAT_ACTIVITY_LABELS,
   DEFAULT_CHAT_TITLE: () => DEFAULT_CHAT_TITLE,
@@ -89,7 +89,7 @@ __export(src_exports, {
   HAND_OFF_TOOL: () => HAND_OFF_TOOL,
   HAND_OFF_TOOL_SPEC: () => HAND_OFF_TOOL_SPEC,
   HELP_COMMAND_ID: () => HELP_COMMAND_ID,
-  HISTORY_TOKEN_BUDGET: () => import_working22.HISTORY_TOKEN_BUDGET,
+  HISTORY_TOKEN_BUDGET: () => import_working23.HISTORY_TOKEN_BUDGET,
   INFERENCE_MODES: () => INFERENCE_MODES,
   INJECTED_TURN_META_KEY: () => INJECTED_TURN_META_KEY,
   JUDGEMENT_SCHEMAS: () => JUDGEMENT_SCHEMAS,
@@ -228,9 +228,9 @@ __export(src_exports, {
   composeEvermindHooks: () => composeEvermindHooks,
   computeBrainDiagnostics: () => computeBrainDiagnostics,
   computeRunProgress: () => computeRunProgress,
-  consolidationMarkerContent: () => import_working23.consolidationMarkerContent,
-  consolidationMarkerOf: () => import_working23.consolidationMarkerOf,
-  consolidationMetadata: () => import_working23.consolidationMetadata,
+  consolidationMarkerContent: () => import_working24.consolidationMarkerContent,
+  consolidationMarkerOf: () => import_working24.consolidationMarkerOf,
+  consolidationMetadata: () => import_working24.consolidationMetadata,
   contextUsageOf: () => contextUsageOf,
   contextWindowOf: () => contextWindowOf,
   countReconciledMemories: () => import_evermind3.countReconciledMemories,
@@ -331,7 +331,7 @@ __export(src_exports, {
   isCoderReask: () => isCoderReask,
   isConnectFailure: () => isConnectFailure,
   isConnectedAccountUnused: () => isConnectedAccountUnused,
-  isConsolidationMarker: () => import_working23.isConsolidationMarker,
+  isConsolidationMarker: () => import_working24.isConsolidationMarker,
   isDirectedToParticipant: () => isDirectedToParticipant,
   isDispatchTool: () => isDispatchTool,
   isEffort: () => isEffort,
@@ -368,7 +368,7 @@ __export(src_exports, {
   joinRestorableTurns: () => joinRestorableTurns,
   jsonClientResult: () => jsonClientResult,
   judgeClientFirstFor: () => judgeClientFirstFor,
-  lastConsolidationIndex: () => import_working23.lastConsolidationIndex,
+  lastConsolidationIndex: () => import_working24.lastConsolidationIndex,
   lastServedModel: () => lastServedModel,
   leftChangeUnreviewed: () => leftChangeUnreviewed,
   leftChangeUnshipped: () => leftChangeUnshipped,
@@ -492,7 +492,7 @@ __export(src_exports, {
   runProgressVerdict: () => runProgressVerdict,
   savePendingPrompt: () => savePendingPrompt,
   savedChatOf: () => savedChatOf,
-  scopeToConsolidation: () => import_working23.scopeToConsolidation,
+  scopeToConsolidation: () => import_working24.scopeToConsolidation,
   selectPendingAskUser: () => selectPendingAskUser,
   serializeAskUser: () => serializeAskUser,
   serveEngineWorker: () => serveEngineWorker,
@@ -14764,8 +14764,11 @@ function isFailedToolResult(result) {
   return false;
 }
 
-// ../packages/agent-tools/src/run-knowledge.ts
+// ../packages/agent-tools/src/memoryFactKeys.ts
 var import_working4 = require("@seanhogg/builderforce-memory/working");
+
+// ../packages/agent-tools/src/run-knowledge.ts
+var import_working5 = require("@seanhogg/builderforce-memory/working");
 var FILE_TOOL_KINDS = /* @__PURE__ */ new Map([
   ["write_file", "create"],
   ["write", "create"],
@@ -14825,7 +14828,7 @@ function savedFactOf(args) {
   return key && content ? { key, content } : void 0;
 }
 var RunKnowledgeRecorder = class _RunKnowledgeRecorder {
-  memory = new import_working4.WorkingMemory();
+  memory = new import_working5.WorkingMemory();
   tools = [];
   savedFacts = /* @__PURE__ */ new Map();
   /**
@@ -14920,7 +14923,7 @@ ${lines.join("\n")}`;
 ${section}` : section;
   }
   consolidate(opts) {
-    return (0, import_working4.consolidate)(this.memory.snapshot, opts);
+    return (0, import_working5.consolidate)(this.memory.snapshot, opts);
   }
 };
 
@@ -15453,7 +15456,7 @@ var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeNodes.ts
 var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
-var import_working5 = require("@seanhogg/builderforce-memory/working");
+var import_working6 = require("@seanhogg/builderforce-memory/working");
 var import_ingest2 = require("@seanhogg/builderforce-memory/ingest");
 var CODE_PACK_ID = "code";
 var CODE_BADGES = {
@@ -16971,7 +16974,7 @@ function isCostLeverOn(env, id, tenantId) {
 }
 
 // src/transcriptSummarizer.ts
-var import_working6 = require("@seanhogg/builderforce-memory/working");
+var import_working7 = require("@seanhogg/builderforce-memory/working");
 
 // src/onDevice/utilitySummary.ts
 var CONTEXT_CHARS2 = 800;
@@ -17008,7 +17011,7 @@ function streamSummaryCompletion(stream, model, onDeviceTasks) {
   }, onDeviceTasks);
 }
 function summarizeMiddle(stream, model, msgs, signal, onDeviceTasks) {
-  return (0, import_working6.summarizeTranscript)(streamSummaryCompletion(stream, model, onDeviceTasks), msgs, signal);
+  return (0, import_working7.summarizeTranscript)(streamSummaryCompletion(stream, model, onDeviceTasks), msgs, signal);
 }
 
 // src/windowFit/packMemo.ts
@@ -18373,7 +18376,7 @@ var MAX_SUMMARY_CHUNKS = 8;
 var CHUNK_BUDGET_SHARE = 0.8;
 
 // src/onDevice/chunkedSummary.ts
-var import_working7 = require("@seanhogg/builderforce-memory/working");
+var import_working8 = require("@seanhogg/builderforce-memory/working");
 
 // src/onDevice/taskPrompts.ts
 var WORDS = { short: "a few sentences", medium: "a short paragraph", long: "several paragraphs" };
@@ -18441,7 +18444,7 @@ function summaryReserveTokens(o) {
 }
 function chunkedSummary(input) {
   const { text: text2, budget: budget2, summarizeChunk, reserveTokens, signal } = input;
-  return (0, import_working7.chunkedTextSummary)({
+  return (0, import_working8.chunkedTextSummary)({
     text: text2,
     limit: budget2.limit,
     measure: (t, s) => budget2.measure(t, s),
@@ -18991,7 +18994,7 @@ function judgeClientFirstFor(host) {
 }
 
 // src/onDevice/clientFirstSummary.ts
-var import_working8 = require("@seanhogg/builderforce-memory/working");
+var import_working9 = require("@seanhogg/builderforce-memory/working");
 async function onDeviceTranscriptSummary(host, seed, signal) {
   if (seed.length < 2 || !(await host.tasks.available()).has("summarize")) return null;
   const capture = capturingServed();
@@ -18999,7 +19002,7 @@ async function onDeviceTranscriptSummary(host, seed, signal) {
     req.signal || !signal ? req : { ...req, signal },
     { onServed: capture.onServed }
   )) ?? "";
-  return textClientResult(await (0, import_working8.summarizeTranscript)(completion, seed, signal), host, capture.served());
+  return textClientResult(await (0, import_working9.summarizeTranscript)(completion, seed, signal), host, capture.served());
 }
 
 // src/pageEngines/fetchShim.ts
@@ -23657,6 +23660,7 @@ async function fetchMcpToolEntries(transport, skipExtensionIds = []) {
   const tools = await createMcpRelay({
     baseUrl: transport.baseUrl,
     token: transport.getToken(),
+    fetch: transport.mcpFetch,
     catalogNames: "canonical"
   }).list();
   const skip = new Set(skipExtensionIds);
@@ -23682,7 +23686,7 @@ function mcpActionsFrom(entries, transport, onToolResult, localTools, toolWireNa
           onToolResult?.({ name: entry.name, tool: entry.tool, extensionId: entry.extensionId, mutating, ok: !isErrorResult(out2) });
           return out2;
         }
-        const relay = createMcpRelay({ baseUrl: transport.baseUrl, token });
+        const relay = createMcpRelay({ baseUrl: transport.baseUrl, token, fetch: transport.mcpFetch });
         const res = await relay.call({ extensionId: entry.extensionId, tool: entry.tool, arguments: args });
         const body = await res.json().catch(() => ({}));
         const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : body.result ?? body;
@@ -23696,7 +23700,7 @@ function mcpActionsFrom(entries, transport, onToolResult, localTools, toolWireNa
         return out;
       };
       if (token && mutating && isCreateTool(entry.name, entry.tool)) {
-        const key = JSON.stringify([transport.baseUrl, token, entry.extensionId, entry.tool, stableStringify(args)]);
+        const key = JSON.stringify([transport.baseUrl, token, transport.workspaceScope, entry.extensionId, entry.tool, stableStringify(args)]);
         const now = nowMs();
         const prior = recentCreates.get(key);
         if (prior && now - prior.at < CREATE_DEDUPE_MS) return prior.result;
@@ -24551,10 +24555,10 @@ function summarizeWorkflow(metrics) {
 }
 
 // ../packages/agent-run/src/policy/compaction/history.ts
-var import_working9 = require("@seanhogg/builderforce-memory/working");
+var import_working10 = require("@seanhogg/builderforce-memory/working");
 var foldLimits = { summaryMs: 15e3 };
-function compactionSavedTokens(full, working, historyBudgetTokens = import_working9.HISTORY_TOKEN_BUDGET) {
-  return Math.max(0, Math.min((0, import_working9.transcriptTokens)(full), historyBudgetTokens) - (0, import_working9.transcriptTokens)(working));
+function compactionSavedTokens(full, working, historyBudgetTokens = import_working10.HISTORY_TOKEN_BUDGET) {
+  return Math.max(0, Math.min((0, import_working10.transcriptTokens)(full), historyBudgetTokens) - (0, import_working10.transcriptTokens)(working));
 }
 function linkedAbort(parent) {
   const own2 = new AbortController();
@@ -24598,7 +24602,7 @@ function createHistoryCompactionHook(ports) {
   return {
     async compact(ctx) {
       let folded = false;
-      const working = await (0, import_working9.buildWorkingTranscript)(
+      const working = await (0, import_working10.buildWorkingTranscript)(
         ports.state,
         ports.systemPrompt,
         (messages) => {
@@ -24622,7 +24626,7 @@ function createHistoryCompactionHook(ports) {
         }
       );
       ports.savedTokens(ports.state.compactMemo ? compactionSavedTokens([{ role: "system", content: ports.systemPrompt }, ...ports.state.transcript], working) : 0);
-      const rows = (0, import_working9.foldWorkingTranscript)(working).map((row) => ports.toRunMessage(row));
+      const rows = (0, import_working10.foldWorkingTranscript)(working).map((row) => ports.toRunMessage(row));
       if (sameRows(ctx.messages, rows)) return void 0;
       return { messages: rows, dropped: Math.max(0, ctx.messages.length - rows.length), ...folded ? {} : { reused: true } };
     }
@@ -32102,7 +32106,7 @@ function createOutbox(opts) {
     if (discarded.length) drop(key, discarded, permanent ? "rejected" : "failed");
     return keep2.length === 0;
   };
-  const enqueueEntry = (key, item, work, path) => {
+  const enqueueEntry = (key, item, work, path, ownerScope) => {
     const retention = resolveRetention(work, path);
     if (retention === "durable") {
       evictBestEffortWhileOver(Math.max(0, maxEntries - 1));
@@ -32112,7 +32116,7 @@ function createOutbox(opts) {
       }
     }
     const l = lane(key);
-    const scope = currentScope();
+    const scope = ownerScope ?? currentScope();
     const entry = {
       id: newId(),
       key,
@@ -32130,11 +32134,11 @@ function createOutbox(opts) {
     return { id: entry.id, persisted };
   };
   return {
-    enqueue(key, item, work) {
-      return enqueueEntry(key, item, work, "enqueue").id;
+    enqueue(key, item, work, scope) {
+      return enqueueEntry(key, item, work, "enqueue", scope).id;
     },
-    async enqueueDurable(key, item, work) {
-      const enqueued = enqueueEntry(key, item, work, "enqueueDurable");
+    async enqueueDurable(key, item, work, scope) {
+      const enqueued = enqueueEntry(key, item, work, "enqueueDurable", scope);
       await enqueued.persisted;
       if (storeFailure) throw storeFailure;
       return enqueued.id;
@@ -32842,7 +32846,7 @@ function formatWorkflowDiagnostics(workflow) {
 }
 
 // src/modelReply.ts
-var import_working10 = require("@seanhogg/builderforce-memory/working");
+var import_working11 = require("@seanhogg/builderforce-memory/working");
 
 // src/chatActivity.ts
 var PHASES = ["started", "completed", "failed", "paused", "resumed", "cancelled"];
@@ -32954,7 +32958,7 @@ function chatActivityText(activity, labels) {
 
 // src/modelReply.ts
 function isModelReply(m) {
-  return m.role === "assistant" && !isStepMessage(m) && !(0, import_working10.isConsolidationMarker)(m) && !isActivityMessage(m) && !isStoppedBeforeStart(m);
+  return m.role === "assistant" && !isStepMessage(m) && !(0, import_working11.isConsolidationMarker)(m) && !isActivityMessage(m) && !isStoppedBeforeStart(m);
 }
 
 // src/persistedSteps.ts
@@ -33811,7 +33815,7 @@ function formatStaffingSummary(s, opts) {
 }
 
 // src/runFindings/policy.ts
-var import_working11 = require("@seanhogg/builderforce-memory/working");
+var import_working12 = require("@seanhogg/builderforce-memory/working");
 var RUN_FINDING_POLICY = Object.freeze({
   /** Read-only turns before the first write that make an analysis overrun. */
   analysisReadTurns: 8,
@@ -33832,7 +33836,7 @@ var RUN_FINDING_POLICY = Object.freeze({
   slowTurnMs: 6e4,
   /** Word-set overlap at which a pre-call text repeats the last kept one: memory's B7 fold threshold, so the
    *  diagnostic and the fold agree (`NARRATION_OVERLAP`, `@seanhogg/builderforce-memory/working`). */
-  narrationOverlap: import_working11.NARRATION_OVERLAP,
+  narrationOverlap: import_working12.NARRATION_OVERLAP,
   /** Longest excerpt an evidence row quotes. */
   excerptChars: 160
 });
@@ -34086,14 +34090,14 @@ function promptBloat(view) {
 }
 
 // src/runFindings/detectors/repeatedNarration.ts
-var import_working12 = require("@seanhogg/builderforce-memory/working");
+var import_working13 = require("@seanhogg/builderforce-memory/working");
 function asNarration(t) {
   return { role: "assistant", content: t.text, tool_calls: t.calls.map(() => ({})) };
 }
 var isCandidate = (t) => t.calls.length > 0 && t.text.trim().length > 0;
 function repeatedNarration(view) {
   const msgs = view.turns.map(asNarration);
-  const folded = (0, import_working12.foldRepeatedNarration)(msgs, RUN_FINDING_POLICY.narrationOverlap);
+  const folded = (0, import_working13.foldRepeatedNarration)(msgs, RUN_FINDING_POLICY.narrationOverlap);
   const repeats = /* @__PURE__ */ new Set();
   let lastKept = null;
   for (let i = 0; i < view.turns.length; i++) {
@@ -34435,8 +34439,8 @@ function providerFailureVerdict(f) {
 }
 
 // src/brainVerdict.ts
-var import_working13 = require("@seanhogg/builderforce-memory/working");
-var CONTEXT_PROMPT_PEAK = Math.round(import_working13.HISTORY_TOKEN_BUDGET * 1.5);
+var import_working14 = require("@seanhogg/builderforce-memory/working");
+var CONTEXT_PROMPT_PEAK = Math.round(import_working14.HISTORY_TOKEN_BUDGET * 1.5);
 var LARGE_LOSSY_RESULT_BYTES = 2e4;
 var VERDICT_RULES = [
   ["run-in-progress", (s) => s.running],
@@ -34478,7 +34482,7 @@ function isHealthyRun(h) {
 }
 
 // src/brainDiagnosticsText.ts
-var import_working14 = require("@seanhogg/builderforce-memory/working");
+var import_working15 = require("@seanhogg/builderforce-memory/working");
 var kb = formatBytes;
 function contextEvidence(d) {
   const parts = [];
@@ -34497,7 +34501,7 @@ function contextPressureLine(d) {
   if (d.tokensMeasured && d.promptTokenPeak > 0) parts.push(`prompt peaked at ${d.promptTokenPeak.toLocaleString("en-US")} tokens`);
   if (d.truncatedToolResults > 0) parts.push(`${d.truncatedToolResults} tool result(s) trimmed to the ${toolResultBudgetText()} budget by design`);
   if (!parts.length && d.largestToolResult) parts.push(`one ${d.largestToolResult.label} result was ${kb(d.largestToolResult.bytes)}`);
-  return `Context: pressure noted (${parts.join(", ")}) \u2014 no turn was cut short by it. The working transcript has a ${import_working14.HISTORY_TOKEN_BUDGET.toLocaleString("en-US")}-token budget.`;
+  return `Context: pressure noted (${parts.join(", ")}) \u2014 no turn was cut short by it. The working transcript has a ${import_working15.HISTORY_TOKEN_BUDGET.toLocaleString("en-US")}-token budget.`;
 }
 function healthyVerdict(d) {
   const recovered = d.recoveredFailures ?? 0;
@@ -36099,10 +36103,10 @@ function completionAdvisory(open2) {
 }
 
 // src/runStore/runPreamble.ts
-var import_working17 = require("@seanhogg/builderforce-memory/working");
+var import_working18 = require("@seanhogg/builderforce-memory/working");
 
 // src/runStore/runFoldMarker.ts
-var import_working15 = require("@seanhogg/builderforce-memory/working");
+var import_working16 = require("@seanhogg/builderforce-memory/working");
 function entryKey(m) {
   return `${m.role}\0${m.role === "assistant" ? replayTextOf(contentText(m.content ?? "")) : contentText(m.content ?? "")}`;
 }
@@ -36146,14 +36150,14 @@ function recordTranscriptAnchors(c, req) {
   }
 }
 async function persistFoldMarker(c, chatId, persistence, fold) {
-  const covered = (0, import_working15.foldKeepFromId)(c.transcriptAnchors, fold.coveredEnd);
+  const covered = (0, import_working16.foldKeepFromId)(c.transcriptAnchors, fold.coveredEnd);
   if (covered === void 0) return;
   const keepFromId = c.unseenFromId === void 0 ? covered : Math.min(covered, c.unseenFromId);
   try {
     const [msg] = await persistence.sendMessages(chatId, [{
       role: "assistant",
-      content: (0, import_working15.consolidationMarkerContent)(fold.note),
-      metadata: (0, import_working15.consolidationMetadata)({ keepFromId, folded: fold.droppedMessages })
+      content: (0, import_working16.consolidationMarkerContent)(fold.note),
+      metadata: (0, import_working16.consolidationMetadata)({ keepFromId, folded: fold.droppedMessages })
     }]);
     if (msg) {
       recordAppended(c, msg);
@@ -36299,7 +36303,7 @@ function seedConfigLog(c, snap) {
 
 // src/runStore/runMemory.ts
 var import_evermind2 = require("@seanhogg/builderforce-memory/evermind");
-var import_working16 = require("@seanhogg/builderforce-memory/working");
+var import_working17 = require("@seanhogg/builderforce-memory/working");
 
 // src/run/normalizeRelPath.ts
 function normalizeRelPath(value) {
@@ -36368,7 +36372,7 @@ async function recallForRun(c, convo, evermind, hint, timeoutMs = PREFLIGHT_PROB
   if (recalled?.seeded && recalled.items.length > 0) {
     const block = (0, import_evermind2.formatEvermindMemoryBlock)(recalled.items);
     if (block) {
-      const blockTokens = (0, import_working16.transcriptTokens)([{ role: "system", content: block }]);
+      const blockTokens = (0, import_working17.transcriptTokens)([{ role: "system", content: block }]);
       pushTrace(c, {
         ts: nowIso(),
         category: "recall",
@@ -37439,7 +37443,7 @@ ${part}`;
     canAskUser
   );
   const windowFit = createRunWindowFit({
-    workingBudgetTokens: import_working17.HISTORY_TOKEN_BUDGET,
+    workingBudgetTokens: import_working18.HISTORY_TOKEN_BUDGET,
     summarizer: () => ({ stream, model: run.policy.model, signal: c.abort?.signal, ...req.onDeviceTasks ? { onDeviceTasks: req.onDeviceTasks } : {} }),
     ...evermind?.recall ? { recall: (q) => evermind.recall(q), priorRecall } : {},
     ...req.windowSources ? { windowSources: req.windowSources } : {},
@@ -37813,7 +37817,7 @@ function relevantTools(tools, query) {
 }
 
 // src/runStore/callPreflight.ts
-var import_working18 = require("@seanhogg/builderforce-memory/working");
+var import_working19 = require("@seanhogg/builderforce-memory/working");
 
 // src/runStore/runBackstops.ts
 function listingScopeOfRun(c) {
@@ -38636,7 +38640,7 @@ function callPreflight(run) {
     if (isDedupableRead(call2.name)) {
       if (readCoverage2.isRepeat(call2.name, args)) {
         const cached2 = readCoverage2.cachedResult(call2.name, args);
-        if (cached2 && !(0, import_working18.stillInWorkingContext)(c, cached2.anchor)) {
+        if (cached2 && !(0, import_working19.stillInWorkingContext)(c, cached2.anchor)) {
           const replayNote = `Replayed from this run's read cache: this exact ${call2.name} call succeeded earlier in the run, but its result was compressed out of the working context, so here it is again \u2014 served from memory, not re-read. Act on it now; do not request it again.`;
           const visit = readCoverage2.record(call2.name, args);
           const target2 = visit ? visitTarget(args) : void 0;
@@ -38675,7 +38679,7 @@ ${revisit}` : replayNote,
         const note = revisit ? `${covered.note}
 
 ${revisit}` : covered.note;
-        if (covered.cached && !(0, import_working18.stillInWorkingContext)(c, covered.cached.anchor)) {
+        if (covered.cached && !(0, import_working19.stillInWorkingContext)(c, covered.cached.anchor)) {
           const requested = requestedReadWindow2(covered.cached.result ?? null, covered.start, covered.end);
           const replayed = trimToolResult(call2.name, requested, { advisory: note, contextWindowTokens: await run.windowFit.contextWindow?.() });
           run.pending.replayed(call2.id, { name: call2.name, args, result: requested, served: replayed.served });
@@ -39341,7 +39345,7 @@ function brainPlatformTools(run) {
 }
 
 // src/run/brainFold.ts
-var import_working19 = require("@seanhogg/builderforce-memory/working");
+var import_working20 = require("@seanhogg/builderforce-memory/working");
 
 // src/run/runMessages.ts
 var imagePart = (part) => ({ type: "image", url: part.image_url.url, ...part.image_url.detail ? { detail: part.image_url.detail } : {} });
@@ -39378,7 +39382,7 @@ function brainCompaction(run) {
       state: c,
       systemPrompt,
       signal: c.abort?.signal,
-      summarize: (messages, signal) => (0, import_working19.summarizeTranscript)(streamSummaryCompletion(req.stream, run.policy.model, req.onDeviceTasks), messages, signal),
+      summarize: (messages, signal) => (0, import_working20.summarizeTranscript)(streamSummaryCompletion(req.stream, run.policy.model, req.onDeviceTasks), messages, signal),
       // The state above is Brain-owned. Memory preserves its native rows and creates only plain text summary rows.
       toRunMessage: (row) => toRunMessage(row),
       recordFold: (fold) => recordFold(run, fold),
@@ -41464,14 +41468,14 @@ function usePendingTurns(chatId, messages, options) {
 var import_react11 = require("react");
 
 // src/userTurnRuns.ts
-var import_working20 = require("@seanhogg/builderforce-memory/working");
+var import_working21 = require("@seanhogg/builderforce-memory/working");
 function startsRun(text2) {
   return !stopIntent(text2);
 }
 function unansweredTurnIndex(messages) {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message2 = messages[i];
-    if (isStepMessage(message2) || (0, import_working20.isConsolidationMarker)(message2)) continue;
+    if (isStepMessage(message2) || (0, import_working21.isConsolidationMarker)(message2)) continue;
     return message2.role === "user" && !isMidTurnMetadata(message2.metadata) && startsRun(message2.content) ? i : -1;
   }
   return -1;
@@ -41636,7 +41640,7 @@ function useContinuation(persistence, prepareRun) {
 }
 
 // src/useBrainConversation.ts
-var import_working21 = require("@seanhogg/builderforce-memory/working");
+var import_working22 = require("@seanhogg/builderforce-memory/working");
 
 // src/contextUsage.ts
 var LLM_COMPLETE = "llm.complete";
@@ -41902,7 +41906,7 @@ ${extraSystem}` : resolvedSystemPrompt;
         seed: seed.messages,
         seedIds: seed.ids,
         ...injectedTurnIds.length > 0 ? { injectedTurnIds } : {},
-        priorResearch: priorResearchDigest((0, import_working21.scopeToConsolidation)(researchFrom)),
+        priorResearch: priorResearchDigest((0, import_working22.scopeToConsolidation)(researchFrom)),
         userTurn,
         ...userTurnMessageId != null ? { userTurnMessageId } : {},
         projectId,
@@ -42598,7 +42602,7 @@ function ordinalWord(n2) {
 }
 
 // src/index.ts
-var import_working22 = require("@seanhogg/builderforce-memory/working");
+var import_working23 = require("@seanhogg/builderforce-memory/working");
 
 // src/apiVersion.ts
 var API_VERSION_TTL_MS = 6e4;
@@ -42667,7 +42671,7 @@ function takePendingPrompt() {
 }
 
 // src/index.ts
-var import_working23 = require("@seanhogg/builderforce-memory/working");
+var import_working24 = require("@seanhogg/builderforce-memory/working");
 
 // src/modelIdentity.ts
 var BUILDERFORCE_PRODUCT_NAME = {

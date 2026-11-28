@@ -14,7 +14,7 @@
  * full output (to {@link EDITOR_COMMAND_BUFFER_CHARS}) is retained for `output_filter` (`localShellOutputs.ts`).
  */
 
-import { BACKGROUND_JOB_LIMIT_ERROR, EDITOR_COMMAND_BUFFER_CHARS, makeRoomForBackgroundJob } from "@builderforce/tool-output-policy";
+import { BACKGROUND_JOB_LIMIT_ERROR, backgroundWaitAbort, EDITOR_COMMAND_BUFFER_CHARS, makeRoomForBackgroundJob, waitForBackgroundJob } from "@builderforce/tool-output-policy";
 import type { ChildProcess } from "child_process";
 import type { ShellJobStart, ShellJobStatus } from "@builderforce/agent-tools";
 import { killTree } from "@builderforce/agent-tools/node-process";
@@ -126,19 +126,6 @@ export function startJob(command: string, opts: StartJobOptions): ShellJobStart 
   return { ok: true, id };
 }
 
-/** Resolves once `signal` aborts (never, without one); `off` detaches it. */
-function abortOf(signal: AbortSignal | undefined): { aborted: Promise<void>; off: () => void } {
-  if (!signal) return { aborted: new Promise<void>(() => undefined), off: () => undefined };
-  let off = (): void => undefined;
-  const aborted = new Promise<void>((resolve) => {
-    if (signal.aborted) return resolve();
-    const onAbort = (): void => resolve();
-    signal.addEventListener("abort", onAbort, { once: true });
-    off = () => signal.removeEventListener("abort", onAbort);
-  });
-  return { aborted, off };
-}
-
 /**
  * A job's state, after waiting up to `waitMs` for it to finish. Aborting `signal` ends
  * the WAIT early with the status so far — the job itself runs on.
@@ -147,11 +134,7 @@ export async function pollJob(id: string, waitMs = 0, opts: { owner?: JobOwner; 
   const job = jobs.get(keyOf(opts.owner, id));
   if (!job) return unknownJob(id);
   if (job.status === "running" && waitMs > 0 && !opts.signal?.aborted) {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const stop = abortOf(opts.signal);
-    await Promise.race([job.done, stop.aborted, new Promise<void>((r) => { timer = setTimeout(r, waitMs); })]);
-    if (timer) clearTimeout(timer);
-    stop.off();
+    await waitForBackgroundJob(job.done, waitMs, backgroundWaitAbort(opts.signal));
   }
   return statusOf(job);
 }
@@ -163,9 +146,7 @@ export async function killJob(id: string, owner?: JobOwner): Promise<ShellJobSta
   if (job.status === "running") {
     job.status = "killed";
     if (job.child.pid) killTree(job.child.pid);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    await Promise.race([job.done, new Promise<void>((r) => { timer = setTimeout(r, 3_000); })]);
-    if (timer) clearTimeout(timer);
+    await waitForBackgroundJob(job.done, 3_000);
   }
   return { ...statusOf(job), ...(job.status === "killed" ? { error: "stopped" } : {}) };
 }

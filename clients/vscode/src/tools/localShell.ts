@@ -146,7 +146,7 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
         }
         if (r.code === 0 && !r.error) return { ok: true, exitCode: 0, stdout: clamp(out || "(no output)", EDITOR_COMMAND_OUTPUT_CHARS) };
         if (timedOut || r.signal === "SIGTERM") {
-          return { ok: false, error: `timed out after ${timeout / 1000}s`, stdout: clamp(out, EDITOR_COMMAND_OUTPUT_CHARS) };
+          return { ok: false, code: 'timeout', error: `timed out after ${timeout / 1000}s`, stdout: clamp(out, EDITOR_COMMAND_OUTPUT_CHARS) };
         }
         return { ok: false, exitCode: r.code ?? 1, stdout: clamp(out || r.error?.message || "(no output)", EDITOR_COMMAND_OUTPUT_CHARS) };
       })();

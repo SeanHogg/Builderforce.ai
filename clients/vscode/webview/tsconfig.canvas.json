@@ -34,6 +34,7 @@
     // (Vite `dedupe` in vite.config.ts), so types and runtime agree. Never point these
     // at the frontend's copy.
     "paths": {
+      "@builderforce/device-auth": ["../../../packages/device-auth/src/index.ts"],
       "@builderforce/api-errors": ["../../../packages/api-errors/src/index.ts"],
       "@builderforce/agent-tools/workspace": ["../../../packages/agent-tools/src/workspace.ts"],
       "@seanhogg/builderforce-mcp": ["../../../packages/builderforce-mcp/src/index.ts"],

@@ -23,6 +23,7 @@
  */
 import { slotKeyedRows, type BrainMessage } from '@seanhogg/builderforce-brain-embedded';
 import {
+  newLocalChat,
   newLocalChatId,
   readStoredChats,
   readStoredMessages,
@@ -116,9 +117,8 @@ export function createIdbRecords(factory: IDBFactory, dbName: string): RovrRecor
       if (chat !== undefined) readStoredChats([chat]);
       return chat;
     },
-    async createChat(title) {
-      const now = new Date().toISOString();
-      const chat: LocalChat = { id: newLocalChatId(Date.now()), title, createdAt: now, updatedAt: now, syncKey: crypto.randomUUID() };
+    async createChat(title, scope) {
+      const chat = newLocalChat(newLocalChatId(Date.now()), title, scope);
       const tx = (await open()).transaction(CHATS, 'readwrite');
       tx.objectStore(CHATS).add(chat);
       await done(tx);

@@ -7,7 +7,7 @@
  * Regenerate with `node scripts/gen-container-shared.mjs` (from `api/`).
  * `--check` fails the build when the source no longer matches the hash below.
  *
- * @source-sha256 bf367970ceebe42f99cfc9cf5d6a6e0b48544eff651b2081fedec8507e0bdc54
+ * @source-sha256 155b979e8cd2bf8058ed076b91ea492f131d12421556dcbf5024626054bdc3dc
  */
 // ── caps.ts ──
 /**
@@ -24,6 +24,34 @@ const DEFAULT_COMMAND_TIMEOUT_MS = 10 * 60_000;
 /** Number of jobs retained by a workspace shell. */
 const MAX_BACKGROUND_JOBS = 32;
 const BACKGROUND_JOB_LIMIT_ERROR = `too many running background jobs (${MAX_BACKGROUND_JOBS}); stop one with command_stop first`;
+/** Bound a job poll and release its timer and cancellation subscription. */
+async function waitForBackgroundJob(done, waitMs, onAbort) {
+    let timer;
+    const cleanup = {};
+    try {
+        const stop = new Promise((resolve) => {
+            timer = setTimeout(resolve, waitMs);
+            const release = onAbort?.(resolve);
+            if (release)
+                cleanup.onAbort = release;
+        });
+        await Promise.race([done, stop]);
+    }
+    finally {
+        clearTimeout(timer);
+        cleanup.onAbort?.();
+    }
+}
+function backgroundWaitAbort(signal) {
+    return (wake) => {
+        if (!signal)
+            return;
+        if (signal.aborted)
+            return wake();
+        signal.addEventListener('abort', wake, { once: true });
+        return () => signal.removeEventListener('abort', wake);
+    };
+}
 /** Evict the oldest finished entries and reserve space for a new job. */
 function makeRoomForBackgroundJob(jobs) {
     if (jobs.size < MAX_BACKGROUND_JOBS)
@@ -863,4 +891,4 @@ function modelToolResultPolicy(opts) {
     return (toolName, data) => shapeToolResult(toolName, data ?? null, { summarize: opts.summarize, caps: opts.caps }).content;
 }
 
-export { DEFAULT_COMMAND_TIMEOUT_MS, BACKGROUND_JOB_LIMIT_ERROR, makeRoomForBackgroundJob, SHELL_CAPTURE_CHARS, TOOL_OUTPUT_CAPS, toolOutputCap, keepTail, cutHead, cutHeadTail, summarizeShellOutput, detectRunner, projectJson, windowReadFile, fitToolText, shapeToolResult, modelToolResultPolicy, LIST_MAX_FILES, LIST_RETURN_MAX, READ_MAX_BYTES, SEARCH_MAX_MATCHES };
+export { DEFAULT_COMMAND_TIMEOUT_MS, BACKGROUND_JOB_LIMIT_ERROR, makeRoomForBackgroundJob, waitForBackgroundJob, SHELL_CAPTURE_CHARS, TOOL_OUTPUT_CAPS, toolOutputCap, keepTail, cutHead, cutHeadTail, summarizeShellOutput, detectRunner, projectJson, windowReadFile, fitToolText, shapeToolResult, modelToolResultPolicy, LIST_MAX_FILES, LIST_RETURN_MAX, READ_MAX_BYTES, SEARCH_MAX_MATCHES };

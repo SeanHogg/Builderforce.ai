@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { exchangeEditorKey, isTenantSessionFresh, requestWorkspaceToken, tenantSessionExpiresAt } from "@builderforce/device-auth";
+import { exchangeEditorKey, isTenantSessionFresh, readEditorTenantToken, requestWorkspaceToken } from "@builderforce/device-auth";
 import { getApiKey, getBaseUrl } from "../gateway/gateway";
 import { setOutboxScope, trackReachability } from "../sync/outboxStorage";
 import { setCurrentWorkspace } from "../workspace/workspaceSelection";
@@ -270,13 +270,13 @@ async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<s
         parkWorkspaceWrites();
         return base.token;
       }
-      const body = (await res.json()) as { token?: string; expiresIn?: number };
+      const token = await readEditorTenantToken(res, Date.now, target);
       if (epoch !== jwtEpoch) return undefined;
-      if (!body.token) {
+      if (!token) {
         parkWorkspaceWrites();
         return base.token;
       }
-      scopedJwt = { token: body.token, exp: tenantSessionExpiresAt(Date.now(), body.expiresIn), tenantId: target };
+      scopedJwt = token;
       syncOutboxScope();
       return scopedJwt.token;
     }

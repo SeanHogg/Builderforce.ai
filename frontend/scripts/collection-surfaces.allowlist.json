@@ -318,11 +318,6 @@
     "components/UserDetailSections.tsx": {
       "table": 2,
       "data-table-class": 2
-    },
-    "components/WorkflowsContent.tsx": {
-      "table": 1,
-      "data-table-styles": 1,
-      "view-toggle": 1
     }
   }
 }

@@ -66,6 +66,21 @@ function fakeRuntime(behaviour: Behaviour, initialFs: Record<string, string> = {
 const run = (shell: ReturnType<typeof createWorkspaceShell>, command: string) => shell.run(command) as Promise<WorkspaceShellResult>;
 
 describe('createWorkspaceShell', () => {
+  it('polls a background command without stopping it, then stops it through the process port', async () => {
+    const { store } = memoryStore({});
+    const child = fakeRuntime((_fs, emit) => { emit('server ready'); return 'hang'; });
+    const shell = createWorkspaceShell(store, { boot: async () => child.runtime });
+    const started = await shell.start!('npm run dev');
+    expect(started.ok).toBe(true);
+    await vi.waitFor(async () => expect(await shell.poll!(started.id!)).toMatchObject({ status: 'running', output: 'server ready' }));
+    const cancelled = new AbortController();
+    cancelled.abort();
+    expect(await shell.poll!(started.id!, { waitMs: 10, signal: cancelled.signal })).toMatchObject({ status: 'running' });
+    expect(child.kill).not.toHaveBeenCalled();
+    expect(await shell.kill!(started.id!)).toMatchObject({ ok: false, status: 'killed', exitCode: 143 });
+    expect(child.kill).toHaveBeenCalledOnce();
+  });
+
   it('writes the workspace and runs the line through bfsh -c, returning output and exit code', async () => {
     const { store } = memoryStore({ 'package.json': '{"name":"app"}', 'src/App.jsx': 'export default 1;' });
     const fake = fakeRuntime((fs, emit) => {

@@ -4,16 +4,17 @@
  * name (the manifest's `host_permissions` must list the same origins; `config.test.ts`
  * holds them together).
  */
+import { BUILDERFORCE_PLATFORM_ORIGINS, EDITOR_GATEWAY_BASE } from '@builderforce/device-auth';
 
 /**
  * The gateway base. The primary domain's same-origin gateway path, exactly as the VS Code
  * extension defaults to (`builderforce.baseUrl`): it reaches the API on networks that
  * allow the main site but block the `api.` subdomain.
  */
-export const DEFAULT_BASE_URL = 'https://builderforce.ai/gateway';
+export const DEFAULT_BASE_URL = EDITOR_GATEWAY_BASE;
 
 /** The origins Rovr talks to without asking — mirrored by the manifest's `host_permissions`. */
-export const PLATFORM_ORIGINS = ['https://builderforce.ai', 'https://api.builderforce.ai'] as const;
+export const PLATFORM_ORIGINS = BUILDERFORCE_PLATFORM_ORIGINS;
 /** Where an upgrade click lands — the web app's `/pricing` IS its billing console, for a
  *  free workspace choosing a tier and a paid one managing its plan alike. */
 export const PRICING_URL = `${PLATFORM_ORIGINS[0]}/pricing`;

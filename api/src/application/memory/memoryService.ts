@@ -219,7 +219,7 @@ export async function recall(
     const token = await scopeCacheToken(env, ctx, chain);
     const entries = await getOrSetCached(
       env,
-      `mem:recall:v2:${ctx.tenantId}:${token}:${n}:${query}`,
+      `mem:recall:v3:${ctx.tenantId}:${token}:${n}:${query}`,
       async () => {
         // The semantic arm needs a query vector; without one (no key, or the vendor
         // failed) recall is the lexical arm alone, which is the pre-1134 behaviour.
@@ -238,7 +238,7 @@ export async function recall(
         // chain in ONE query per arm.
         const [scopedLexical, project, scopedVector] = await Promise.all([
           scopedKinds.length === 0
-            ? Promise.resolve([] as Array<{ key: string; content: string; scopeKind: string; origin: string; expiresAt: Date | null; importance: number }>)
+            ? Promise.resolve([] as Array<{ key: string; content: string; scopeKind: string; origin: string; expiresAt: Date | null; importance: number; updatedAt: Date | null }>)
             : (() => {
                 const words = queryTerms(query);
                 const matchers = words.map((w) => ilike(agentMemory.content, `%${w}%`));
@@ -255,6 +255,7 @@ export async function recall(
                     origin: agentMemory.origin,
                     expiresAt: agentMemory.expiresAt,
                     importance: agentMemory.importance,
+                    updatedAt: agentMemory.updatedAt,
                   })
                   .from(agentMemory)
                   .where(scopedToTenant(agentMemory, ctx.tenantId, scopeClause, unexpiredNow, lexical))
@@ -276,6 +277,7 @@ export async function recall(
           ...row,
           id: `scoped:${row.scopeKind}:${row.key}`,
           importance: Number(row.importance ?? 0.5),
+          updatedAt: row.updatedAt ? new Date(row.updatedAt) : null,
           vectorScore: 0,
         }));
         const fused = rankMemoryArms<RecalledRow>([...scopedVector, ...project.vector], [...scopedText, ...project.text]);

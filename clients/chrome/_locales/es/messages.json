@@ -381,6 +381,15 @@
   "signInFailed": {
     "message": "No se pudo iniciar sesión. Inténtalo de nuevo."
   },
+  "workspaceLabel": {
+    "message": "Espacio de trabajo"
+  },
+  "workspaceChoose": {
+    "message": "Elegir un espacio de trabajo"
+  },
+  "workspaceSwitchFailed": {
+    "message": "No se pudo cambiar el espacio de trabajo."
+  },
   "sitesHeading": {
     "message": "Sitios permitidos"
   },

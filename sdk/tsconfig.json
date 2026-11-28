@@ -12,6 +12,7 @@
     "lib": ["ES2022", "DOM"],
     "types": ["node", "vitest/globals"],
     "paths": {
+      "@builderforce/device-auth": ["../packages/device-auth/src/index.ts"],
       "@builderforce/api-errors": ["../packages/api-errors/src/index.ts"]
     }
   },

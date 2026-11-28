@@ -26,8 +26,9 @@ export interface RovrSettings {
   subscribe(listener: () => void): () => void;
 }
 
-export function createSettings(storage: KeyValueStore): RovrSettings {
+export function createSettings(storage: KeyValueStore, workspace?: { scope(): string | null; subscribe(listener: () => void): () => void }): RovrSettings {
   const setOrRemove = (key: string, value: unknown) => (value === null || value === '' ? storage.remove(key) : storage.set(key, value));
+  const projectKey = (scope: string | null | undefined): string => scope ? `${TASK_PROJECT}.${scope}` : TASK_PROJECT;
   return {
     synapseUrl: async () => {
       const current = await storage.get<string>(BFI_SERVE_URL);
@@ -43,12 +44,34 @@ export function createSettings(storage: KeyValueStore): RovrSettings {
       // A cleared (or replaced) address must not resurrect from the retired key on the next read.
       await storage.remove(LEGACY_SYNAPSE_URL);
     },
-    taskProjectId: async () => (await storage.get<number>(TASK_PROJECT)) ?? null,
-    setTaskProjectId: (id) => setOrRemove(TASK_PROJECT, id),
+    async taskProjectId() {
+      const scope = workspace?.scope();
+      const key = projectKey(scope);
+      const current = await storage.get<number>(key);
+      if (current !== undefined || !scope) return current ?? null;
+      const legacy = await storage.get<number>(TASK_PROJECT);
+      if (legacy === undefined || workspace?.scope() !== scope) return null;
+      await storage.set(key, legacy);
+      await storage.remove(TASK_PROJECT);
+      return legacy;
+    },
+    async setTaskProjectId(id) {
+      const scope = workspace?.scope();
+      if (scope) await storage.remove(TASK_PROJECT);
+      await setOrRemove(projectKey(scope), id);
+    },
     pinnedModel: async () => (await storage.get<string>(PINNED_MODEL)) ?? null,
     setPinnedModel: (ref) => setOrRemove(PINNED_MODEL, ref),
     reportErrors: async () => (await storage.get<boolean>(REPORT_ERRORS_SETTING)) === true,
     setReportErrors: (on) => storage.set(REPORT_ERRORS_SETTING, on),
-    subscribe: (listener) => storage.subscribe((keys) => keys.some((k) => k.startsWith('settings.')) && listener()),
+    subscribe(listener) {
+      const stopStorage = storage.subscribe((keys) => keys.some((k) => k.startsWith('settings.')) && listener());
+      let scope = workspace?.scope();
+      const stopWorkspace = workspace?.subscribe(() => {
+        const next = workspace.scope();
+        if (next !== scope) { scope = next; listener(); }
+      });
+      return () => { stopStorage(); stopWorkspace?.(); };
+    },
   };
 }

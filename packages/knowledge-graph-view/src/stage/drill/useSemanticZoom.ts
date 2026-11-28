@@ -231,8 +231,9 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
 
     const zoomInto = useCallback((stationId: string) => {
         const s = state.current, p = bus.placement, rig = rigOf(bus);
+        // A folder mark (a system, an app) is named by its slot key; a station by its id.
         const station = s.map.stations.byId.get(stationId);
-        const slot = station ? bus.slotOf(s.map.keyOfStation(station)) : -1;
+        const slot = station ? bus.slotOf(s.map.keyOfStation(station)) : folderOfKey(stationId) !== null ? bus.slotOf(stationId) : -1;
         const scale = p && slot >= 0 ? p.scale[slot] ?? 0 : 0;
         if (!rig || !p || !(scale > 0) || s.band >= CODE || !hasSemanticMap(cameraOf(p))) { s.drill.enter(stationId); return; }
         rig.flyTo(p.position[slot * 3]!, p.position[slot * 3 + 2]!, zoomForBand(s.band + 1, scale), now(), ms, p.position[slot * 3 + 1]);
@@ -283,10 +284,37 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
             s.codeKey = null; s.trail = []; setTrail([]);
         }
         pending.current = true;
-        s.drill.climb(target);
+        // Bands count from the package down: the system and app frames stay under them.
+        s.drill.climb(structuralDepth(s.drill.stack) + target);
         // The camera is still zoomed in: fit it, or the crossing would go straight back in.
         rigOf(bus)?.fit(now(), ms);
     }, [bus, ms, leaveCode]);
+
+    // The rail's click out to `rung`: close the code, then keep the frames up to that rung (System is the world).
+    const outToRung = useCallback((rung: number) => {
+        const s = state.current;
+        goal.current = -1;
+        if (s.codeKey) {
+            if (rung >= RUNG_METHOD) { leaveCode(); return; }
+            s.codeKey = null; s.trail = []; setTrail([]);
+        }
+        const keep = stackLengthForRung(s.drill.stack, rung);
+        if (keep >= s.drill.stack.length) return;
+        pending.current = true;
+        s.drill.climb(keep);
+        rigOf(bus)?.fit(now(), ms);
+    }, [bus, ms, leaveCode]);
+
+    // One step out: the code, else the band, else the system or app the drill is inside.
+    const outOne = useCallback(() => {
+        const s = state.current;
+        if (s.band === CODE) { if (s.trail.length > 1) codeBack(s.trail.length - 2); else leaveCode(); return; }
+        if (s.band > 0) { outToBand(s.band - 1); return; }
+        if (s.drill.stack.length === 0) return;
+        pending.current = true;
+        s.drill.out();
+        rigOf(bus)?.fit(now(), ms);
+    }, [bus, ms, codeBack, leaveCode, outToBand]);
 
     const closeCode = useCallback(() => {
         const s = state.current;
@@ -310,14 +338,15 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
     const stepIn = useCallback((prefer: string | null): boolean => {
         const s = state.current, p = bus.placement, proj = bus.projector;
         if (s.band >= CODE || pending.current || bus.tweening) return false;
-        let c = s.candidates.find((k) => k.key === prefer);
+        const cands = s.band < CODE - 1 && p ? [...s.candidates, ...folderCandidates(p, s.drill)] : s.candidates;
+        let c = cands.find((k) => k.key === prefer);
         // At the method band a loaded method that is not a station of this level still opens its code.
         if (!c && prefer?.startsWith('node:') && s.band === CODE - 1 && codeTargetOf(prefer.slice(5), s.drill.symbols)) return enterCode(prefer.slice(5));
         if (!c && p && proj) {
-            const slots = s.candidates.map((k) => bus.slotOf(k.key));
+            const slots = cands.map((k) => bus.slotOf(k.key));
             const at = rigOf(bus)?.focusPoint ?? [proj.width / 2, proj.height / 2];
             const f = focusOf(p, proj, slots, at, Number.POSITIVE_INFINITY);
-            if (f) c = s.candidates[slots.indexOf(f.slot)];
+            if (f) c = cands[slots.indexOf(f.slot)];
         }
         if (!c) return false;
         if (s.band === CODE - 1 && !(s.drill.hasMembers?.(c.id) && s.drill.canEnter(c.id).can)) return enterCode(c.key.slice('node:'.length));
@@ -326,14 +355,29 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
     }, [bus, enterCode, zoomInto]);
     stepGoal.current = () => stepIn(null);
 
+    // In toward rail rung `rung` step by step; `walk` takes the next step as each level lands.
+    const walkIn = useCallback((rung: number, prefer: string | null, onBlocked: () => void) => {
+        blocked.current = onBlocked;
+        goal.current = rung;
+        if (!stepIn(prefer)) { goal.current = -1; onBlocked(); }
+    }, [stepIn]);
+
     const toBand = useCallback((target: number, prefer: string | null, onBlocked: () => void) => {
         const s = state.current;
         blocked.current = onBlocked;
         if (target < s.band) { goal.current = -1; outToBand(target); return; }
-        if (target === s.band) { goal.current = -1; return; }
-        goal.current = target;
-        if (!stepIn(prefer)) { goal.current = -1; onBlocked(); }
-    }, [outToBand, stepIn]);
+        const rung = RUNG_OF_BAND[Math.min(target, CODE)]!;
+        if (target === s.band || rungOf(s.drill.stack, !!s.codeKey) >= rung) { goal.current = -1; return; }
+        walkIn(rung, prefer, onBlocked);
+    }, [outToBand, walkIn]);
+
+    const rung = rungOf(drill.stack, !!codeKey);
+    const toRung = useCallback((target: number, prefer: string | null, onBlocked: () => void) => {
+        const s = state.current, now_ = rungOf(s.drill.stack, !!s.codeKey);
+        if (target < now_) { outToRung(target); return; }
+        if (target === now_) { goal.current = -1; return; }
+        walkIn(target, prefer, onBlocked);
+    }, [outToRung, walkIn]);
 
     const code = useMemo(() => {
         const target = codeKey ? codeTargetOf(codeKey.slice('node:'.length), drill.symbols) : null;
@@ -346,7 +390,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
     }), [trail, drill.symbols]);
 
     return {
-        band: bandOf(band), sequenceLod: sequenceLodOf(seqBand), nest, setBasis, awaitsBasis, nests, zoomInto, zoomToBand, setMethodOpen, outToBand, stepIn, toBand, code, closeCode, leaveCode, enterCode,
+        band: bandOf(band), sequenceLod: sequenceLodOf(seqBand), nest, setBasis, awaitsBasis, nests, zoomInto, zoomToBand, setMethodOpen, outToBand, stepIn, toBand, rung, toRung, outOne, code, closeCode, leaveCode, enterCode,
         trail: crumbs, codeBack,
     };
 }

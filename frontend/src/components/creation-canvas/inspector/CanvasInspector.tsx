@@ -1,5 +1,5 @@
 import type { CreationFlowNode } from '../CreationNode';
-import { creationSessionsApi, pmoApi, type PmoScopeKind, runtimeApi, tasksApi } from '@/lib/builderforceApi';
+import { creationSessionsApi, pmoApi, type PmoScopeKind, runtimeApi, tasksApi, workflowDefinitions } from '@/lib/builderforceApi';
 import type { CreationNodeData } from '../types';
 import type { CanvasExportAction } from '@/lib/canvasExports';
 import { useFormat } from '@/i18n/useFormat';
@@ -27,14 +27,53 @@ import { CourseSubjectControl, PracticeAuthoring, ReadingLevelControl } from '..
 import { SourceList } from './datasetInspectorParts';
 import { SellInMarketplace } from '../SellInMarketplace';
 import { CanvasExportActions, canvasExportActionsFor } from '../CanvasExportActions';
+import { resourceIdOfType } from '@builderforce/creation-canvas-contract';
+import { WorkflowRunHistoryPanel } from '@/components/WorkflowRunHistoryPanel';
+import { useConfirm } from '@/components/ConfirmProvider';
+import { Button } from '@/components/ui';
 
 const NO_TASK_ASSIGNEES: { id: string; name: string }[] = [];
+
+function WorkflowDetails({ definitionId, title, onDeleted }: { definitionId: string; title: string; onDeleted?: () => void }) {
+  const t = useTranslations('workflowsContent');
+  const common = useTranslations('common');
+  const confirm = useConfirm();
+  const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+  async function remove() {
+    if (!onDeleted) return;
+    setDeleting(true);
+    setError('');
+    try {
+      if (await confirm(common('deleteWorkflowConfirm'))) {
+        await workflowDefinitions.remove(definitionId);
+        onDeleted();
+      }
+    } catch (cause) {
+      setError(faultText(cause, t('failedDelete')));
+    } finally {
+      setDeleting(false);
+    }
+  }
+  return <>
+    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>{t('runs')}</summary>
+      {open && <WorkflowRunHistoryPanel definitionId={definitionId} definitionName={title} />}
+    </details>
+    {onDeleted && <Button variant="secondary" disabled={deleting} onClick={() => void remove()}>{common('delete')}</Button>}
+    {error && <small role="alert">{error}</small>}
+  </>;
+}
 
 export function Inspector({ node }: { node: CreationFlowNode }) {
   const { nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onPublishListing, onOpenReleases, onUnpackWorkflow, onBuildWorkflow, onBuildFlow, onRemoveConnection, onOpenEvermindBuild, onLoadEvermindTemplate, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDiagram, onExportArtifact, onAskBrain, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke } = useInspectorBindings(node.id);
   const fmt = useFormat();
   const t = useTranslations('creationCanvas');
   const kind = node.data.kind;
+  const workflowId = kind === 'workflow' && persistence === 'server' && node.data.workflowExecutable !== false
+    ? resourceIdOfType(node.data.resourceId, 'workflow')
+    : null;
   const onWebsiteChange = (patch: Partial<CreationNodeData>) => onChange(patchWebsiteHero(node.data, patch));
   const websiteHero = websiteHeroFrom(node.data);
   const websiteTheme = websiteThemeFrom(node.data);
@@ -281,6 +320,14 @@ export function Inspector({ node }: { node: CreationFlowNode }) {
         <PracticeAuthoring data={node.data} editable={editable} onChange={onChange} onAskBrain={onAskBrain} />
       </>}
       {tab === 'details' && <SourceList sources={node.data.sources} />}
+      {tab === 'details' && workflowId && (
+        <WorkflowDetails
+          key={workflowId}
+          definitionId={workflowId}
+          title={node.data.title}
+          onDeleted={editable ? () => onChange({ resourceId: '', workflowExecutable: undefined }) : undefined}
+        />
+      )}
       {/* The step that used to be missing: an object that runs on this board and
           nowhere else becomes something a stranger can find, buy and play. The
           button decides its own visibility from the KIND — and, separately, whether

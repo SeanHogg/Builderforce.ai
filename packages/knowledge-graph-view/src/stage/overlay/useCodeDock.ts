@@ -156,7 +156,8 @@ export function useCodeDock(a: CodeDockInput): CodeDockModel {
     const subject = codeSubject(selected, stationPick);
     const markRef = subject.ref;
     // A journey stop id is a station id. Resolve it the same way; selection still wins when both name a line.
-    const stop = surface.path?.stops[surface.step];
+    // Nothing is selected until the person picks: the default line's first stop (step 0, e.g. `.plans`) is not a pick.
+    const stop = surface.lineChosen || surface.pinned || surface.station || surface.step > 0 ? surface.path?.stops[surface.step] : undefined;
     const stopStation = stop ? surface.stations.byId.get(stop.id) ?? map.stations.byId.get(stop.id) ?? null : null;
     const stopRef = codeRefForStop(stop?.id ?? null, stopStation);
     // The active drill wins over a file left selected at the previous level. An explicit symbol in the same file can still set the line.

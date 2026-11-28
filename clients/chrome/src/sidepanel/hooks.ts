@@ -58,6 +58,11 @@ export function useSignedIn(): boolean {
   );
 }
 
+export function useWorkspaceScope(): string | null {
+  const { session } = useServices();
+  return useSyncExternalStore((listener) => session.subscribe(listener), () => session.scope());
+}
+
 /** The signed-in user's id (cached from the key->JWT exchange), kept current across contexts. Null until the
  *  first exchange - which this hook triggers once when signed in without one. */
 export function useViewerId(): string | null {
@@ -102,7 +107,11 @@ export function useSetting<T>(read: (settings: RovrSettings) => Promise<T>, init
   const [value, setValue] = useState<T>(initial);
   useEffect(() => {
     let live = true;
-    const load = () => void read(settings).then((v) => live && setValue(v));
+    let revision = 0;
+    const load = () => {
+      const current = ++revision;
+      void read(settings).then((v) => { if (live && current === revision) setValue(v); });
+    };
     load();
     const off = settings.subscribe(load);
     return () => {

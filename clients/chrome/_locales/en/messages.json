@@ -491,6 +491,15 @@
     "message": "Sign-in failed. Try again.",
     "description": "Sign-in error"
   },
+  "workspaceLabel": {
+    "message": "Workspace"
+  },
+  "workspaceChoose": {
+    "message": "Choose a workspace"
+  },
+  "workspaceSwitchFailed": {
+    "message": "The workspace could not be switched."
+  },
   "sitesHeading": {
     "message": "Allowed sites",
     "description": "Section heading"

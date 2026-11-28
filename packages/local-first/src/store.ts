@@ -141,6 +141,13 @@ export interface MemoryLocalFirstStore extends LocalFirstStore {
   view(): LocalFirstSnapshot;
   /** Bring these partitions current (`partitionIdOf`). A load commits nothing and notifies nobody. */
   ensureLoaded(partitionIds: Iterable<string>): Promise<void>;
+  /**
+   * Drop these partitions' loaded segments, so the next read of each loads it whole. A recovery
+   * calls it when a read left a partition in doubt. Partitions that exist only in memory (no
+   * pointer yet) and every partition of a store with no loader are left alone: nothing could
+   * read them back. A read that FAILED needs no eviction: the loader rejected, so nothing was installed.
+   */
+  evictPartitions(partitionIds: Iterable<string>): void;
 }
 
 export function createMemoryLocalFirstStore(
@@ -193,6 +200,7 @@ export function createMemoryLocalFirstStore(
     // The whole store, every partition loaded: a caller of `export` gets every row, as always.
     export: async () => clone(await state.fullView()),
     ensureLoaded: (partitionIds) => state.ensureLoaded(partitionIds),
+    evictPartitions: (partitionIds) => state.table.evict(partitionIds),
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

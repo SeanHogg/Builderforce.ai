@@ -60,6 +60,9 @@ export class AppendedSlots {
             const parent = [this.parentStation[k]!, this.parentFolder[k]!].find((q) => q >= 0 && q < have);
             for (let c = 0; c < 3; c++) position[s * 3 + c] = parent === undefined ? (min[c]! + max[c]!) / 2 : p.position[parent * 3 + c]!;
         }
-        return { ...p, position, scale, extrude };
+        // A rectangular footprint's depth ÷ width: the appended slots are square (1).
+        const aspect = p.aspect ? new Float32Array(total).fill(1) : undefined;
+        aspect?.set(p.aspect!);
+        return { ...p, position, scale, extrude, ...(aspect ? { aspect } : {}) };
     }
 }

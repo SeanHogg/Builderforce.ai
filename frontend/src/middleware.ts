@@ -9,6 +9,7 @@ import { isCanvasInvitationRoute } from '@/lib/shellRouting';
 import { canvasAppPath, STUDIO_ROUTE } from '@/lib/studio/studioHost';
 import { productHostRedirect } from '@/lib/productHosts';
 import { HSTS_HEADERS, isLocalHost, secureCanonicalRedirect } from '@/lib/secureTransport';
+import { markLegacyCreationRoute } from '@/lib/canvas/legacyCreationRoute';
 
 /**
  * Route protection rules:
@@ -195,6 +196,21 @@ async function route(request: NextRequest): Promise<NextResponse> {
   const gated = await websitePageGate(request);
   if (gated) return gated;
 
+  // The retired /ide root no longer has an app directory, so redirect it before
+  // the unknown-slug guard. Deep links follow the same Creation Canvas path.
+  if (pathname === '/ide' || pathname.startsWith('/ide/')) {
+    const url = request.nextUrl.clone();
+    if (pathname === '/ide' || pathname === '/ide/dashboard') {
+      url.pathname = '/create';
+      url.searchParams.set('filter', 'build');
+    } else {
+      const projectRef = pathname.slice('/ide/'.length).split('/')[0];
+      url.pathname = canvasAppPath(projectRef);
+    }
+    markLegacyCreationRoute(url.searchParams, '/ide');
+    return NextResponse.redirect(url);
+  }
+
   // HARD 404 for unknown root-level slugs. `app/[burnrateDomain]/page.tsx` is a
   // catch-all over the whole root level, so every mistyped URL on the site
   // reached it and got `notFound()` — a branded 404 BODY served with a 200
@@ -217,21 +233,6 @@ async function route(request: NextRequest): Promise<NextResponse> {
   const rootSegment = pathname.slice(1);
   if (rootSegment && !rootSegment.includes('/') && !MIDDLEWARE_ROOT_SEGMENTS.has(rootSegment)) {
     return NextResponse.next();
-  }
-
-  // The former editor product surface is retired. Preserve published deep links without
-  // mounting a second UI: every route resolves directly into Creation Canvas.
-  if (pathname === '/ide' || pathname === '/ide/dashboard') {
-    const url = request.nextUrl.clone();
-    url.pathname = '/create';
-    url.searchParams.set('filter', 'build');
-    return NextResponse.redirect(url);
-  }
-  if (pathname.startsWith('/ide/')) {
-    const projectRef = pathname.slice('/ide/'.length).split('/')[0];
-    const url = request.nextUrl.clone();
-    url.pathname = canvasAppPath(projectRef);
-    return NextResponse.redirect(url);
   }
 
   const needsCoi = (pathname.startsWith('/create/') && !isCanvasInvitationRoute(pathname))

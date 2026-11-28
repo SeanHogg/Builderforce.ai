@@ -345,6 +345,18 @@ describe("createOutbox — durable mode", () => {
     await box.flush();
     expect(sent[1]).toEqual({ scope: "t1", items: [1, 3] });
   });
+
+  it("parks a late handoff under the record's original workspace", async () => {
+    let scope = "tenant:8";
+    const send = vi.fn(async () => {});
+    const box = createOutbox<number>({ maxWaitMs: 0, scope: () => scope, send });
+    await box.enqueueDurable("chat", 1, "history", "tenant:7");
+    await box.flush();
+    expect(send).not.toHaveBeenCalled();
+    scope = "tenant:7";
+    await box.flush();
+    expect(send).toHaveBeenCalledWith("chat", [1], expect.objectContaining({ scope }));
+  });
 });
 
 describe("outbox work classification", () => {

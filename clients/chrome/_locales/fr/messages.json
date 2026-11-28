@@ -381,6 +381,15 @@
   "signInFailed": {
     "message": "La connexion a échoué. Réessayez."
   },
+  "workspaceLabel": {
+    "message": "Espace de travail"
+  },
+  "workspaceChoose": {
+    "message": "Choisir un espace de travail"
+  },
+  "workspaceSwitchFailed": {
+    "message": "Impossible de changer d’espace de travail."
+  },
   "sitesHeading": {
     "message": "Sites autorisés"
   },

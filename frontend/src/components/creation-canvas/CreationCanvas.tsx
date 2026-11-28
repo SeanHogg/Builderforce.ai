@@ -335,6 +335,7 @@ function CanvasInner({ sessionId, persistence, lens = 'canvas', initialFocusId, 
   const localizedTourDefaults = useCanvasTourDefaults(t);
   const sectionTour = useSectionTour({
     ...CREATION_CANVAS_TOUR,
+    stepCompletedEvent: 'creation_tutorial_step_completed',
     audienceId: currentUserId || (persistence === 'local' ? 'guest' : null),
     activity: { sessionId, clientSurface: canvasSurface() },
     enabled: canvasLensDefinition(lens).tours, // no tour of chrome the lens does not draw

@@ -879,6 +879,10 @@ interface BrainTransport {
      * to the global `fetch` for the browser/web app.
      */
     fetch?: (input: string, init: RequestInit) => Promise<Response>;
+    /** Optional host transport for MCP catalog and tool requests. */
+    mcpFetch?: (input: string, init: RequestInit) => Promise<Response>;
+    /** Host-provided scope for MCP cache and mutation deduplication. */
+    workspaceScope?: string;
     /**
      * `openai`: the transport reaches a provider's plain OpenAI route, not the gateway
      * (`localTransport`). The gateway-only fields — `strict`, `routingMode`,

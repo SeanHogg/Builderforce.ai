@@ -13,13 +13,15 @@ interface UseSectionTourOptions {
   enabled?: boolean;
   minimumVisits?: number;
   activity?: Record<string, unknown>;
+  stepCompletedEvent?: string;
 }
 
-export function useSectionTour({ sectionId, version, audienceId, enabled = true, minimumVisits = 1, activity = {} }: UseSectionTourOptions) {
+export function useSectionTour({ sectionId, version, audienceId, enabled = true, minimumVisits = 1, activity = {}, stepCompletedEvent }: UseSectionTourOptions) {
   const [phase, setPhase] = useState<SectionTourPhase>('idle');
   const [step, setStep] = useState(0);
   const historyRef = useRef<SectionTourHistory | null>(null);
   const visitedAudienceRef = useRef<string | null>(null);
+  const lastCompletedStep = useRef(0);
   const activityRef = useRef(activity);
   activityRef.current = activity;
 
@@ -56,6 +58,7 @@ export function useSectionTour({ sectionId, version, audienceId, enabled = true,
   }, [record]);
 
   const start = useCallback(() => {
+    lastCompletedStep.current = 0;
     setStep(0);
     setPhase('active');
     record('onboarding_tour_started');
@@ -69,6 +72,12 @@ export function useSectionTour({ sectionId, version, audienceId, enabled = true,
   }, [persistOutcome, phase, record, step]);
 
   const next = useCallback((totalSteps: number) => {
+    if (phase !== 'active' || step >= totalSteps) return;
+    const completedStep = step + 1;
+    if (stepCompletedEvent && completedStep > lastCompletedStep.current) {
+      lastCompletedStep.current = completedStep;
+      record(stepCompletedEvent, { step: completedStep });
+    }
     if (step >= totalSteps - 1) {
       persistOutcome('completed', totalSteps);
       setPhase('idle');
@@ -78,7 +87,7 @@ export function useSectionTour({ sectionId, version, audienceId, enabled = true,
     const nextStep = step + 1;
     setStep(nextStep);
     record('onboarding_tour_step_viewed', { step: nextStep + 1 });
-  }, [persistOutcome, record, step]);
+  }, [persistOutcome, phase, record, step, stepCompletedEvent]);
 
   const back = useCallback(() => setStep((current) => Math.max(0, current - 1)), []);
 

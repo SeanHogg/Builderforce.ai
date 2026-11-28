@@ -381,6 +381,15 @@
   "signInFailed": {
     "message": "登录失败，请重试。"
   },
+  "workspaceLabel": {
+    "message": "工作区"
+  },
+  "workspaceChoose": {
+    "message": "选择工作区"
+  },
+  "workspaceSwitchFailed": {
+    "message": "无法切换工作区。"
+  },
   "sitesHeading": {
     "message": "允许的网站"
   },

@@ -10,7 +10,7 @@ import { DEVICE_CLIENT } from '../config';
 import { SYNAPSE_DEFAULT_URL } from '../inference/localRuntimes';
 import { originOf } from '../tools/safety';
 import { t, type MessageKey } from '../i18n/t';
-import { useLoaded, useServices, useSignedIn } from './hooks';
+import { useLoaded, useServices, useSetting, useSignedIn, useWorkspaceScope } from './hooks';
 import { ModelPickerSection } from './ModelPickerSection';
 
 const FAILURE_KEY: Record<DeviceAuthFailure, MessageKey> = {
@@ -105,7 +105,42 @@ function AccountSection() {
           </button>
         )}
       </div>
+      {signedIn && <WorkspacePicker />}
     </div>
+  );
+}
+
+function WorkspacePicker() {
+  const services = useServices();
+  const scope = useWorkspaceScope();
+  const [workspaces] = useLoaded(
+    () => services.listWorkspaces().catch(() => []),
+    [],
+    [scope],
+  );
+  const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
+  if (!workspaces.length && !failed) return null;
+  const select = async (tenantId: number) => {
+    setPending(true);
+    setFailed(false);
+    try {
+      setFailed(!(await services.switchWorkspace(tenantId)));
+    } catch {
+      setFailed(true);
+    } finally {
+      setPending(false);
+    }
+  };
+  return (
+    <label className="rovr-field">
+      <span>{t('workspaceLabel')}</span>
+      <select className="bf-select" value={services.session.tenantId() ?? ''} disabled={pending} onChange={(event) => void select(Number(event.target.value))}>
+        <option value="" disabled>{t('workspaceChoose')}</option>
+        {workspaces.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+      </select>
+      {failed && <span className="rovr-error" role="alert">{t('workspaceSwitchFailed')}</span>}
+    </label>
   );
 }
 
@@ -197,18 +232,16 @@ function LocalModelsSection() {
 function TaskProjectSection() {
   const services = useServices();
   const signedIn = useSignedIn();
+  const scope = useWorkspaceScope();
   const [projects] = useLoaded<Array<{ id: number; name: string }>>(
     () =>
       signedIn
         ? services.api.request<{ projects?: Array<{ id: number; name: string }> }>('/api/projects').then((r) => r.projects ?? [], () => [])
         : Promise.resolve([]),
     [],
-    [signedIn],
+    [signedIn, scope],
   );
-  const [projectId, setProjectId] = useState<number | null>(null);
-  useEffect(() => {
-    void services.settings.taskProjectId().then(setProjectId);
-  }, [services]);
+  const projectId = useSetting((settings) => settings.taskProjectId(), null);
 
   return (
     <div className="rovr-card rovr-stack">
@@ -221,7 +254,6 @@ function TaskProjectSection() {
           disabled={!signedIn}
           onChange={(e) => {
             const next = e.target.value ? Number(e.target.value) : null;
-            setProjectId(next);
             void services.settings.setTaskProjectId(next);
           }}
         >

@@ -95,7 +95,7 @@ export async function readMcpRelayCatalog(
 export function createMcpRelay(options: {
   baseUrl: string;
   token?: string | null;
-  fetch?: typeof fetch;
+  fetch?: (input: string, init: RequestInit) => Promise<Response>;
   headers?: Record<string, string>;
   timeoutMs?: number;
   catalogNames?: "canonical";

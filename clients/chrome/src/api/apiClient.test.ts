@@ -22,6 +22,8 @@ function setup(fetch: ApiFetch) {
     userId: () => null,
     signIn: async () => {},
     signOut: async () => {},
+    switchWorkspace: async () => true,
+    baseJwt: async () => 'base',
     jwt: vi.fn<Session['jwt']>(async (force) => force ? 'fresh' : 'cached'),
     subscribe: () => () => {},
   };

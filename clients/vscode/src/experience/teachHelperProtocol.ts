@@ -8,6 +8,8 @@
  * `{id, error:{code, message}}` and pushes `{event, ...}` lines of its own.
  */
 
+import type { RunStatus, StepOutcome } from "@seanhogg/builderforce-memory-engine";
+
 export type HelperErrorCode =
   | "bad_request"
   | "unknown_method"
@@ -30,8 +32,8 @@ export class HelperError extends Error {
   }
 }
 
-export type StepOutcomeWire = "ok" | "fallback" | "failed" | "approved" | "denied";
-export type RunFinishStatus = "succeeded" | "failed" | "stopped" | "denied";
+export type StepOutcomeWire = StepOutcome;
+export type RunFinishStatus = Exclude<RunStatus, "running">;
 
 /** Everything the helper pushes unprompted. */
 export type HelperEvent =

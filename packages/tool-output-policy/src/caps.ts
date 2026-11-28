@@ -15,6 +15,36 @@ export const DEFAULT_COMMAND_TIMEOUT_MS = 10 * 60_000;
 export const MAX_BACKGROUND_JOBS = 32;
 export const BACKGROUND_JOB_LIMIT_ERROR = `too many running background jobs (${MAX_BACKGROUND_JOBS}); stop one with command_stop first`;
 
+/** Bound a job poll and release its timer and cancellation subscription. */
+export async function waitForBackgroundJob(
+  done: Promise<unknown>,
+  waitMs: number,
+  onAbort?: (wake: () => void) => void | (() => void),
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cleanup: { onAbort?: () => void } = {};
+  try {
+    const stop = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, waitMs);
+      const release = onAbort?.(resolve);
+      if (release) cleanup.onAbort = release;
+    });
+    await Promise.race([done, stop]);
+  } finally {
+    clearTimeout(timer);
+    cleanup.onAbort?.();
+  }
+}
+
+export function backgroundWaitAbort(signal: AbortSignal | undefined): (wake: () => void) => void | (() => void) {
+  return (wake) => {
+    if (!signal) return;
+    if (signal.aborted) return wake();
+    signal.addEventListener('abort', wake, { once: true });
+    return () => signal.removeEventListener('abort', wake);
+  };
+}
+
 /** Evict the oldest finished entries and reserve space for a new job. */
 export function makeRoomForBackgroundJob<K>(jobs: Map<K, { status: string }>): boolean {
   if (jobs.size < MAX_BACKGROUND_JOBS) return true;

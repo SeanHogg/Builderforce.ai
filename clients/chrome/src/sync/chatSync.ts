@@ -66,6 +66,7 @@ export const SYNC_BATCH_WAIT_MS = 2_000;
 async function ensureServerChat(deps: ChatSyncDeps, localId: number, scope: string | undefined): Promise<number> {
   const chat = await deps.records.getChat(localId);
   if (!chat) throw Object.assign(new Error(`unknown local chat ${localId}`), { status: 410 });
+  if (chat.scope && chat.scope !== scope) throw new Error('parked: chat belongs to another workspace');
   if (chat.serverId) return chat.serverId;
   const created = await deps.api.request<{ id: number }>('/api/brain/chats', {
     method: 'POST',
@@ -233,9 +234,9 @@ export function createChatSync(deps: ChatSyncDeps): ChatSync {
   void outbox.ready().then(changed, () => undefined);
   return {
     ...outbox,
-    enqueue(key, item) {
+    enqueue(key, item, work, scope) {
       if (item.kind === 'task') void resolveDestination(item);
-      const id = outbox.enqueue(key, item);
+      const id = outbox.enqueue(key, item, work, scope);
       changed();
       return id;
     },

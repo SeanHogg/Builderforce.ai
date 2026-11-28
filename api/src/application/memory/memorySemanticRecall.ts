@@ -74,6 +74,7 @@ export interface RecalledRow {
   /** Cosine similarity in [0,1] for a semantic hit; 0 for a lexical-only hit. */
   vectorScore: number;
   importance: number;
+  updatedAt: Date | null;
 }
 
 /** `1 - cosine_distance`, floored at 0 so a fused score never goes negative. */
@@ -111,6 +112,7 @@ export async function annRecallScoped(
       origin: agentMemory.origin,
       expiresAt: agentMemory.expiresAt,
       importance: agentMemory.importance,
+      updatedAt: agentMemory.updatedAt,
       score: similarity(sql`${col.vector}`, queryVector),
     })
     .from(agentMemory)
@@ -134,6 +136,7 @@ export async function annRecallScoped(
     expiresAt: r.expiresAt ? new Date(r.expiresAt) : null,
     vectorScore: Number(r.score ?? 0),
     importance: Number(r.importance ?? 0.5),
+    updatedAt: r.updatedAt ? new Date(r.updatedAt) : null,
   }));
 }
 

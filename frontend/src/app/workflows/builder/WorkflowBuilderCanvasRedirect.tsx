@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 import { openedBoardHref } from '@/lib/openedBoardHref';
+import { legacyCreationHref, legacyWorkflowLibraryHref } from '@/lib/canvas/legacyCreationRoute';
 
 /**
  * Compatibility adapter: workflow authoring now opens from a Canvas object. Not a
@@ -15,18 +16,19 @@ export function WorkflowBuilderCanvasRedirect() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    const libraryHref = legacyWorkflowLibraryHref('/workflows/builder', searchParams);
     const id = searchParams.get('id');
     if (!id) {
-      router.replace('/create?filter=workflow');
+      router.replace(libraryHref);
       return;
     }
     let cancelled = false;
     void creationSessionsApi.openResource('workflow', id)
       .then((opened) => {
-        if (!cancelled) router.replace(openedBoardHref(opened));
+        if (!cancelled) router.replace(legacyCreationHref(openedBoardHref(opened), '/workflows/builder'));
       })
       .catch(() => {
-        if (!cancelled) router.replace('/create?filter=workflow');
+        if (!cancelled) router.replace(libraryHref);
       });
     return () => { cancelled = true; };
   }, [router, searchParams]);

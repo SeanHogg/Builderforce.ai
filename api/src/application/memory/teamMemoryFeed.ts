@@ -13,6 +13,7 @@
  * once, rather than hand-rolled in the route.
  */
 
+import { MEMORY_FACT_PREFIX, parseTeamMemoryKey } from '@builderforce/agent-tools';
 import { and, desc, eq, like } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -23,19 +24,8 @@ import { parseJsonArray } from '../../domain/shared/json';
 import type { TeamMemoryEntry } from '../../openapi/schema';
 import { scopeCacheToken } from './memoryService';
 
-const TEAM_KEY_PREFIX = 'team:';
+export { parseTeamMemoryKey, teamMemoryKey } from '@builderforce/agent-tools';
 const TEAM_FEED_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
-
-/** Split `team:<agentHostId>:<runId>` back into its parts (a runId may itself contain ':'). */
-export function parseTeamMemoryKey(key: string): { agentHostId: string; runId: string } {
-  const [, agentHostId = '', ...run] = key.split(':');
-  return { agentHostId, runId: run.join(':') };
-}
-
-/** The key `remember` stores a pushed summary under. */
-export function teamMemoryKey(agentHostId: string, runId: string): string {
-  return `${TEAM_KEY_PREFIX}${agentHostId}:${runId}`;
-}
 
 /** Newest-first team summaries for a tenant, served through the read-through cache. */
 export async function listTeamMemoryEntries(env: Env, db: Db, tenantId: number, limit: number): Promise<TeamMemoryEntry[]> {
@@ -48,7 +38,7 @@ export async function listTeamMemoryEntries(env: Env, db: Db, tenantId: number, 
       const rows = await db
         .select({ id: agentMemory.id, key: agentMemory.key, content: agentMemory.content, tags: agentMemory.tags, createdAt: agentMemory.createdAt })
         .from(agentMemory)
-        .where(and(eq(agentMemory.tenantId, tenantId), like(agentMemory.key, `${TEAM_KEY_PREFIX}%`)))
+        .where(and(eq(agentMemory.tenantId, tenantId), like(agentMemory.key, `${MEMORY_FACT_PREFIX.team}%`)))
         .orderBy(desc(agentMemory.createdAt))
         .limit(limit);
       return rows.map((r): TeamMemoryEntry => {

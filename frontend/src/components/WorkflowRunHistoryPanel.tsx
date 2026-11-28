@@ -1,15 +1,10 @@
-// No 'use client': rendered only inside `WorkflowsContent.tsx`'s and
-// `WorkflowBuilder.tsx`'s own client boundaries.
 /**
  * WorkflowRunHistoryPanel — the execution history + insights surface for ONE
  * workflow definition: a usage summary (runs/cost over the last N days, the
  * Make.com-parity "credits / data transfer" sidebar this was built to match),
  * the run list, and a per-run detail drill-down (tasks + dependency graph).
  *
- * Self-contained so it can mount in two places: `WorkflowsContent.tsx`'s
- * "view runs" flow (a full-page context) and `WorkflowBuilder.tsx`'s toolbar
- * "History" button (a `SlideOutPanel` docked beside the live canvas, so a
- * builder can see a definition's run history without leaving the editor).
+ * Used by the Creation Canvas workflow inspector.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';

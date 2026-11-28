@@ -1,3 +1,41 @@
+## ✅ RESOLVED 2026-11-27 — Creation Canvas legacy routes and tutorial telemetry (UX-G001, UX-G002, UX-G003)
+
+- `/workflows` now forwards to the shared Create library with its workflow filter and project scope. Workflow run history and definition deletion are available in the Canvas inspector.
+- The shared activity queue records a signed-in visitor's legacy route family after the redirect, and the Creation Canvas tour records confirmed steps once per tour. Both events omit user-entered content.
+- The bare `/ide` redirect now runs before the unknown-root check. Removing the attribution marker leaves the build redirect's resource resolution inputs stable.
+
+### Archived Idea spec sections
+
+The following text describes the former gaps.
+
+### Recommendation — legacy entry points
+
+| Existing entry | New behavior |
+| --- | --- |
+| `/workflows` | List sessions filtered to those containing Workflow objects |
+
+**Remaining (verified 2026-11-18):**
+- `/workflows` still renders its own `WorkflowsContent` list (`frontend/src/app/workflows/WorkflowsPageBody.tsx:3,12`) instead of the Create library filtered to Workflow objects.
+- The library already narrows by object kind: `CreationLibraryPanel` reads `?filter=<kind>` and keeps only boards whose `kinds` include it (`frontend/src/components/creation-sessions/CreationLibraryPanel.tsx:69-76`). So the fix is a forward to `/create?filter=workflow`, the same way `/ide` forwards to `/create?filter=build` (`frontend/src/middleware.ts:224-229`).
+- The other legacy entries already forward into Create: `/workflows/builder` (`frontend/src/app/workflows/builder/WorkflowBuilderCanvasRedirect.tsx:13`), `/brainstorm` (`frontend/src/app/brainstorm/BrainstormCanvasRedirect.tsx:18`) and `/ide*` (`frontend/src/middleware.ts:224-234`).
+
+### Delivery sequence — Phase 4 Route consolidation
+
+- Redirect legacy URLs only after migration telemetry shows saved links and session ownership are reliable.
+
+**Remaining (verified 2026-11-18):**
+- The redirects shipped, but the telemetry they were meant to wait for was never emitted. `creation_legacy_route_adapted` has no emitter: `git grep` finds it only in this doc's source, not in `frontend/src`, `api/src` or `packages`.
+- Either emit it (through `trackActivity`, `frontend/src/lib/activity/tracker.ts:30`) from the three redirect clients and the middleware branch, or drop the event from the product-event family below.
+- The rest of Phase 4 is done: Create is the primary navigation group and already matches `/brainstorm` and `/workflows` (`frontend/src/lib/navGroups.ts:142`).
+
+### Operations — Observe (product-event family)
+
+- Track the PRD product-event family (`creation_session_*`, `creation_prompt_submitted`, `creation_object_*`, `creation_connection_added`, `creation_project*`, `creation_ai_evaluation_completed`, `creation_change_set_applied`, `creation_artifact_delivered`, `creation_agent_assigned`, `creation_tutorial_step_completed`, and `creation_legacy_route_adapted`) without recording prompt or object content.
+
+**Remaining (verified 2026-11-18):**
+- `creation_tutorial_step_completed` and `creation_legacy_route_adapted` are never emitted. The canvas tutorial is the section tour (`frontend/src/components/creation-canvas/CreationCanvas.tsx:779`, `onTutorial={sectionTour.openOffer}`), and it records no step event.
+- The rest of the family is emitted. Examples: `creation_session_opened` (`frontend/src/components/creation-canvas/hooks/useCanvasSession.ts:100,142`), `creation_prompt_submitted` (`hooks/useCanvasBrainTurn.ts:131`), `creation_artifact_delivered` and `creation_agent_assigned` (`hooks/useCanvasProjectActions.ts:264,267`).
+
 ## ✅ RESOLVED 2026-11-27 — Synapse batches 2 and 3: AI project types; Teach-once, Self-Directed Agents and phone approvals rebuilt (UP-G015 §4, UP-G018 code)
 
 - **AI project types (§4):**

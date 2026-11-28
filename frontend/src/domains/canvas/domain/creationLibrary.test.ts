@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { BrainChat, CreationSessionSummary, WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import type { IdeProject, Project, PublishedAgent } from '@/lib/types';
 import { compareCreationLibraryEntries } from '@builderforce/creation-canvas-contract';
-import { creationLibraryFacetCounts, creationLibraryItems, type CreationLibraryInput } from './creationLibrary';
+import { creationLibraryFacetCounts, creationLibraryItems, matchesCreationLibraryFilter, type CreationLibraryInput } from './creationLibrary';
 
 function session(overrides: Partial<CreationSessionSummary> = {}): CreationSessionSummary {
   return {
@@ -49,6 +49,20 @@ function input(overrides: Partial<CreationLibraryInput> = {}): CreationLibraryIn
 }
 
 describe('creationLibraryItems', () => {
+  it('finds workflow boards and standalone workflows under the same project filter', () => {
+    const items = creationLibraryItems(input({
+      sessions: [
+        session({ id: 'workflow', projectIds: [4], preview: { objectCount: 1, kinds: ['workflow'], objects: [] } }),
+        session({ id: 'other' }),
+      ],
+      workflows: [{ ...workflow, projectId: 4 }, { ...workflow, id: 'w2', projectId: 7 }],
+    }));
+
+    expect(items.filter((item) => matchesCreationLibraryFilter(item, 'workflow', 4)).map((item) => item.key).sort())
+      .toEqual(['session-workflow', 'workflow-w1']);
+    expect(items.filter((item) => matchesCreationLibraryFilter(item, 'workflow', null))).toHaveLength(3);
+  });
+
   it('puts sessions and records in ONE list', () => {
     const items = creationLibraryItems(input({
       sessions: [session()],

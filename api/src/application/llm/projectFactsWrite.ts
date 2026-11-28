@@ -3,7 +3,8 @@
  * accumulate) and the by-key delete. Every write bumps the project's fact version so no
  * cached read serves a stale set. Primitives live in `projectFactsStore`.
  */
-import { CONSOLIDATED_KEY_PREFIX, mergeConsolidated } from '@seanhogg/builderforce-memory/working';
+import { MEMORY_FACT_PREFIX } from '@builderforce/agent-tools';
+import { mergeConsolidated } from '@seanhogg/builderforce-memory/working';
 import { and, eq, getTableColumns, inArray, isNull, ne, notLike, sql } from 'drizzle-orm';
 import { memoryEmbeddingText } from '../memory/memoryEmbedding';
 import { NO_MEMORY_EMBEDDING, memoryEmbeddingFieldsFor } from '../memory/memoryEmbeddingPolicy';
@@ -183,7 +184,7 @@ async function prepareFactRow(
           // the first anchor identifies it without an array-containment operator that
           // cannot use an index.
           sql`${pathKeySql(sql`${projectFacts.fileAnchors}->0->>'path'`)} IN (${sql.join(anchors.map((p) => sql`${p}`), sql`, `)})`,
-          notLike(projectFacts.key, `${CONSOLIDATED_KEY_PREFIX}%`),
+          notLike(projectFacts.key, `${MEMORY_FACT_PREFIX.codemap}%`),
         ))
         .catch((err: unknown) => {
           reportCaughtError(err, { source: 'project-facts', operation: 'supersede-by-anchor', level: 'warning', context: { tenantId, projectId } });

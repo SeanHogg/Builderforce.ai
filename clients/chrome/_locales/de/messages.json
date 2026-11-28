@@ -381,6 +381,15 @@
   "signInFailed": {
     "message": "Die Anmeldung ist fehlgeschlagen. Versuchen Sie es erneut."
   },
+  "workspaceLabel": {
+    "message": "Arbeitsbereich"
+  },
+  "workspaceChoose": {
+    "message": "Arbeitsbereich auswählen"
+  },
+  "workspaceSwitchFailed": {
+    "message": "Der Arbeitsbereich konnte nicht gewechselt werden."
+  },
   "sitesHeading": {
     "message": "Erlaubte Websites"
   },

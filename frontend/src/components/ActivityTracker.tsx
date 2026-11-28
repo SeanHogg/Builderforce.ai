@@ -1,7 +1,25 @@
-import { useEffect, useRef } from 'react';
-import { usePathname } from 'next/navigation';
+import { Suspense, useEffect, useRef } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { trackActivity, flushActivity } from '@/lib/activity/tracker';
+import { isLegacyCreationRoute, LEGACY_CREATION_ROUTE_PARAM } from '@/lib/canvas/legacyCreationRoute';
+
+function LegacyCreationRouteActivity() {
+  const { authReady, isAuthenticated } = useAuth();
+  const source = useSearchParams().get(LEGACY_CREATION_ROUTE_PARAM);
+
+  useEffect(() => {
+    if (!authReady || !isLegacyCreationRoute(source)) return;
+    const url = new URL(window.location.href);
+    // Recheck the live URL because effects can rerun or navigation can move on.
+    if (url.searchParams.get(LEGACY_CREATION_ROUTE_PARAM) !== source) return;
+    url.searchParams.delete(LEGACY_CREATION_ROUTE_PARAM);
+    window.history.replaceState(null, '', url);
+    if (isAuthenticated) trackActivity('creation_legacy_route_adapted', { ref: source });
+  }, [authReady, isAuthenticated, source]);
+
+  return null;
+}
 
 /**
  * Mounts once in the app shell for signed-in users. Auto-captures navigation
@@ -36,5 +54,7 @@ export default function ActivityTracker() {
     };
   }, [isAuthenticated]);
 
-  return null;
+  return pathname === '/create' || pathname.startsWith('/create/')
+    ? <Suspense fallback={null}><LegacyCreationRouteActivity /></Suspense>
+    : null;
 }

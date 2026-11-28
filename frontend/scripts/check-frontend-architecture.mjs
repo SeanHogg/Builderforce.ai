@@ -1194,6 +1194,11 @@ const tallies = {
 const recorded = readTallies(TALLY_PATH);
 
 const violations = [];
+for (const file of production) {
+  if (rel(file) !== 'components/Terminal.tsx' && /['"]@xterm\//.test(source.get(file))) {
+    violations.push(`${rel(file)} imports xterm directly. Reuse components/Terminal.tsx.`);
+  }
+}
 /** Ratchets whose failure the tally can explain, in the order they were checked. */
 const countFailures = [];
 /** Baseline numbers this run proved are too loose, as `key -> actual`. */

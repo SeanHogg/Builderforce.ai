@@ -4675,8 +4675,11 @@ function isFailedToolResult(result) {
   return false;
 }
 
-// ../packages/agent-tools/src/run-knowledge.ts
+// ../packages/agent-tools/src/memoryFactKeys.ts
 var import_working3 = require("@seanhogg/builderforce-memory/working");
+
+// ../packages/agent-tools/src/run-knowledge.ts
+var import_working4 = require("@seanhogg/builderforce-memory/working");
 
 // ../packages/agent-tools/src/skill-tools.ts
 var skillProposeTool = defineTool({
@@ -5203,7 +5206,7 @@ var import_knowledge9 = require("@seanhogg/builderforce-memory/knowledge");
 
 // ../packages/agent-tools/src/knowledge/codeNodes.ts
 var import_knowledge10 = require("@seanhogg/builderforce-memory/knowledge");
-var import_working4 = require("@seanhogg/builderforce-memory/working");
+var import_working5 = require("@seanhogg/builderforce-memory/working");
 var import_ingest2 = require("@seanhogg/builderforce-memory/ingest");
 var CODE_PACK_ID = "code";
 var CODE_BADGES = {
@@ -7566,14 +7569,14 @@ function promptBloat(view) {
 }
 
 // src/runFindings/detectors/repeatedNarration.ts
-var import_working5 = require("@seanhogg/builderforce-memory/working");
+var import_working6 = require("@seanhogg/builderforce-memory/working");
 function asNarration(t) {
   return { role: "assistant", content: t.text, tool_calls: t.calls.map(() => ({})) };
 }
 var isCandidate = (t) => t.calls.length > 0 && t.text.trim().length > 0;
 function repeatedNarration(view) {
   const msgs = view.turns.map(asNarration);
-  const folded = (0, import_working5.foldRepeatedNarration)(msgs, RUN_FINDING_POLICY.narrationOverlap);
+  const folded = (0, import_working6.foldRepeatedNarration)(msgs, RUN_FINDING_POLICY.narrationOverlap);
   const repeats = /* @__PURE__ */ new Set();
   let lastKept = null;
   for (let i = 0; i < view.turns.length; i++) {
@@ -8453,10 +8456,10 @@ ${who} Read the failure above, correct exactly what it names, and verify again b
 }
 
 // ../packages/agent-run/src/policy/compaction/history.ts
-var import_working6 = require("@seanhogg/builderforce-memory/working");
+var import_working7 = require("@seanhogg/builderforce-memory/working");
 var foldLimits = { summaryMs: 15e3 };
-function compactionSavedTokens(full, working, historyBudgetTokens = import_working6.HISTORY_TOKEN_BUDGET) {
-  return Math.max(0, Math.min((0, import_working6.transcriptTokens)(full), historyBudgetTokens) - (0, import_working6.transcriptTokens)(working));
+function compactionSavedTokens(full, working, historyBudgetTokens = import_working7.HISTORY_TOKEN_BUDGET) {
+  return Math.max(0, Math.min((0, import_working7.transcriptTokens)(full), historyBudgetTokens) - (0, import_working7.transcriptTokens)(working));
 }
 function linkedAbort(parent) {
   const own2 = new AbortController();
@@ -8500,7 +8503,7 @@ function createHistoryCompactionHook(ports) {
   return {
     async compact(ctx) {
       let folded = false;
-      const working = await (0, import_working6.buildWorkingTranscript)(
+      const working = await (0, import_working7.buildWorkingTranscript)(
         ports.state,
         ports.systemPrompt,
         (messages) => {
@@ -8524,7 +8527,7 @@ function createHistoryCompactionHook(ports) {
         }
       );
       ports.savedTokens(ports.state.compactMemo ? compactionSavedTokens([{ role: "system", content: ports.systemPrompt }, ...ports.state.transcript], working) : 0);
-      const rows = (0, import_working6.foldWorkingTranscript)(working).map((row) => ports.toRunMessage(row));
+      const rows = (0, import_working7.foldWorkingTranscript)(working).map((row) => ports.toRunMessage(row));
       if (sameRows(ctx.messages, rows)) return void 0;
       return { messages: rows, dropped: Math.max(0, ctx.messages.length - rows.length), ...folded ? {} : { reused: true } };
     }
@@ -10933,7 +10936,7 @@ function toolResultRecord(result) {
 }
 
 // src/modelReply.ts
-var import_working7 = require("@seanhogg/builderforce-memory/working");
+var import_working8 = require("@seanhogg/builderforce-memory/working");
 
 // src/types.ts
 var STEP_MESSAGE_ROLE = "tool";
@@ -11085,11 +11088,11 @@ function staffingSummaryInTrace(events) {
 }
 
 // src/brainVerdict.ts
-var import_working8 = require("@seanhogg/builderforce-memory/working");
-var CONTEXT_PROMPT_PEAK = Math.round(import_working8.HISTORY_TOKEN_BUDGET * 1.5);
+var import_working9 = require("@seanhogg/builderforce-memory/working");
+var CONTEXT_PROMPT_PEAK = Math.round(import_working9.HISTORY_TOKEN_BUDGET * 1.5);
 
 // src/brainDiagnosticsText.ts
-var import_working9 = require("@seanhogg/builderforce-memory/working");
+var import_working10 = require("@seanhogg/builderforce-memory/working");
 
 // src/runProgress.ts
 function isCacheAnswered(ev) {

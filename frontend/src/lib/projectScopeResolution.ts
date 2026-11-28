@@ -50,6 +50,11 @@ export function toProjectId(raw: unknown): number | null {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
 }
 
+/** The current and legacy query parameter spellings, in priority order. */
+export function projectFromSearch(query: Pick<URLSearchParams, 'get'>): number | null {
+  return toProjectId(query.get('project')) ?? toProjectId(query.get('projectId'));
+}
+
 /**
  * The project a URL deep-links to. Every spelling in circulation, in one place:
  * `?project=` (the shell's own), `?projectId=` (older links), and `#projectId=`
@@ -57,11 +62,8 @@ export function toProjectId(raw: unknown): number | null {
  */
 export function projectFromLocation(search: string, hash = ''): number | null {
   const query = new URLSearchParams(search.replace(/^\?/, ''));
-  return (
-    toProjectId(query.get('project')) ??
-    toProjectId(query.get('projectId')) ??
-    toProjectId(new URLSearchParams(hash.replace(/^#/, '')).get('projectId'))
-  );
+  return projectFromSearch(query)
+    ?? toProjectId(new URLSearchParams(hash.replace(/^#/, '')).get('projectId'));
 }
 
 /** {@link projectFromLocation} for the live window; null on the server. */

@@ -1,3 +1,4 @@
+import { GATEWAY_WORKSPACE_HEADER } from "@builderforce/device-auth";
 import { getCurrentWorkspace } from "../workspace/workspaceSelection";
 
 /**
@@ -11,7 +12,7 @@ import { getCurrentWorkspace } from "../workspace/workspaceSelection";
  * The current workspace is read from the vscode-free leaf `workspaceSelection.ts`, which the
  * session module keeps up to date; this module imports no session or vscode code.
  */
-export const GATEWAY_WORKSPACE_HEADER = "x-builderforce-workspace";
+export { GATEWAY_WORKSPACE_HEADER };
 
 /** The workspace header for a known workspace, or none. */
 export function workspaceHeaderFor(workspace: number | undefined): Record<string, string> {

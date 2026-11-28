@@ -51,6 +51,7 @@ export type RouteFetch = (input: string, init: RequestInit) => Promise<Response>
 export interface RovrRouteDeps {
   baseUrl: string;
   fetch: RouteFetch;
+  gatewayFetch?(): RouteFetch;
   prober: LocalRuntimeProber;
   endpoints(): Promise<LocalEndpoints>;
   /** The gateway credential, or null signed out. */
@@ -138,7 +139,7 @@ export function createRovrStream(deps: RovrRouteDeps): BrainStreamFn {
     cloud: async () => {
       const key = await deps.key();
       if (!key || (deps.gatewayAllowed && !deps.gatewayAllowed())) return null;
-      return gatewayStream(deps.baseUrl, key, deps.fetch);
+      return gatewayStream(deps.baseUrl, key, deps.gatewayFetch?.() ?? deps.fetch);
     },
     signedIn: async () => (await deps.key()) !== null,
     ...(deps.mode ? { mode: deps.mode } : {}),

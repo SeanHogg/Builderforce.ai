@@ -7,7 +7,7 @@
  */
 import { createLocalRuntimeProber, type LocalFirstAttemptRecord, type LocalRuntimeProbe } from '@builderforce/local-inference';
 import { createOnlineSignal } from '@builderforce/write-outbox';
-import { createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, installIndexedDbStepDurability, pageEngineCompletion, pageEnginesReady, pageOnDeviceTasks, type BrainConfig, type ModelFallbackChannel, type OnDeviceTasks, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
+import { createLocalSuccessFederation, createModelFallbackChannel, createPageEngineSet, getGlobalRunState, installIndexedDbStepDurability, pageEngineCompletion, pageEnginesReady, pageOnDeviceTasks, stopRun, type BrainConfig, type ModelFallbackChannel, type OnDeviceTasks, type PageEngineSet } from '@seanhogg/builderforce-brain-embedded';
 import { createProviderConnectionsClient, type GatewayRequest } from '@builderforce/provider-connect';
 import type { ComposerConnections } from '@seanhogg/builderforce-brain-ui';
 import { createApiClient, createAuthenticatedFetch, type ApiClient, type AuthenticatedFetch } from '../api/apiClient';
@@ -15,6 +15,9 @@ import { portRequest } from '../api/requestPorts';
 import { bindPendingWordsOwner } from './pendingWordsOwner';
 import { bindLastSeenOwner } from './lastSeenOwner';
 import { createSession, type Session } from '../auth/session';
+import { scopedGatewayFetch } from '../auth/gatewayScope';
+import { createCredentialVault } from '../auth/credentialVault';
+import { t } from '../i18n/t';
 import { BFI_WASM_FILE, BFI_WORKER_FILE, DEFAULT_BASE_URL, LOCAL_DB, STEP_OUTBOX_DB } from '../config';
 import { KIMI_API_ORIGINS, createConnectedAccount, type ConnectedAccount } from '../inference/connectedAccount';
 import { loopbackEndpoints, resolveLoopbackProbes } from '../inference/localRuntimes';
@@ -76,6 +79,8 @@ export interface PanelServices {
   safety(): SafetyContext;
   /** Add a task to a chat (the panel's own form and the agent's tool share this). */
   addTask(chatId: number, title: string, description: string): Promise<LocalTask>;
+  switchWorkspace(tenantId: number): Promise<boolean>;
+  listWorkspaces(): Promise<Array<{ id: number; name: string }>>;
   /** Probe the on-device runtimes now (Settings → Refresh). */
   probeLocal(): Promise<LocalRuntimeProbe[]>;
   /** Releases what the panel bound to the session (the last-seen owner's subscription). Called when the panel unmounts. */
@@ -116,11 +121,21 @@ export async function createPanelServices(): Promise<PanelServices> {
   void runNetworkDenialSelfCheck({ fetchImpl, policy: rovrPolicy, account: requestAccount })
     .catch((error: unknown) => console.error('Rovr network-denial self-check: failed to run', error));
   await rovrPolicy.ready();
-  const session = createSession({ storage: local, baseUrl, fetch: fetchImpl, now: Date.now });
+  const session = createSession({ storage: local, baseUrl, fetch: fetchImpl, now: Date.now, vault: createCredentialVault(self.indexedDB) });
   await session.ready();
-  const settings = createSettings(local);
+  const settings = createSettings(local, session);
   const sites = createSitePermissions();
   const records = createIdbRecords(self.indexedDB, LOCAL_DB);
+  let lastScope = session.scope();
+  const unbindWorkspace = session.subscribe(() => {
+    const scope = session.scope();
+    if (lastScope === scope) return;
+    const { running, awaiting } = getGlobalRunState();
+    for (const chatId of [...running, ...awaiting]) stopRun(chatId);
+    lastScope = scope;
+  });
+  const workspaceChanged = () => t('workspaceChanged');
+  const gatewayFetch = () => scopedGatewayFetch(session, fetchImpl, workspaceChanged);
   const api = createApiClient({ session, baseUrl, fetch: fetchImpl });
   const apiFetch = createAuthenticatedFetch({ session, baseUrl, fetch: fetchImpl });
   const sendRuntime = (message: RovrRuntimeMessage) => chrome.runtime.sendMessage(message);
@@ -185,7 +200,10 @@ export async function createPanelServices(): Promise<PanelServices> {
   };
 
   const addTask = async (chatId: number, title: string, description: string): Promise<LocalTask> => {
-    const task: LocalTask = { id: crypto.randomUUID(), chatId, title, description, createdAt: new Date().toISOString(), state: 'queued' };
+    const chat = await records.getChat(chatId);
+    const scope = session.scope();
+    const projectId = chat?.scope && chat.scope !== scope ? null : await settings.taskProjectId();
+    const task: LocalTask = { id: crypto.randomUUID(), chatId, title, description, createdAt: new Date().toISOString(), state: 'queued', projectId };
     await records.putTask(task);
     sink.enqueue(chatId, [{ kind: 'task', taskId: task.id }]);
     return task;
@@ -238,12 +256,13 @@ export async function createPanelServices(): Promise<PanelServices> {
   // The knowledge view's in-memory last-seen graphs likewise belong to the signed-in workspace.
   const unbindLastSeen = bindLastSeenOwner(session);
   const modelFallback = createModelFallbackChannel();
-  const stream = createRovrStream({
+  const createScopedStream = (gatewayFetchForStream: typeof gatewayFetch) => createRovrStream({
     baseUrl,
     fetch: fetchImpl,
     prober,
     endpoints,
     key: () => session.key(),
+    gatewayFetch: gatewayFetchForStream,
     page: { probe: () => pageEngines.probe(), fetch: pageEngines.fetch(fetchImpl) },
     // The side panel's model picker persists its pin here (Settings → Model).
     pinned: () => settings.pinnedModel(),
@@ -269,9 +288,12 @@ export async function createPanelServices(): Promise<PanelServices> {
 
   // Signed in, the tenant's gateway MCP catalog joins the browser tools — read once a
   // minute at most for the life of the panel, writes behind the same approval card.
+  const stream = createScopedStream(gatewayFetch);
   const platform = createPlatformCatalog({
     baseUrl,
     key: () => session.key(),
+    scope: () => session.scope(),
+    gatewayFetch,
     onError: (error) => reportError(error, 'platform.catalog'),
   });
 
@@ -288,17 +310,17 @@ export async function createPanelServices(): Promise<PanelServices> {
 
   // A settled run's record, to the gateway's run-outcome door with the device key. Through the same guarded fetch as every platform call
   // (a device kept Local only sends nothing); signed out, there is no key and nothing is sent.
-  const postRunOutcome = async (outcome: object): Promise<void> => {
+  const postRunOutcome = async (outcome: object, fetch: typeof fetchImpl): Promise<void> => {
     const key = await session.key();
     if (!key) return;
-    await fetchImpl(`${baseUrl}/llm/v1/run-outcome`, {
+    await fetch(`${baseUrl}/llm/v1/run-outcome`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
       body: JSON.stringify(outcome),
     });
   };
 
-  const host = createRovrRunHost({
+  const runHost = createRovrRunHost({
     async catalog(chatId) {
       const tools = createBrowserTools({
         chatId,
@@ -335,7 +357,6 @@ export async function createPanelServices(): Promise<PanelServices> {
     },
     // A settled run's outcome record, to the gateway's run-outcome door with the device key. Through the same guarded fetch as every platform
     // call (a device kept Local only sends nothing); signed out, there is no key and nothing is sent.
-    reportRunRecord: postRunOutcome,
     onDeviceTasks,
     onDeclined(chatId, call) {
       const tab = working.current();
@@ -349,6 +370,27 @@ export async function createPanelServices(): Promise<PanelServices> {
       });
     },
   });
+
+  const host: RovrRunHost = {
+    ...runHost,
+    async prepareRun(chatId) {
+      const scope = session.scope();
+      const chat = await records.getChat(chatId);
+      if (chat?.scope && chat.scope !== scope) throw new Error(workspaceChanged());
+      const fetch = gatewayFetch();
+      const pinnedStream = createScopedStream(() => fetch);
+      const prepared = await runHost.prepareRun(chatId);
+      if (session.scope() !== scope) throw new Error(workspaceChanged());
+      return {
+        ...prepared,
+        stream: (options, handlers) => {
+          if (session.scope() !== scope) throw new Error(workspaceChanged());
+          return pinnedStream(options, handlers);
+        },
+        reportRunRecord: (record) => scope ? postRunOutcome(record, fetch) : Promise.resolve(),
+      };
+    },
+  };
 
   return {
     host,
@@ -368,6 +410,26 @@ export async function createPanelServices(): Promise<PanelServices> {
     allowedOrigins: () => allowed,
     safety,
     addTask,
+    async listWorkspaces() {
+      const jwt = await session.baseJwt();
+      if (!jwt) return [];
+      const response = await fetchImpl(`${baseUrl}/api/tenants`, { headers: { authorization: `Bearer ${jwt}` } });
+      if (!response.ok) return [];
+      const { tenants } = await response.json() as { tenants?: Array<{ id: number; name: string }> };
+      return tenants ?? [];
+    },
+    async switchWorkspace(tenantId) {
+      await session.jwt();
+      const scope = session.scope();
+      if (!scope) return false;
+      if (session.tenantId() === tenantId) return true;
+      const legacy = (await records.listChats()).filter((chat) => !chat.scope);
+      await Promise.all(legacy.map((chat) => records.updateChat(chat.id, { scope })));
+      await settings.taskProjectId();
+      if (scope !== session.scope() || !(await session.switchWorkspace(tenantId))) return false;
+      await kimi.store.clear();
+      return true;
+    },
     probeLocal: async () => {
       const [probes, page] = await Promise.all([
         prober.probe(await endpoints(), { fresh: true }),
@@ -382,7 +444,7 @@ export async function createPanelServices(): Promise<PanelServices> {
     modelFallback,
     sendRuntime,
     reportError,
-    dispose: () => { unbindLastSeen(); },
+    dispose: () => { unbindLastSeen(); unbindWorkspace(); },
   };
 }
 
@@ -390,6 +452,4 @@ export async function createPanelServices(): Promise<PanelServices> {
 function describeTarget(args: unknown): string {
   if (!args || typeof args !== 'object') return '';
   const a = args as Record<string, unknown>;
-  for (const key of ['url', 'ref', 'query', 'title']) if (typeof a[key] === 'string') return a[key] as string;
-  return '';
-}
+  for (const key of ['url', 'ref', 'query', 'title']) if (typeof a[ke

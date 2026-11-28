@@ -19,9 +19,6 @@
 
 ## 💡 Idea — Read · Prove
 
-- `UX-G001` **[canvas] `creation_tutorial_step_completed` is never emitted,** so the creation product-event family is incomplete. Emit it from the tutorial step, or drop it from the family. [idea.md › Creation Canvas](../../docs/specs/idea.md#operations--observe-product-event-family)
-- `UX-G002` **[canvas] `creation_legacy_route_adapted` has no emitter,** so the legacy-route redirects shipped without the telemetry they were meant to wait for. Emit it from the three redirect clients and the middleware branch, or drop it from the product-event family. [idea.md › Creation Canvas](../../docs/specs/idea.md#delivery-sequence--phase-4-route-consolidation)
-- `UX-G003` **[canvas] `/workflows` still renders its own list.** `WorkflowsPageBody.tsx` shows `WorkflowsContent`, not the Create library filtered to Workflow objects; the other legacy entries already forward into Create. Route it the same way. [idea.md › Creation Canvas](../../docs/specs/idea.md#recommendation--legacy-entry-points)
 - `UX-G004` **[canvas] Ideas surface reads unfinished.** Lede and empty body repeat "the prompt below", Capture misses request-shaped text, Brain's "no data" reply asks for an object ID. Mockup: https://claude.ai/artifact/KcEJGhrZaQMQWEMSHNJjyE. *Blocker: operator go-ahead.*
 - `UX-G005` **[canvas] Experiment templates and verdict.** Smoke test and wizard-of-oz exist. Add A/B and concierge templates, a decision-rule field, and a pursue / pivot / kill verdict (`revealIdea` grades met/missed only). Build as proof-form registry data.
 - `UX-G006` **[canvas] Survey delivery gaps.** `CampaignTransport` has no `twilio` or `scheduledAt` though the server supports both; clicks record no link (a per-link registry also closes the `?u=` open redirect); the CSAT/NPS widget has no renderer.
@@ -731,23 +728,21 @@ The fact engine, Memory MCP, experience model, `EvermindConsole`, and `memory_*`
 Gaps:
 
 - `MEM-G101` The fact-store audit identifies the cloud and local owners. Local and cloud durable facts still need a scoped sync contract.
-- `MEM-G102` Project-only and governed cloud recall share candidate reads and ranking. The local memory store still ranks facts differently.
+- `MEM-G102` Implemented in source. Cloud and local durable facts share weighted fusion and use importance and recency when serving hosted recall.
 - `MEM-G103` **Implemented.** VS Code advertises `memory__recall` and `memory__remember` through the shared `MemoryCapability` tools. Saved calls retain their existing dispatch IDs.
 - `MEM-G104` **agent-runtime keeps a second memory index.**
   - It uses sqlite-vec with provider embedders, and exposes `memory_search`/`memory_get`.
   - Location: `agent-runtime/src/memory/*`.
-- `MEM-G107` **"Skill" means three unrelated things**: the Train-Once procedure, SKILL.md, and the Claude plugin skill.
+- `MEM-G105` The release test now checks the native serialization against a fixture from the Train Once engine. The native helper still owns its Rust wire models.
+- `MEM-G107` Implemented in source. Train Once uses Procedure in VS Code and on the shared Memory MCP catalog. Saved tool names remain valid.
 - `MEM-G108` **There are 4 run ledgers with unrelated ids**: experience runs, `runOutcomes`, `runDelta` and `brain_chat_steps`.
 - `MEM-G109` **There are 4 compaction paths**: memory-mcp, `working/consolidate`, `brainMemory` and `memory-flush`.
 - `MEM-G110` **There is no local↔cloud fact sync.** The VS Code import teaches Evermind but does not write `project_facts`.
-- `MEM-G111` **There are two live memory file locations**: `~/.builderforce-memory` and the legacy `~/.claude/builderforce-memory`. Whichever is newest wins, which risks a split brain.
-- `MEM-G112` **Fact key prefixes have no registry**: `team:`, `run-outcome:`, `codemap:` and `[absorbed→…]`.
-- `MEM-G113` Embedding fingerprints still differ across stores. Cloud memory already supports Cloudflare bge-m3 and OpenRouter fallback in their respective vector spaces.
+- `MEM-G111` Implemented in source. Memory MCP uses the canonical per-machine snapshot and imports legacy facts, archives and experience when the canonical files are absent. Older host configurations that pin the legacy path need an installer refresh.
+- `MEM-G112` Implemented. A shared platform registry owns the `team:` and `run-outcome:` namespaces and uses the memory package's existing `codemap:` prefix. Compaction owns the absorbed content marker.
+- `MEM-G113` Cloud memory supports Cloudflare bge-m3 and OpenRouter fallback in their respective spaces. Browser knowledge memory rejects mismatched fingerprints and vector widths, and local recall checks vector width. Remaining fingerprints need end-to-end verification.
 - `MEM-G114` **There are 2 brain-map UIs**: `EvermindBrainMap` and `EvermindBrain3D`. Merge them onto the shared 3D stage (`AE-G059`).
-- `MEM-G115` **Names collide:**
-  - "memory" means RAM in webcontainers but facts elsewhere;
-  - "Evermind" means the model, the facts or the console;
-  - "brain" means the chat or the map.
+- `MEM-G115` Implemented in source. Browser RAM management lives under `src/residency`, and the memory audit documents the product terminology.
 - `MEM-G116` Implemented in webcontainers source. Browser memory uses the shared chunker, BM25 scoring, RRF and decay. The code ships with the next webcontainers release.
 
 ### Chat consolidation `[platform]`
@@ -782,7 +777,6 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §6. 
 - `SHELL-G015` **Error shape and wording differ by host.** Standardize on `{ok:false, error, code}`.
 - `SHELL-G016` **The browser shell has no jobs, background runs or tree cancel.**
 - `SHELL-G017` **There is no cross-host conformance suite** for file and command tools.
-- `SHELL-G018` **There is one terminal component** (`frontend/src/components/Terminal.tsx`). New hosts reuse it.
 
 ### Auth and cloud client consolidation `[platform]`
 

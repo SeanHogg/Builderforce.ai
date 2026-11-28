@@ -7556,6 +7556,9 @@ function limbicTraits(profile) {
 // ../packages/agent-tools/src/knowledge-notes.ts
 import { rankByCount } from "@seanhogg/builderforce-memory/working";
 
+// ../packages/agent-tools/src/memoryFactKeys.ts
+import { CONSOLIDATED_KEY_PREFIX } from "@seanhogg/builderforce-memory/working";
+
 // ../packages/agent-tools/src/run-knowledge.ts
 import { WorkingMemory, consolidate } from "@seanhogg/builderforce-memory/working";
 var FILE_TOOL_KINDS = /* @__PURE__ */ new Map([
@@ -21912,4 +21915,4 @@ export {
   computeBrainDiagnostics,
   buildBrainTriageReport
 };
-//# sourceMappingURL=chunk-MMGGQZOY.mjs.map
+//# sourceMappingURL=chunk-5XKDK462.mjs.map

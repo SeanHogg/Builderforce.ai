@@ -85,7 +85,7 @@ export interface SandboxRunReply { ok: boolean; exitCode?: number; output?: stri
 /** A `/sandbox/run` reply as the shared tools read it — ONE mapping for both transports. */
 export function toShellResult(r: SandboxRunReply | { ok: false; error: string }): ShellResult {
   if ('exitCode' in r && typeof r.exitCode === 'number') {
-    return { ok: r.ok, exitCode: r.exitCode, stdout: r.output ?? '', ...(r.timedOut ? { error: 'the command timed out and was stopped' } : {}) };
+    return { ok: r.ok, exitCode: r.exitCode, stdout: r.output ?? '', ...(r.timedOut ? { code: 'timeout', error: 'the command timed out and was stopped' } : {}) };
   }
   return { ok: false, error: r.error ?? 'the command did not run' };
 }

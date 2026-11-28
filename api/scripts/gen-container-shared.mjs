@@ -47,7 +47,7 @@ const BUNDLES = [
     srcDir: join(REPO_ROOT, 'packages', 'tool-output-policy', 'src'),
     files: ['caps.ts', 'textCut.ts', 'shellSummary.ts', 'jsonProjection.ts', 'readFileWindow.ts', 'policy.ts', 'modelPolicy.ts'],
     exports: [
-      'DEFAULT_COMMAND_TIMEOUT_MS', 'BACKGROUND_JOB_LIMIT_ERROR', 'makeRoomForBackgroundJob',
+      'DEFAULT_COMMAND_TIMEOUT_MS', 'BACKGROUND_JOB_LIMIT_ERROR', 'makeRoomForBackgroundJob', 'waitForBackgroundJob',
       'SHELL_CAPTURE_CHARS', 'TOOL_OUTPUT_CAPS', 'toolOutputCap', 'keepTail', 'cutHead', 'cutHeadTail',
       'summarizeShellOutput', 'detectRunner', 'projectJson', 'windowReadFile', 'fitToolText', 'shapeToolResult',
       'modelToolResultPolicy', 'LIST_MAX_FILES', 'LIST_RETURN_MAX', 'READ_MAX_BYTES', 'SEARCH_MAX_MATCHES',

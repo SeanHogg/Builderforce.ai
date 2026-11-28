@@ -121,6 +121,52 @@ describe('partition table', () => {
     expect(state.table.stub('message', 'm2')).toBeDefined();
   });
 
+  it('regression: a rejected load installs nothing, clears the in-flight read, and a later read succeeds', async () => {
+    let fail = true;
+    const rows = [msg('m1', 1)];
+    const loader: PartitionLoader = {
+      load: async () => {
+        if (fail) throw new Error('read failed');
+        return { records: rows };
+      },
+    };
+    const state = stateWith(loader);
+    state.applyDelta(stubDelta(msg('m1', 1), 1));
+    await expect(state.ensureLoaded([CHAT_1])).rejects.toThrow('read failed');
+    expect(state.table.segment(CHAT_1)).toBeUndefined(); // nothing installed: the partition is not "empty"
+    fail = false;
+    await state.ensureLoaded([CHAT_1]); // the in-flight promise was cleared, so this retries
+    expect(idsIn(state, CHAT_1)).toEqual(['m1']);
+  });
+
+  it('regression: evicting a partition forces a whole reload on the next read', async () => {
+    const { loader, pending } = controlledLoader();
+    const state = stateWith(loader);
+    state.applyDelta(stubDelta(msg('m1', 1), 1));
+    const first = state.ensureLoaded([CHAT_1]);
+    pending[0]!.settle({ records: [msg('m1', 1)] });
+    await first;
+    state.table.evict([CHAT_1]);
+    expect(state.table.segment(CHAT_1)).toBeUndefined();
+    const again = state.ensureLoaded([CHAT_1]);
+    expect(pending[1]!.from).toBeUndefined(); // whole, not resumed
+    pending[1]!.settle({ records: [msg('m1', 1)] });
+    await again;
+    expect(idsIn(state, CHAT_1)).toEqual(['m1']);
+  });
+
+  it('regression: a whole load keeps only rows whose stub still files them in this partition', async () => {
+    const { loader, pending } = controlledLoader();
+    const state = stateWith(loader);
+    state.applyDelta(stubDelta(msg('m1', 1), 2));
+    state.applyDelta({ stubs: [stubOf(PARTITION, msg('m2', 2))!], partitionPointers: { [CHAT_2]: pointer(1) } }); // m2 now lives in chat 2
+    const loading = state.ensureLoaded([CHAT_1]);
+    // The file of chat 1 still holds m2 (it moved away) and a row with no stub at all.
+    pending[0]!.settle({ records: [msg('m1', 1), msg('m2', 1), msg('ghost', 1)] });
+    await loading;
+    expect(idsIn(state, CHAT_1)).toEqual(['m1']);
+  });
+
   it('regression: a reset drops every segment, stub and pointer', async () => {
     const state = stateWith();
     state.applyDelta({ ...stubDelta(msg('m1', 1), 1), records: [msg('m1', 1)] });

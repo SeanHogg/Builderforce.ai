@@ -324,6 +324,24 @@ describe('vector recall (5301 req 4)', () => {
     expect(doubles.ann.mock.calls.length).toBeGreaterThan(0);
   });
 
+  it('decays old project and scoped candidates in the same recall', async () => {
+    const now = new Date();
+    const old = new Date(now.getTime() - 360 * 86_400_000);
+    const { db } = makeDb({
+      selectRows: (index) => index === 0 ? [{
+        key: 'old-tenant', content: 'auth seed', scopeKind: 'tenant', origin: 'agent',
+        expiresAt: null, importance: 1, updatedAt: old,
+      }] : [{
+        key: 'new-project', content: 'auth invariant', expiresAt: null, importance: 0.5, updatedAt: now,
+      }],
+    });
+    doubles.embed.mockResolvedValueOnce(null as never);
+
+    const result = await recall(env, db as never, { tenantId: 7, projectId: 42 }, 'auth', 1);
+
+    expect(result).toMatchObject({ ok: true, entries: [{ key: 'new-project', scope: 'project' }] });
+  });
+
   it('embeds governed recall once and stamps only the project fact it returns', async () => {
     const expiresAt = new Date('2099-01-01T00:00:00.000Z');
     const { db, calls } = makeDb({

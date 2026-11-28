@@ -6,6 +6,7 @@ import { fetchProject } from '@/lib/api';
 import { ensureIdeProjectForStorage } from '@/lib/ideProjectsApi';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 import { openedBoardHref } from '@/lib/openedBoardHref';
+import { LEGACY_CREATION_ROUTE_PARAM } from '@/lib/canvas/legacyCreationRoute';
 import { namesProjectChat, studioChatHref, studioChatLinkFrom } from '@/lib/studio/studioDeepLink';
 
 /**
@@ -15,11 +16,15 @@ import { namesProjectChat, studioChatHref, studioChatLinkFrom } from '@/lib/stud
  */
 export function BuildCanvasRedirect({ projectRef }: { projectRef: string }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const search = new URLSearchParams(useSearchParams());
+  // ActivityTracker removes this marker. That must not restart project resolution.
+  search.delete(LEGACY_CREATION_ROUTE_PARAM);
+  const destinationSearch = search.toString();
 
   useEffect(() => {
     if (!projectRef) return;
     let cancelled = false;
+    const searchParams = new URLSearchParams(destinationSearch);
     const chatLink = studioChatLinkFrom(searchParams);
     const toBuildList = () => { if (!cancelled) router.replace('/create?filter=build'); };
     void (async () => {
@@ -39,7 +44,7 @@ export function BuildCanvasRedirect({ projectRef }: { projectRef: string }) {
       }));
     })().catch(toBuildList);
     return () => { cancelled = true; };
-  }, [projectRef, router, searchParams]);
+  }, [projectRef, router, destinationSearch]);
 
   return null;
 }

@@ -19,7 +19,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { accessSync, constants as fsConstants } from 'node:fs';
 import { userInfo } from 'node:os';
 import { killTree } from './nodeProcess.mjs';
-import { BACKGROUND_JOB_LIMIT_ERROR, SHELL_CAPTURE_CHARS, keepTail, makeRoomForBackgroundJob } from './toolOutputPolicy.mjs';
+import { BACKGROUND_JOB_LIMIT_ERROR, SHELL_CAPTURE_CHARS, keepTail, makeRoomForBackgroundJob, waitForBackgroundJob } from './toolOutputPolicy.mjs';
 
 /**
  * The binaries THIS process (which holds the run's credentials) executes — git, sudo, id, kill, pkill, chown, rm —
@@ -385,12 +385,7 @@ export function createJobTable({ maxWaitMs, idPrefix = '' }) {
     if (!job) return unknownJob(id);
     const wait = Number.isFinite(waitMs) && waitMs > 0 ? Math.min(waitMs, maxWaitMs) : 0;
     if (job.status === 'running' && wait > 0) {
-      let timer;
-      let release;
-      const aborted = new Promise((resolve) => { release = onAbort(resolve); });
-      await Promise.race([job.done, aborted, new Promise((r) => { timer = setTimeout(r, wait); })]);
-      clearTimeout(timer);
-      if (typeof release === 'function') release();
+      await waitForBackgroundJob(job.done, wait, onAbort);
     }
     return statusOf(job);
   }
@@ -407,9 +402,7 @@ export function createJobTable({ maxWaitMs, idPrefix = '' }) {
     if (groups.has(job.child)) killSandboxTree(job.child);
     groups.delete(job.child);
     if (wasRunning) {
-      let timer;
-      await Promise.race([job.done, new Promise((r) => { timer = setTimeout(r, KILL_SETTLE_MS); })]);
-      clearTimeout(timer);
+      await waitForBackgroundJob(job.done, KILL_SETTLE_MS);
     }
     return { ...statusOf(job), ...(job.status === 'killed' ? { error: 'stopped' } : {}) };
   }

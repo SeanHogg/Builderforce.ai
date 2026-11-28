@@ -16,7 +16,7 @@ import { ActionsView } from './ActionsView';
 import { ChatView } from './ChatView';
 import { RovrChatHistory } from './RovrChatHistory';
 import { RovrTranslationProvider } from './RovrTranslationProvider';
-import { ServicesContext, useLoaded, useOnline, useServices, useSignedIn, useSyncStats } from './hooks';
+import { ServicesContext, useLoaded, useOnline, useServices, useSignedIn, useSyncStats, useWorkspaceScope } from './hooks';
 import { PlaybooksView } from './PlaybooksView';
 import { SettingsView } from './SettingsView';
 import { TasksView } from './TasksView';
@@ -65,16 +65,31 @@ function Shell() {
   const services = useServices();
   const online = useOnline();
   const signedIn = useSignedIn();
+  const scope = useWorkspaceScope();
+  const previousScope = useRef(scope);
   const [view, setView] = useState<View>('chat');
-  const [chatId, setChatId] = useState<number | null>(null);
+  const [selectedChatId, setChatId] = useState<number | null>(null);
+  const chatId = previousScope.current === scope ? selectedChatId : null;
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [chats, reloadChats, chatsLoaded] = useLoaded<LocalChat[]>(() => services.records.listChats(), [], []);
+  const [history, reloadChats, loaded] = useLoaded(
+    async () => ({ scope, chats: await services.records.listChats() }),
+    { scope, chats: [] as LocalChat[] },
+    [scope],
+  );
+  const chatsLoaded = loaded && history.scope === scope;
+  const chats = useMemo(() => history.scope === scope ? history.chats.filter((chat) => !chat.scope || chat.scope === scope) : [], [history, scope]);
   // ARCHIVED chats are dropped here, at the ONE list every view reads — the history
   // rows, and the header's "open on the most recent chat". The device record store has
   // no `archived=exclude` filter (the server list has), so without this an archived
   // row stays in the panel and Archive would look like it did nothing. The flag stays
   // on the record, so the chat is never re-offered and its transcript survives.
   const live = useMemo(() => liveChats(chats), [chats]);
+  useEffect(() => {
+    if (previousScope.current === scope) return;
+    previousScope.current = scope;
+    setChatId(null);
+    setHistoryOpen(false);
+  }, [scope]);
 
   // The synced server chats, keyed by serverId — the platform rollup (`ticketCount`,
   // `ticketProgressPct`) the device record does not carry. One list fetch gives every
@@ -88,7 +103,7 @@ function Shell() {
       return new Map(list.map((c) => [c.id, c]));
     },
     new Map(),
-    [online, signedIn, live],
+    [online, signedIn, live, scope],
   );
 
   // Open on the most recent chat — once, when the panel first has its list. After that
@@ -102,7 +117,7 @@ function Shell() {
   }, [live, chatId]);
 
   const newChat = useCallback(async () => {
-    const chat = await services.records.createChat(t('newChatTitle'));
+    const chat = await services.records.createChat(t('newChatTitle'), services.session.scope() ?? undefined);
     reloadChats();
     setChatId(chat.id);
     setView('chat');

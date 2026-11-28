@@ -27,7 +27,7 @@ export class SkillsViewProvider implements vscode.WebviewViewProvider {
     view.webview.onDidReceiveMessage((m: unknown) => {
       if (isInbound(m)) void this.controller?.handle(m);
     });
-    view.webview.html = renderSkillsHtml({ nonce: makeNonce(), title: vscode.l10n.t("Skills") });
+    view.webview.html = renderSkillsHtml({ nonce: makeNonce(), title: vscode.l10n.t("Procedures") });
     view.onDidChangeVisibility(() => {
       if (view.visible) void this.controller?.push();
     });

@@ -43,11 +43,11 @@ function runnerMessages(): RunnerMessages {
   return {
     orphaned: vscode.l10n.t("Synapse closed during the run"),
     unsupported: vscode.l10n.t("Not available on this system"),
-    busy: vscode.l10n.t("A skill is already running."),
-    lockedElsewhere: vscode.l10n.t("Another BuilderForce window is already running a skill."),
+    busy: vscode.l10n.t("A procedure is already running."),
+    lockedElsewhere: vscode.l10n.t("Another BuilderForce window is already running a procedure."),
     stopped: vscode.l10n.t("Stopped before the run began."),
     explain: explainError,
-    unknownSkill: (id) => vscode.l10n.t("Skill {0} was not found.", id),
+    unknownSkill: (id) => vscode.l10n.t("Procedure {0} was not found.", id),
     approvalDescription: (skill, step, action) => vscode.l10n.t("{0}: step {1} needs your approval ({2})", skill, step, action),
     // A fact for later recall, not UI: kept in plain English like every other memory.
     lastRun: (skill, status, whenIso, trigger) => `Skill "${skill}" ${status} at ${whenIso} (${trigger} run).`,
@@ -76,7 +76,7 @@ function hostUi(gate: ReturnType<typeof createAgentsGate>, secrets: vscode.Secre
     async confirmDelete(name) {
       const del = vscode.l10n.t("Delete");
       const answer = await vscode.window.showWarningMessage(
-        vscode.l10n.t("Delete the skill “{0}”? Its run history is kept.", name),
+        vscode.l10n.t("Delete the procedure “{0}”? Its run history is kept.", name),
         { modal: true },
         del,
       );

@@ -8,14 +8,14 @@
  * it durable) or drops the transaction. A `work` that throws therefore publishes nothing.
  */
 
-import { destinationKey, earliestMapping, normalizeServerMapping, type EntityDestination, type EntityScope, type JournalEvent, type LocalEntityType, type LocalRecord, type ServerMapping, type ServerMappingInput, type SyncConflict, type SyncReceipt } from './records.js';
-import { parseEntityRef, parseSyncId, syncIdText, tierRefText } from './entityId.js';
+import { destinationKey, normalizeServerMapping, type EntityDestination, type EntityScope, type JournalEvent, type LocalEntityType, type LocalRecord, type ServerMapping, type ServerMappingInput, type SyncConflict, type SyncReceipt } from './records.js';
+import { findByExternalRef, findByServerId } from './mappingLookup.js';
 import type { LocalFirstDelta } from './localFirstDelta.js';
 import { DraftMap } from './draftMap.js';
 import { CommittedState, mappingKey, recordKey, splitRecordKey } from './storeState.js';
 import { PendingCounts, PendingEntityIndex, PendingKeyIndex } from './pendingIndexes.js';
 import { isJournalEventId, SCAN_STOP, type AppendJournalEvent, type LocalFirstTransaction, type PendingCount, type PendingLookup, type ScanPendingVisit, type ScanStop, type ScanVisit } from './storeContract.js';
-import { committedGroup, draftStub, homeChanged, loadIndex, loadRow, loadType, scanDraftStubs, typeRowsOf } from './partitionedReads.js';
+import { committedGroup, draftStub, homeChanged, loadIndex, loadRow, loadType, rowStub, scanDraftStubs, typeRowsOf } from './partitionedReads.js';
 import { partitionedDeltaParts } from './partitionedDelta.js';
 import type { RecordStub } from './recordPartition.js';
 import { isRecordPayloadMarker, materializedEvent } from './recordPayloadMarker.js';
@@ -170,6 +170,7 @@ export class Transaction implements LocalFirstTransaction {
       throw Object.assign(new Error('entity_version_conflict'), { code: 'ENTITY_VERSION_CONFLICT' });
     }
     const written = clone(record);
+    rowStub(this.base, written); // a `homeOf` / `ordinalOf` that cannot read the row fails the put, here
     // A put that changes the row's home is a delete in the old partition and a put in the new
     // one, in this one delta: delete-then-set is how the overlay already says "removed and re-added".
     if (current && homeChanged(this.base, current, written)) this.records.delete(key);
@@ -301,11 +302,11 @@ export class Transaction implements LocalFirstTransaction {
   }
 
   async mappingByServerId(entityType: LocalEntityType, serverId: string | number, scope?: EntityScope): Promise<ServerMapping | undefined> {
-    return clone(findByServerId(this.mappings.values(), entityType, serverId, scope));
+    return clone(findByServerId(() => this.mappings.values(), entityType, serverId, scope));
   }
 
   async mappingByExternalRef(entityType: LocalEntityType, externalRef: string, scope?: EntityScope): Promise<ServerMapping | undefined> {
-    return clone(findByExternalRef(this.mappings.values(), entityType, externalRef, scope));
+    return clone(findByExternalRef(() => this.mappings.values(), entityType, externalRef, scope));
   }
 
   async putReceipt(receipt: SyncReceipt): Promise<void> {

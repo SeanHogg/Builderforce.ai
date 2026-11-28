@@ -158,6 +158,13 @@ function matches(haystack: string, query: string): boolean {
   return !needle || haystack.toLowerCase().includes(needle);
 }
 
+/** A workflow record without a board also belongs in the legacy workflow view. */
+export function matchesCreationLibraryFilter(item: CreationLibraryItem, kind: string, projectId: number | null): boolean {
+  if (kind !== 'workflow') return item.kinds.includes(kind);
+  return (item.kinds.includes(kind) || item.resource?.type === 'workflow')
+    && (projectId === null || item.projectIds.includes(projectId));
+}
+
 function sessionItem(session: CreationSessionSummary & { matchingObjectId?: string | null }): CreationLibraryItem {
   return {
     key: `session-${session.id}`,

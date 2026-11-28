@@ -417,7 +417,7 @@ import {
   workFiledNotStaffedVerdict,
   workFinishPorts,
   workSupportsRoutingSample
-} from "./chunk-MMGGQZOY.mjs";
+} from "./chunk-5XKDK462.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -8454,6 +8454,7 @@ async function fetchMcpToolEntries(transport, skipExtensionIds = []) {
   const tools = await createMcpRelay({
     baseUrl: transport.baseUrl,
     token: transport.getToken(),
+    fetch: transport.mcpFetch,
     catalogNames: "canonical"
   }).list();
   const skip = new Set(skipExtensionIds);
@@ -8479,7 +8480,7 @@ function mcpActionsFrom(entries, transport, onToolResult, localTools, toolWireNa
           onToolResult?.({ name: entry.name, tool: entry.tool, extensionId: entry.extensionId, mutating, ok: !isErrorResult(out2) });
           return out2;
         }
-        const relay = createMcpRelay({ baseUrl: transport.baseUrl, token });
+        const relay = createMcpRelay({ baseUrl: transport.baseUrl, token, fetch: transport.mcpFetch });
         const res = await relay.call({ extensionId: entry.extensionId, tool: entry.tool, arguments: args });
         const body = await res.json().catch(() => ({}));
         const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : body.result ?? body;
@@ -8493,7 +8494,7 @@ function mcpActionsFrom(entries, transport, onToolResult, localTools, toolWireNa
         return out;
       };
       if (token && mutating && isCreateTool(entry.name, entry.tool)) {
-        const key = JSON.stringify([transport.baseUrl, token, entry.extensionId, entry.tool, stableStringify(args)]);
+        const key = JSON.stringify([transport.baseUrl, token, transport.workspaceScope, entry.extensionId, entry.tool, stableStringify(args)]);
         const now = nowMs();
         const prior = recentCreates.get(key);
         if (prior && now - prior.at < CREATE_DEDUPE_MS) return prior.result;
@@ -10350,7 +10351,7 @@ function createOutbox(opts) {
     if (discarded.length) drop(key, discarded, permanent ? "rejected" : "failed");
     return keep2.length === 0;
   };
-  const enqueueEntry = (key, item, work, path) => {
+  const enqueueEntry = (key, item, work, path, ownerScope) => {
     const retention = resolveRetention(work, path);
     if (retention === "durable") {
       evictBestEffortWhileOver(Math.max(0, maxEntries - 1));
@@ -10360,7 +10361,7 @@ function createOutbox(opts) {
       }
     }
     const l = lane(key);
-    const scope = currentScope();
+    const scope = ownerScope ?? currentScope();
     const entry = {
       id: newId(),
       key,
@@ -10378,11 +10379,11 @@ function createOutbox(opts) {
     return { id: entry.id, persisted };
   };
   return {
-    enqueue(key, item, work) {
-      return enqueueEntry(key, item, work, "enqueue").id;
+    enqueue(key, item, work, scope) {
+      return enqueueEntry(key, item, work, "enqueue", scope).id;
     },
-    async enqueueDurable(key, item, work) {
-      const enqueued = enqueueEntry(key, item, work, "enqueueDurable");
+    async enqueueDurable(key, item, work, scope) {
+      const enqueued = enqueueEntry(key, item, work, "enqueueDurable", scope);
       await enqueued.persisted;
       if (storeFailure) throw storeFailure;
       return enqueued.id;

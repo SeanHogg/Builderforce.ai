@@ -20,7 +20,7 @@
 
 import type { ConsolidatedMemory } from '@seanhogg/builderforce-memory/working';
 import { buildMemoryCapability } from '../../memory/memoryService';
-import { extractFocusPaths } from '@builderforce/agent-tools';
+import { extractFocusPaths, runOutcomeMemoryKey } from '@builderforce/agent-tools';
 import type { Db } from '../../../infrastructure/database/connection';
 import type { Env } from '../../../env';
 import { reportCaughtError } from '../../observability/caughtErrorReporter';
@@ -146,11 +146,7 @@ export function runFactAnchors(
 
 /** Stable, bounded memory key per run — a re-delivered completion upserts, not duplicates. */
 function runFactKey(input: RunMemoryCommitInput): string {
-  const scope = input.ticketId != null
-    ? `ticket-${input.ticketId}`
-    : input.projectId != null ? `project-${input.projectId}` : 'run';
-  const id = input.executionId != null ? String(input.executionId) : String(Math.trunc(Date.now() / 1000));
-  return `run-outcome:${scope}:${id}`;
+  return runOutcomeMemoryKey(input, input.executionId ?? Math.trunc(Date.now() / 1000));
 }
 
 /**

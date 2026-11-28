@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 import { openedBoardHref } from '@/lib/openedBoardHref';
+import { legacyCreationHref } from '@/lib/canvas/legacyCreationRoute';
 import { startCreationSession } from '@/lib/canvas/startCreationSession';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { UpgradeModal } from '@/components/UpgradeModal';
@@ -20,6 +21,7 @@ export function BrainstormCanvasRedirect() {
   const searchParams = useSearchParams();
   const { authReady, isAuthenticated, hasTenant } = useAuth();
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
+  const libraryHref = legacyCreationHref('/create', '/brainstorm');
 
   useEffect(() => {
     // Wait for the stored session, as `/create/new` does: before it is read, everyone looks
@@ -28,20 +30,23 @@ export function BrainstormCanvasRedirect() {
     let cancelled = false;
     const chatId = Number(searchParams.get('chat')) || null;
     const prompt = searchParams.get('prompt')?.trim() || '';
+    const forward = (href: string) => {
+      if (!cancelled) router.replace(legacyCreationHref(href, '/brainstorm'));
+    };
 
     const open = async () => {
       if (chatId && hasTenant) {
         const result = await creationSessionsApi.openResource('chat', chatId);
-        if (!cancelled) router.replace(openedBoardHref(result));
+        forward(openedBoardHref(result));
         return;
       }
       if (prompt) {
         // THE one start-a-session use case (`lib/canvas/startCreationSession.ts`).
         const { sessionId } = await startCreationSession({ prompt, isAuthenticated, hasTenant, surface: 'brain' });
-        if (!cancelled) router.replace(openedBoardHref({ sessionId }));
+        forward(openedBoardHref({ sessionId }));
         return;
       }
-      if (!cancelled) router.replace('/create/new');
+      forward('/create/new');
     };
 
     void open().catch((error: unknown) => {
@@ -49,10 +54,10 @@ export function BrainstormCanvasRedirect() {
       // A plan limit is the one failure worth a stop: say why, with the way up, as
       // `/create/new` and the dashboard do. Anything else lands in the library.
       if (isPlanLimitError(error)) setPlanError(error);
-      else router.replace('/create');
+      else router.replace(libraryHref);
     });
     return () => { cancelled = true; };
-  }, [authReady, hasTenant, isAuthenticated, router, searchParams]);
+  }, [authReady, hasTenant, isAuthenticated, libraryHref, router, searchParams]);
 
-  return <UpgradeModal error={planError} onClose={() => { setPlanError(null); router.replace('/create'); }} />;
+  return <UpgradeModal error={planError} onClose={() => { setPlanError(null); router.replace(libraryHref); }} />;
 }

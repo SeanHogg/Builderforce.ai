@@ -11,6 +11,10 @@ import { base64ToBytes, bytesToBase64, type EvermindLM } from '@seanhogg/builder
 /** Max tokens fed to one embedding pass — bounds the forward cost per memory / query. */
 export const EMBED_MAX_TOKENS = 96;
 
+export function evermindRecallFingerprint(modelRef: string): string {
+  return `ssm-mean-v1:${EMBED_MAX_TOKENS}:${modelRef}`;
+}
+
 /** The tokenizer surface an embedding needs (the engine's `BPETokenizer` satisfies it). */
 interface EmbedTokenizer {
   encode(text: string): number[];

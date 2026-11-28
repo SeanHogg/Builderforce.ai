@@ -16,7 +16,8 @@
  * while signed out wait (unscoped) for the next sign-in.
  */
 import type { KeyValueStore } from '../platform/keyValue';
-import { exchangeEditorKey, isTenantSessionFresh, revokeKey } from '@builderforce/device-auth';
+import { isWrappedCredential, type CredentialVault } from './credentialVault';
+import { exchangeEditorKey, isTenantSessionFresh, readEditorTenantToken, requestWorkspaceToken, revokeKey, type EditorTenantToken } from '@builderforce/device-auth';
 
 /** Where the credential lives in `chrome.storage.local` — read by the platform policy
  *  too, which derives the default inference mode from "signed in". */
@@ -30,6 +31,7 @@ export interface SessionDeps {
   baseUrl: string;
   fetch: (input: string, init?: RequestInit) => Promise<Response>;
   now(): number;
+  vault?: CredentialVault;
 }
 
 export interface Session {
@@ -44,6 +46,9 @@ export interface Session {
   userId(): string | null;
   signIn(input: { accessKey: string; tenantId: number | null }): Promise<void>;
   signOut(): Promise<void>;
+  switchWorkspace(tenantId: number): Promise<boolean>;
+  /** Only for person-level routes that must remain reachable from a parked workspace. */
+  baseJwt(): Promise<string | null>;
   /** A tenant JWT for `/api/*`, or null signed out / unreachable. */
   jwt(force?: boolean): Promise<string | null>;
   subscribe(listener: () => void): () => void;
@@ -53,17 +58,35 @@ export function createSession(deps: SessionDeps): Session {
   let key: string | null = null;
   let tenant: number | null = null;
   let user: string | null = null;
-  let jwtCache: { token: string; exp: number } | null = null;
+  let jwtCache: EditorTenantToken | null = null;
+  let identityEpoch = 0;
+  let loadSequence = 0;
   const listeners = new Set<() => void>();
   const notify = () => {
     for (const l of [...listeners]) l();
   };
 
   const load = async (): Promise<void> => {
-    key = (await deps.storage.get<string>(KEY)) ?? null;
-    tenant = (await deps.storage.get<number>(TENANT)) ?? null;
-    user = (await deps.storage.get<string>(USER)) ?? null;
-    jwtCache = null;
+    const sequence = ++loadSequence;
+    const [storedCredential, storedTenant, storedUser] = await Promise.all([
+      deps.storage.get<unknown>(KEY), deps.storage.get<number>(TENANT), deps.storage.get<string>(USER),
+    ]);
+    const storedKey = typeof storedCredential === 'string' ? storedCredential
+      : isWrappedCredential(storedCredential) && deps.vault ? await deps.vault.unwrap(storedCredential).catch(() => null) : null;
+    if (sequence !== loadSequence) return;
+    if (key !== (storedKey ?? null) || tenant !== (storedKey ? storedTenant ?? null : null)) {
+      identityEpoch += 1;
+      jwtCache = null;
+    }
+    key = storedKey ?? null;
+    tenant = storedKey ? storedTenant ?? null : null;
+    user = storedKey ? storedUser ?? null : null;
+    if (storedKey && typeof storedCredential === 'string' && deps.vault) {
+      const wrapped = await deps.vault.wrap(storedKey);
+      if (sequence === loadSequence && await deps.storage.get<unknown>(KEY) === storedCredential) {
+        await deps.storage.set(KEY, wrapped);
+      }
+    }
   };
   const loaded = load();
   // Another context signed in or out — follow it.
@@ -72,6 +95,8 @@ export function createSession(deps: SessionDeps): Session {
   });
 
   const clear = async (): Promise<void> => {
+    identityEpoch += 1;
+    loadSequence += 1;
     key = null;
     tenant = null;
     user = null;
@@ -81,6 +106,43 @@ export function createSession(deps: SessionDeps): Session {
     await deps.storage.remove(USER);
     notify();
   };
+
+  async function mint(target: number | null): Promise<EditorTenantToken | null> {
+    const exchangeKey = key;
+    if (!exchangeKey) return null;
+    const epoch = identityEpoch;
+    const result = await exchangeEditorKey(deps.baseUrl, exchangeKey, deps.fetch, deps.now);
+    if (epoch !== identityEpoch) return null;
+    if (!result.ok) {
+      if (result.rejected) await clear();
+      return null;
+    }
+    const base = result.jwt;
+    if (target === null || target === base.tenantId) return base;
+    try {
+      const response = await requestWorkspaceToken(deps.baseUrl, target, base.token, deps.fetch);
+      if (!response.ok) return null;
+      const scoped = await readEditorTenantToken(response, deps.now, target);
+      return epoch === identityEpoch && scoped ? { ...scoped, userId: base.userId } : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function adopt(token: EditorTenantToken): Promise<void> {
+    const tenantChanged = tenant !== token.tenantId;
+    const userChanged = token.userId !== undefined && token.userId !== user;
+    if (tenantChanged) identityEpoch += 1;
+    loadSequence += 1;
+    tenant = token.tenantId;
+    if (token.userId !== undefined) user = token.userId;
+    jwtCache = token;
+    await Promise.all([
+      ...(tenantChanged ? [deps.storage.set(TENANT, token.tenantId)] : []),
+      ...(userChanged ? [deps.storage.set(USER, token.userId)] : []),
+    ]);
+    if (tenantChanged || userChanged) notify();
+  }
 
   return {
     ready: () => loaded,
@@ -93,14 +155,17 @@ export function createSession(deps: SessionDeps): Session {
     tenantId: () => tenant,
     userId: () => user,
     async signIn(input) {
+      await loaded;
+      if (!deps.vault) throw new Error('The editor credential vault is unavailable');
+      const credential = await deps.vault.wrap(input.accessKey);
+      identityEpoch += 1;
+      loadSequence += 1;
       key = input.accessKey;
       tenant = input.tenantId;
       user = null; // a new key may be another person's - relearned on the next exchange
-      await deps.storage.remove(USER);
       jwtCache = null;
-      await deps.storage.set(KEY, input.accessKey);
-      if (input.tenantId === null) await deps.storage.remove(TENANT);
-      else await deps.storage.set(TENANT, input.tenantId);
+      await deps.storage.set(KEY, credential);
+      await Promise.all([deps.storage.remove(USER), input.tenantId === null ? deps.storage.remove(TENANT) : deps.storage.set(TENANT, input.tenantId)]);
       notify();
     },
     async signOut() {
@@ -108,31 +173,28 @@ export function createSession(deps: SessionDeps): Session {
       await clear();
       if (old) await revokeKey(deps, old);
     },
+    async switchWorkspace(target) {
+      await loaded;
+      if (!Number.isSafeInteger(target) || target <= 0) return false;
+      const epoch = identityEpoch;
+      const token = await mint(target);
+      if (!token || epoch !== identityEpoch) return false;
+      await adopt(token);
+      return jwtCache?.token === token.token;
+    },
+    async baseJwt() {
+      await loaded;
+      return (await mint(null))?.token ?? null;
+    },
     async jwt(force = false) {
       await loaded;
       if (!key) return null;
       if (!force && jwtCache && isTenantSessionFresh(jwtCache.exp, deps.now())) return jwtCache.token;
-      const exchangeKey = key;
-      const result = await exchangeEditorKey(deps.baseUrl, exchangeKey, deps.fetch, deps.now);
-      if (key !== exchangeKey) return null;
-      if (!result.ok) {
-        if (result.rejected) await clear();
-        return null;
-      }
-      const { jwt } = result;
-      jwtCache = jwt;
-      if (jwt.userId !== undefined && jwt.userId !== user) {
-        user = jwt.userId;
-        await deps.storage.set(USER, jwt.userId);
-        notify();
-      }
-      if (key !== exchangeKey) return null;
-      if (jwt.tenantId !== tenant) {
-        tenant = jwt.tenantId;
-        await deps.storage.set(TENANT, jwt.tenantId);
-        notify();
-      }
-      return key === exchangeKey ? jwt.token : null;
+      const epoch = identityEpoch;
+      const token = await mint(tenant);
+      if (!token || epoch !== identityEpoch) return null;
+      await adopt(token);
+      return jwtCache?.token === token.token ? token.token : null;
     },
     subscribe(listener) {
       listeners.add(listener);

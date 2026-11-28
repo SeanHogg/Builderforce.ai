@@ -25,6 +25,8 @@ export interface ShellRunOptions {
   fresh?: boolean;
 }
 
+export type ShellFailureCode = 'invalid' | 'refused' | 'aborted' | 'timeout' | 'not_found' | 'unsupported' | 'command_failed';
+
 /** A background job's state as `poll` / `kill` report it. */
 export interface ShellJobStatus {
   ok: boolean;
@@ -38,10 +40,12 @@ export interface ShellJobStatus {
   /** A finished job's full output, retained for `output_filter`. */
   outputId?: string;
   error?: string;
+  code?: ShellFailureCode;
 }
 
 export interface ShellJobStart {
   ok: boolean;
   id?: string;
   error?: string;
+  code?: ShellFailureCode;
 }

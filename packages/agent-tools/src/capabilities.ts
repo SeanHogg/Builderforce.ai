@@ -27,8 +27,8 @@
 
 import type { SymbolKind } from "./symbols.js";
 import type { ModelRole } from "./modelRoles.js";
-import type { ShellJobStart, ShellJobStatus, ShellRunOptions } from "./shell-job-types.js";
-export type { ShellJobStart, ShellJobStatus, ShellRunOptions } from "./shell-job-types.js";
+import type { ShellFailureCode, ShellJobStart, ShellJobStatus, ShellRunOptions } from "./shell-job-types.js";
+export type { ShellFailureCode, ShellJobStart, ShellJobStatus, ShellRunOptions } from "./shell-job-types.js";
 import type { LocalResearchCapability } from "./research-capability.js";
 export type { LocalResearchCapability, LocalResearchMessage, ResearchFileFingerprint, ResearchAnswerStore } from "./research-capability.js";
 
@@ -812,6 +812,7 @@ export interface ShellResult {
   stdout?: string;
   exitCode?: number;
   error?: string;
+  code?: ShellFailureCode;
   /** The command was killed by its cancel signal (Stop, or the person's steer). */
   aborted?: boolean;
   /** The shell RETAINED this command's full output under this id: `output_filter` greps / heads / tails it without a re-run. */

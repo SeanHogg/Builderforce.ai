@@ -135,6 +135,10 @@ export const MESSAGE_KEYS = [
   'signInExpired',
   'signInCancelled',
   'signInFailed',
+  'workspaceLabel',
+  'workspaceChoose',
+  'workspaceSwitchFailed',
+  'workspaceChanged',
   'sitesHeading',
   'sitesIntro',
   'sitesEmpty',
@@ -512,4 +516,4 @@ export const MESSAGE_KEYS = [
   'translationGetTranslator',
 ] as const;
 
-export type MessageKey = (typeof MESSAGE_KEYS)[number];
+export type MessageKey = (typeof M

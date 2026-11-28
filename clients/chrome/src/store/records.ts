@@ -48,6 +48,8 @@ export interface LocalChat {
   updatedAt: string;
   /** The platform's chat id, once the sync outbox has created it. */
   serverId?: number;
+  /** Origin workspace for synced chat history; absent on older or device-only chats. */
+  scope?: string;
   /** Minted with the chat — the `Idempotency-Key` its platform create is sent with, so a
    *  create whose answer was lost replays instead of making a second chat. */
   syncKey: string;
@@ -119,7 +121,7 @@ export interface MessageInput {
 export interface RovrRecords {
   listChats(): Promise<LocalChat[]>;
   getChat(id: number): Promise<LocalChat | undefined>;
-  createChat(title: string): Promise<LocalChat>;
+  createChat(title: string, scope?: string): Promise<LocalChat>;
   updateChat(id: number, patch: Partial<Omit<LocalChat, 'id'>>): Promise<void>;
   listMessages(chatId: number): Promise<BrainMessage[]>;
   appendMessages(chatId: number, rows: readonly MessageInput[]): Promise<AppendResult>;
@@ -132,6 +134,11 @@ export interface RovrRecords {
 
 export const newLocalChatId = (now: number, salt: number = Math.floor(Math.random() * 1000)): number =>
   -(Math.floor(now / 1000) * 1000 + salt);
+
+export function newLocalChat(id: number, title: string, scope?: string): LocalChat {
+  const now = new Date().toISOString();
+  return { id, title, createdAt: now, updatedAt: now, syncKey: crypto.randomUUID(), ...(scope ? { scope } : {}) };
+}
 
 /* ------------------------------------------------------------------------- *
  * G26 — what this adapter guarantees, stated once and reused, not re-derived.
@@ -246,6 +253,9 @@ function assertChat(value: unknown): asserts value is LocalChat {
   if (typeof chat.id !== 'number') throw new RovrCorruptRecordError('chat row has no numeric id');
   if (typeof chat.title !== 'string') throw new RovrCorruptRecordError(`chat ${chat.id} has no title`);
   if (typeof chat.updatedAt !== 'string') throw new RovrCorruptRecordError(`chat ${chat.id} has no updatedAt`);
+  if (chat.scope !== undefined && (typeof chat.scope !== 'string' || !/^tenant:[1-9]\d*$/.test(chat.scope))) {
+    throw new RovrCorruptRecordError(`chat ${chat.id} has an invalid workspace scope`);
+  }
   if (typeof chat.syncKey !== 'string' || chat.syncKey.length === 0) {
     throw new RovrCorruptRecordError(`chat ${chat.id} has no syncKey`);
   }
@@ -337,11 +347,10 @@ export function createMemoryRecords(): RovrRecords {
       if (chat !== undefined) readStoredChats([chat]);
       return chat;
     },
-    async createChat(title) {
-      const now = new Date().toISOString();
+    async createChat(title, scope) {
       let id = newLocalChatId(Date.now());
       while (chats.has(id)) id -= 1;
-      const chat: LocalChat = { id, title, createdAt: now, updatedAt: now, syncKey: crypto.randomUUID() };
+      const chat = newLocalChat(id, title, scope);
       chats.set(id, chat);
       return chat;
     },

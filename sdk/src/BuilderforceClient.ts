@@ -1,3 +1,4 @@
+import { BUILDERFORCE_API_ORIGIN } from '@builderforce/device-auth';
 import { ChatCompletionsApi } from './application/ChatCompletionsApi';
 import { EmbeddingsApi } from './application/EmbeddingsApi';
 import { ImagesApi } from './application/ImagesApi';
@@ -35,7 +36,7 @@ export class BuilderforceClient {
 
     const http = new HttpClient({
       apiKey,
-      baseUrl: options.baseUrl ?? 'https://api.builderforce.ai',
+      baseUrl: options.baseUrl ?? BUILDERFORCE_API_ORIGIN,
       fetchFn: options.fetch,
       timeoutMs: options.timeoutMs,
     });

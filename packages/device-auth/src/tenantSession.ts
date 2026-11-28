@@ -1,6 +1,5 @@
-export const TENANT_SESSION_TTL_SECONDS = 3600;
-export const WORKSPACE_TOKEN_ROUTE = '/workspace-token';
-export const WORKSPACE_TOKEN_PATH = `/api/auth${WORKSPACE_TOKEN_ROUTE}`;
+import { BUILDERFORCE_WEB_ORIGIN } from './platformOrigins.js';
+import { TENANT_SESSION_TTL_SECONDS, WORKSPACE_TOKEN_PATH } from './tenantSessionContract.js';
 
 export function derivePlatformWebBase(gateway: string): string {
   try {
@@ -10,7 +9,7 @@ export function derivePlatformWebBase(gateway: string): string {
   } catch {
     // A malformed gateway setting has no browser origin.
   }
-  return 'https://builderforce.ai';
+  return BUILDERFORCE_WEB_ORIGIN;
 }
 
 const REFRESH_MARGIN_MS = 60_000;
@@ -38,6 +37,23 @@ export interface EditorTenantToken {
 
 type EditorKeyExchange = { ok: true; jwt: EditorTenantToken } | { ok: false; rejected: boolean };
 
+export async function readEditorTenantToken(
+  response: Response,
+  now: () => number,
+  expectedTenant?: number,
+): Promise<EditorTenantToken | null> {
+  const body = await response.json().catch(() => null) as { token?: unknown; tenantId?: unknown; userId?: unknown; expiresIn?: unknown } | null;
+  const tenantId = body?.tenantId === undefined ? expectedTenant : body.tenantId;
+  if (typeof body?.token !== 'string' || !body.token || typeof tenantId !== 'number' || !Number.isSafeInteger(tenantId) || tenantId <= 0) return null;
+  if (expectedTenant !== undefined && expectedTenant !== tenantId) return null;
+  return {
+    token: body.token,
+    tenantId,
+    exp: tenantSessionExpiresAt(now(), typeof body.expiresIn === 'number' ? body.expiresIn : undefined),
+    userId: typeof body.userId === 'string' ? body.userId : undefined,
+  };
+}
+
 /** Exchange the key for the workspace it was issued in. Only an explicit refusal invalidates the key. */
 export async function exchangeEditorKey(
   baseUrl: string,
@@ -53,19 +69,8 @@ export async function exchangeEditorKey(
       signal: AbortSignal.timeout(MINT_TIMEOUT_MS),
     });
     if (!res.ok) return { ok: false, rejected: res.status === 401 || res.status === 400 };
-    const body = await res.json() as { token?: unknown; tenantId?: unknown; userId?: unknown; expiresIn?: unknown };
-    if (typeof body?.token !== 'string' || !body.token || typeof body.tenantId !== 'number') {
-      return { ok: false, rejected: false };
-    }
-    return {
-      ok: true,
-      jwt: {
-        token: body.token,
-        tenantId: body.tenantId,
-        exp: tenantSessionExpiresAt(now(), typeof body.expiresIn === 'number' ? body.expiresIn : undefined),
-        userId: typeof body.userId === 'string' ? body.userId : undefined,
-      },
-    };
+    const jwt = await readEditorTenantToken(res, now);
+    return jwt ? { ok: true, jwt } : { ok: false, rejected: false };
   } catch {
     return { ok: false, rejected: false };
   }

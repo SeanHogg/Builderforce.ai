@@ -81,11 +81,11 @@ function isErrorResult(out: unknown): boolean {
  * doesn't get the same capability twice.
  */
 export async function fetchMcpToolEntries(
-  transport: Pick<BrainTransport, 'baseUrl' | 'getToken'>,
+  transport: Pick<BrainTransport, 'baseUrl' | 'getToken' | 'mcpFetch'>,
   skipExtensionIds: readonly string[] = [],
 ): Promise<McpToolEntry[]> {
   const tools = await createMcpRelay({
-    baseUrl: transport.baseUrl, token: transport.getToken(), catalogNames: 'canonical',
+    baseUrl: transport.baseUrl, token: transport.getToken(), fetch: transport.mcpFetch, catalogNames: 'canonical',
   }).list();
   const skip = new Set(skipExtensionIds);
   // Catalog names are provider-facing. Brain actions and host callbacks keep their policy IDs.
@@ -100,7 +100,7 @@ export async function fetchMcpToolEntries(
  */
 export function mcpActionsFrom(
   entries: readonly McpToolEntry[],
-  transport: Pick<BrainTransport, 'baseUrl' | 'getToken'>,
+  transport: Pick<BrainTransport, 'baseUrl' | 'getToken' | 'mcpFetch' | 'workspaceScope'>,
   onToolResult?: (info: McpToolResultInfo) => void,
   localTools?: LocalToolRouter,
   toolWireName?: McpToolWireName,
@@ -127,7 +127,7 @@ export function mcpActionsFrom(
           onToolResult?.({ name: entry.name, tool: entry.tool, extensionId: entry.extensionId, mutating, ok: !isErrorResult(out) });
           return out;
         }
-        const relay = createMcpRelay({ baseUrl: transport.baseUrl, token });
+        const relay = createMcpRelay({ baseUrl: transport.baseUrl, token, fetch: transport.mcpFetch });
         const res = await relay.call({ extensionId: entry.extensionId, tool: entry.tool, arguments: args });
         const body = (await res.json().catch(() => ({}))) as RelayCallResult;
         const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : (body.result ?? body);
@@ -140,7 +140,7 @@ export function mcpActionsFrom(
       };
       // Idempotency guard: collapse a duplicated create within the window.
       if (token && mutating && isCreateTool(entry.name, entry.tool)) {
-        const key = JSON.stringify([transport.baseUrl, token, entry.extensionId, entry.tool, stableStringify(args)]);
+        const key = JSON.stringify([transport.baseUrl, token, transport.workspaceScope, entry.extensionId, entry.tool, stableStringify(args)]);
         const now = nowMs();
         const prior = recentCreates.get(key);
         if (prior && now - prior.at < CREATE_DEDUPE_MS) return prior.result;

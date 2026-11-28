@@ -38,6 +38,7 @@
  * throws, never rejects, and never blocks the run that called it. A memory
  * failure is observable at debug level and nothing more.
  */
+import { runOutcomeMemoryKey } from "@builderforce/agent-tools";
 import { logDebug } from "../logger.js";
 import { pushProjectFact } from "./project-facts-sync.js";
 import type { ProjectFactsSyncConfig } from "./project-facts-sync.js";
@@ -93,8 +94,7 @@ export interface RunOutcomeMemoryInput {
  * caller cannot push the key past a storage limit.
  */
 export function runOutcomeFactKey(cfg: RunOutcomeMemoryConfig, runId: string): string {
-  const id = runId.trim().slice(0, 120);
-  return `run-outcome:project-${cfg.projectId}:${id || "run"}`;
+  return runOutcomeMemoryKey(cfg, runId);
 }
 
 /**

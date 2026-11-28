@@ -9,6 +9,8 @@ export {
   MAX_BACKGROUND_JOBS,
   BACKGROUND_JOB_LIMIT_ERROR,
   makeRoomForBackgroundJob,
+  waitForBackgroundJob,
+  backgroundWaitAbort,
   EDITOR_COMMAND_OUTPUT_CHARS,
   EDITOR_COMMAND_BUFFER_CHARS,
   BROWSER_COMMAND_OUTPUT_CHARS,

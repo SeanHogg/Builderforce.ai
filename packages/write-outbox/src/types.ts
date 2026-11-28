@@ -126,9 +126,9 @@ export interface Outbox<T, K> {
    * and facts are durable; telemetry is best-effort. Unclassified writes follow the
    * outbox mode. Use enqueueDurable before acknowledging durable user work.
    */
-  enqueue(key: K, item: T, work?: string): string;
+  enqueue(key: K, item: T, work?: string, scope?: string): string;
   /** Queue and resolve only after the store acknowledges the write. Always durable unless `work` is telemetry. */
-  enqueueDurable(key: K, item: T, work?: string): Promise<string>;
+  enqueueDurable(key: K, item: T, work?: string, scope?: string): Promise<string>;
   flush(key?: K, opts?: { final?: boolean }): Promise<void>;
   drainWith<R>(key: K, request: (pending: T[], ctx: OutboxDrainContext) => Promise<R>): Promise<R>;
   /** Explicitly return retained refusals to the send queue after repair. */

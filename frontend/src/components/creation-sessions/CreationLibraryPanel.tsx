@@ -4,7 +4,9 @@ import { useSearchParams } from 'next/navigation';
 import { Collection } from '@/components/collection/Collection';
 import { useLocalCollection } from '@/components/collection/useLocalCollection';
 import { useFormat } from '@/i18n/useFormat';
-import type { CreationLibraryItem } from '@/domains/canvas/domain/creationLibrary';
+import { useComponentProjectId } from '@/lib/components/scope';
+import { projectFromSearch } from '@/lib/projectScopeResolution';
+import { matchesCreationLibraryFilter, type CreationLibraryItem } from '@/domains/canvas/domain/creationLibrary';
 import { CreationFolderBar, UNFILED } from './CreationFolderBar';
 import { CreationLibraryFacetBar } from './CreationLibraryFacetBar';
 import { CreationSessionTile } from './CreationSessionTile';
@@ -60,9 +62,13 @@ export function CreationLibraryPanel() {
   // facet bar's ("what KIND of thing is this?"), so the two compose rather than
   // fight — the facet bar filters what this leaves.
   const kindFilter = searchParams.get('filter');
+  const selectedProject = useComponentProjectId();
+  const projectId = kindFilter === 'workflow' ? projectFromSearch(searchParams) ?? selectedProject : null;
   const rows = useMemo(
-    () => (kindFilter ? library.visible.filter((item) => item.kinds.includes(kindFilter)) : library.visible),
-    [library.visible, kindFilter],
+    () => kindFilter
+      ? library.visible.filter((item) => matchesCreationLibraryFilter(item, kindFilter, projectId))
+      : library.visible,
+    [library.visible, kindFilter, projectId],
   );
 
   const projectLabel = useCallback(

@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import nodeFs from "node:fs";
 import nodeOs from "node:os";
 import nodePath from "node:path";
-import { derivePlatformWebBase } from "@builderforce/device-auth";
+import { derivePlatformWebBase, EDITOR_GATEWAY_BASE } from "@builderforce/device-auth";
 import { gatewayCanChooseModel, gatewayModelIdentity, gatewayPlanModels, type ModelIdentityContext, NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import {
   BFI_DISCOVERY_ENV,
@@ -48,7 +48,7 @@ export interface ChatMessage {
 export function getBaseUrl(): string {
   const raw =
     vscode.workspace.getConfiguration("builderforce").get<string>("baseUrl") ||
-    "https://builderforce.ai/gateway";
+    EDITOR_GATEWAY_BASE;
   return raw.replace(/\/+$/, "");
 }
 

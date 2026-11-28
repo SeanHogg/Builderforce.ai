@@ -28,6 +28,7 @@ import {
   type PlatformPolicySnapshot,
 } from '@builderforce/local-first';
 import { SESSION_CREDENTIAL_KEY } from '../auth/session';
+import { hasStoredCredential } from '../auth/credentialVault';
 import type { KeyValueStore } from './keyValue';
 
 const PREFIX = 'policy.';
@@ -77,7 +78,7 @@ export function createRovrPlatformPolicy(storage: KeyValueStore): RovrPlatformPo
       if (typeof stored === 'boolean') overrides[field] = stored;
     }
     const stored = await storage.get<string>(INFERENCE_MODE_KEY);
-    const signedIn = typeof (await storage.get<string>(SESSION_CREDENTIAL_KEY)) === 'string';
+    const signedIn = hasStoredCredential(await storage.get<unknown>(SESSION_CREDENTIAL_KEY));
     const resolved = resolveInferencePolicy({ mode: isInferenceMode(stored) ? stored : null, signedIn, overrides });
     state = { mode: resolved.mode, chosen: resolved.chosen, signedIn, loaded: true };
     policy.set(resolved.snapshot);

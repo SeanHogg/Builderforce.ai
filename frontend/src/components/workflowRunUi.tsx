@@ -1,14 +1,4 @@
-// No 'use client': pure style constants + a presentational component,
-// imported by `WorkflowsContent.tsx`, `WorkflowRunHistoryPanel.tsx`, and the
-// creation-canvas live-graph poll, all already inside their own client boundaries.
-/**
- * Shared vocabulary for every workflow-run surface — `WorkflowsContent.tsx`
- * (the definition list + its "view runs" flow) and `WorkflowRunHistoryPanel.tsx`
- * (the run list/detail, used standalone from both that flow and the builder's
- * "History" toolbar button). Extracted to its own module rather than one
- * importing from the other so neither surface has a hard dependency on the
- * other's module graph.
- */
+/** Shared workflow run presentation and status rules for history and the live graph. */
 
 import { statusPillStyle, type StatusToneMap } from '@/lib/statusTone';
 

@@ -29,8 +29,8 @@
  * `{ ok: false, error }` the model can read and relay; nothing here throws.
  */
 import type { PreviewRuntime, SnapshotStore } from '@seanhogg/builderforce-webcontainers';
-import { posixCommandIn, type ShellCapability, type ShellResult } from '@builderforce/agent-tools';
-import { BROWSER_COMMAND_OUTPUT_CHARS as MAX_COMMAND_OUTPUT_CHARS, DEFAULT_COMMAND_TIMEOUT_MS } from '@builderforce/tool-output-policy';
+import { posixCommandIn, type ShellCapability, type ShellJobStatus, type ShellResult, type ShellRunOptions } from '@builderforce/agent-tools';
+import { BACKGROUND_JOB_LIMIT_ERROR, backgroundWaitAbort, BROWSER_COMMAND_OUTPUT_CHARS as MAX_COMMAND_OUTPUT_CHARS, DEFAULT_COMMAND_TIMEOUT_MS, makeRoomForBackgroundJob, waitForBackgroundJob } from '@builderforce/tool-output-policy';
 import { validateFileContentForPath } from '@builderforce/ide-file-contract';
 import { isGeneratedPath } from '@/lib/workspace/generatedPaths';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
@@ -206,20 +206,34 @@ async function saveBack(
 async function runInRuntime(
   runtime: PreviewRuntime,
   command: string,
-  timeoutMs: number,
-): Promise<{ exitCode: number | undefined; timedOut: boolean; stdout: string }> {
+  timeoutMs: number | undefined,
+  signal: AbortSignal | undefined,
+  onStart?: (output: ReturnType<typeof collectTail>, killTree?: () => void) => void,
+): Promise<{ exitCode: number | undefined; timedOut: boolean; aborted: boolean; stdout: string }> {
   // Tracked: when a browser run takes the runtime, the workspace's commands stop with it.
-  const child = trackWorkspaceProcess(runtime.run('bfsh', ['-c', command]));
+  const child = trackWorkspaceProcess(runtime.run('bfsh', ['-c', command])) as ReturnType<PreviewRuntime['run']> & { killTree?: () => void };
   const output = collectTail(child.combinedOutput);
+  const killTree = child.killTree?.bind(child);
+  onStart?.(output, killTree);
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), timeoutMs); });
-  const outcome = await Promise.race([child.wait(), timeout]);
-  clearTimeout(timer);
+  let abort: (() => void) | undefined;
+  const stop = new Promise<'timeout' | 'abort'>((resolve) => {
+    if (timeoutMs !== undefined) timer = setTimeout(() => resolve('timeout'), timeoutMs);
+    abort = () => resolve('abort');
+    if (signal?.aborted) abort();
+    else signal?.addEventListener('abort', abort, { once: true });
+  });
+  const outcome = await Promise.race([child.wait(), stop]).finally(() => {
+    clearTimeout(timer);
+    if (abort) signal?.removeEventListener('abort', abort);
+  });
 
   let exitCode: number | undefined;
   const timedOut = outcome === 'timeout';
-  if (timedOut) {
-    child.kill();
+  const aborted = outcome === 'abort';
+  if (timedOut || aborted) {
+    if (killTree) killTree();
+    else child.kill();
     exitCode = await settle(child.wait(), SETTLE_MS);
     if (exitCode === undefined) {
       child.kill('SIGKILL');
@@ -230,7 +244,16 @@ async function runInRuntime(
   }
   await settle(output.done, SETTLE_MS);
   const { text, truncated } = output.text();
-  return { exitCode, timedOut, stdout: truncated ? `[… earlier output truncated; showing the last ${MAX_COMMAND_OUTPUT_CHARS} characters]\n${text}` : text };
+  return { exitCode, timedOut, aborted, stdout: truncated ? `[… earlier output truncated; showing the last ${MAX_COMMAND_OUTPUT_CHARS} characters]\n${text}` : text };
+}
+
+interface BrowserJob {
+  controller: AbortController;
+  status: ShellJobStatus['status'];
+  output?: ReturnType<typeof collectTail>;
+  killTree?: () => void;
+  result?: WorkspaceShellResult;
+  done: Promise<void>;
 }
 
 /**
@@ -240,11 +263,13 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
   const boot = deps.boot ?? bootSharedPreviewRuntime;
   const timeoutMs = deps.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
 
-  const run = async (command: string, cwd?: string): Promise<WorkspaceShellResult> => {
+  const run = async (command: string, opts: ShellRunOptions, job?: BrowserJob): Promise<WorkspaceShellResult> => {
+    const signal = opts.signal;
+    if (signal?.aborted) return { ok: false, aborted: true, error: 'The command was stopped' };
     // `bfsh -c` takes only a command line, so the working directory the shared tools hand over
     // (`ShellRunOptions.cwd`) is written in by the ONE shared helper; an unsafe one is refused.
-    const scoped = posixCommandIn(cwd, command);
-    if (scoped === null) return { ok: false, error: `'${cwd}' is not a directory inside the workspace, so no command was run there` };
+    const scoped = posixCommandIn(opts.cwd, command);
+    if (scoped === null) return { ok: false, error: `'${opts.cwd}' is not a directory inside the workspace, so no command was run there` };
     let runtime: PreviewRuntime;
     try {
       runtime = await boot();
@@ -272,7 +297,12 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
 
     let ran: Awaited<ReturnType<typeof runInRuntime>>;
     try {
-      ran = await runInRuntime(runtime, scoped, timeoutMs);
+      if (signal?.aborted) return { ok: false, aborted: true, error: 'The command was stopped' };
+      ran = await runInRuntime(runtime, scoped, job ? undefined : timeoutMs, signal, (output, killTree) => {
+        if (!job) return;
+        job.output = output;
+        job.killTree = killTree;
+      });
     } catch (error) {
       return { ok: false, error: `The command could not be started: ${toolErrorMessage(error, 'spawn failed')}` };
     }
@@ -283,14 +313,14 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
     const touched = [...(saved.changedFiles ?? []), ...(saved.removedFiles ?? [])];
     if (touched.length) deps.onFilesChanged?.(store.id, touched);
 
-    const ok = !ran.timedOut && ran.exitCode === 0;
+    const ok = !ran.timedOut && !ran.aborted && ran.exitCode === 0;
     if (install && ok) {
       // Keyed by the manifest the command LEFT (an `add` changed it), which is what the
       // store now holds and the next run will look up. Never awaited.
       const key = installSnapshotKey(store.id, manifestFiles(runtime, saved.unsavedFiles));
       if (key) void saveInstalledPackages(runtime, key, deps.snapshots);
     }
-    const error = ran.timedOut
+    const error = ran.aborted ? 'The command was stopped' : ran.timedOut
       ? `Timed out after ${Math.round(timeoutMs / 1000)}s and was stopped. A long-running process (a dev server, a watcher) never finishes here — the live preview already runs the app.`
       : ok ? undefined : `Exited with code ${ran.exitCode}.${ran.exitCode === COMMAND_NOT_FOUND && !install && !hasInstalledPackages(runtime) ? ' No dependencies are installed — run npm install first, then retry.' : ''}`;
     return {
@@ -298,11 +328,60 @@ export function createWorkspaceShell(store: WorkspaceFileStore, deps: WorkspaceS
       stdout: ran.stdout,
       ...(ran.exitCode !== undefined ? { exitCode: ran.exitCode } : {}),
       ...(error ? { error } : {}),
-      ...(ran.timedOut ? { timedOut: true } : {}),
+      ...(ran.timedOut ? { timedOut: true, code: 'timeout' } : {}),
+      ...(ran.aborted ? { aborted: true } : {}),
       ...(unreadable.length ? { unloadedFiles: unreadable } : {}),
       ...saved,
     };
   };
 
-  return { run: (command, opts) => serialized(() => run(command, opts?.cwd)) };
+  const jobs = new Map<string, BrowserJob>();
+  let nextJob = 0;
+  function statusOf(id: string, job: BrowserJob | undefined): ShellJobStatus {
+    if (!job) return { ok: false, id, status: 'unknown', error: 'No background command has that id' };
+    const output = job.output?.text();
+    return {
+      id, status: job.status, ok: job.status === 'running' || job.result?.ok === true,
+      ...(output ? { output: output.text, truncated: output.truncated } : {}),
+      ...(job.result?.exitCode === undefined ? {} : { exitCode: job.result.exitCode }),
+      ...(job.result?.error ? { error: job.result.error } : {}),
+    };
+  }
+
+  return {
+    run: (command, opts = {}) => serialized(() => run(command, opts)),
+    async start(command, opts = {}) {
+      if (opts.signal?.aborted) return { ok: false, error: 'The command was stopped' };
+      if (!makeRoomForBackgroundJob(jobs)) return { ok: false, error: BACKGROUND_JOB_LIMIT_ERROR };
+      const id = `job-${++nextJob}`;
+      const controller = new AbortController();
+      const signal = opts.signal ? AbortSignal.any([opts.signal, controller.signal]) : controller.signal;
+      const job: BrowserJob = { controller, status: 'running', done: Promise.resolve() };
+      job.done = serialized(() => run(command, { ...opts, signal }, job)).then(
+        (result) => { job.result = result; job.status = result.aborted ? 'killed' : 'exited'; },
+        (error: unknown) => { job.result = { ok: false, error: toolErrorMessage(error, 'The command failed') }; job.status = 'exited'; },
+      );
+      jobs.set(id, job);
+      return { ok: true, id };
+    },
+    async poll(id, opts) {
+      const job = jobs.get(id);
+      const wait = Math.min(opts?.waitMs ?? 0, timeoutMs);
+      if (job?.status === 'running' && wait > 0 && !opts?.signal?.aborted) {
+        await waitForBackgroundJob(job.done, wait, backgroundWaitAbort(opts?.signal));
+      }
+      return statusOf(id, job);
+    },
+    async kill(id) {
+      const job = jobs.get(id);
+      if (job?.status === 'running') {
+        job.status = 'killed';
+        job.controller.abort();
+        await waitForBackgroundJob(job.done, SETTLE_MS * 2);
+      } else {
+        job?.killTree?.();
+      }
+      return statusOf(id, job);
+    },
+  };
 }

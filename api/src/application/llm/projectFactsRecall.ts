@@ -49,7 +49,7 @@ const RECALL_CANDIDATE_MULTIPLIER = 4;
  * may be raised once per order" and the run simply started without it.
  *   1. LEXICAL (the original `ILIKE` arm) â€” kept, because an exact identifier ("QA_CACHE_SOURCE",
  *      "project_facts") is a lookup, not a similarity, and embeddings are worse at it.
- *   2. SEMANTIC — the project ANN read over the active embedding spaces.
+ *   2. SEMANTIC - the project ANN read over the active embedding spaces.
  *
  * Governed recall consumes the same candidate arms and ranking policy.
  *
@@ -74,7 +74,7 @@ export async function recallProjectFacts(
     const token = await projectFactsVersion(env, tenantId, projectId);
     const cached = await getOrSetCached(
       env,
-      `project_facts:recall:${tenantId}:${projectId}:v:${token}:${limit}:${query}`,
+      `project_facts:recall:v2:${tenantId}:${projectId}:v:${token}:${limit}:${query}`,
       async () => {
         const vectors = memoryQueryVectors(env, tenantId, query, ['project_facts']);
         const pull = Math.min(limit * RECALL_CANDIDATE_MULTIPLIER, 100);
@@ -167,6 +167,7 @@ interface SemanticFactRow {
   origin: 'agent';
   expiresAt: Date | null;
   importance: number;
+  updatedAt: Date | null;
   vectorScore: number;
   fileAnchors: FactFileAnchor[] | null;
 }
@@ -176,6 +177,7 @@ const projectFactCandidateColumns = {
   content: projectFacts.content,
   expiresAt: projectFacts.expiresAt,
   importance: projectFacts.importance,
+  updatedAt: projectFacts.updatedAt,
   fileAnchors: projectFacts.fileAnchors,
 };
 
@@ -191,6 +193,7 @@ function projectFactCandidate(
     origin: 'agent',
     expiresAt: row.expiresAt ? new Date(row.expiresAt) : null,
     importance: Number(row.importance ?? 0.5),
+    updatedAt: row.updatedAt ? new Date(row.updatedAt) : null,
     vectorScore,
     fileAnchors: normalizeFileAnchors(row.fileAnchors as FactFileAnchor[] | null),
   };

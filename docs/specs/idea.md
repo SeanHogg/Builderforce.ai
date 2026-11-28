@@ -17,36 +17,14 @@
 
 ## Design — Creation Canvas
 
-> Consolidated 2026-11-18 from `docs/design/creation-canvas/README.md`, `docs/design/creation-canvas/DELIVERY-ARCHITECTURE.md` and `docs/design/creation-canvas/OPERATIONS.md`. Verified against code 2026-11-18: shipped, with three open telemetry/routing gaps; the delivery contract and the operations runbook are kept below as reference.
+> Consolidated 2026-11-18 from `docs/design/creation-canvas/README.md`, `docs/design/creation-canvas/DELIVERY-ARCHITECTURE.md` and `docs/design/creation-canvas/OPERATIONS.md`. The remaining route and telemetry items were implemented on 2026-11-27 and are recorded in DONE.md. The delivery contract and operations runbook are kept below as reference.
 > Finished README and DELIVERY-ARCHITECTURE sections were archived word for word in DONE.md on 2026-11-17 ("Design: Creation Canvas — finished sections archived on consolidation"); the finished OPERATIONS sections are archived in DONE.md ("Creation Canvas: finished sections archived on consolidation (2026-11-18)"). The release-evidence contract stays a file: [`../design/creation-canvas/evidence/README.md`](../design/creation-canvas/evidence/README.md) (named by `qa-e2e/src/canvas-release-audit.ts:51`).
 
-### Recommendation — legacy entry points
+### Legacy entry points and product events (reference)
 
-| Existing entry | New behavior |
-| --- | --- |
-| `/workflows` | List sessions filtered to those containing Workflow objects |
-
-**Remaining (verified 2026-11-18):**
-- `/workflows` still renders its own `WorkflowsContent` list (`frontend/src/app/workflows/WorkflowsPageBody.tsx:3,12`) instead of the Create library filtered to Workflow objects.
-- The library already narrows by object kind: `CreationLibraryPanel` reads `?filter=<kind>` and keeps only boards whose `kinds` include it (`frontend/src/components/creation-sessions/CreationLibraryPanel.tsx:69-76`). So the fix is a forward to `/create?filter=workflow`, the same way `/ide` forwards to `/create?filter=build` (`frontend/src/middleware.ts:224-229`).
-- The other legacy entries already forward into Create: `/workflows/builder` (`frontend/src/app/workflows/builder/WorkflowBuilderCanvasRedirect.tsx:13`), `/brainstorm` (`frontend/src/app/brainstorm/BrainstormCanvasRedirect.tsx:18`) and `/ide*` (`frontend/src/middleware.ts:224-234`).
-
-### Delivery sequence — Phase 4 Route consolidation
-
-- Redirect legacy URLs only after migration telemetry shows saved links and session ownership are reliable.
-
-**Remaining (verified 2026-11-18):**
-- The redirects shipped, but the telemetry they were meant to wait for was never emitted. `creation_legacy_route_adapted` has no emitter: `git grep` finds it only in this doc's source, not in `frontend/src`, `api/src` or `packages`.
-- Either emit it (through `trackActivity`, `frontend/src/lib/activity/tracker.ts:30`) from the three redirect clients and the middleware branch, or drop the event from the product-event family below.
-- The rest of Phase 4 is done: Create is the primary navigation group and already matches `/brainstorm` and `/workflows` (`frontend/src/lib/navGroups.ts:142`).
-
-### Operations — Observe (product-event family)
-
-- Track the PRD product-event family (`creation_session_*`, `creation_prompt_submitted`, `creation_object_*`, `creation_connection_added`, `creation_project*`, `creation_ai_evaluation_completed`, `creation_change_set_applied`, `creation_artifact_delivered`, `creation_agent_assigned`, `creation_tutorial_step_completed`, and `creation_legacy_route_adapted`) without recording prompt or object content.
-
-**Remaining (verified 2026-11-18):**
-- `creation_tutorial_step_completed` and `creation_legacy_route_adapted` are never emitted. The canvas tutorial is the section tour (`frontend/src/components/creation-canvas/CreationCanvas.tsx:779`, `onTutorial={sectionTour.openOffer}`), and it records no step event.
-- The rest of the family is emitted. Examples: `creation_session_opened` (`frontend/src/components/creation-canvas/hooks/useCanvasSession.ts:100,142`), `creation_prompt_submitted` (`hooks/useCanvasBrainTurn.ts:131`), `creation_artifact_delivered` and `creation_agent_assigned` (`hooks/useCanvasProjectActions.ts:264,267`).
+- `/workflows` forwards to the Create library filtered to workflow boards and standalone workflow definitions. Scoped links keep their project selection. A saved workflow's Canvas inspector has the shared execution history panel.
+- `/workflows/builder`, `/brainstorm`, and `/ide*` retain their existing resource resolution and forward paths. The existing portal activity tracker records `creation_legacy_route_adapted` for signed-in visitors using the route family only.
+- The Creation Canvas tutorial records `creation_tutorial_step_completed` when a signed-in visitor confirms a step with Next or Finish, once per step in each tour. Both events use the shared activity queue and omit prompt and object content.
 
 ### Delivery architecture (reference)
 

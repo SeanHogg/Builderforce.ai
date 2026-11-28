@@ -74,6 +74,7 @@ export function nestPlacement(raw: Placement, e: NestEntry): Placement {
         };
     };
     return {
+        // `...raw` carries `aspect` (depth ÷ width) as it is: the nest scales x and z by the same `s`, so the ratio holds.
         ...raw,
         cacheKey: `${raw.cacheKey}|nest:${e.centre.join(',')}:${e.diameter}`,
         position, scale, extrude,

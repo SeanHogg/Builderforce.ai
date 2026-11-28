@@ -32,7 +32,7 @@ The OpenVSCode-in-Tauri shell is not being built. Until the fork ships, the edit
 | CHAT-G016 | Reduced to the Spawn copy of dictation. |
 | CHAT-G010, CHAT-G018 | The Synapse part is gone. The API, Brain and VS Code share the attachment size limits. Chrome diagnostics and the remaining chat budgets stay open. |
 | MEM-G105, MEM-G106 | The former Tauri experience integration and its direct `memory.json` reads were removed. The native Teach-once helper remains in `bf-teach`. |
-| MEM-G114 | Reduced to 2 brain-map UIs (`EvermindBrainMap`, `EvermindBrain3D`). |
+| MEM-G114 | The former Tauri brain map was removed. Studio and the canvas still have their own renderers. |
 | INF-G006 | Closed. `hub.rs` is deleted. |
 | INF-G007, INF-G011 | The `bf-local` copies (its fit share and its `models_dir()`) are gone. The rest remains open. |
 | INF-G015 | Closed. The `bfi` User-Agent comes from the crate version. |
@@ -601,34 +601,44 @@ Cloud durable project beliefs are owned by `project_facts`. Tenant and ticket be
 are owned by the corresponding `agent_memory` scope. The separate `facts` relation stores
 subject-predicate-object records for the Facts API. The Evermind coordinator's `mem:`
 records track model contributions, and `project_facts` rows with source `qa-cache`
-serve exact-question lookups. Neither participates in governed durable-fact recall.
+serve exact-question lookups. Governed recall reads active durable facts.
 Workspace Markdown remains a workspace-owned input and its SQLite index is derived.
-The local MCP snapshot remains locally owned until scoped fact sync is wired up.
+The MCP snapshot and archive live under the canonical per-machine memory directory.
+Experience lives beside them and owns recorded episodes, procedures and replay logs.
+Scoped replication into the cloud fact owners remains open.
+
+**Terminology.** A fact is a durable belief. An episode is a recorded demonstration.
+A procedure is the replayable result of Train Once. A schedule controls when it
+runs. An agent skill is a SKILL.md capability. Evermind names the model and its
+learning system, Brain names the chat assistant, and the brain map visualizes
+Evermind activity. Residency manages browser RAM and model placement.
 
 Cloud embedding failover already uses two declared spaces. Writes with the free
 embedding lever enabled try Cloudflare bge-m3 first and fall back to OpenRouter's
 text-embedding-3-small. Reads use a query vector stamped for each space they search.
-A platform-wide fingerprint policy for the remaining stores is still open.
+Browser knowledge memory checks its declared fingerprint and vector width at
+restore and recall. Local fact recall rejects malformed or incompatible vectors.
+A fingerprint policy across the remaining platform stores is still open.
 
 ### 4.4 Granular gaps
 
 | ID | Gap | Fix | Where |
 |---|---|---|---|
 | MEM-G101 | Cloud and local owners are documented above. Local and cloud durable facts still need a synchronization contract | Follow the scoped sync contract in MEM-G110 | §4.1 row "Fact stores" |
-| MEM-G102 | Project-only and governed cloud recall now share candidate reads, one importance policy and the memory package's weighted fusion. The local `MemoryStore` still uses a different ranking policy | Align cloud and local fact ranking without giving up scoped ANN reads | `api/.../memory/memoryRecallRanking.ts`, M `MemoryStore` |
+| MEM-G102 | Implemented in source. Cloud and local durable facts use the memory package's weighted fusion with importance and a 90-day half-life for cloud and MCP recall. pgvector and SSM supply dense evidence, and ILIKE and BM25 supply their respective lexical evidence | Ship the memory package changes | `memoryRecallRanking.ts`, M `MemoryStore` and `HybridRetriever` |
 | MEM-G103 | Implemented. VS Code advertises `memory__recall` and `memory__remember` and uses the shared `MemoryCapability` tools | Retain the saved editor dispatch IDs | `clients/vscode/src/memory/cognition.ts` |
 | MEM-G104 | agent-runtime keeps a second memory index (sqlite-vec + provider embedders) with tools `memory_search`/`memory_get` | Retire with the pi loop; the workspace-notes index moves to `code-index` (§2) | `agent-runtime/src/memory/*`, `agents/tools/memory-tool.ts` |
-| MEM-G105 | Experience types hand-mirrored in Rust `bf-teach` | Retire with the Synapse rebuild; until then, add a contract test | `I/crates/bf-teach/src/model.rs` |
-| MEM-G106 | Synapse reads `memory.json` directly (`facts_list`), bypassing memory-mcp | Go through the MCP tools | `I/app/src-tauri/src/agents/*` |
-| MEM-G107 | "Skill" has 3 meanings | Rename the procedural kind | memory-engine `experience`, memory-mcp `skill_*` tools |
+| MEM-G105 | The native helper now round-trips a fixture emitted by the TypeScript Train Once engine. The release workflow runs the contract test | Retire the mirrored types when the native helper is replaced | `I/crates/bf-teach/tests/experience_contract.rs` |
+| MEM-G106 | Closed with the retirement of the Tauri client and its direct fact reads | Fact access goes through Memory MCP | `M/packages/memory-mcp` |
+| MEM-G107 | Implemented in source. VS Code labels Train Once results as procedures and the shared Memory MCP server advertises procedure tool names | Keep saved tool IDs, scoped aliases and persisted fields compatible | `clients/vscode/src/experience`, M `experience/tools.ts` |
 | MEM-G108 | 4 run ledgers with unrelated ids | One `RunRef` | `experience.json` runs, `runOutcomes`, `runDelta`, `brain_chat_steps` |
 | MEM-G109 | 4 compaction paths | memory-mcp `compaction.ts` only | `brainMemory.ts`, `working/consolidate`, `memory-flush.ts` |
-| MEM-G110 | No local ↔ cloud fact sync | Facts over `/api/sync/v1` outbox | `packages/local-first`, `write-outbox`, memory-mcp backend |
-| MEM-G111 | Two live memory file locations; the newest wins (split-brain risk) | Migrate the legacy file once, then read one location | `memory-mcp` `resolveMemoryFile()` |
-| MEM-G112 | Fact key prefixes (`team:`, `run-outcome:`, `codemap:`, `[absorbed→…]`) are conventions with no registry | One key-namespace registry in M | M `memory`, api `runEndMemory.ts`, `teamMemoryFeed.ts` |
-| MEM-G113 | Cloud memory has two declared vector spaces and vendor failover. Local and cloud embedding spaces still differ | Declare and enforce fingerprints across the remaining stores | `memoryEmbedding.ts`, `memoryEmbeddingPolicy.ts`, `evermindEmbed.ts`, agent-runtime embedders |
-| MEM-G114 | 3 brain-map UIs (Synapse JS, `EvermindBrainMap`, `EvermindBrain3D`) | One, on the shared 3D stage (`AE-G059`) | `I/app/ui/js/views/brain/*`, frontend builder, the canvas station |
-| MEM-G115 | Name collisions: "memory" (RAM vs facts), "Evermind" (model vs facts vs console), "brain" (chat vs map) | Glossary + W rename `memory/` → `residency/` | W `packages/browser/src/memory` |
+| MEM-G110 | The sync outbox mirrors local memory-fact records as client-reported history. The MCP snapshot and cloud durable fact owners have no scoped replication contract | Connect explicitly scoped facts through the sync outbox and governed cloud writes | `packages/local-first`, `write-outbox`, memory-mcp backend |
+| MEM-G111 | Implemented in source. The installer, servers and generated hook import legacy data into the canonical location when the canonical snapshot is absent. Existing canonical and legacy snapshots are preserved | Ship Memory MCP and refresh older host entries that pin the legacy path | `memory-mcp` `resolveMemoryFile()` |
+| MEM-G112 | Implemented. Cloud and on-prem share registered fact prefixes and run-outcome key construction. The codemap prefix comes from the memory package. The absorbed marker is fact content and remains owned by compaction | Preserve existing serialized keys and stubs | `packages/agent-tools/src/memoryFactKeys.ts`, M `compaction.ts` |
+| MEM-G113 | Cloud memory has declared spaces and vendor fallback. Browser and local retrieval now reject vectors from incompatible spaces | Finish fingerprint enforcement across the remaining stores | `memoryEmbeddingPolicy.ts`, M `SemanticRecall.ts`, W `memoryIntegration` |
+| MEM-G114 | Two active brain-map renderers remain, `EvermindBrainMap` and `EvermindBrain3D` | Render both on the shared stage after the stage package extraction (AE-G059) | frontend Studio and canvas station |
+| MEM-G115 | Implemented in source. Browser RAM management lives in `src/residency` and the memory terminology is documented above | Ship with the next webcontainers release | W `packages/browser/src/residency` |
 | MEM-G116 | Implemented. Browser memory uses the memory package's chunking, BM25 scoring, RRF and decay. The browser adapter owns its incremental postings and IndexedDB persistence | Ship with the next webcontainers release | `W/packages/browser/src/memoryIntegration/*` |
 
 ## 5. Chat: composer, transcript, streaming, persistence
@@ -870,7 +880,7 @@ Paths are relative to `Builderforce.ai` unless marked I (`builderforce-inference
 | SHELL-G015 | Error shape and wording differ by host | all providers; target `{ok:false, error, code}` |
 | SHELL-G016 | The browser shell has no jobs, background runs or tree cancel | `workspaceShell.ts`, W `packages/browser/src/node/processHost.ts` |
 | SHELL-G017 | File-tool parity covers the on-prem, sandbox and reference providers. Host adapters and command conformance still need broader coverage | `agent-runtime/src/agents/cross-provider-smoke.test.ts` |
-| SHELL-G018 | Only one terminal component; new hosts must reuse it, not fork it | `frontend/src/components/Terminal.tsx` |
+| SHELL-G018 | Closed. The terminal and output panes share `Terminal`. The frontend architecture guard rejects additional direct xterm imports | `frontend/src/components/Terminal.tsx`, `frontend/scripts/check-frontend-architecture.mjs` |
 
 ## 7. Auth, device sign-in and the cloud API client
 

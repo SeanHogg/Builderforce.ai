@@ -28,12 +28,14 @@ export const PLATFORM_CATALOG_TTL_MS = MCP_CATALOG_TTL_MS;
 /** Names Rovr's own tools hold; a platform tool advertising one is dropped, never shadows. */
 const ROVR_TOOL_NAMES: ReadonlySet<string> = new Set<string>([...Object.values(BROWSER_TOOL), ADD_TASK_TOOL]);
 
-type CatalogTransport = Pick<BrainTransport, 'baseUrl' | 'getToken'>;
+type CatalogTransport = Pick<BrainTransport, 'baseUrl' | 'getToken' | 'mcpFetch' | 'workspaceScope'>;
 
 export interface PlatformCatalogDeps {
   baseUrl: string;
   /** The gateway credential, or null signed out (no platform tools). */
   key(): Promise<string | null>;
+  scope?(): string | null;
+  gatewayFetch?(): CatalogTransport['mcpFetch'];
   /** The catalog read — the shared client by default; a test passes its own. */
   load?(transport: CatalogTransport): Promise<BrainAction[]>;
   now?(): number;
@@ -55,13 +57,14 @@ export function createPlatformCatalog(deps: PlatformCatalogDeps): PlatformCatalo
 
   return {
     async actions() {
+      const scope = deps.scope?.();
       const key = await deps.key();
-      if (!key) {
+      if (!key || scope === null || scope !== deps.scope?.()) {
         catalog.clear();
         return [];
       }
-      const transport: CatalogTransport = { baseUrl: deps.baseUrl, getToken: () => key };
-      return catalog.get(key, () => load(transport)
+      const transport: CatalogTransport = { baseUrl: deps.baseUrl, getToken: () => key, mcpFetch: deps.gatewayFetch?.(), workspaceScope: scope };
+      return catalog.get(JSON.stringify([key, scope]), () => load(transport)
         .catch((error: unknown) => {
           deps.onError?.(error);
           throw error;

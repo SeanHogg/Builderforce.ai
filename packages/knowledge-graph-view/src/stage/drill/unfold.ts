@@ -28,7 +28,7 @@ export function satelliteKeys(station: Pick<Station, 'refs'>, index: ReadonlyMap
 
 export function unfoldPatch(p: Placement, stationSlot: number, satellites: readonly { key: string; name: string }[], slotOf: (key: string) => number): Placement {
     if (stationSlot < 0 || !(p.scale[stationSlot]! > 0) || satellites.length === 0) return p;
-    const position = p.position.slice(), scale = p.scale.slice(), extrude = p.extrude.slice();
+    const position = p.position.slice(), scale = p.scale.slice(), extrude = p.extrude.slice(), aspect = p.aspect?.slice();
     const at = { x: p.position[stationSlot * 3]!, y: p.position[stationSlot * 3 + 2]! };
     const midZ = (p.bounds.min[2] + p.bounds.max[2]) / 2;
     const places = satellitePlaces(at, satellites.length, at.y > midZ);
@@ -39,6 +39,8 @@ export function unfoldPatch(p: Placement, stationSlot: number, satellites: reado
         if (slot < 0 || slot >= scale.length || !place) return;
         position[slot * 3] = place.x; position[slot * 3 + 1] = p.position[stationSlot * 3 + 1]!; position[slot * 3 + 2] = place.y;
         scale[slot] = size; extrude[slot] = 0;
+        // A satellite is a square mark, whatever footprint its slot had.
+        if (aspect && slot < aspect.length) aspect[slot] = 1;
         labels.push({
             slot, text: satelliteName(s), offsetPx: [place.anchor === 'start' ? size + 8 : -(size + 8), 0], font: 'mono', size: 10, weight: 400,
             anchor: place.anchor, tone: toneIndex('text'), halo: { tone: BG_TONE, px: 3 }, priority: 0, scale: 'world',
@@ -48,5 +50,5 @@ export function unfoldPatch(p: Placement, stationSlot: number, satellites: reado
     // The satellites are read right after their station.
     const after = p.a11y.findIndex((item) => item.slot === stationSlot);
     const order = after < 0 ? [...p.a11y, ...a11y] : [...p.a11y.slice(0, after + 1), ...a11y, ...p.a11y.slice(after + 1)];
-    return { ...p, cacheKey: `${p.cacheKey}|unfold:${stationSlot}`, position, scale, extrude, labels: [...p.labels, ...labels], a11y: order };
+    return { ...p, cacheKey: `${p.cacheKey}|unfold:${stationSlot}`, position, scale, extrude, ...(aspect ? { aspect } : {}), labels: [...p.labels, ...labels], a11y: order };
 }
