@@ -47,8 +47,13 @@ interface MigrationRecord {
 
 export interface EventMigrationPorts {
   readonly journalFile: string;
-  /** The committed state, read synchronously. */
-  view(): LocalFirstSnapshot;
+  /**
+   * The state the planner reads: events, receipts, mappings and the ROWS the events name. A partitioned
+   * store has no `view().records` of its partitioned rows, so it answers through a transaction lookup.
+   */
+  view(): LocalFirstSnapshot | Promise<LocalFirstSnapshot>;
+  /** Keep a copy of the journal before the first frame (default). A v4 store's migration is main-only and keeps none. */
+  backup?: boolean;
   /** Run `work` holding the cross-window lock, with the state caught up with the journal. */
   locked<T>(work: () => Promise<T>): Promise<T>;
   /** Append `delta` as one journal frame (fsynced), then apply it to the state. Under the lock. */
@@ -63,19 +68,22 @@ export async function migrateEventBacklog(ports: EventMigrationPorts): Promise<E
   // Lock-free first: a migrated store, or one with nothing to migrate (the usual open), never
   // takes the lock and writes nothing — the flag is recorded only with a migration that changed
   // something, so a store with no backlog is planned again (a cheap filter) and never touched.
-  if (eventBacklogMigrated(ports.view()) || await exists(`${journalFile}${MIGRATION_DISABLED_SUFFIX}`)) {
-    await retireBackup(journalFile, ports.view(), ports.now?.() ?? Date.now());
+  const backup = ports.backup !== false;
+  const seen = await ports.view();
+  if (eventBacklogMigrated(seen) || await exists(`${journalFile}${MIGRATION_DISABLED_SUFFIX}`)) {
+    if (backup) await retireBackup(journalFile, seen, ports.now?.() ?? Date.now());
     return undefined;
   }
-  const probe = planEventBacklogMigration(ports.view());
+  const probe = planEventBacklogMigration(seen);
   if (probe.stripped + probe.dropped === 0) return undefined;
   return ports.locked(async () => {
-    if (eventBacklogMigrated(ports.view())) return undefined;
-    const plan = planEventBacklogMigration(ports.view());
+    const current = await ports.view();
+    if (eventBacklogMigrated(current)) return undefined;
+    const plan = planEventBacklogMigration(current);
     const changes = plan.stripped + plan.dropped > 0;
     if (!changes) return undefined;
     // The FIRST pre-migration state is the one worth keeping: a resumed migration keeps it.
-    if (changes && !(await exists(`${journalFile}${PRE_MIGRATION_SUFFIX}`))) {
+    if (backup && !(await exists(`${journalFile}${PRE_MIGRATION_SUFFIX}`))) {
       await copyDurably(journalFile, journalFile, `${journalFile}${PRE_MIGRATION_SUFFIX}`);
       const record: MigrationRecord = { migratedAt: new Date(ports.now?.() ?? Date.now()).toISOString(), markedEventIds: plan.markedEventIds };
       await writeDurably(journalFile, `${journalFile}${PRE_MIGRATION_RECORD_SUFFIX}`, JSON.stringify(record));

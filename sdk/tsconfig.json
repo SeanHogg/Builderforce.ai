@@ -11,8 +11,9 @@
     "esModuleInterop": true,
     "lib": ["ES2022", "DOM"],
     "types": ["node", "vitest/globals"],
-    "rootDir": "src",
-    "outDir": "dist"
+    "paths": {
+      "@builderforce/api-errors": ["../packages/api-errors/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["dist", "node_modules"]

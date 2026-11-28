@@ -8,7 +8,7 @@
  * capped, the oldest dropped first), and a restart kills its process group and starts
  * the same command again in the same place.
  *
- * Spawn and kill are injected (`spawnShell` / `killTree` in the image), so this is
+ * Spawn and kill are injected (`spawnShell` / `killSandboxTree` in the image), so this is
  * testable without a shell user, a container or Linux.
  */
 

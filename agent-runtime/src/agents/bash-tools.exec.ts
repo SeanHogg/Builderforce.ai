@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { DEFAULT_COMMAND_TIMEOUT_MS } from "@builderforce/tool-output-policy";
 import type { AgentTool, AgentToolResult } from "../builderforce/model/agent-types.js";
 import {
   type ExecAsk,
@@ -225,7 +226,7 @@ export function createExecTool(
   const defaultTimeoutSec =
     typeof defaults?.timeoutSec === "number" && defaults.timeoutSec > 0
       ? defaults.timeoutSec
-      : 1800;
+      : DEFAULT_COMMAND_TIMEOUT_MS / 1000;
   const defaultPathPrepend = normalizePathPrepend(defaults?.pathPrepend);
   const safeBins = resolveSafeBins(defaults?.safeBins);
   const notifyOnExit = defaults?.notifyOnExit !== false;

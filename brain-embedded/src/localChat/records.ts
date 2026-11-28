@@ -12,12 +12,16 @@
 
 import {
   defineRecordIndex,
+  defineRecordPartition,
+  isLiveOwnStub,
   isOwnRecord,
   SCAN_STOP,
   scanByIndex,
   selectRecords,
   type LocalFirstTransaction,
   type LocalRecord,
+  type RecordStub,
+  type ScanStop,
 } from '@builderforce/local-first';
 import type { BrainChat, BrainMessage } from '../types';
 import type { RunUsageValue } from './usageLedger';
@@ -75,6 +79,46 @@ export function liveRecords<T>(
  * so every module of the local chat shares one built index per store.
  */
 export const MESSAGES_BY_CHAT = defineRecordIndex<MessageValue>('message', 'brain.message.chatId', (row) => row.payload.chatId);
+
+/**
+ * Message rows live in ONE partition per chat (AE-G031), so a store with a loader reads a
+ * chat's rows only when a read names that chat. Its home is `MESSAGES_BY_CHAT`'s key ignoring
+ * `deletedAt` (a tombstoned message stays in its chat's partition); the stub carries the
+ * message's view key as its ordinal, so an id is read without the row.
+ */
+export const MESSAGE_PARTITION = defineRecordPartition<MessageValue>({
+  index: MESSAGES_BY_CHAT,
+  homeOf: (row) => row.payload.chatId,
+  ordinalOf: (row) => row.payload.message.id,
+});
+
+/**
+ * Visit the stub of each of this device's LIVE messages without loading any partition. Resolves
+ * `false` when the store has no stubs to give (no partitions, or a fake without `scanStubs`):
+ * the caller then takes its row-scan path. The ONE place that decides "stubs, or rows".
+ */
+export async function scanLiveMessageStubs(
+  tx: LocalFirstTransaction,
+  deviceId: string,
+  visit: (stub: Readonly<RecordStub>) => void | ScanStop,
+): Promise<boolean> {
+  if (!tx.scanStubs) return false;
+  let any = false;
+  await tx.scanStubs('message', (stub) => {
+    any = true;
+    if (isLiveOwnStub(stub, deviceId)) return visit(stub);
+    return undefined;
+  });
+  return any;
+}
+
+/** The largest message view key this device holds (0 when none) — from stubs when the store has them. */
+export async function highestMessageId(tx: LocalFirstTransaction, deviceId: string): Promise<number> {
+  let highest = 0;
+  const fromStubs = await scanLiveMessageStubs(tx, deviceId, (stub) => { highest = Math.max(highest, stub.ordinal ?? 0); });
+  if (!fromStubs) await scanLive<MessageValue>(tx, 'message', deviceId, (row) => { highest = Math.max(highest, row.payload.message.id); });
+  return highest;
+}
 
 /** Visit this device's live messages of ONE chat without cloning them (see `scanLive`). */
 export function scanChatMessages(
@@ -161,6 +205,17 @@ export async function messageRecordById(
     await scanChatMessages(tx, deviceId, chatId, (row) => { if (row.payload.message.id === messageId) found = row; });
   }
   if (!found) {
+    // Stubs name the row without loading any partition; then one `get` reads just that row's chat.
+    let stubId: string | undefined;
+    const fromStubs = await scanLiveMessageStubs(tx, deviceId, (stub) => {
+      if (stub.ordinal !== messageId) return undefined;
+      stubId = stub.id;
+      return SCAN_STOP;
+    });
+    if (fromStubs) {
+      const row = stubId !== undefined ? await tx.get<MessageValue>('message', stubId) : undefined;
+      return row && isLiveOwn(row, deviceId) ? row : undefined;
+    }
     await tx.scan<MessageValue>('message', (row) => {
       if (row.payload.message.id !== messageId || !isLiveOwn(row, deviceId)) return undefined;
       found = row;

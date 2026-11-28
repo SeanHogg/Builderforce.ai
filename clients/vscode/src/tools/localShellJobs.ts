@@ -11,9 +11,10 @@
  * jobs when the run settles (finish, fail or Stop — `killRunJobs`) and every job when the
  * extension deactivates (`killAllJobs`), so no run leaves a dev server behind. A job
  * started with a `signal` also dies with it. Output is a bounded tail; a finished job's
- * full output (to {@link MAX_FULL_OUTPUT}) is retained for `output_filter` (`localShellOutputs.ts`).
+ * full output (to {@link EDITOR_COMMAND_BUFFER_CHARS}) is retained for `output_filter` (`localShellOutputs.ts`).
  */
 
+import { BACKGROUND_JOB_LIMIT_ERROR, EDITOR_COMMAND_BUFFER_CHARS, makeRoomForBackgroundJob } from "@builderforce/tool-output-policy";
 import type { ChildProcess } from "child_process";
 import type { ShellJobStart, ShellJobStatus } from "@builderforce/agent-tools";
 import { killTree } from "@builderforce/agent-tools/node-process";
@@ -34,7 +35,7 @@ interface Job {
   exitCode?: number;
   output: string;
   truncated: boolean;
-  /** Everything it printed, to {@link MAX_FULL_OUTPUT} — retained when it finishes. */
+  /** Everything it printed, up to {@link EDITOR_COMMAND_BUFFER_CHARS}, retained when it finishes. */
   full: string;
   outputId?: string;
   done: Promise<void>;
@@ -46,10 +47,6 @@ const jobs = new Map<string, Job>();
 const nextJobOf = new Map<JobOwner, number>();
 
 const keyOf = (owner: JobOwner, id: string): string => `${owner ?? "-"}:${id}`;
-/** Finished jobs kept for a late `command_status`; the oldest finished go first. */
-const MAX_JOBS = 32;
-/** The most of a job's output retained for `output_filter` (the foreground buffer's bound). */
-const MAX_FULL_OUTPUT = 4 * 1024 * 1024;
 
 export interface StartJobOptions {
   cwd: string;
@@ -61,14 +58,6 @@ export interface StartJobOptions {
   owner?: JobOwner;
   /** Bound on the kept output tail. */
   maxOutput: number;
-}
-
-function evictFinished(): void {
-  if (jobs.size < MAX_JOBS) return;
-  for (const [id, job] of jobs) {
-    if (job.status !== "running") jobs.delete(id);
-    if (jobs.size < MAX_JOBS) return;
-  }
 }
 
 function statusOf(job: Job): ShellJobStatus {
@@ -95,7 +84,7 @@ const unknownJob = (id: string): ShellJobStatus => ({
 
 export function startJob(command: string, opts: StartJobOptions): ShellJobStart {
   if (opts.signal?.aborted) return { ok: false, error: "the run was stopped" };
-  evictFinished();
+  if (!makeRoomForBackgroundJob(jobs)) return { ok: false, error: BACKGROUND_JOB_LIMIT_ERROR };
   let child: ChildProcess;
   try {
     child = spawnCommand(command, opts.bash, {
@@ -112,7 +101,7 @@ export function startJob(command: string, opts: StartJobOptions): ShellJobStart 
   let settle!: () => void;
   const job: Job = { id, owner, child, status: "running", output: "", truncated: false, full: "", done: new Promise<void>((r) => { settle = r; }) };
   const append = (chunk: string): void => {
-    if (job.full.length < MAX_FULL_OUTPUT) job.full += chunk;
+    if (job.full.length < EDITOR_COMMAND_BUFFER_CHARS) job.full += chunk.slice(0, EDITOR_COMMAND_BUFFER_CHARS - job.full.length);
     job.output += chunk;
     if (job.output.length > opts.maxOutput) {
       job.output = job.output.slice(job.output.length - opts.maxOutput);

@@ -1,39 +1,37 @@
 /**
- * The Map placement (Transit + Tower, PRD 43 B1a rule 7) from the EXISTING `layoutTransit` output — the layout is not
+ * The transit Map placement (Transit + Tower, PRD 43 B1a rule 7) from the EXISTING `layoutTransit` output — the layout is not
  * rewritten here, only read: each drawn station is shown at its transit position on the map plane (world x = map x,
  * world z = map y), every node is anchored at its station at scale 0, the routes become one `route` link batch with the
  * background casing, and the layer bands become planes. The overlay's geometry channels are data (`req.channels`) read
  * through the ONE `makeOverlay`, exactly as the SVG map reads them: a station's radius is its size channel
  * (`StationStyle.size`), a route's width its line's width channel (`lineWidth` over the line's stops). Tilt is extrude:
  * `depth` 0 is the flat map, 1 raises every station into its tower, height = the size channel (`towerHeight`, the
- * SVG tower's own reading). Pure.
+ * SVG tower's own reading). The Map and 3D CAMERAS draw one level at a time through `level.ts`; this transit layout is what
+ * the other cameras' drilled levels (`drill.ts`) are placed with. Pure.
  */
 
 import { makeOverlay, segmentUntested } from '../../../surface/overlays';
 import { towerHeight } from '../../../surface/transit/towerHeight';
 import { layoutFloors } from './mapFloors';
 import { systemName } from '../../../surface/systems';
-import { tailOf } from '../../../surface/outlineGraph';
 import { CAMERA_WORD, wordIn } from './cameraStrings';
 import { RESTING_DEPTH } from '../../../stage/depth';
 import { FORM_RISE, TYPE_FORM } from '../../../stage/marks/forms';
 import { MARK_TYPE_ORDER } from '../../../shapes';
-import { BG_TONE, toneIndex } from '../../../stage/tones';
+import { toneIndex } from '../../../stage/tones';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { DASH_CYCLE, DASH_SOLID, DASH_UNTESTED, FLAG, type Caption, type LabelRun, type Placement, type PlaneSpec } from '../../../stage/types';
 import type { StageModel } from '../stageModel';
 import { anchorHidden, draftFor, show } from './anchor';
+import { chipLabel } from './chipLabel';
 import { linkBatch, type LinkPath } from './links';
 import { mapDecorations } from './mapDecor';
 import { widenMapBounds } from './mapBounds';
-import { contentPoints, mapFit } from './mapFit';
-import { roofMinis } from './roofMinis';
+import { contentPoints, homeRig, mapFit } from './mapFit';
 import { channelBindings, placementKeyOf, VIEWPORT_BANDS, type PlacementReq } from './request';
 
 const CASING_EXTRA = 4;
 const TEXT = toneIndex('text');
-/** The design's home view: fov 38, theta -0.55 rad (yaw), phi 0.95 rad (pitch = 90° - phi), heights collapse to 0.03 in Flat. */
-const HOME_FOV = 38, HOME_YAW = (-0.55 * 180) / Math.PI, HOME_PITCH = 90 - (0.95 * 180) / Math.PI, FLAT_DEPTH = 0.03;
 /** The floor plate's thickness, as a share of the level's width. */
 const PLATE_THICKNESS = 0.02;
 
@@ -43,38 +41,25 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
     const width = VIEWPORT_BANDS[req.viewportBand] ?? VIEWPORT_BANDS[2]!;
     const hidden = new Set(req.hiddenStations);
     const visible = stations.stations.filter((station) => !hidden.has(station.id));
-    const architecture = req.camera === '3d' && !req.drill;
-    const { layout, floors, modules } = layoutFloors(visible, lines.lines, width, model.order, architecture);
+    const { layout, floors } = layoutFloors(visible, lines.lines, width, model.order);
     const depth = Math.max(0, Math.min(1, req.depth ?? RESTING_DEPTH));
     const d = draftFor(marks.keys.length);
     const labels: LabelRun[] = [];
     const a11y: Placement['a11y'] = [];
     let top = 0;
     const overlay = makeOverlay(channelBindings(req.channels), stations.stations);
-    const methodCounts = new Map<string, number>();
-    if (req.camera === '3d' && req.drill) for (const record of req.symbols ?? []) {
-        if (record.kind === 'method') methodCounts.set(record.parent, (methodCounts.get(record.parent) ?? 0) + 1);
-    }
 
     for (const id of layout.drawn) {
         const slot = model.stationSlot.get(id), at = layout.positions.get(id), s = stations.byId.get(id);
         if (slot === undefined || !at || !s) continue;
-        const size = architecture ? Math.min(28, 10 + 3 * Math.log2(Math.max(1, s.files))) : overlay.style(s).size;
+        const size = overlay.style(s).size;
         const form = TYPE_FORM[MARK_TYPE_ORDER[marks.type[slot]!] ?? 'source'];
-        const methods = methodCounts.get(s.refs[0] ?? '');
-        const height = architecture ? 18 + 16 * Math.log2(Math.max(1, s.files))
-            : methods === undefined ? towerHeight(size, s.cx) : Math.min(100, 16 + methods * 7);
-        const extrude = depth * height * FORM_RISE[form];
+        const extrude = depth * towerHeight(size, s.cx) * FORM_RISE[form];
         top = Math.max(top, extrude);
         show(d, slot, at.x, 0, at.y, size, extrude);
-        labels.push({
-            slot, text: marks.label[slot] ?? s.name, offsetPx: [0, size + 12], font: 'mono', size: 11, weight: 500, anchor: 'middle',
-            tone: TEXT, halo: { tone: BG_TONE, px: 3 }, priority: s.use, scale: 'world',
-            chip: { risky: s.anti >= 3, title: marks.tooltip[slot] },
-        });
+        labels.push(chipLabel(slot, marks.label[slot] ?? s.name, size, s.use, s.anti >= 3, marks.tooltip[slot]));
         a11y.push({ slot, label: marks.tooltip[slot] ?? s.path ?? s.name });
     }
-    roofMinis(model, d, layout.drawn);
     anchorHidden(marks, d, 'station', [layout.width / 2, 0, layout.height / 2]);
 
     const lineIndex = new Map(lines.lines.map((l) => [l.id, l] as const));
@@ -95,20 +80,16 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
 
     const thick = Math.max(4, layout.width * PLATE_THICKNESS), inside = req.drill != null;
     const planes: PlaneSpec[] = visible.length ? floors.map((floor) => ({
-        kind: 'room', min: [0, -thick, floor.offset], max: [floor.width, architecture ? -0.5 : 0, floor.offset + floor.depth],
+        kind: 'room', min: [0, -thick, floor.offset], max: [floor.width, 0, floor.offset + floor.depth],
         tone: toneIndex(inside ? 'room' : 'floor'), edge: toneIndex(inside ? 'lit' : 'edge'),
     })) : [];
-    const captions: Caption[] = !inside && (architecture || floors.length > 1 || (lines.systems?.length ?? 0) > 1) && visible.length
+    const captions: Caption[] = !inside && (floors.length > 1 || (lines.systems?.length ?? 0) > 1) && visible.length
         ? floors.map((floor) => ({
             role: 'plane', anchor: 'start', tone: TEXT, position: [20, 0, floor.offset + 16],
             text: systemName(lines.systems, floor.system) || wordIn(model.strings, CAMERA_WORD.systemLoose),
         })) : [];
-    for (const area of modules) {
-        planes.push({ kind: 'partition', min: [area.x, -0.2, area.z], max: [area.x + area.width, -0.2, area.z + area.depth], tone: toneIndex('room'), edge: toneIndex('edge') });
-        captions.push({ role: 'band', anchor: 'start', tone: TEXT, position: [area.x + 10, 0, area.z + 12], text: tailOf(area.app) });
-    }
-    const { cx, cz, radius } = mapFit(layout, contentPoints(layout.positions, layout.drawn, layout.routes), top);
-    const decor = g && !architecture ? mapDecorations(g, stations, layout) : [];
+    const fit = mapFit(layout, contentPoints(layout.positions, layout.drawn, layout.routes), top);
+    const decor = g ? mapDecorations(g, stations, layout) : [];
     const bounds = widenMapBounds(layout, widths, neutralWidth, CASING_EXTRA, top, decor);
     return {
         generation: marks.generation, cacheKey: placementKeyOf(marks, req), anchor: 'station',
@@ -116,16 +97,8 @@ export function placeMap(model: StageModel, req: PlacementReq, g?: Pick<Knowledg
         // Each route polyline (`group`) names its line, so a route pick selects the line (as the SVG map's hop does).
         links: [{ ...linkBatch('hall', paths, 0), lineIds: layout.routes.map((r) => r.lineId) }, ...decor],
         planes, labels, captions, a11y,
-        // The roof miniatures stand on their parents' roofs: their y lowers with the extrude in Flat.
-        liftWithDepth: true,
         caption: { shown: layout.drawn.length, total: visible.length, capped: layout.drawn.length < visible.length },
         bounds,
-        rig: {
-            projection: 'perspective', frame: 'fill',
-            home: { position: [cx, 1000, cz], target: [cx, top * 0.35, cz], up: [0, 1, 0] },
-            depth: { tilt: [5, 83], orbit: true },
-            // Fit-to-content: the rig derives the distance from the stage's own aspect (and again on every resize).
-            view: { yaw: HOME_YAW, pitch: HOME_PITCH, distance: 1000, fov: HOME_FOV, radius, flatDepth: FLAT_DEPTH },
-        },
+        rig: homeRig(fit, top),
     };
 }

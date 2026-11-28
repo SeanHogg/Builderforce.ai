@@ -35,10 +35,12 @@ function isEntityDestination(value: unknown): value is EntityDestination {
 }
 
 function unboundSyncError(): UnboundSyncError {
-  return Object.assign(new Error('Unbound record cannot sync until a destination is chosen'), {
+  // Typed apart so `code` keeps its literal type instead of widening to string inside the literal.
+  const fields: { name: string; code: typeof SYNC_DESTINATION_REQUIRED } = {
     name: 'UnboundSyncError',
     code: SYNC_DESTINATION_REQUIRED,
-  });
+  };
+  return Object.assign(new Error('Unbound record cannot sync until a destination is chosen'), fields);
 }
 
 /**

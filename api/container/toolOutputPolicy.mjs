@@ -7,7 +7,7 @@
  * Regenerate with `node scripts/gen-container-shared.mjs` (from `api/`).
  * `--check` fails the build when the source no longer matches the hash below.
  *
- * @source-sha256 9fe7bf2956a7a7ba7faf30122bbcabe6163dc861ec64147059ae6e4a7a06b80a
+ * @source-sha256 bf367970ceebe42f99cfc9cf5d6a6e0b48544eff651b2081fedec8507e0bdc54
  */
 // ── caps.ts ──
 /**
@@ -19,6 +19,30 @@
  */
 /** Per-result cap (chars) for a tool with no row in {@link TOOL_OUTPUT_CAPS}. */
 const DEFAULT_TOOL_OUTPUT_CHARS = 6_000;
+/** Default wall-clock limit for a foreground shell command. */
+const DEFAULT_COMMAND_TIMEOUT_MS = 10 * 60_000;
+/** Number of jobs retained by a workspace shell. */
+const MAX_BACKGROUND_JOBS = 32;
+const BACKGROUND_JOB_LIMIT_ERROR = `too many running background jobs (${MAX_BACKGROUND_JOBS}); stop one with command_stop first`;
+/** Evict the oldest finished entries and reserve space for a new job. */
+function makeRoomForBackgroundJob(jobs) {
+    if (jobs.size < MAX_BACKGROUND_JOBS)
+        return true;
+    for (const [id, job] of jobs) {
+        if (job.status === 'running')
+            continue;
+        jobs.delete(id);
+        if (jobs.size < MAX_BACKGROUND_JOBS)
+            return true;
+    }
+    return false;
+}
+/** Host-specific limits for command and file-read protocols. */
+const EDITOR_COMMAND_OUTPUT_CHARS = 60_000;
+const EDITOR_COMMAND_BUFFER_CHARS = 4 * 1024 * 1024;
+const BROWSER_COMMAND_OUTPUT_CHARS = 16_000;
+const NATIVE_FILE_READ_MAX_LINES = 2_000;
+const NATIVE_FILE_READ_MAX_BYTES = 50 * 1024;
 /**
  * Per-tool caps (chars of the model-facing result). `read_file` is larger on purpose:
  * reading source is what a coding surface DOES, and it is paged by line with the offset
@@ -839,4 +863,4 @@ function modelToolResultPolicy(opts) {
     return (toolName, data) => shapeToolResult(toolName, data ?? null, { summarize: opts.summarize, caps: opts.caps }).content;
 }
 
-export { SHELL_CAPTURE_CHARS, TOOL_OUTPUT_CAPS, toolOutputCap, keepTail, cutHead, cutHeadTail, summarizeShellOutput, detectRunner, projectJson, windowReadFile, fitToolText, shapeToolResult, modelToolResultPolicy, LIST_MAX_FILES, LIST_RETURN_MAX, READ_MAX_BYTES, SEARCH_MAX_MATCHES };
+export { DEFAULT_COMMAND_TIMEOUT_MS, BACKGROUND_JOB_LIMIT_ERROR, makeRoomForBackgroundJob, SHELL_CAPTURE_CHARS, TOOL_OUTPUT_CAPS, toolOutputCap, keepTail, cutHead, cutHeadTail, summarizeShellOutput, detectRunner, projectJson, windowReadFile, fitToolText, shapeToolResult, modelToolResultPolicy, LIST_MAX_FILES, LIST_RETURN_MAX, READ_MAX_BYTES, SEARCH_MAX_MATCHES };

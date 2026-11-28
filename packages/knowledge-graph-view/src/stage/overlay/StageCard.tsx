@@ -74,7 +74,7 @@ export function StageCard({ cardKey, map, drill, graph, labels, narrow, type, an
     const station = map.stationOfKey(cardKey);
     if (!station || !cardKey) return null;
     const base = stationCardOf(station, { map, drill, findings, index, labels, facts, restructureReady });
-    const card: CardModel = base.leaf && onEnter ? { ...base, enter: { can: true, level: 'package' } } : base;
+    const card: CardModel = base.leaf && onEnter ? { ...base, enter: { can: true, level: 'package', ref: station.id } } : base;
     return (
         <StationCard
             key={station.id} card={card} labels={labels} type={type} answer={answer} narrow={narrow} loading={drill.loading}

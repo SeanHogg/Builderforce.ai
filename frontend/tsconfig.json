@@ -22,6 +22,7 @@
       }
     ],
     "paths": {
+      "@builderforce/api-errors": ["../packages/api-errors/src/index.ts"],
       "@seanhogg/builderforce-mcp": ["../packages/builderforce-mcp/src/index.ts"],
       "@seanhogg/builderforce-mcp/server": ["../packages/builderforce-mcp/src/server.ts"],
       "@modelcontextprotocol/sdk/*": ["../packages/builderforce-mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/*"],

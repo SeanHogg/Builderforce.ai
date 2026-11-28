@@ -131,7 +131,7 @@ function collapse<T>(changes: readonly PullChange<T>[]): PlannedEntity<T>[] {
 export function planPull<T>(input: PlanPullInput<T> | null | undefined): PullPlan<T> {
   if (!input || input.expired === true || !isNonBlank(input.cursor)) return RESNAPSHOT;
 
-  const source = Array.isArray(input.changes) ? input.changes : [];
+  const source: readonly PullChange<T>[] = Array.isArray(input.changes) ? input.changes : [];
   const changes = source.map((change) => copyChange(change));
   const entities = collapse(changes);
   return Object.freeze({

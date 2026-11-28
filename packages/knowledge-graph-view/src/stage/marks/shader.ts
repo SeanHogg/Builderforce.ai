@@ -22,7 +22,8 @@ import { fixedColourUniforms, type FixedColourUniforms } from '../fixedColours';
 import { LIGHT_GLSL } from '../lighting';
 import { PALETTE_SIZE, toneIndex } from '../tones';
 import { STAGGER_MS, STAGGER_STEPS } from '../tween';
-import { CAP_BAND, FORM_CODE, type MarkForm } from './forms';
+import { ASPECT_GLSL } from './aspect';
+import { CAP_BAND, DRUM_LID, FORM_CODE, type MarkForm } from './forms';
 import { FLAG } from '../types';
 
 /** Outline points the cap SDF accepts (the circle has 32). */
@@ -49,7 +50,7 @@ const VERTEX = /* glsl */ `
 in float aPart;
 in vec4 placeA;      // posA.xyz, scaleA
 in vec4 placeB;      // posB.xyz, scaleB
-in vec3 extrudeAB;   // extrudeA, extrudeB, entry order (shown marks counted across every batch: the stagger's index)
+in vec4 extrudeAB;   // extrudeA, extrudeB, entry order (shown marks counted across every batch: the stagger's index), footprint aspects A/B packed
 in vec4 paint;       // tone, tone2, fill, flags
 uniform float uForm; uniform float uHoverInst;
 uniform float uT; uniform float uLin; uniform float uSpan; uniform float uDur; uniform float uFlip; uniform float uPxPerWorld; uniform float uDpr; uniform float uDepth; uniform vec2 uMinMarkPx; uniform vec2 uLiftDepth;
@@ -58,6 +59,7 @@ out vec2 vUv; out float vPart; out vec3 vColor; out vec3 vColor2; out float vFil
 out float vLight; out float vY; out float vHover; out float vFade;
 ${FLAG_GLSL}
 ${LIGHT_GLSL}
+${ASPECT_GLSL}
 void main() {
     vec4 from = mix(placeA, placeB, uFlip), to = mix(placeB, placeA, uFlip);
     // Each mark runs its own cubic in-out, started STAGGER_MS after the one before it in the WHOLE placement (\`extrudeAB.z\`: shown
@@ -79,30 +81,36 @@ void main() {
     vec3 p = mix(from.xyz, to.xyz, tt);
     p.y = mix(from.y * mix(1.0, uDepth, liftFrom), to.y * mix(1.0, uDepth, liftTo), tt);
     float e = mix(mix(extrudeAB.x, extrudeAB.y, uFlip), mix(extrudeAB.y, extrudeAB.x, uFlip), tt) * uDepth;
+    // The footprint's depth ÷ width (Placement.aspect), tweened like the extrude: a rectangle is the outline with z scaled.
+    vec2 asp2 = aspectsOf(extrudeAB.w);
+    float asp = mix(mix(asp2.x, asp2.y, uFlip), mix(asp2.y, asp2.x, uFlip), tt);
     float tone = paint.x, tone2 = paint.y, fillv = paint.z, flags = paint.w;
     float px = s * uPxPerWorld * uDpr;
+    // The quad is padded in uv by the farthest ring: along the shorter side of a rectangle a uv step is fewer px.
+    float padPx = max(px * min(1.0, asp), 0.001);
     vec3 local;
     vLight = stageLight(vec3(0.0, 1.0, 0.0)); vY = 1.0;
     if (aPart > 1.5) {
         // The contact shadow: the cap's quad on the ground under the mark, thrown away from the sun by its height, soft-edged.
-        float extent = ${f1(SHAPE_EXTENT)} + max(0.9, (${f1(CAP_PAD_PX)} + 1.5) * uDpr / max(px, 0.001));
+        float extent = ${f1(SHAPE_EXTENT)} + max(0.9, (${f1(CAP_PAD_PX)} + 1.5) * uDpr / padPx);
         vUv = position.xz * extent;
         bool caged = mod(floor(flags / F_CAGE), 2.0) > 0.5;
         vec2 off = caged ? vec2(0.0) : -SUN.xz / SUN.y * e * 0.45;
-        local = vec3(vUv.x * s + off.x, s * 0.01, vUv.y * s + off.y);
+        local = vec3(vUv.x * s + off.x, s * 0.01, vUv.y * s * asp + off.y);
     } else if (aPart > 0.5) {
-        float extent = ${f1(SHAPE_EXTENT)} + (${f1(CAP_PAD_PX)} + 1.5) * uDpr / max(px, 0.001);
+        float extent = ${f1(SHAPE_EXTENT)} + (${f1(CAP_PAD_PX)} + 1.5) * uDpr / padPx;
         vUv = position.xz * extent;
-        local = vec3(vUv.x * s, e + 0.01, vUv.y * s);
+        local = vec3(vUv.x * s, e + 0.01, vUv.y * s * asp);
     } else {
         vUv = position.xz;
-        local = vec3(position.x * s, (position.y + 0.5) * e, position.z * s);
+        local = vec3(position.x * s, (position.y + 0.5) * e, position.z * s * asp);
         // A drum and a puck are round: their walls take the radial normal, so the light rolls round them smoothly.
         vec3 n = (uForm > 2.5 && uForm < 4.5) ? normalize(vec3(position.x, 0.0, position.z)) : normal;
         vLight = stageLight(n); vY = position.y + 0.5;
     }
     vHover = float(gl_InstanceID) == uHoverInst ? 1.0 : 0.0;
-    vPart = aPart; vPx = px; vFill = fillv; vFlags = flags;
+    // Rings and dashes are measured in px along the outline: on a rectangle take the geometric mean of its two scales.
+    vPart = aPart; vPx = px * sqrt(asp); vFill = fillv; vFlags = flags;
     vColor = uPalette[int(tone + 0.5)]; vColor2 = uPalette[int(tone2 + 0.5)];
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p + local, 1.0);
 }`;

@@ -14,6 +14,7 @@
 import * as path from "path";
 import type { ChildProcess } from "child_process";
 import type { ShellJobStart, ShellJobStatus, ShellResult } from "@builderforce/agent-tools";
+import { DEFAULT_COMMAND_TIMEOUT_MS, EDITOR_COMMAND_BUFFER_CHARS, EDITOR_COMMAND_OUTPUT_CHARS } from "@builderforce/tool-output-policy";
 import { posixRoute, runRouted, withPipefail } from "@builderforce/agent-tools/node-posix-shell";
 import { resolveShellCwd } from "@builderforce/agent-tools/node-path";
 import { spawnCommand, stopCommand } from "./processTree";
@@ -23,15 +24,6 @@ import { cachedResult, invalidateRunCache, rememberResult, shellCacheEffect, wor
 import { withScratchEnv } from "../run/scratchDir";
 import { messageOf } from "../shared/messageOf";
 
-// Bound a command's wall-clock + the output handed back to the model. Matches the cloud
-// Container's COMMAND_TIMEOUT_MS (api/container/server.mjs) — a build/type-check/test
-// step may legitimately take minutes (e.g. `tsc --noEmit` or `npm test` on a large
-// monorepo), and the old 120s ceiling was killing those runs mid-compile well before
-// they could finish.
-export const RUN_TIMEOUT_MS = 10 * 60 * 1000;
-const RUN_MAX_BUFFER = 4 * 1024 * 1024;
-const RUN_MAX_OUTPUT = 60_000;
-
 /** Within a run the full text stays retained under the result's `outputId` (`output_filter`). */
 function clamp(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}\n…(${text.length - max} more chars truncated)`;
@@ -40,7 +32,7 @@ function clamp(text: string, max: number): string {
 interface Exited { stdout: string; stderr: string; code: number | null; signal: NodeJS.Signals | null; error?: Error }
 
 /**
- * Wait for `child` to exit. Never rejects. A stream past {@link RUN_MAX_BUFFER} calls
+ * Wait for `child` to exit. Never rejects. A stream past {@link EDITOR_COMMAND_BUFFER_CHARS} calls
  * `onOverflow` once and keeps no more: an unbounded producer (`yes`, `tail -f`, a
  * watcher run in the foreground) is stopped there, not left to the 10-minute bound.
  */
@@ -50,7 +42,7 @@ function collect(child: ChildProcess, onOverflow: () => void): Promise<Exited> {
     let overflowed = false;
     for (const key of ["stdout", "stderr"] as const) {
       child[key]?.on("data", (chunk: string) => {
-        if (out[key].length < RUN_MAX_BUFFER) out[key] += chunk;
+        if (out[key].length < EDITOR_COMMAND_BUFFER_CHARS) out[key] += chunk;
         else if (!overflowed) {
           overflowed = true;
           onOverflow();
@@ -77,7 +69,7 @@ export interface LocalShellOptions {
   cwd?: string;
   /** Run it even when an unchanged verification command's cached result exists (`localShellCache.ts`). */
   fresh?: boolean;
-  /** Wall-clock bound for this command; defaults to {@link RUN_TIMEOUT_MS}. */
+  /** Wall-clock bound for this command; defaults to {@link DEFAULT_COMMAND_TIMEOUT_MS}. */
   timeoutMs?: number;
   /** Extra environment for this command, layered over the editor's own. */
   env?: Record<string, string>;
@@ -104,7 +96,7 @@ const aborted = (out: string): ShellResult => ({
   ok: false,
   aborted: true,
   error: "stopped — the command and everything it started were killed",
-  ...(out ? { stdout: clamp(out, RUN_MAX_OUTPUT) } : {}),
+  ...(out ? { stdout: clamp(out, EDITOR_COMMAND_OUTPUT_CHARS) } : {}),
 });
 
 /** A shell rooted at `root` (every command's working directory). `jobOwner` is the run
@@ -115,7 +107,7 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
 
   /** Execute once, in a named interpreter. `bash` null ⇒ the platform default shell. */
   async function execOnce(command: string, bash: string | null, options: LocalShellOptions, dir: string): Promise<ShellResult> {
-    const timeout = options.timeoutMs ?? RUN_TIMEOUT_MS;
+    const timeout = options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
     const signal = options.signal;
     if (signal?.aborted) return aborted("");
     // A POSIX script goes to bash EXPLICITLY (`bash -c <script>`), not through the
@@ -150,13 +142,13 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
       const settled = ((): ShellResult => {
         if (signal?.aborted) return aborted(out);
         if (overflowed) {
-          return { ok: false, error: `stopped — it printed more than ${RUN_MAX_BUFFER / (1024 * 1024)}MB of output`, stdout: clamp(out, RUN_MAX_OUTPUT) };
+          return { ok: false, error: `stopped — it printed more than ${EDITOR_COMMAND_BUFFER_CHARS / (1024 * 1024)}MB of output`, stdout: clamp(out, EDITOR_COMMAND_OUTPUT_CHARS) };
         }
-        if (r.code === 0 && !r.error) return { ok: true, exitCode: 0, stdout: clamp(out || "(no output)", RUN_MAX_OUTPUT) };
+        if (r.code === 0 && !r.error) return { ok: true, exitCode: 0, stdout: clamp(out || "(no output)", EDITOR_COMMAND_OUTPUT_CHARS) };
         if (timedOut || r.signal === "SIGTERM") {
-          return { ok: false, error: `timed out after ${timeout / 1000}s`, stdout: clamp(out, RUN_MAX_OUTPUT) };
+          return { ok: false, error: `timed out after ${timeout / 1000}s`, stdout: clamp(out, EDITOR_COMMAND_OUTPUT_CHARS) };
         }
-        return { ok: false, exitCode: r.code ?? 1, stdout: clamp(out || r.error?.message || "(no output)", RUN_MAX_OUTPUT) };
+        return { ok: false, exitCode: r.code ?? 1, stdout: clamp(out || r.error?.message || "(no output)", EDITOR_COMMAND_OUTPUT_CHARS) };
       })();
       // Within a run, the FULL output is kept for `output_filter`, and the result says where.
       return owner !== undefined && out ? { ...settled, outputId: retainOutput(owner, out) } : settled;
@@ -199,7 +191,7 @@ export function createLocalShell(root: string, opts: { jobOwner?: JobOwner } = {
       return startJob(withPipefail(command, route.bash, process.platform), {
         cwd: where.dir,
         bash: route.bash,
-        maxOutput: RUN_MAX_OUTPUT,
+        maxOutput: EDITOR_COMMAND_OUTPUT_CHARS,
         ...(owner !== undefined ? { owner } : {}),
         env: withScratchEnv(owner, options.env),
         ...(options.signal ? { signal: options.signal } : {}),

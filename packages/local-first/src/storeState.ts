@@ -19,6 +19,7 @@ import { PendingCounts, PendingEntityIndex, PendingKeyIndex } from './pendingInd
 import { PartitionTable } from './partitionTable.js';
 import { stubOf, type AnyRecordPartition, type PartitionLoader, type RecordPartition } from './recordPartition.js';
 import { CompositeRecords } from './compositeRecords.js';
+import type { DraftBase } from './draftMap.js';
 import { recordKey } from './recordKey.js';
 
 export { recordKey, splitRecordKey } from './recordKey.js';
@@ -112,7 +113,7 @@ export class CommittedState {
   }
 
   /** The records Map a transaction reads through: the main rows, plus the loaded segments when any type is partitioned. */
-  recordsBase(): ReadonlyMap<string, LocalRecord> {
+  recordsBase(): DraftBase<LocalRecord> {
     return this.table.enabled ? new CompositeRecords(this.records, this.table) : this.records;
   }
 

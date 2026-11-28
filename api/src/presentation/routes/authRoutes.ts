@@ -50,6 +50,7 @@ import { revokeSessionTokens } from '../../application/auth/sessionRevocation';
 import { listUserSessions } from '../../application/auth/sessionDirectory';
 import { beginMfaSetup, confirmMfaEnable, disableMfa, regenerateRecoveryCodes, verifyMfaChallenge } from '../../application/auth/mfaChallenge';
 import { createSessionIntrospectRoutes } from './sessionIntrospectRoutes';
+import { createWorkspaceTokenRoutes } from './workspaceTokenRoutes';
 import { createWebRenewRoutes } from './webRenewRoutes';
 import { createScopedTokenRoute } from './scopedTokenRoute';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
@@ -197,6 +198,8 @@ export function createAuthRoutes(authService: AuthService, tenantService: Tenant
 
   // POST /api/auth/scoped-token — short-lived audience-bound copy of the tenant JWT; own module.
   router.route('/', createScopedTokenRoute(db));
+
+  router.route('/', createWorkspaceTokenRoutes(db, tenantService));
 
   // The newsletter (`/newsletter/subscribers`) and the privacy/DSR channel
   // (`/privacy-requests`, `/me/privacy-*`) are mounted at this same `/api/auth`

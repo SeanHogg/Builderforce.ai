@@ -69,6 +69,8 @@ export interface JournalStageTiming {
 /** Optional instrumentation. Absent (the default) = no timings computed at all. */
 export interface NodeJournalIoOptions {
   onStageTiming?: (timing: JournalStageTiming) => void;
+  /** The journal's file name in the directory. Default `local-first-v3.journal`; a partitioned store uses v4's. */
+  fileName?: string;
 }
 
 /** Give the thread back to the event loop (I/O callbacks, timers, the webview) before continuing. */
@@ -180,7 +182,7 @@ const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).
 
 export function createNodeJournalIo(directory: string, options: NodeJournalIoOptions = {}): NodeJournalIo {
   const onStageTiming = options.onStageTiming;
-  const journalFile = nodePath.join(directory, JOURNAL_FILE);
+  const journalFile = nodePath.join(directory, options.fileName ?? JOURNAL_FILE);
   let committedBytes = 0;
   let frameCount = 0;
   let tailFrames = 0;

@@ -44,6 +44,8 @@ import { createCompactionScheduler } from "./localFirstCompactionScheduler";
 import { migrateEventBacklog } from "./localFirstEventMigration";
 import { createCompactionBackoff } from "./localFirstCompactionBackoff";
 import { createNodeJournalIo, yieldToEventLoop, type JournalStageTiming, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
+import { createPartitionedStorage } from "./localFirstPartitionedStorage";
+import { V4_JOURNAL_FILE } from "./localFirstPartitionNames";
 import {
   checkSnapshotCache,
   hasLegacyState,
@@ -83,7 +85,8 @@ export function createDurableLocalFirstStore(
       ? ({ stage, ms, detail }: JournalStageTiming) =>
           hostLog(`local-first perf: ${stage} ${ms}ms${detail ? ` (${detail})` : ""}`)
       : undefined);
-  const io = createNodeJournalIo(directory, { onStageTiming });
+  // Declared partitions make this a v4 store (`local-first-v4.journal` + partition files); none leaves it v3.
+  const io = createNodeJournalIo(directory, { onStageTiming, ...(options.partitions?.length ? { fileName: V4_JOURNAL_FILE } : {}) });
   const lock = createLocalFirstFileLock(nodePath.join(directory, LOCK_FILE), options.lock);
   const beforeWrite = options.beforeWrite ?? Promise.resolve();
   const compactionBackoff = options.compactionBackoff ?? createCompactionBackoff();
@@ -91,9 +94,13 @@ export function createDurableLocalFirstStore(
     ?? ((error: unknown) => console.warn("local-first: background write failed", error));
   // An open or import holds the lock far longer than a commit does (a measured 3.3 s import).
   const openWaitMs = options.lock?.busyTimeoutMs ?? LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS;
+  const partitioned = options.partitions?.length
+    ? createPartitionedStorage({ directory, partitions: options.partitions, lock, openWaitMs, onBackgroundError, ...(options.partitionCompaction ? { compaction: options.partitionCompaction } : {}) })
+    : undefined;
   const listeners = new Set<LocalFirstListener>();
   let quiet = false;
   let opened: Promise<void> | undefined;
+  let openDone = false;
   let tail: Promise<unknown> = Promise.resolve();
   let inTransaction = false;
   /** Set while a commit (or compaction) holding the lock catches up; readers wait for it. `mergeLegacyWrites` also
@@ -115,12 +122,16 @@ export function createDurableLocalFirstStore(
     onCommit: async (delta) => {
       // An empty journal opens with a whole-snapshot frame (a base); every later commit is a delta.
       const serializeStart = onStageTiming ? Date.now() : 0;
-      const frame = io.frames() === 0 ? encodeJournalFrame(snapshotAfter(delta)) : encodeDeltaFrame(delta);
+      const first = io.frames() === 0;
+      // A partitioned commit first appends its partition frames, then returns the main frame (the commit point).
+      const frame = partitioned ? await partitioned.commit.prepare(delta, first, snapshotAfter) : first ? encodeJournalFrame(snapshotAfter(delta)) : encodeDeltaFrame(delta);
       if (onStageTiming) onStageTiming({ stage: "commit.serialize", ms: Date.now() - serializeStart, detail: `${frame.byteLength} bytes` });
       lastFrameBytes = frame.byteLength;
       compaction.noteCommit(delta);
       await io.append(frame);
+      partitioned?.commit.committed(delta);
     },
+    ...(partitioned ? { partitions: partitioned.partitions, loader: partitioned.loader } : {}),
   });
   memory.subscribe((change) => {
     if (quiet) return;
@@ -130,6 +141,7 @@ export function createDurableLocalFirstStore(
   /** Adopt a loaded journal as the store's state. `silent` for the open, which nobody is waiting on. */
   const adopt = (loaded: LoadedJournal, silent: boolean): void => {
     io.adopt(loaded);
+    partitioned?.adopted(loaded);
     if (silent && loaded.state) memory.adoptInitialState(loaded.state);
     else replaceMemory(loaded.latest ?? EMPTY_LOCAL_FIRST_SNAPSHOT, silent);
   };
@@ -137,6 +149,7 @@ export function createDurableLocalFirstStore(
   const replaceMemory = (snapshot: LocalFirstSnapshot, silent: boolean): void => {
     const rebuildStart = onStageTiming ? Date.now() : 0;
     quiet = silent;
+    partitioned?.pointers.seed(snapshot.partitionPointers);
     try {
       memory.applyDelta(resetDeltaOf(snapshot));
     } finally {
@@ -148,6 +161,7 @@ export function createDurableLocalFirstStore(
   // The one-time v2 import, the damaged-v3 rebuild and the pre-v3 copy's retirement (`durableLocalFirstRecovery.ts`).
   const { importLegacy, rebuildCorrupt, retirePreV3Snapshot } = createRecovery({
     directory, snapshotFile, io, lock, openWaitMs, onBackgroundError, adopt, replaceMemory,
+    ...(partitioned ? { prepareSnapshot: partitioned.prepareSnapshot, retireExtra: partitioned.retire } : {}),
   });
 
   /**
@@ -158,7 +172,7 @@ export function createDurableLocalFirstStore(
   const mergeLegacyWrites = async (): Promise<void> => {
     if (!(await legacyMoved(directory))) return;
     await underOpenLock(async () => {
-      const merge = await readLegacyMerge(directory, memory.view(), yieldToEventLoop);
+      const merge = await readLegacyMerge(directory, memory.view(), yieldToEventLoop, partitioned?.versionsOf);
       if (!merge) return;
       if (merge.delta) await commitOpenDelta(merge.delta);
       await writeLegacyBaseline(directory, merge.baseline);
@@ -179,7 +193,12 @@ export function createDurableLocalFirstStore(
 
   /** During the open, under its lock: one frame appended and applied. */
   const commitOpenDelta = async (delta: LocalFirstDelta): Promise<void> => {
-    await io.append(encodeDeltaFrame(delta));
+    if (partitioned) {
+      await io.append(await partitioned.commit.prepare(partitioned.complete(delta), io.frames() === 0, snapshotAfter));
+      partitioned.commit.committed(delta);
+    } else {
+      await io.append(encodeDeltaFrame(delta));
+    }
     memory.applyDelta(delta);
     dirty = true;
   };
@@ -188,13 +207,21 @@ export function createDurableLocalFirstStore(
   let compactAfterOpen = false;
   // The one-time event-backlog migration (`localFirstEventMigration.ts`), as ordinary commits under the lock.
   const migrateBacklog = async (): Promise<void> => {
-    const plan = await migrateEventBacklog({ journalFile: io.journalFile, view: () => memory.view(), locked: underOpenLock, commit: commitOpenDelta });
+    const plan = await migrateEventBacklog({
+      journalFile: io.journalFile,
+      // v4: the planner reads rows through a transaction lookup, and there is no main-only backup to keep or restore.
+      view: partitioned ? partitioned.planSnapshot : () => memory.view(),
+      backup: !partitioned,
+      locked: underOpenLock,
+      commit: commitOpenDelta,
+    });
     if (!plan) return;
     compactAfterOpen = true;
     hostLog(`local-first: migrated the event backlog — ${plan.stripped} payload copies became markers, ${plan.dropped} dead events dropped, ${plan.kept} kept (payload differs from the row)`);
   };
 
   const openStore = async (): Promise<void> => {
+    await partitioned?.ensureV4(); // v4 absent beside a v3: cut it out of v3 (two-phase, `localFirstV4Migration.ts`)
     const loaded = await io.load(yieldToEventLoop);
     if (loaded.corrupt) {
       await importLegacy();
@@ -204,6 +231,7 @@ export function createDurableLocalFirstStore(
       // is still moved aside here. Failing to do so must not fail the open.
       await checkSnapshotCache(snapshotFile).catch(onBackgroundError);
       await mergeLegacyWrites().catch(onBackgroundError);
+      await partitioned?.mergeV3().catch(onBackgroundError); // what an old window wrote to v3 after v4 was cut
       // v3 is live and healthy: the pre-v3 rollback copy only costs disk now.
       await retirePreV3Snapshot();
       await migrateBacklog().catch(onBackgroundError);
@@ -219,6 +247,7 @@ export function createDurableLocalFirstStore(
   const ensureOpen = (): Promise<void> => {
     const openedAt = onStageTiming ? Date.now() : 0;
     opened ??= openStore().then(() => {
+      openDone = true;
       if (onStageTiming) onStageTiming({ stage: "import.open", ms: Date.now() - openedAt });
       // After the open has resolved (the compaction's `exclusive` waits on it), never inside it.
       if (compactAfterOpen) {
@@ -233,7 +262,10 @@ export function createDurableLocalFirstStore(
   };
 
   const applyTail = (read: Extract<TailRead, { kind: "deltas" }>): void => {
-    for (const delta of read.deltas) memory.applyDelta(delta);
+    for (const delta of read.deltas) {
+      memory.applyDelta(delta);
+      partitioned?.pointers.apply(delta);
+    }
     io.advance(read);
   };
 
@@ -316,10 +348,13 @@ export function createDurableLocalFirstStore(
     }
   };
 
+  partitioned?.bind({ memory, serialized, exclusive, commitOpenDelta, underOpenLock, refreshMain: () => (openDone ? refreshForRead() : Promise.resolve()) });
+
   // WHEN the journal compacts (tail policy, a drained queue, a migration): `localFirstCompactionScheduler.ts`.
   // `flush()` waits for a queued compaction.
   const compaction = createCompactionScheduler({
     io, view: () => memory.view(), exclusive, serialized, backoff: compactionBackoff, onBackgroundError,
+    ...(partitioned ? { partitions: partitioned.compactor() } : {}),
     dropReceipts: (eventIds) => { memory.applyDelta({ prunedReceipts: [...eventIds] }); },
     ...(options.compaction ? { policy: options.compaction } : {}),
     ...(options.compactAfterAcknowledged !== undefined ? { compactAfterAcknowledged: options.compactAfterAcknowledged } : {}),

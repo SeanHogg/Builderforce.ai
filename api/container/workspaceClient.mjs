@@ -9,7 +9,7 @@
  */
 import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
-import { killTree, spawnShell } from './sandboxJobs.mjs';
+import { killSandboxTree, spawnShell } from './sandboxJobs.mjs';
 
 /** A helper reply line past this is refused (the helper is the model's user: its output is not trusted to be small). */
 const MAX_REPLY_LINE_CHARS = 64 * 1024 * 1024;
@@ -75,7 +75,7 @@ export function createWorkspaceClient({ workdir, helperPath }) {
       child = null;
       if (!proc) return;
       try { proc.stdin.end(); } catch (e) { console.error(`[workspace] could not close the helper's stdin: ${e.message}`); }
-      killTree(proc);
+      killSandboxTree(proc);
     },
   };
 }

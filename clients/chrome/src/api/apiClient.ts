@@ -8,6 +8,7 @@
  * acts as another tenant the request is NOT sent — it fails retriably and waits.
  */
 import { sendWithTenantSession } from '@builderforce/device-auth';
+import { flattenApiError } from '@builderforce/api-errors';
 import type { Session } from '../auth/session';
 
 export type ApiFetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -23,14 +24,9 @@ export interface ApiRequestInit extends Omit<RequestInit, 'body'> {
 /**
  * The API answers `{error:"msg"}` or the nested `{error:{message,code}}`. Reading
  * `error` as a string alone rendered "[object Object]" for the nested form.
- * Mirrors frontend/src/lib/apiClient.ts flattenErrorBody (no package the
- * extension and the web app both import, so one copy per runtime).
  */
 export function flattenErrorMessage(body: unknown): string | undefined {
-  if (typeof body !== 'object' || body === null) return undefined;
-  const b = body as { error?: unknown; message?: unknown };
-  const nested = typeof b.error === 'object' && b.error !== null ? (b.error as { message?: unknown }) : null;
-  return [b.message, nested?.message, b.error].find((c): c is string => typeof c === 'string' && c.length > 0);
+  return flattenApiError(body).message;
 }
 
 export class ApiError extends Error {

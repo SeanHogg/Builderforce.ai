@@ -25,13 +25,15 @@ export const TYPE_FORM: Readonly<Record<MarkType, MarkForm>> = {
 };
 
 /**
- * The outline a form is extruded from: round forms stand on the circle, an interface on the SQUARE (the design's translucent
- * box with dashed edges: the dashed `iface` form, not its silhouette, tells it from a class), the rest keep their type's
- * silhouette. The flat 2D marks and the legend keep `TYPE_SHAPE` (an interface's slant there), where no form can separate it.
+ * The outline a form is extruded from: round forms stand on the circle; a box, a slab and an interface on the SQUARE (the
+ * design's block, plate and translucent box are plain rectangles, and `Placement.aspect` gives the rectangle its depth: the
+ * form, not a silhouette, tells them apart); the rest keep their type's silhouette. The flat 2D marks and the legend keep
+ * `TYPE_SHAPE` (a system's hexagon, an interface's slant there), where no form can separate them.
  */
 export function outlineShape(type: MarkType): NodeShape {
     const form = TYPE_FORM[type];
-    return form === 'drum' || form === 'puck' ? 'circle' : form === 'iface' ? 'square' : TYPE_SHAPE[type];
+    if (form === 'drum' || form === 'puck') return 'circle';
+    return form === 'iface' || form === 'slab' || form === 'box' ? 'square' : TYPE_SHAPE[type];
 }
 
 /**
@@ -42,3 +44,9 @@ export const FORM_RISE: Readonly<Record<MarkForm, number>> = { slab: 0.25, puck:
 
 /** The lighter cap of a box is this share of its height (the design's 16%). */
 export const CAP_BAND = 0.16;
+
+/** The lighter lid of a drum is this share of its height (the design's 12%). */
+export const DRUM_LID = 0.12;
+
+/** How far a cap (a box's top band, a drum's lid) goes toward the theme's top tone: a clear step, the body's hue kept. */
+export const CAP_TOWARD_TOP = 0.7;

@@ -24,8 +24,8 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const API_ROOT = resolve(HERE, '..');
 const CONTAINER = join(API_ROOT, 'container');
-/** In dependency order: the core imports the five before it. */
-const MODULES = ['toolOutputPolicy.mjs', 'postEditChecks.mjs', 'sandboxJobs.mjs', 'workspaceClient.mjs', 'sandboxGit.mjs', 'sandboxCore.mjs'];
+/** In dependency order: the core imports its sibling modules. */
+const MODULES = ['nodeProcess.mjs', 'toolOutputPolicy.mjs', 'postEditChecks.mjs', 'sandboxJobs.mjs', 'workspaceClient.mjs', 'sandboxGit.mjs', 'sandboxCore.mjs'];
 /** The workspace helper is NOT inlined: it is its own process (run as the shell user), so the runner writes it to a file. */
 const HELPER = 'workspaceAgent.mjs';
 /** The generated modules the helper imports. The runner writes the helper ALONE to a file, so they are inlined into it (see {@link toHelperInline}). */

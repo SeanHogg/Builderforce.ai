@@ -17,7 +17,10 @@
  * Host-neutral: fetch, the page opener and the clock are injected (tested with fakes).
  */
 
-export { isTenantSessionFresh, sendWithTenantSession, tenantSessionExpiresAt, TENANT_SESSION_TTL_SECONDS } from './tenantSession.js';
+export {
+  exchangeEditorKey, isTenantSessionFresh, requestWorkspaceToken, sendWithTenantSession, tenantSessionExpiresAt,
+  TENANT_SESSION_TTL_SECONDS, WORKSPACE_TOKEN_PATH, WORKSPACE_TOKEN_ROUTE,
+} from './tenantSession.js';
 
 export interface DeviceAuthDeps {
   baseUrl: string;

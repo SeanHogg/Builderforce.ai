@@ -3,7 +3,7 @@
  * community-derived, and communities are recomputed per build, so the SAME files can come back under
  * another id. A package frame therefore remembers the files it was entered with and, when its id is
  * gone, moves to the station that now holds most of them; it is dropped (and named) only when none
- * of its files survive. Class and function frames key on file / symbol refs, which are stable, so
+ * of its files survive. System and app frames are folder paths and pass through unchanged. Class and function frames key on file / symbol refs, which are stable, so
  * they are checked as before, after the package frame above them is re-anchored. Pure.
  */
 
@@ -67,6 +67,8 @@ export function reanchorDrill(stack: readonly DrillFrame[], world: StationModel,
                 moved.set(frame.ref, to);
                 changed = true;
             }
+        } else if (frame.level === 'system' || frame.level === 'app') {
+            // A system or an app is a folder: its ref is a stable path, so a rebuilt map keeps it as it is.
         } else if (frame.level === 'class' ? !world.stationOf.has(frame.ref) : !hasNode(frame.ref)) {
             return { stack: next, notice: frame.name, moved };
         }

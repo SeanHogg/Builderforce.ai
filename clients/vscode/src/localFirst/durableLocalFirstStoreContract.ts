@@ -5,6 +5,7 @@
 
 import {
   INDEXEDDB_REDACTION_RULE,
+  type AnyRecordPartition,
   type JournalCompactionPolicy,
   type LocalFirstSnapshot,
   type LocalFirstStore,
@@ -57,4 +58,12 @@ export interface DurableLocalFirstStoreOptions {
    * `localFirstStore.ts` fills it from the `BUILDERFORCE_LOCAL_FIRST_PERF` env flag.
    */
   onStageTiming?: (timing: JournalStageTiming) => void;
+  /**
+   * The record types stored one journal file per home (`defineRecordPartition`, AE-G031). With none, the store
+   * is v3 exactly as it was. With some it uses `local-first-v4.journal` and `local-first-v4.partitions/`; the
+   * first open cuts v4 out of an existing v3 (`localFirstV4Migration.ts`).
+   */
+  partitions?: readonly AnyRecordPartition[];
+  /** Overrides each partition's own compaction thresholds (tests). */
+  partitionCompaction?: Partial<JournalCompactionPolicy>;
 }

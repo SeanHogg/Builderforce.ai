@@ -16,7 +16,7 @@ This compares the live visualizer with the design and lists every change it need
   3. *What fundamentals am I missing?* (22 fundamentals in four groups: reliability, security, delivery, operating)
 - **Layout, left to right:** the first design's code pane (outline tree, file bar, source, "In plain words") · the picture with its toolbar · the answer column. The visualizer has no chat of its own.
 - **The review is an explicit loop:** a first-run card, progress, "Review again" or "Update review · n files", a schedule, and past reviews with scores. Every answer says which review it came from.
-- **The VSIX agent drives the picture.** The visualizer is opened from the VSIX, and the agent in the VSIX chat controls it. Asked "show me the ERD", the agent calls a tool with a *view spec* made of named pieces, and the visualizer draws it. A built-in view (the ERD) and a one-off view the agent composes use the same contract. While an agent view is on the picture, the answer column shows a "Shown by the agent in chat" card (title, one-line answer, pieces, Save as a view, Back to the question).
+- **The VSIX agent drives the picture.** The visualizer is opened from the VSIX, and the agent in the VSIX chat controls it. Asked "show me the ERD", the agent calls a tool with a *view spec* made of named pieces, and the visualizer draws it. A built-in view (the ERD) and a one-off view the agent composes use the same contract. Nothing agent- or chat-related is drawn inside the visualizer.
 
 ## What is reused as it is
 
@@ -362,8 +362,7 @@ Today:
   - "Shown in the picture";
   - the pieces as badges;
   - **Show it again**, **Save as a view**, **Copy as Mermaid** (`sequenceText.ts` / `pathMermaid` exist).
-- In the visualizer: while the agent's spec is on the picture, the answer column opens with a "Shown by the agent in chat" card (title, one-line answer, pieces, **Save as a view**, **Back to the question**). Opening any question row ends the agent view.
-- There is no chat box in the visualizer. Questions go to the one VSIX chat (ONE unified flow).
+- In the visualizer: the picture simply changes to the spec. The visualizer has no chat box, no agent card and no agent UI. Questions go to the one VSIX chat (ONE unified flow).
 
 **7.5 Composed views.**
 - When no built-in view answers the question, the agent builds a `Diagram` (nodes/edges/groups with `ref`s back to graph nodes) and sends it as `spec.diagram`. Example: "Which tables does the nightly job touch?" gives tables plus the job, with read/write edges.
@@ -395,6 +394,6 @@ The memory changes ship with a contract snapshot and one regression test per cha
 3. **Shell** (1.1–1.4) with the questions registry, then City (3.1), Matrix (3.2), Where it runs (3.3), ERD as a view (3.4).
 4. **Q2:** score, ranking, the four new detectors, stored provenance, the proposers, dismiss.
 5. **Q3:** the registry, then the promoted run-delta rules (one shared function each), then the new detectors, overlay and fixes.
-6. **Agent control:** the tools, the protocol, the two cards (VSIX chat and answer column), then composed views.
+6. **Agent control:** the tools, the protocol, the VSIX chat card, then composed views.
 
 Each step is checked against the design with harness screenshots at 1440, 1100 and 360px in dark and light, next to the matching design screenshot.

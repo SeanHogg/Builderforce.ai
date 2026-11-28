@@ -28,6 +28,10 @@ export interface RecoveryPorts {
   /** Adopt a loaded journal as the store's state. `silent` for the open, which nobody is waiting on. */
   adopt(loaded: LoadedJournal, silent: boolean): void;
   replaceMemory(snapshot: LocalFirstSnapshot, silent: boolean): void;
+  /** A partitioned store: a source that holds message rows becomes main + partition files before it is written (`localFirstV4Migration.ts`). */
+  prepareSnapshot?(snapshot: LocalFirstSnapshot): Promise<LocalFirstSnapshot>;
+  /** After a healthy open: more files that are only disk now (v4: the retired v3 formats). */
+  retireExtra?(): Promise<void>;
 }
 
 export interface Recovery {
@@ -68,8 +72,9 @@ export function createRecovery(ports: RecoveryPorts): Recovery {
       const fromJournal = await readLegacyJournal(directory, yieldToEventLoop);
       const source = fromJournal ?? await readSnapshotCache(snapshotFile);
       if (source && snapshotHasState(source)) {
-        await io.compact(source, yieldToEventLoop);
-        replaceMemory(source, true);
+        const written = ports.prepareSnapshot ? await ports.prepareSnapshot(source) : source;
+        await io.compact(written, yieldToEventLoop);
+        replaceMemory(written, true);
       } else {
         adopt(raced, true);
       }
@@ -89,8 +94,9 @@ export function createRecovery(ports: RecoveryPorts): Recovery {
     const copy = await quarantineJournal(io.journalFile);
     const plan = await chooseRebuildSource({ directory, snapshotFile, loaded, held, pause: yieldToEventLoop });
     if (!plan) throw new LocalFirstStoreCorruptError(copy);
-    await io.compact(plan.snapshot, yieldToEventLoop);
-    replaceMemory(plan.snapshot, false);
+    const written = ports.prepareSnapshot ? await ports.prepareSnapshot(plan.snapshot) : plan.snapshot;
+    await io.compact(written, yieldToEventLoop);
+    replaceMemory(written, false);
     if (plan.from === "v2") await recordImportBaseline(plan.snapshot, plan.legacy);
     onBackgroundError(new Error(describeRebuild(plan, copy, loaded, (await fs.stat(copy)).size)));
   };
@@ -106,6 +112,7 @@ export function createRecovery(ports: RecoveryPorts): Recovery {
   const retirePreV3Snapshot = async (): Promise<void> => {
     try {
       await fs.rm(`${snapshotFile}${PRE_V3_SUFFIX}`, { force: true });
+      await ports.retireExtra?.();
     } catch (error) {
       onBackgroundError(error);
     }

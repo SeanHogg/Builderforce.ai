@@ -24,6 +24,7 @@ import {
   chatMessagesInOrder,
   chatRecordById,
   chatsMessagesInOrder,
+  highestMessageId,
   messageRecordById,
   scanChatMessages,
   scanLive,
@@ -115,8 +116,7 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
   const nextId = async (tx: LocalFirstTransaction): Promise<number> => {
     let highest = 0;
     await scanLive<ChatValue>(tx, 'chat', options.deviceId, (row) => { highest = Math.max(highest, row.payload.chat.id); });
-    await scanLive<MessageValue>(tx, 'message', options.deviceId, (row) => { highest = Math.max(highest, row.payload.message.id); });
-    return highest + 1;
+    return Math.max(highest, await highestMessageId(tx, options.deviceId)) + 1;
   };
   /** Does this commit touch the chat's messages? Row ids are looked up (`get`), never scanned. */
   const touchesChatMessages = (chatId: number, change: LocalFirstChange): Promise<boolean> => {
@@ -125,6 +125,12 @@ export function createLocalBrainPersistence(options: LocalBrainPersistenceOption
     if (ids.size > MESSAGE_ID_CHECK_LIMIT) return Promise.resolve(true);
     return options.store.read(async (tx) => {
       for (const id of ids) {
+        // The stub names the row's chat without loading its partition (no stubs: the row itself).
+        const stub = await tx.stub?.('message', id);
+        if (stub) {
+          if (stub.home === chatId) return true;
+          continue;
+        }
         const row = await tx.get<MessageValue>('message', id);
         // A row that is gone cannot be placed in a chat: assume it was this one's.
         if (!row || row.payload.chatId === chatId) return true;

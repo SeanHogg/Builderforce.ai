@@ -16,7 +16,7 @@
  * while signed out wait (unscoped) for the next sign-in.
  */
 import type { KeyValueStore } from '../platform/keyValue';
-import { isTenantSessionFresh, revokeKey, tenantSessionExpiresAt } from '@builderforce/device-auth';
+import { exchangeEditorKey, isTenantSessionFresh, revokeKey } from '@builderforce/device-auth';
 
 /** Where the credential lives in `chrome.storage.local` — read by the platform policy
  *  too, which derives the default inference mode from "signed in". */
@@ -99,7 +99,8 @@ export function createSession(deps: SessionDeps): Session {
       await deps.storage.remove(USER);
       jwtCache = null;
       await deps.storage.set(KEY, input.accessKey);
-      if (input.tenantId !== null) await deps.storage.set(TENANT, input.tenantId);
+      if (input.tenantId === null) await deps.storage.remove(TENANT);
+      else await deps.storage.set(TENANT, input.tenantId);
       notify();
     },
     async signOut() {
@@ -111,36 +112,27 @@ export function createSession(deps: SessionDeps): Session {
       await loaded;
       if (!key) return null;
       if (!force && jwtCache && isTenantSessionFresh(jwtCache.exp, deps.now())) return jwtCache.token;
-      let res: Response;
-      try {
-        res = await deps.fetch(`${deps.baseUrl}/api/auth/tenant-api-key-token`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ apiKey: key }),
-        });
-      } catch {
-        return null; // unreachable — no verdict on the key
-      }
-      // 401 = invalid/revoked; 400 = a key with no user behind it. A verdict on the key.
-      if (res.status === 401 || res.status === 400) {
-        await clear();
+      const exchangeKey = key;
+      const result = await exchangeEditorKey(deps.baseUrl, exchangeKey, deps.fetch, deps.now);
+      if (key !== exchangeKey) return null;
+      if (!result.ok) {
+        if (result.rejected) await clear();
         return null;
       }
-      if (!res.ok) return null;
-      const body = (await res.json()) as { token?: string; expiresIn?: number; tenantId?: number; userId?: string };
-      if (!body.token) return null;
-      jwtCache = { token: body.token, exp: tenantSessionExpiresAt(deps.now(), body.expiresIn) };
-      if (typeof body.userId === 'string' && body.userId !== user) {
-        user = body.userId;
-        await deps.storage.set(USER, body.userId);
+      const { jwt } = result;
+      jwtCache = jwt;
+      if (jwt.userId !== undefined && jwt.userId !== user) {
+        user = jwt.userId;
+        await deps.storage.set(USER, jwt.userId);
         notify();
       }
-      if (typeof body.tenantId === 'number' && body.tenantId !== tenant) {
-        tenant = body.tenantId;
-        await deps.storage.set(TENANT, body.tenantId);
+      if (key !== exchangeKey) return null;
+      if (jwt.tenantId !== tenant) {
+        tenant = jwt.tenantId;
+        await deps.storage.set(TENANT, jwt.tenantId);
         notify();
       }
-      return body.token;
+      return key === exchangeKey ? jwt.token : null;
     },
     subscribe(listener) {
       listeners.add(listener);

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { WORKSPACE_TOKEN_PATH } from '@builderforce/device-auth';
 import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
@@ -6,11 +7,9 @@ import { listVscodeConnections, upsertVscodeConnection } from '../../application
 import { resolveEditorIdentity } from '../../application/vscode/editorIdentity';
 import { listOpenTasksAssignedTo } from '../../application/vscode/assignedTasks';
 import type { TenantService } from '../../application/tenant/TenantService';
-import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
-import { assertLiveEditorKey } from '../../application/llm/editorKeyGate';
-import { claimsFromContext } from '../middleware/requestClaims';
 import { parseOptionalBody, z } from './requestBody';
 import { legacyAliasNotice } from '../middleware/legacyAlias';
+import { workspaceTokenHandler } from './workspaceTokenRoutes';
 import { WORKSPACES_PATH, workspaceHandlers } from './workspaceHandlers';
 
 /** `POST /connect` — a bare heartbeat is valid; both fields have defaults. */
@@ -25,7 +24,7 @@ const ConnectBody = z.object({
  * /api/auth/tenant-api-key-token), so the signed-in USER is known (c.get('userId'))
  * even though the key is bound to ONE tenant. That lets the editor enumerate / create /
  * switch the user's OTHER workspaces without a browser round-trip. Listing and
- * creating now live at the person-level GET/POST /api/tenants; the switch stays here.
+ * creating now live at the person-level GET/POST /api/tenants; the editor switch endpoint is a compatibility alias.
  */
 export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -45,52 +44,10 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
   router.get('/tenants', legacyAliasNotice(WORKSPACES_PATH), workspaces.list);
   router.post('/tenants', legacyAliasNotice(WORKSPACES_PATH), workspaces.create);
 
-  // POST /api/vscode/tenants/:id/token — SWITCH workspace: mint a tenant-scoped editor
-  // JWT for :id, but ONLY if the caller is a member (so the editor can act on another
-  // of the user's workspaces using its single bound key as proof of identity).
-  router.post('/tenants/:id/token', async (c) => {
-    const userId = c.get('userId') as string;
-    const tenantId = Number(c.req.param('id'));
-    if (!Number.isFinite(tenantId) || tenantId <= 0) return c.json({ error: 'invalid tenant id' }, 400);
-    // A session derived from an editor KEY carries the server-signed device `src` (web
-    // sessions carry none and switch freely). While the key is the session's authority:
-    //   - a revoked / unknown / foreign key may not keep renewing derived JWTs: 401, which the
-    //     editor answers by re-exchanging the key (and signing out if it is really dead);
-    //   - a switch to ANOTHER workspace also needs the key to pass the gateway's editor-key
-    //     bar (the same predicate), so the picker never selects a workspace the gateway will
-    //     refuse: 403 `editor_key_required`;
-    //   - a token with no `kid` was minted before it was stamped: it cannot be checked, but
-    //     the key may be perfectly fine, so it is `session_stale` (re-exchange and retry),
-    //     never a verdict on the key - whether or not the target is its own workspace.
-    if (c.get('clientSurface')) {
-      // A token with no kid is unchecked, and one minted from it would carry no kid either - it
-      // could renew itself forever after its key is revoked, so the gate sends it back to the key.
-      const gate = await assertLiveEditorKey(db, {
-        keyId: c.get('apiKeyId'),
-        userId,
-        missingKey: 'session_stale',
-        requireRescope: tenantId !== c.get('tenantId'),
-      });
-      if (!gate.ok) {
-        // The 401 has always been a bare `{ error }`; only the 403 outcomes carry a `code`.
-        return c.json(gate.status === 401 ? { error: gate.message } : { error: gate.message, code: gate.code }, gate.status);
-      }
-    }
-    const member = (await tenantService.listTenantsForUser(userId)).find((t) => t.id === tenantId);
-    if (!member) return c.json({ error: 'Not a member of this workspace' }, 403);
-    // Role is resolved from the caller's active membership inside the minter, so an
-    // owner/manager switching workspaces keeps their real authority (not a flat dev token).
-    const claims = claimsFromContext(c);
-    const { token, expiresIn } = await mintTenantSessionToken(db, c.env.JWT_SECRET, {
-      userId,
-      tenantId,
-      ...claims,
-      // The app that asked keeps its own surface across the switch (Synapse, Spawn).
-      clientSurface: claims.clientSurface ?? 'vscode',
-      // `claims.keyId` carries the key forward, so a switch FROM this token is checked against it.
-    });
-    return c.json({ token, expiresIn, tenantId });
-  });
+  const mintWorkspaceToken = workspaceTokenHandler(db, tenantService);
+  router.post('/tenants/:id/token', legacyAliasNotice(WORKSPACE_TOKEN_PATH), (c) =>
+    mintWorkspaceToken(c, Number(c.req.param('id'))),
+  );
 
   // POST /api/vscode/connect — register or heartbeat this VS Code connection.
   router.post('/connect', async (c) => {

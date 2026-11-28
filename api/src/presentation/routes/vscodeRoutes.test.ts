@@ -27,6 +27,7 @@ const { mintTenantSessionToken } = vi.hoisted(() => ({ mintTenantSessionToken: v
 vi.mock('../../infrastructure/auth/tenantSessionToken', () => ({ mintTenantSessionToken }));
 
 import { createVscodeRoutes } from './vscodeRoutes';
+import { createWorkspaceTokenRoutes } from './workspaceTokenRoutes';
 
 const WORKSPACES = [
   { id: TENANT, name: 'Acme', slug: 'acme', role: 'owner', status: 'active' },
@@ -106,6 +107,16 @@ describe('vscodeRoutes — workspace (tenant) management', () => {
     const [, secret, opts] = mintTenantSessionToken.mock.calls[0] as any[];
     expect(secret).toBe('test-secret');
     expect(opts).toMatchObject({ userId: USER, tenantId: 8, clientSurface: 'vscode' });
+  });
+
+  it('applies the same membership check and token contract on the host-neutral route', async () => {
+    const router = createWorkspaceTokenRoutes({} as any, makeTenantService() as any);
+    const accepted = await router.request('/workspace-token', postJson({ tenantId: 8 }), ENV);
+    expect(accepted.status).toBe(200);
+    expect(await accepted.json()).toEqual({ token: 'minted.jwt', expiresIn: 3600, tenantId: 8 });
+    const refused = await router.request('/workspace-token', postJson({ tenantId: 999 }), ENV);
+    expect(refused.status).toBe(403);
+    expect(mintTenantSessionToken).toHaveBeenCalledTimes(1);
   });
 
   describe('POST /tenants/:id/token for a key-derived editor session', () => {

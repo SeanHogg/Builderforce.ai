@@ -30,6 +30,7 @@
  */
 import type { PreviewRuntime, SnapshotStore } from '@seanhogg/builderforce-webcontainers';
 import { posixCommandIn, type ShellCapability, type ShellResult } from '@builderforce/agent-tools';
+import { BROWSER_COMMAND_OUTPUT_CHARS as MAX_COMMAND_OUTPUT_CHARS, DEFAULT_COMMAND_TIMEOUT_MS } from '@builderforce/tool-output-policy';
 import { validateFileContentForPath } from '@builderforce/ide-file-contract';
 import { isGeneratedPath } from '@/lib/workspace/generatedPaths';
 import type { WorkspaceFileStore } from '@/lib/workspace/workspaceFileStore';
@@ -39,11 +40,7 @@ import { toolErrorMessage } from '@/lib/toolErrorMessage';
 import { bootSharedPreviewRuntime, replaceProjectFiles, trackWorkspaceProcess } from './previewRuntime';
 import { hasInstalledPackages, installSnapshotKey, restoreInstalledPackages, saveInstalledPackages } from './installSnapshots';
 
-/** Default ceiling for one command: an install of a mid-sized app fits; a dev server never ends. */
-export const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60_000;
-
-/** Output handed back to the model: the TAIL, where the error and the exit summary are. */
-export const MAX_COMMAND_OUTPUT_CHARS = 16_000;
+export { DEFAULT_COMMAND_TIMEOUT_MS, MAX_COMMAND_OUTPUT_CHARS };
 
 /** A file the command produced that is bigger than this is not source; it is not saved back. */
 export const MAX_SAVED_FILE_CHARS = 1_000_000;

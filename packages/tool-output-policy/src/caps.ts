@@ -9,6 +9,30 @@
 /** Per-result cap (chars) for a tool with no row in {@link TOOL_OUTPUT_CAPS}. */
 export const DEFAULT_TOOL_OUTPUT_CHARS = 6_000;
 
+/** Default wall-clock limit for a foreground shell command. */
+export const DEFAULT_COMMAND_TIMEOUT_MS = 10 * 60_000;
+/** Number of jobs retained by a workspace shell. */
+export const MAX_BACKGROUND_JOBS = 32;
+export const BACKGROUND_JOB_LIMIT_ERROR = `too many running background jobs (${MAX_BACKGROUND_JOBS}); stop one with command_stop first`;
+
+/** Evict the oldest finished entries and reserve space for a new job. */
+export function makeRoomForBackgroundJob<K>(jobs: Map<K, { status: string }>): boolean {
+  if (jobs.size < MAX_BACKGROUND_JOBS) return true;
+  for (const [id, job] of jobs) {
+    if (job.status === 'running') continue;
+    jobs.delete(id);
+    if (jobs.size < MAX_BACKGROUND_JOBS) return true;
+  }
+  return false;
+}
+
+/** Host-specific limits for command and file-read protocols. */
+export const EDITOR_COMMAND_OUTPUT_CHARS = 60_000;
+export const EDITOR_COMMAND_BUFFER_CHARS = 4 * 1024 * 1024;
+export const BROWSER_COMMAND_OUTPUT_CHARS = 16_000;
+export const NATIVE_FILE_READ_MAX_LINES = 2_000;
+export const NATIVE_FILE_READ_MAX_BYTES = 50 * 1024;
+
 /**
  * Per-tool caps (chars of the model-facing result). `read_file` is larger on purpose:
  * reading source is what a coding surface DOES, and it is paged by line with the offset

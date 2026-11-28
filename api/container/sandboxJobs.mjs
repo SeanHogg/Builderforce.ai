@@ -18,7 +18,8 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { accessSync, constants as fsConstants } from 'node:fs';
 import { userInfo } from 'node:os';
-import { SHELL_CAPTURE_CHARS, keepTail } from './toolOutputPolicy.mjs';
+import { killTree } from './nodeProcess.mjs';
+import { BACKGROUND_JOB_LIMIT_ERROR, SHELL_CAPTURE_CHARS, keepTail, makeRoomForBackgroundJob } from './toolOutputPolicy.mjs';
 
 /**
  * The binaries THIS process (which holds the run's credentials) executes — git, sudo, id, kill, pkill, chown, rm —
@@ -53,8 +54,6 @@ export function trustedBinary(name, platform = process.platform) {
   return resolved;
 }
 
-/** Finished jobs kept for a late poll; past this the oldest finished go first. */
-const MAX_JOBS = 32;
 /** How long `kill` waits for the tree to report its exit before answering anyway. */
 const KILL_SETTLE_MS = 3_000;
 
@@ -183,14 +182,15 @@ function asShellUser(user, args) {
 /** SIGKILL the job's whole process group (it was spawned detached, so it leads one): a
  *  `bash -lc` child killed alone would leave its grandchildren running. With a shell user the
  *  group is another uid's, so the signal is delivered through sudo as that user. */
-export function killTree(child) {
-  try {
-    process.kill(-child.pid, 'SIGKILL');
-  } catch {
-    try { child.kill('SIGKILL'); } catch { /* already gone */ }
-  }
+export function killSandboxTree(child) {
+  if (!child.pid) return;
   const user = shellUser();
-  if (user && child.pid) asShellUser(user, [trustedBinary('kill'), '-KILL', '--', `-${child.pid}`]);
+  killTree(child.pid, {
+    onError: (error) => {
+      if (!user || error?.code !== 'EPERM') console.error('[sandbox] could not stop the process tree:', error);
+    },
+  });
+  if (user) asShellUser(user, [trustedBinary('kill'), '-KILL', '--', `-${child.pid}`]);
 }
 
 /** Kill EVERY process the shell user owns — a daemon that escaped its process group (`setsid`) included. ONLY where
@@ -348,17 +348,9 @@ export function createJobTable({ maxWaitMs, idPrefix = '' }) {
   const groups = new Set();
   let seq = 0;
 
-  function evictFinished() {
-    for (const [id, job] of table) {
-      if (table.size < MAX_JOBS) return;
-      if (job.status !== 'running') table.delete(id);
-    }
-  }
-
   /** Start `command` in `cwd` (already resolved inside the clone). */
   function start(command, cwd) {
-    evictFinished();
-    if (table.size >= MAX_JOBS) return { ok: false, error: `too many running background jobs (${MAX_JOBS}); stop one with command_stop first` };
+    if (!makeRoomForBackgroundJob(table)) return { ok: false, error: BACKGROUND_JOB_LIMIT_ERROR };
     const id = `${idPrefix}job-${++seq}`;
     const child = spawnShell(command, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
     let settle;
@@ -412,7 +404,7 @@ export function createJobTable({ maxWaitMs, idPrefix = '' }) {
     const wasRunning = job.status === 'running';
     if (wasRunning) job.status = 'killed';
     // Only a group still tracked: `close` drops one that emptied, and its pid may be reused.
-    if (groups.has(job.child)) killTree(job.child);
+    if (groups.has(job.child)) killSandboxTree(job.child);
     groups.delete(job.child);
     if (wasRunning) {
       let timer;
@@ -425,7 +417,7 @@ export function createJobTable({ maxWaitMs, idPrefix = '' }) {
   /** Kill every job and every group a job left behind — the run is over. */
   async function closeAll() {
     await Promise.all([...table.values()].filter((j) => j.status === 'running').map((j) => kill(j.id)));
-    for (const child of groups) killTree(child);
+    for (const child of groups) killSandboxTree(child);
     groups.clear();
   }
 

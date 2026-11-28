@@ -23,6 +23,7 @@ import {
   createLocalBrainPersistence,
   createLocalChatIdentity,
   createRunUsageLedger,
+  MESSAGE_PARTITION,
   type BrainPersistenceAdapter,
   type LocalChatIdentity,
   type RunUsageLedger,
@@ -43,6 +44,8 @@ export function createVsCodeLocalFirstStore(
 ): DurableLocalFirstStore {
   return createDurableLocalFirstStore(ctx.globalStorageUri.fsPath, {
     beforeWrite,
+    // One partition per chat: the extension no longer reads every message at boot (AE-G031).
+    partitions: [MESSAGE_PARTITION],
     onSlowCommit: (ms, frameBytes) => hostLog(`[local-first] slow commit: ${ms} ms, ${frameBytes} byte frame`),
     onBackgroundError: (error) => hostLog(`[local-first] ${messageOf(error)}`),
   });

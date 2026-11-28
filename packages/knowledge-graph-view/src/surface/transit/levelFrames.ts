@@ -15,6 +15,7 @@ import { tailOf } from '../outlineGraph';
 import type { StationModel } from '../stations';
 import { modulesOfFiles, systemName, systemsOf } from '../systems';
 import type { DrillFrame, DrillLevel } from './drillView';
+import { anchorFilesOf } from './reanchorDrill';
 
 /** How deep a level is: a frame may only be entered from a shallower one. */
 export const LEVEL_RANK: Readonly<Record<DrillLevel | 'world', number>> = { world: 0, system: 1, app: 2, package: 3, class: 4, function: 5 };
@@ -46,7 +47,7 @@ export function folderFrameOf(graph: KnowledgeGraph, path: string): DrillFrame |
 /** A station's own frame (a package). */
 export const packageFrameOf = (world: StationModel, id: string): DrillFrame | null => {
     const station = world.byId.get(id);
-    return station ? { level: 'package', ref: id, name: station.name, files: station.refs.slice(0, 32) } : null;
+    return station ? { level: 'package', ref: id, name: station.name, files: anchorFilesOf(world, id) } : null;
 };
 
 /** The frame of a child mark of a structural level (its slot key), else null. */

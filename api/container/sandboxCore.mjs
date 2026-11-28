@@ -23,15 +23,13 @@
  * so the Actions runner can inline it verbatim (`api/scripts/gen-sandbox-core-source.mjs`).
  */
 import { join, relative, sep } from 'node:path';
-import { SHELL_CAPTURE_CHARS, fitToolText, keepTail, toolOutputCap } from './toolOutputPolicy.mjs';
+import { DEFAULT_COMMAND_TIMEOUT_MS, SHELL_CAPTURE_CHARS, fitToolText, keepTail, toolOutputCap } from './toolOutputPolicy.mjs';
 import { cloneCheckIo, createPostEditChecks } from './postEditChecks.mjs';
-import { bootJobIdPrefix, createJobTable, isolationProbe, killTree, provisionShellUser, releaseShellWorkspace, shellEnv, shellInvocation, shellUser, spawnShell, sweepShellProcesses, teardownShellSync, TRUSTED_PATH, trustedBinary, verifyShellIsolation } from './sandboxJobs.mjs';
+import { bootJobIdPrefix, createJobTable, isolationProbe, killSandboxTree, provisionShellUser, releaseShellWorkspace, shellEnv, shellInvocation, shellUser, spawnShell, sweepShellProcesses, teardownShellSync, TRUSTED_PATH, trustedBinary, verifyShellIsolation } from './sandboxJobs.mjs';
 import { createWorkspaceClient } from './workspaceClient.mjs';
 import { absorbHead, assertWorkdirOutsideParentCheckout, assertWorkspaceOutsideCheckout, bundleCreateArgs, cloneWorkspace, createMirror, disposeMirror, gitAuthOf, importBundle, mirrorGitCommand, publishHead, safeRef, scrubCheckoutCredentials, syncWorkspace, WORKSPACE_INSIDE_CHECKOUT, workspaceInsideCheckout } from './sandboxGit.mjs';
 
 export { absorbHead, assertWorkdirOutsideParentCheckout, assertWorkspaceOutsideCheckout, bundleCreateArgs, cloneWorkspace, gitAuthOf, importBundle, mirrorGitCommand, provisionShellUser, releaseShellWorkspace, scrubCheckoutCredentials, shellEnv, shellInvocation, shellUser, spawnShell, sweepShellProcesses, teardownShellSync, isolationProbe, TRUSTED_PATH, trustedBinary, verifyShellIsolation, WORKSPACE_INSIDE_CHECKOUT, workspaceInsideCheckout };
-
-const COMMAND_TIMEOUT_MS = 10 * 60 * 1000; // a build/test step may legitimately take minutes
 
 /** Whether the C7 lever is on for this run — decided by the Worker (it owns the tenant
  *  and the env) and carried on the open spec. Absent ⇒ off. */
@@ -55,7 +53,7 @@ const SHELL_SETTLE_MS = 2_000;
  *  `npm test` is a grandchild of `bash`), and the call always settles shortly after.
  *  `proc` (optional) is a holder whose `.current` is set to a handle (`kill`) so a closed
  *  `/sandbox/run` request (the engine's cancel) can stop it. */
-function runShell(command, cwd, proc, timeoutMs = COMMAND_TIMEOUT_MS) {
+function runShell(command, cwd, proc, timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS) {
   return new Promise((resolve) => {
     const child = spawnShell(command, { cwd });
     let out = '';
@@ -80,7 +78,7 @@ function runShell(command, cwd, proc, timeoutMs = COMMAND_TIMEOUT_MS) {
     let exitCode = -1;
     const settleSoon = () => { settleTimer ??= setTimeout(() => done({ exitCode, output: out }), SHELL_SETTLE_MS); };
     const stop = () => {
-      killTree(child);
+      killSandboxTree(child);
       settleSoon();
     };
     const handle = { kill: stop };
@@ -178,7 +176,7 @@ async function sandboxRun(box, body, onAbort) {
   const proc = { current: null };
   const release = onAbort(() => { if (proc.current) proc.current.kill('SIGKILL'); });
   // The engine may bound a command below the ceiling (the run-end verify's budget).
-  const timeoutMs = Number.isFinite(body.timeoutMs) && body.timeoutMs > 0 ? Math.min(body.timeoutMs, COMMAND_TIMEOUT_MS) : COMMAND_TIMEOUT_MS;
+  const timeoutMs = Number.isFinite(body.timeoutMs) && body.timeoutMs > 0 ? Math.min(body.timeoutMs, DEFAULT_COMMAND_TIMEOUT_MS) : DEFAULT_COMMAND_TIMEOUT_MS;
   const r = await runShell(command, box.workdir, proc, timeoutMs);
   if (typeof release === 'function') release();
   return { ok: r.exitCode === 0, exitCode: r.exitCode, timedOut: r.timedOut, output: commandOutput(box.spec, 'run_command', r.output) };
@@ -235,7 +233,7 @@ export function createSandboxBox({ spec, workdir, branch = null, emit = () => {}
   if (typeof helperPath !== 'string' || !helperPath) throw new Error('createSandboxBox needs the workspace helper path (workspaceAgent.mjs)');
   const box = {
     spec, workdir, branch, emit, checks: null,
-    jobs: createJobTable({ maxWaitMs: COMMAND_TIMEOUT_MS, idPrefix: jobIdPrefix }),
+    jobs: createJobTable({ maxWaitMs: DEFAULT_COMMAND_TIMEOUT_MS, idPrefix: jobIdPrefix }),
     workspace: createWorkspaceClient({ workdir, helperPath }),
     mirror: createMirror(spec),
   };

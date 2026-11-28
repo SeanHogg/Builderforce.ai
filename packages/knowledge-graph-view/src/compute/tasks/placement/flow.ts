@@ -16,7 +16,7 @@ import { BG_TONE, toneIndex } from '../../../stage/tones';
 import { DASH_DESCRIBES, DASH_SOLID, type Caption, type LabelRun, type Placement, type Vec3 } from '../../../stage/types';
 import type { StageModel } from '../stageModel';
 import { anchorHidden, draftFor, show } from './anchor';
-import { drillLevel } from './drill';
+import { drillLevel } from './drillLevel';
 import { polylineBatch, type WorldPath } from './links';
 import { drillFrameOf, placementKeyOf, VIEWPORT_BANDS, type PlacementReq } from './request';
 import { sequenceFlow } from './sequenceFlow';

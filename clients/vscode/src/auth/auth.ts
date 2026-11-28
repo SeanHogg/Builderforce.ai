@@ -6,7 +6,7 @@ import {
   type DeviceAuthDeps,
   type DeviceCodeStart,
 } from "@builderforce/device-auth";
-import { getBaseUrl, SECRET_KEY } from "../gateway/gateway";
+import { getBaseUrl, getWebBaseUrl, SECRET_KEY } from "../gateway/gateway";
 import { clearLocalProviderCredentials } from "./localProviderCredentials";
 import { getScopedToken, invalidateScopedTokens, setScopedTokenErrorSink, type ScopedAudience } from "../bfApi/scopedToken";
 import { logLine } from "../diagnostics/errorReporter";
@@ -39,18 +39,7 @@ function isScopedAudience(scope: string): scope is ScopedAudience {
   return scope === "spawn";
 }
 
-/** The web app URL, derived from the gateway base (api.builderforce.ai → builderforce.ai). */
-export function appUrl(): string {
-  try {
-    const u = new URL(getBaseUrl());
-    u.hostname = u.hostname.replace(/^api\./, "");
-    u.pathname = "";
-    u.search = "";
-    return u.toString().replace(/\/$/, "");
-  } catch {
-    return "https://builderforce.ai";
-  }
-}
+export { getWebBaseUrl as appUrl } from "../gateway/gateway";
 
 /**
  * Auth provider for BuilderForce. `createSession` runs the browser device-code flow
@@ -143,7 +132,7 @@ export class BuilderForceAuthProvider implements vscode.AuthenticationProvider {
   private async pasteKey(): Promise<string> {
     // Land the user on the "Connect your editor" page: it signs them in (or prompts
     // login), generates an editor key, and shows it with a Copy button. They paste here.
-    await vscode.env.openExternal(vscode.Uri.parse(`${appUrl()}/activate`));
+    await vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/activate`));
     const key = await vscode.window.showInputBox({
       title: "Sign in to BuilderForce",
       prompt: "A browser opened with your editor key — copy it there and paste it here.",

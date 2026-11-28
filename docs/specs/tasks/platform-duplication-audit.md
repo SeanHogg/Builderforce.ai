@@ -842,17 +842,17 @@ Paths are relative to `Builderforce.ai` unless marked I (`builderforce-inference
 |---|---|---|
 | SHELL-G001 | Sandbox provider containment uses `startsWith("..")` and wrongly rejects `..foo` | `agent-runtime/src/agents/sandbox-capability-provider.ts:101` |
 | SHELL-G002 | The shared resolver does not resolve symlinks (details in the local security findings file) | `packages/agent-tools/src/node-path.ts`, `localCapabilities.ts`, `node-capability-provider.ts` |
-| SHELL-G003 | Four tree-kill implementations | `clients/vscode/src/process/killTree.ts`, `clients/vscode/src/tools/processTree.ts`, `agent-runtime/src/process/kill-tree.ts`, `agent-runtime/src/agents/shell-utils.ts`, `api/container/sandboxJobs.mjs:186` |
+| SHELL-G003 | Closed. Node hosts and the generated container/Actions module share `node-process` tree cancellation. The sandbox retains its shell-user signal adapter | `packages/agent-tools/src/node-process.ts`, `api/container/sandboxJobs.mjs` |
 | SHELL-G004 | Bare `taskkill` resolved from `PATH` (details in the local security findings file) | `processTree.ts`, `kill-tree.ts`, `shell-utils.ts` |
-| SHELL-G005 | Output caps hard-coded per host | `localShell.ts:32-33`, `workspaceShell.ts:46`, `native-file-tools.ts`, `localCapabilities.ts` |
-| SHELL-G006 | Timeout defaults and units differ (seconds vs ms; 5 vs 10 min) | `localShell.ts:31`, `sandboxCore.mjs:34`, `workspaceShell.ts:43`, `bash-tools.exec.ts:226` |
+| SHELL-G005 | Closed. The editor, browser, container and native read paths use named budgets from the shared output policy | `packages/tool-output-policy/src/caps.ts` |
+| SHELL-G006 | Closed. Foreground shells share the ten-minute fallback in milliseconds, converted at the runtime's seconds-based tool boundary | `packages/tool-output-policy/src/caps.ts` |
 | SHELL-G007 | The `apply_patch` alias points at `edit_file`, which has a different contract | `packages/agent-tools/src/toolAliases.ts`, `agent-runtime/src/agents/apply-patch.ts` |
 | SHELL-G008 | Native `read`, `exec` and `process` are not converged onto the shared tools | `converged-coding-tools.ts`, `native-file-tools.ts`, `bash-tools.exec.ts` |
 | SHELL-G009 | No command policy outside agent-runtime (details in the local security findings file) | `shell-tools.ts`, `localShell.ts`, `workspaceShell.ts`, `infra/exec-approvals*.ts` |
-| SHELL-G010 | `LIST_MAX_FILES` and the file walker copied three times | `node-capability-provider.ts:73`, `sandbox-capability-provider.ts:68`, `localCapabilities.ts:48` |
-| SHELL-G011 | Glob pruning copied by hand into the container | `api/container/workspaceAgent.mjs:364`, `agent-tools/src/glob.ts` |
-| SHELL-G012 | Job tables duplicated (`MAX_JOBS = 32` in two places) | `localShellJobs.ts:49`, `sandboxJobs.mjs:57`, `bash-process-registry.ts` |
-| SHELL-G013 | The native edit matcher duplicates `applyStringEdit` | `native-file-tools.ts`, `agent-tools/src/edit.ts`, `edit-match.ts` |
+| SHELL-G010 | Closed. VS Code, on-prem and the sandbox use the shared provider, walker and cap | `packages/agent-tools/src/workspace.ts`, `workspaceList.ts` |
+| SHELL-G011 | Closed. The container consumes generated glob and pruning rules | `api/container/workspaceGlob.mjs`, `packages/agent-tools/src/glob.ts` |
+| SHELL-G012 | The editor and container now share the job limit and eviction policy. The remaining lifecycle logic and native runtime registry are open | `localShellJobs.ts`, `sandboxJobs.mjs`, `bash-process-registry.ts` |
+| SHELL-G013 | Closed. Native edit uses the shared string matcher | `native-file-tools.ts`, `packages/agent-tools/src/edit.ts` |
 | SHELL-G014 | Tool-name tables spread over more than 8 files | see §6.4 |
 | SHELL-G015 | Error shape and wording differ by host | all providers; target `{ok:false, error, code}` |
 | SHELL-G016 | The browser shell has no jobs, background runs or tree cancel | `workspaceShell.ts`, W `packages/browser/src/node/processHost.ts` |
@@ -932,21 +932,21 @@ Paths: BF = `Builderforce.ai`, I = `builderforce-inference`, M = `builderforce-m
 | ID | Gap | Where |
 |---|---|---|
 | AUTH-G001 | Rust device flow duplicates TypeScript; no shared contract fixture | `I/crates/bf-cloud/src/device.rs`, `packages/device-auth` |
-| AUTH-G002 | Three copies of the editor-key session | VS Code `bfApi/session.ts`, Chrome `auth/session.ts`, `I/bf-cloud/session.rs` |
+| AUTH-G002 | VS Code and Chrome share key exchange, TTL and retry. Session storage, workspace selection and Rust flow remain open | `packages/device-auth/src/tenantSession.ts`, Spawn `bf-cloud` |
 | AUTH-G003 | Closed. Chrome uses the shared 401 forced refresh and one retry for replayable requests. Tests cover the idempotency key and workspace scope | `clients/chrome/src/api/apiClient.test.ts` |
 | AUTH-G004 | Chrome has no workspace switch | `clients/chrome/src/auth/session.ts` |
 | AUTH-G005 | agent-runtime has about 56 hand-built Bearer fetches and about 18 `BUILDERFORCE_URL` fallbacks | `agent-runtime/src/{infra,builderforce,commands}/*` |
 | AUTH-G006 | Default base URL split (`api.` vs `/gateway`) | all clients |
 | AUTH-G007 | Inconsistent configuration names and aliases | see §7.4 |
-| AUTH-G008 | Error flattening copied four times; Rust misses the nested form | `frontend/src/lib/apiClient.ts`, `clients/chrome/src/api/apiClient.ts`, `sdk/src/infrastructure/httpClient.ts`, `I/bf-cloud/src/error.rs` |
-| AUTH-G009 | The API and TypeScript clients now share the `expiresIn` default. Rust parity remains open (900 s) | `packages/device-auth/src/tenantSession.ts`, Spawn `bf-cloud` |
+| AUTH-G008 | Closed. Web, Chrome and SDK share the error decoder. Spawn handles both flat and nested envelopes in its native decoder | `packages/api-errors`, Spawn `bf-cloud` |
+| AUTH-G009 | Closed. The API, TypeScript clients and Spawn use a 3600 s fallback | `packages/device-auth/src/tenantSession.ts`, Spawn `bf-cloud` |
 | AUTH-G010 | Closed. The `device-auth` header names the current Chrome and VS Code entry points | `packages/device-auth/src/index.ts` |
 | AUTH-G011 | The web has no refresh; an expired token means a hard logout | `frontend/src/lib/apiClient.ts`, `auth/session.ts` |
-| AUTH-G012 | Chrome now tests refresh and retry. Chrome session, Rust parity and agent-runtime client coverage remain open | — |
-| AUTH-G013 | Web origin derived from the API URL by hand in Rust and VS Code | `I/bf-cloud/src/lib.rs` `web_base_of`, VS Code `appUrl()` |
+| AUTH-G012 | Chrome refresh, retry and session tests are in place. Rust device-flow parity and agent-runtime client coverage remain open | — |
+| AUTH-G013 | VS Code sign-in and deep links now use `getWebBaseUrl`. Cross-language URL parity remains open | Spawn `bf-cloud/src/lib.rs`, VS Code `gateway.ts` |
 | AUTH-G014 | Not yet audited: Chrome SettingsView sign-in, W `aiGateway`/`hostRelay`, `packages/knowledge-client`, `packages/provider-connect` | — |
 | AUTH-G015–G019 | Security-sensitive; details in the local security findings file | — |
-| AUTH-G020 | The workspace-switch route is VS Code-named but used by every editor host | `api/src/presentation/routes/vscodeRoutes.ts` |
+| AUTH-G020 | Expanded. VS Code and Spawn call `/api/auth/workspace-token` and fall back on older gateways. Retire the deprecated alias after client rollout | `api/src/presentation/routes/workspaceTokenRoutes.ts`, `vscodeRoutes.ts` |
 
 ## 8. Security policy engines
 

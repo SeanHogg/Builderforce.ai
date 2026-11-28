@@ -53,7 +53,7 @@ import { promisify } from 'node:util';
 // Side-effect import, FIRST among our modules: spawned git/npm/pip must trust the egress CA.
 import './egressTrust.mjs';
 import { bootJobIdPrefix, closeSandboxBox, cloneWorkspace, createSandboxBox, runShell, serveSandbox, shellUser, spawnShell, verifyShellIsolation } from './sandboxCore.mjs';
-import { killTree } from './sandboxJobs.mjs';
+import { killSandboxTree } from './sandboxJobs.mjs';
 import { createPreviewProcess } from './previewProcess.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
@@ -251,7 +251,7 @@ async function startPreviewDevServer(spec, box) {
     cwd: workdir,
     extraEnv: step.env && typeof step.env === 'object' ? step.env : {},
     spawn: spawnShell,
-    kill: killTree,
+    kill: killSandboxTree,
   });
   try {
     proc.start();

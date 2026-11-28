@@ -68,6 +68,20 @@ describe("mintJwt re-scope", () => {
     globalThis.fetch = realFetch;
   });
 
+  it("uses the neutral workspace route and falls back on older gateways", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(baseOk())
+      .mockResolvedValueOnce(json({}, 404))
+      .mockResolvedValueOnce(json({ token: "scoped.jwt", expiresIn: 3600 }));
+    globalThis.fetch = fetch;
+
+    expect(await exchangeJwt({} as never)).toBe("scoped.jwt");
+    expect(fetch).toHaveBeenNthCalledWith(2, "https://api.example/api/auth/workspace-token", expect.objectContaining({
+      method: "POST", body: '{"tenantId":7}', headers: expect.objectContaining({ authorization: "Bearer base.jwt" }),
+    }));
+    expect(fetch).toHaveBeenNthCalledWith(3, "https://api.example/api/vscode/tenants/7/token", expect.objectContaining({ method: "POST" }));
+  });
+
   it("editor_key_required goes to the editor-key refusal path (naming the workspace), not a silent drop", async () => {
     stubApi(json({ error: "x", code: "editor_key_required" }, 403));
     expect(await exchangeJwt({} as never)).toBe("base.jwt");

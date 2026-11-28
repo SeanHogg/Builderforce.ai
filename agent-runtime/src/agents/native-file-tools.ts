@@ -16,12 +16,12 @@ import {
 } from "node:fs/promises";
 import { dirname, extname, isAbsolute, resolve as resolvePath } from "node:path";
 import { applyStringEdit } from "@builderforce/agent-tools";
+import { NATIVE_FILE_READ_MAX_BYTES as DEFAULT_MAX_BYTES, NATIVE_FILE_READ_MAX_LINES as DEFAULT_MAX_LINES } from "@builderforce/tool-output-policy";
 import { Type } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "../builderforce/model/agent-types.js";
 import { getStagedEdit, isStagingActive, stageEdit } from "../builderforce/staged-edits.js";
 
-export const DEFAULT_MAX_LINES = 2000;
-export const DEFAULT_MAX_BYTES = 50 * 1024;
+export { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES };
 
 const readSchema = Type.Object({
   path: Type.String({ description: "Path to the file to read (relative or absolute)" }),

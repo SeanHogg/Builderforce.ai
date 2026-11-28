@@ -1,45 +1,32 @@
 /**
- * ROOF MINIATURES (the design's): an enterable shape on the Map shows what is inside it, small, on its roof. The children of
- * a drawn station (the slots whose `parentStation` it is) are placed as small marks standing on its roof — at most
- * {@link MINIS_MAX} each, in a grid over the roof's footprint — so entering the station grows the children out of those roof
- * positions (visibility is scale: the same slots, shown at full size on the next level's floor). Skipped on a crowded level
- * (the existing large-graph caps: more than {@link MINIS_LEVEL_MAX} stations draw no roofs). Pure.
+ * ROOF MINIATURES (the design's `build`): a shape you can go inside shows what is inside it, small, on its roof — at most
+ * {@link MINIS_MAX}, laid out exactly as the next level lays them out (`tierLayout`), shrunk onto the roof by
+ * `1.25 × w / 17` across and `1.25 × d / 13` deep, {@link MINI.height} tall. They are the SAME slots the next level grows them
+ * from (visibility is scale), so entering a shape grows its roof into the room. A slot a level already placed is never
+ * placed twice. The y of a mini is its parent's roof: `Placement.liftWithDepth` lowers it with the depth. Pure.
  */
 
-import { SLOT_NODE } from '../../../stage/types';
-import type { StageModel } from '../stageModel';
-import { VISIBLE, show, type Draft } from './anchor';
+import type { Draft } from './anchor';
+import { VISIBLE, show } from './anchor';
+import type { LevelChild } from './levelChildren';
+import { FOOT, kindOfChild, MINI, MINIS_MAX, ROUND_KINDS, U } from './levelGeometry';
+import { layTiers } from './tierLayout';
 
-/** The design's cap on miniatures per roof. */
-export const MINIS_MAX = 12;
-/** More drawn stations than this and no roofs are built (a crowded level reads as a map, not as shapes to look into). */
-export const MINIS_LEVEL_MAX = 80;
-/** A mini is this share of its parent's half-size across, and this share tall. */
-const MINI_SHARE = 0.22, MINI_RISE = 0.14;
-/** A mini's half-size at most this share of its grid cell, so neighbours keep a gap. */
-const MINI_CELL_FILL = 0.4;
+/** A shape standing on the floor: where (world x, z), how big (design units, full width × depth) and how high its roof is (world y). */
+export interface RoofParent { x: number; z: number; w: number; d: number; roof: number }
 
-export function roofMinis(model: StageModel, d: Draft, drawn: readonly string[]): void {
-    if (drawn.length > MINIS_LEVEL_MAX) return;
-    const { marks, stationSlot } = model;
-    const kids = new Map<number, number[]>();
-    for (let i = 0; i < marks.parentStation.length; i++) {
-        const parent = marks.parentStation[i]!;
-        if (parent < 0 || marks.slotKind[i] !== SLOT_NODE || d.placed[i] === VISIBLE) continue;
-        const list = kids.get(parent);
-        if (!list) kids.set(parent, [i]); else if (list.length < MINIS_MAX) list.push(i);
-    }
-    for (const id of drawn) {
-        const slot = stationSlot.get(id);
-        const list = slot === undefined ? undefined : kids.get(slot);
-        if (slot === undefined || !list || d.scale[slot]! <= 0) continue;
-        const size = d.scale[slot]!, cols = Math.ceil(Math.sqrt(list.length)), cell = (size * 1.5) / cols;
-        // A mini never outgrows its grid cell (a full roof of 12 would otherwise overlap its neighbours).
-        const half = Math.min(size * MINI_SHARE, cell * MINI_CELL_FILL);
-        const roof = d.extrude[slot]!;
-        list.forEach((child, k) => {
-            const cx = (k % cols) - (cols - 1) / 2, cz = Math.floor(k / cols) - (Math.ceil(list.length / cols) - 1) / 2;
-            show(d, child, d.position[slot * 3]! + cx * cell, roof, d.position[slot * 3 + 2]! + cz * cell, half, size * MINI_RISE);
-        });
-    }
+/** Places `kids` (the parent's children, ranked) on the roof of `parent`; `aspect` receives each mini's depth ÷ width. */
+export function roofMinis(d: Draft, aspect: Float32Array, parent: RoofParent, kids: readonly LevelChild[]): number {
+    const fresh = kids.filter((k) => d.placed[k.slot] !== VISIBLE).slice(0, MINIS_MAX);
+    const spots = layTiers(fresh.map((k) => {
+        const kind = kindOfChild(k.role, k.type), [w, depth] = FOOT[kind];
+        return { tier: k.tier, w, d: ROUND_KINDS.has(kind) ? w : depth };
+    }));
+    const fx = (MINI.share * parent.w) / MINI.refW, fz = (MINI.share * parent.d) / MINI.refD;
+    fresh.forEach((kid, i) => {
+        const at = spots[i]!, w = at.w * fx, depth = (ROUND_KINDS.has(kindOfChild(kid.role, kid.type)) ? at.w : at.d) * fz;
+        show(d, kid.slot, parent.x + at.x * fx * U, parent.roof, parent.z + at.z * fz * U, (w * U) / 2, MINI.height * U);
+        aspect[kid.slot] = depth / Math.max(w, 1e-6);
+    });
+    return fresh.length;
 }

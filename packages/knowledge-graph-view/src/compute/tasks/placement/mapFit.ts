@@ -5,6 +5,8 @@
  * narrower than {@link MIN_FIT_EXTENT}, so a sparse level reads at a sane size and a full one frames the whole plate.
  */
 
+import type { CameraRig } from '../../../stage/types';
+
 /** World units kept round the content: a few mark diameters, the labels and the casing. */
 export const FIT_PAD = 56;
 /** The least world extent (either axis) the fit may shrink to. */
@@ -40,4 +42,19 @@ export function contentPoints(positions: ReadonlyMap<string, Pt>, drawn: readonl
     for (const id of drawn) { const p = positions.get(id); if (p) out.push(p); }
     for (const r of routes) out.push(...r.pts);
     return out;
+}
+
+/** The design's home view: fov 38, theta -0.55 rad (yaw), phi 0.95 rad (pitch = 90° - phi), heights collapse to 0.03 in Flat. */
+const HOME_FOV = 38, HOME_YAW = (-0.55 * 180) / Math.PI, HOME_PITCH = 90 - (0.95 * 180) / Math.PI, FLAT_DEPTH = 0.03;
+
+/** The perspective rig of a Map / 3D scene, fitted to `fit` with its tallest shape `top`: the ONE home view (`map.ts`, `level.ts`). */
+export function homeRig(fit: MapFit, top: number): CameraRig {
+    const { cx, cz, radius } = fit;
+    return {
+        projection: 'perspective', frame: 'fill',
+        home: { position: [cx, 1000, cz], target: [cx, top * 0.35, cz], up: [0, 1, 0] },
+        depth: { tilt: [5, 83], orbit: true },
+        // Fit-to-content: the rig derives the distance from the stage's own aspect (and again on every resize).
+        view: { yaw: HOME_YAW, pitch: HOME_PITCH, distance: 1000, fov: HOME_FOV, radius, flatDepth: FLAT_DEPTH },
+    };
 }

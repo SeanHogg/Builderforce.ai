@@ -1,0 +1,8 @@
+{
+  "name": "@builderforce/api-errors",
+  "version": "2026.11.1",
+  "private": true,
+  "type": "module",
+  "description": "Shared decoding for flat and nested Builderforce API error envelopes.",
+  "exports": { ".": "./src/index.ts" }
+}

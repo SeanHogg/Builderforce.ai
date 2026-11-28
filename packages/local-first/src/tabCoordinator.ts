@@ -26,8 +26,8 @@ export type TabClaimResult =
   | { readonly holder: string }
   | { readonly holder: string; readonly refused: string };
 
-function holderAbsent(holder: string | undefined): boolean {
-  return holder === undefined || holder.length === 0;
+function hasHolder(holder: string | undefined): holder is string {
+  return holder !== undefined && holder.length > 0;
 }
 
 /**
@@ -39,7 +39,7 @@ function holderAbsent(holder: string | undefined): boolean {
  */
 export function claimTab(lease: TabCoordinatorLease, tabId: string, now: number): TabClaimResult {
   const holder = lease.holder;
-  if (!holderAbsent(holder) && holder !== tabId && lease.expiresAt > now) {
+  if (hasHolder(holder) && holder !== tabId && lease.expiresAt > now) {
     return { holder, refused: tabId };
   }
   return { holder: tabId };

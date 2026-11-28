@@ -109,9 +109,16 @@ export interface LegacyMerge {
   baseline: LegacyBaseline;
 }
 
-/** The merge rule, pure: what in `legacy` the old window changed since `baseline` and `current` (v3) lacks. */
-export function planLegacyMerge(baseline: LegacyBaseline, legacy: LocalFirstSnapshot, current: LocalFirstSnapshot): LocalFirstDelta | undefined {
-  const versions = new Map(current.records.map((row) => [rowKey(row), row.version]));
+/** Each candidate row's version in the store (`undefined`: absent), keyed `entityType/id`. */
+export type RowVersions = ReadonlyMap<string, number | undefined>;
+
+/**
+ * The merge rule, pure: what in `legacy` the old window changed since `baseline` and `current` (v3) lacks.
+ * A partitioned store's `current.records` holds no message row, so it passes `known`: the version of each
+ * `legacy` row, looked up (`RowLookup`). Without it the versions come from `current.records`.
+ */
+export function planLegacyMerge(baseline: LegacyBaseline, legacy: LocalFirstSnapshot, current: LocalFirstSnapshot, known?: RowVersions): LocalFirstDelta | undefined {
+  const versions: RowVersions = known ?? new Map(current.records.map((row) => [rowKey(row), row.version]));
   const records = legacy.records.filter((row) => {
     const key = rowKey(row);
     const known = baseline.rows[key];
@@ -146,13 +153,15 @@ export async function readLegacyMerge(
   directory: string,
   current: LocalFirstSnapshot,
   pause: () => Promise<void>,
+  /** A partitioned store: the versions of the rows `legacy` holds, by lookup (its `view().records` has no message). */
+  versionsOf?: (rows: LocalFirstSnapshot["records"]) => Promise<RowVersions>,
 ): Promise<LegacyMerge | undefined> {
   const moved = await legacyMoved(directory);
   if (!moved) return undefined;
   // `moved.stat` was taken before this read: a write landing during it only makes the next open re-check.
   const legacy = await readLegacyJournal(directory, pause);
   if (!legacy) return undefined;
-  const delta = planLegacyMerge(moved.baseline, legacy, current);
+  const delta = planLegacyMerge(moved.baseline, legacy, current, versionsOf && await versionsOf(legacy.records));
   return {
     delta,
     rows: delta?.records?.length ?? 0,

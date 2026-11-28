@@ -31,6 +31,8 @@ export { DEFAULT_ROUTE_THRESHOLD, summarizeRouteRuns } from '@builderforce/pipel
 export { prefetchConfirmOf, type PrefetchConfirm, type PrefetchResult } from '@builderforce/prefetch';
 export type { RouteReport, RouteRunRecord, ScoreBin } from '@builderforce/pipeline-route';
 export { bindChatHistoryForSync } from './localChat/chatSync';
+// Message rows are stored one partition per chat (AE-G031): a host passes this to its store.
+export { MESSAGE_PARTITION } from './localChat/records';
 
 // Streaming client + tool/message types
 // RepetitionLoopError: a model stuck repeating one block of prose, cut mid-stream.

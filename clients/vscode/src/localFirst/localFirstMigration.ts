@@ -18,6 +18,7 @@ import nodePath from "node:path";
 import { scanJournalAsync, type LocalFirstSnapshot } from "@builderforce/local-first";
 import { LEGACY_JOURNAL_FILE } from "./localFirstJournalIo";
 import { planSnapshotLoad } from "./localFirstSnapshotFile";
+import { PARTITIONS_DIR, PARTITION_TEMP_PATTERN } from "./localFirstPartitionNames";
 
 const fs = nodeFs.promises;
 
@@ -105,8 +106,8 @@ export async function retireSnapshotCache(snapshotFile: string): Promise<void> {
 const ORPHAN_PATTERNS: readonly RegExp[] = [
   /^local-first-v1\.json\.\d+\.\d+(\.[a-z0-9]+)?\.tmp$/,
   /^local-first-v1\.lock\..+\.tmp$/,
-  /^local-first-v[23]\.journal\.\d+\.\d+(\.[a-z0-9]+)?\.tmp$/,
-  /^local-first-v3\.import\.json\.\d+\.\d+\.tmp$/,
+  /^local-first-v[234]\.journal\.\d+\.\d+(\.[a-z0-9]+)?\.tmp$/,
+  /^local-first-v[34]\.import\.json\.\d+\.\d+(\.[a-z0-9]+)?\.tmp$/,
 ];
 
 /**
@@ -114,13 +115,19 @@ const ORPHAN_PATTERNS: readonly RegExp[] = [
  * enough to be nobody's in-flight write. Best effort: a file that will not go is ignored.
  */
 export async function removeOrphanedTemporaries(directory: string, now: number = Date.now()): Promise<void> {
+  await removeOrphansIn(directory, ORPHAN_PATTERNS, now);
+  // A partition streamed by a compaction or a migration that never renamed it (`*.tmp-<generation>`).
+  await removeOrphansIn(nodePath.join(directory, PARTITIONS_DIR), [PARTITION_TEMP_PATTERN], now);
+}
+
+async function removeOrphansIn(directory: string, patterns: readonly RegExp[], now: number): Promise<void> {
   let names: string[];
   try {
     names = await fs.readdir(directory);
   } catch {
     return;
   }
-  await Promise.all(names.filter((name) => ORPHAN_PATTERNS.some((pattern) => pattern.test(name))).map(async (name) => {
+  await Promise.all(names.filter((name) => patterns.some((pattern) => pattern.test(name))).map(async (name) => {
     const path = nodePath.join(directory, name);
     try {
       if (now - (await fs.stat(path)).mtimeMs < ORPHAN_MIN_AGE_MS) return;

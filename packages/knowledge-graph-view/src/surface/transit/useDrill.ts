@@ -122,7 +122,8 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
     }, [world, full, stack, requestSymbols]);
     const view = useMemo(() => {
         const top = stack[stack.length - 1];
-        return full && top ? buildDrillView(full, world, top, records) : null;
+        // A system or an app is drawn by the level scene over the world's stations: it has no view of its own.
+        return full && top && !isStructuralLevel(top.level) ? buildDrillView(full, world, top, records) : null;
     }, [full, world, stack, records]);
 
     const hasMembers = useCallback((ref: string) => {
@@ -139,23 +140,43 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
         const next = NEXT[level];
         if (!next) return { can: false, reason: 'deepest' };
         if (view?.leaves.has(id)) return { can: false, reason: 'leaf' };
-        if (level === 'world') return world.byId.has(id) ? { can: true, level: 'package' } : { can: false, reason: 'unknown' };
+        if (isStructuralLevel(level)) {
+            // A folder mark is a system or an app; a station is a package. Only a deeper level than the one on show is entered.
+            const folder = folderOfKey(id);
+            if (folder !== null) {
+                const frame = graph ? folderFrameOf(graph, folder) : null;
+                if (!frame) return { can: false, reason: 'unknown' };
+                return LEVEL_RANK[frame.level] > LEVEL_RANK[level] ? { can: true, level: frame.level, ref: frame.ref } : { can: false, reason: 'deepest' };
+            }
+            return world.byId.has(id) ? { can: true, level: 'package', ref: id } : { can: false, reason: 'unknown' };
+        }
         if (!full || !hasSymbols(full)) return { can: false, reason: 'noSymbols' };
         if (level === 'package' && symbolsOfFile(symbolsOf(full), id).length === 0) return { can: false, reason: 'noSymbols' };
         if (level === 'class' && full.nodes.find((n) => n.ref === id)?.kind !== 'symbol') return { can: false, reason: 'noSymbols' };
-        return { can: true, level: next };
-    }, [stack, view, world, full]);
+        return { can: true, level: next, ref: id };
+    }, [stack, view, world, full, graph]);
+
+    // The frame an enter lands on: a package or deeper keeps its own name; a system or an app goes through the ONE skip rule.
+    const frameOf = useCallback((id: string): DrillFrame | null => {
+        const check = canEnter(id);
+        if (!check.can) return null;
+        if (check.level === 'system' || check.level === 'app') {
+            const own = graph ? folderFrameOf(graph, check.ref) : null;
+            return graph && own ? frameToEnter(graph, world, own) : null;
+        }
+        const name = view?.stations.byId.get(id)?.name ?? world.byId.get(id)?.name ?? id;
+        return check.level === 'package' ? { level: check.level, ref: id, name, files: anchorFilesOf(world, id) } : { level: check.level, ref: id, name };
+    }, [canEnter, graph, view, world]);
 
     const enter = useCallback((id: string) => {
-        const check = canEnter(id);
-        if (!check.can) return;
-        const name = view?.stations.byId.get(id)?.name ?? world.byId.get(id)?.name ?? id;
-        setStack((s) => [...s, check.level === 'package' ? { level: check.level, ref: id, name, files: anchorFilesOf(world, id) } : { level: check.level, ref: id, name }]);
+        const frame = frameOf(id);
+        if (!frame) return;
+        setStack((s) => [...s, frame]);
         setSelected(null);
         setNotice(null);
         // The most important files first; the HOST applies the one real cap, this only keeps the request small.
-        if (check.level === 'package') requestSymbols((world.byId.get(id)?.refs ?? []).slice(0, SYMBOL_FILES));
-    }, [canEnter, view, world, requestSymbols]);
+        if (frame.level === 'package') requestSymbols((world.byId.get(frame.ref)?.refs ?? []).slice(0, SYMBOL_FILES));
+    }, [frameOf, world, requestSymbols]);
 
     const openFile = useCallback((ref: string) => {
         const id = stationOfRef(world, ref);
@@ -179,7 +200,7 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
     }, [stack.length]);
     const out = useCallback(() => { setStack((s) => s.slice(0, -1)); setSelected(null); setNotice(null); }, []);
     return {
-        stack, view, canOut: stack.length > 0, parent: stack[stack.length - 2] ?? null, selected, select: setSelected, canEnter, enter, openFile, hasMembers, climb, out,
+        stack, view, canOut: stack.length > 0, parent: stack[stack.length - 2] ?? null, selected, select: setSelected, canEnter, frameOf, enter, openFile, hasMembers, climb, out,
         loading: pending > 0, notice, symbols: records, loadFileSymbols: (ref) => requestSymbols([ref]), reanchored,
     };
 }

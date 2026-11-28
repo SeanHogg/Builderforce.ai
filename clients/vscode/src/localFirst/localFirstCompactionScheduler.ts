@@ -18,6 +18,7 @@ import type { JournalCompactionPolicy, LocalFirstDelta, LocalFirstSnapshot } fro
 import { pruneSettledReceipts, shouldCompactJournal } from "@builderforce/local-first";
 import { compactJournal, type CompactionPorts } from "./localFirstCompaction";
 import type { CompactionBackoff } from "./localFirstCompactionBackoff";
+import type { PartitionCompactor } from "./localFirstPartitionCompaction";
 
 /** Events this window acknowledged since its last compaction that fold a new base. */
 export const COMPACT_AFTER_ACKNOWLEDGED = 20_000;
@@ -34,6 +35,8 @@ export interface CompactionSchedulerPorts {
   onBackgroundError(error: unknown): void;
   /** After a published compaction: drop these receipts (by event id) from the window's own state. */
   dropReceipts?(eventIds: readonly string[]): void;
+  /** A partitioned store: each partition compacts on its own tail policy (`localFirstPartitionCompaction.ts`). */
+  readonly partitions?: PartitionCompactor;
 }
 
 export interface CompactionScheduler {
@@ -68,6 +71,8 @@ export function createCompactionScheduler(ports: CompactionSchedulerPorts): Comp
         };
         const published = await compactJournal({ io: ports.io, view, exclusive: ports.exclusive, policy });
         if (published && pruned.length > 0) ports.dropReceipts?.(pruned);
+        // A partitioned store folds each partition whose own tail is past ITS policy, on this same queue.
+        for (const id of ports.partitions?.due() ?? []) await ports.partitions!.compact(id);
         acknowledged = Math.max(0, acknowledged - counted);
         ports.backoff.succeeded();
       } catch (error) {
@@ -85,7 +90,8 @@ export function createCompactionScheduler(ports: CompactionSchedulerPorts): Comp
     },
     schedule() {
       const drained = acknowledged >= threshold;
-      if (pending || !(drained || shouldCompactJournal(ports.io.tail(), ports.policy)) || !ports.backoff.allowed()) return;
+      const due = drained || shouldCompactJournal(ports.io.tail(), ports.policy) || (ports.partitions?.due().length ?? 0) > 0;
+      if (pending || !due || !ports.backoff.allowed()) return;
       // A drained queue folds whatever the tail measures: one frame is enough.
       queue(drained ? { maxFrames: 1 } : ports.policy);
     },

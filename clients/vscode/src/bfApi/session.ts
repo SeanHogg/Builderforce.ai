@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { isTenantSessionFresh, tenantSessionExpiresAt } from "@builderforce/device-auth";
+import { exchangeEditorKey, isTenantSessionFresh, requestWorkspaceToken, tenantSessionExpiresAt } from "@builderforce/device-auth";
 import { getApiKey, getBaseUrl } from "../gateway/gateway";
 import { setOutboxScope, trackReachability } from "../sync/outboxStorage";
 import { setCurrentWorkspace } from "../workspace/workspaceSelection";
@@ -14,7 +14,7 @@ import { classifyWorkspaceRefusal, reportWorkspaceRefusal } from "../auth/gatewa
  */
 // The editor key is bound to ONE tenant; its exchange yields the "base" JWT. To act on
 // another of the user's workspaces we re-scope that base JWT to the selected tenant via
-// /api/vscode/tenants/:id/token. Both tokens are cached with their tenant + expiry.
+// /api/auth/workspace-token. Both tokens are cached with their tenant + expiry.
 let baseJwt: { token: string; exp: number; tenantId: number } | undefined;
 let scopedJwt: { token: string; exp: number; tenantId: number } | undefined;
 let selectedTenantId: number | undefined;
@@ -157,41 +157,6 @@ export function tenantOfToken(token: string): number | undefined {
 const editorKeyRejected = new vscode.EventEmitter<string>();
 export const onEditorKeyRejected = editorKeyRejected.event;
 
-type KeyExchange =
-  | { ok: true; jwt: { token: string; exp: number; tenantId: number } }
-  | { ok: false; rejected: boolean };
-
-/**
- * Ceiling on the auth-mint round trips (the key→JWT exchange and the workspace
- * re-scope). Without this a slow / cold / dropped gateway leaves `fetch` waiting on the
- * OS TCP timeout — tens of seconds to minutes — and because `exchangeJwt` is
- * single-flight, that one hung mint stalls the whole panel on "Connecting…" and holds up
- * the first turn of every run. A bounded abort turns "hang forever" into the existing
- * fail-fast "Couldn't reach BuilderForce / Retry" path.
- */
-const MINT_TIMEOUT_MS = 10_000;
-
-/** One `tenant-api-key-token` round trip, classified — no caching, no side effects. */
-async function requestBaseJwt(key: string): Promise<KeyExchange> {
-  try {
-    const res = await trackReachability(fetch(`${getBaseUrl()}/api/auth/tenant-api-key-token`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ apiKey: key }),
-      signal: AbortSignal.timeout(MINT_TIMEOUT_MS),
-    }));
-    // 401 = invalid/revoked key; 400 = a key with no user (the route says "use device
-    // sign-in"). Anything else non-OK is the gateway, not the key.
-    if (res.status === 401 || res.status === 400) return { ok: false, rejected: true };
-    if (!res.ok) return { ok: false, rejected: false };
-    const body = (await res.json()) as { token?: string; expiresIn?: number; tenantId?: number };
-    if (!body.token || typeof body.tenantId !== "number") return { ok: false, rejected: false };
-    return { ok: true, jwt: { token: body.token, exp: tenantSessionExpiresAt(Date.now(), body.expiresIn), tenantId: body.tenantId } };
-  } catch {
-    return { ok: false, rejected: false };
-  }
-}
-
 /** Exchange the stored editor key for its OWN tenant JWT (the key's bound workspace). */
 async function exchangeBaseJwt(
   secrets: vscode.SecretStorage,
@@ -201,7 +166,7 @@ async function exchangeBaseJwt(
   const epoch = jwtEpoch;
   const key = await getApiKey(secrets);
   if (!key) return undefined;
-  const result = await requestBaseJwt(key);
+  const result = await exchangeEditorKey(getBaseUrl(), key, (url, init) => trackReachability(fetch(url, init)), Date.now);
   // Signed out or re-keyed meanwhile: this token belongs to the identity that left.
   if (epoch !== jwtEpoch) return undefined;
   if (!result.ok) {
@@ -223,7 +188,7 @@ export async function probeEditorKey(
 ): Promise<"ok" | "rejected" | "unreachable" | "none"> {
   const key = await getApiKey(secrets);
   if (!key) return "none";
-  const result = await requestBaseJwt(key);
+  const result = await exchangeEditorKey(getBaseUrl(), key, (url, init) => trackReachability(fetch(url, init)), Date.now);
   if (result.ok) {
     baseJwt = result.jwt;
     syncOutboxScope();
@@ -264,11 +229,7 @@ async function mintJwt(secrets: vscode.SecretStorage, force: boolean): Promise<s
     // A stale base token (minted before the server stamped its key id, or its key just
     // renewed) is answered 401 / `session_stale`: re-mint the base ONCE and ask again.
     for (let attempt = 0; ; attempt++) {
-      const res = await fetch(`${getBaseUrl()}/api/vscode/tenants/${target}/token`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${base.token}`, "content-type": "application/json" },
-        signal: AbortSignal.timeout(MINT_TIMEOUT_MS),
-      });
+      const res = await requestWorkspaceToken(getBaseUrl(), target, base.token, fetch);
       // Signed out or re-keyed meanwhile (as in `exchangeBaseJwt`): nothing here is ours to keep.
       if (epoch !== jwtEpoch) return undefined;
       const errorBody = res.status === 403 || res.status === 401 ? await res.json().catch(() => null) : null;

@@ -1,3 +1,4 @@
+import { flattenApiError } from '@builderforce/api-errors';
 /**
  * THE API client for api.builderforce.ai — one transport, one header contract.
  *
@@ -278,26 +279,6 @@ interface ApiErrorBody {
 }
 
 /**
- * Flatten either envelope to the three fields the rest of this module reads, so
- * no call site has to know which shape the gateway picked. One unwrap, used by
- * every transport — the alternative is each reader re-deciding, and the one that
- * forgets renders an object.
- */
-function flattenErrorBody(body: ApiErrorBody): { message?: string; code?: string; details?: unknown } {
-  const nested = typeof body.error === 'object' && body.error !== null ? body.error : null;
-  const flatMessage = typeof body.error === 'string' ? body.error : undefined;
-  const message = body.message ?? nested?.message ?? flatMessage;
-  const code = body.code ?? nested?.code;
-  return {
-    // Never hand back a non-string: everything downstream of this renders or
-    // reports it, and the whole point of this unwrap is that none of them can.
-    ...(typeof message === 'string' ? { message } : {}),
-    ...(code === undefined ? {} : { code: String(code) }),
-    details: body.details ?? nested?.details,
-  };
-}
-
-/**
  * The error envelope, parsed once.
  *
  * `read` clones the response, so the streaming transport — whose caller still
@@ -313,7 +294,7 @@ async function readErrorBody(res: Response): Promise<ApiErrorBody> {
  *  (for example the task Done gate). Prefer the explanation in the UI while
  *  retaining `code` for diagnostics. */
 function errorMessage(body: ApiErrorBody, res: Response): string {
-  const { message } = flattenErrorBody(body);
+  const { message } = flattenApiError(body);
   return message || res.statusText || `Request failed (${res.status})`;
 }
 
@@ -360,7 +341,7 @@ async function reportApiFailure(
   // Read through the same unwrap as the message: a cascade-exhausted 429 carries
   // its code and details nested too, so reading them off the top level alone
   // dropped the one code that explains the failure.
-  const { code, details } = flattenErrorBody(body);
+  const { code, details } = flattenApiError(body);
   // A terms bump is a GATE, not a fault — it routes the user to the acceptance
   // screen rather than the support-ticket toast. Signalled before the
   // `expectedErrors` check so the gate heals whichever call happens to hit it
@@ -391,7 +372,7 @@ async function reportAndThrow(
   const body = await reportApiFailure(res, url, method, expectedErrors, hadToken);
   // Through the same unwrap as the toast: a caller that catches this reads the
   // nested code and details too, and never a raw numeric `code`.
-  const { code, details } = flattenErrorBody(body);
+  const { code, details } = flattenApiError(body);
   const signedOut = isAnonymousUnauthorized(res.status, hadToken);
   // The one fact a surface needs from a signed-out read — recorded here, where
   // it is known, so `GuestAccountPrompt` can invite the visitor in without any

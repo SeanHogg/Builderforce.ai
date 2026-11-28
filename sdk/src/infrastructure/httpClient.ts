@@ -1,3 +1,4 @@
+import { flattenApiError } from '@builderforce/api-errors';
 import type { FailoverEvent } from '../domain/types';
 
 export class BuilderforceApiError extends Error {
@@ -217,84 +218,33 @@ export class HttpClient {
     const headerRetryAfter = parsePositiveInt(res.headers.get('retry-after'));
 
     try {
-      const payload = await res.json() as Record<string, unknown> | null;
-
-      // Three envelope shapes are in the wild:
-      //
-      //   Flat   — { error: "msg", code, details, terminal?, retryAfter? }
-      //            (gateway's documented shape — plan_token_limit_exceeded etc.)
-      //   OpenAI — { error: { message, code, type, details } }
-      //            (cascade-exhausted 429 on both chat and image surfaces —
-      //             matches OpenAI's error envelope convention)
-      //   Wrapped — { success: false, error: { code, message, details } }
-      //            (consumer-side wrappers around the gateway, e.g. some
-      //             tenant proxies emit AI_RATE_LIMITED / AI_UNAVAILABLE
-      //             envelopes that re-wrap the upstream error)
-      //
-      // Unwrap to a single `inner` shape so `details.failovers` etc. always
-      // populate on `BuilderforceApiError` regardless of which envelope the
-      // gateway picked. Single parsing site for every surface (DRY).
-      const errorObj =
-        payload !== null
-        && typeof payload === 'object'
-        && typeof payload.error === 'object'
-        && payload.error !== null
-          ? payload.error as Record<string, unknown>
-          : null;
-
-      const isWrapped =
-        payload !== null
-        && typeof payload === 'object'
-        && payload.success === false
-        && errorObj !== null;
-
-      const inner = (isWrapped || errorObj !== null ? errorObj : payload) as {
-        error?:      string;
-        message?:    string;
-        code?:       string | number;
-        details?:    unknown;
-        terminal?:   boolean;
-        retryAfter?: number;
-        vendor?:     string;
-        model?:      string;
-      } | null;
-
-      const message =
-        (typeof inner?.message === 'string' && inner.message)
-        || (typeof inner?.error === 'string' && inner.error)
-        || fallback;
-
-      // Coerce numeric error codes (e.g. cascade-exhausted emits `code: 429`)
-      // to string so `BuilderforceApiError.code` stays a stable type for
-      // consumer-side switches. String codes pass through unchanged.
-      const code = typeof inner?.code === 'number' ? String(inner.code) : inner?.code;
-
+      const { message, code, details, metadata } = flattenApiError(await res.json(), true);
       // Vendor/model may travel at the top of the error envelope (gateway
       // dispatched against an upstream) OR be embedded in details (e.g.
       // `model_unavailable` carries `details.requestedModel`). Prefer the
       // top-level fields; fall back to details so we still extract a model
       // from the strict-pin 503 envelope without a gateway change.
-      const detailsObj = (inner?.details && typeof inner.details === 'object')
-        ? inner.details as { vendor?: unknown; model?: unknown; requestedModel?: unknown }
+      const detailsObj = (details && typeof details === 'object')
+        ? details as { vendor?: unknown; model?: unknown; requestedModel?: unknown }
         : null;
-      const vendor = typeof inner?.vendor === 'string'
-        ? inner.vendor
+      const vendor = typeof metadata?.vendor === 'string'
+        ? metadata.vendor
         : (typeof detailsObj?.vendor === 'string' ? detailsObj.vendor : undefined);
-      const model = typeof inner?.model === 'string'
-        ? inner.model
+      const model = typeof metadata?.model === 'string'
+        ? metadata.model
         : (typeof detailsObj?.model === 'string'
             ? detailsObj.model
             : (typeof detailsObj?.requestedModel === 'string' ? detailsObj.requestedModel : undefined));
 
       return new BuilderforceApiError(
-        message,
+        message ?? fallback,
         res.status,
         code,
-        inner?.details,
+        details,
         requestId,
         {
-          terminal:   inner?.terminal,
-          retryAfter: headerRetryAfter ?? inner?.retryAfter,
+          terminal: typeof metadata?.terminal === 'boolean' ? metadata.terminal : undefined,
+          retryAfter: headerRetryAfter ?? (typeof metadata?.retryAfter === 'number' ? metadata.retryAfter : undefined),
           vendor,
           model,
         },
