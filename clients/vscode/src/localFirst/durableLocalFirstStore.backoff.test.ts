@@ -38,7 +38,9 @@ afterEach(async () => {
   await Promise.all(directories.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-describe("failed compaction backoff", () => {
+// Each commit takes the store lock and fsyncs/renames real files; on a Windows disk under a scanner that is
+// ~100-500ms a commit, so a multi-commit test outgrows vitest's 5s default. Bounded by the awaits.
+describe("failed compaction backoff", { timeout: 30_000 }, () => {
   it("does not re-run a failing compaction inside the window, and runs again after it", async () => {
     const root = await directory();
     const errors: unknown[] = [];

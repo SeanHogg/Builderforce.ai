@@ -89,6 +89,16 @@ describe('compact base blocks', () => {
     expect(latest?.records).toEqual([]);
   });
 
+  it('regression: a store with no partitions writes its base without blocks, so an older reader keeps its mappings', async () => {
+    const store = createMemoryLocalFirstStore();
+    await store.transact(async (tx) => {
+      await tx.putMapping({ destination: BOUND, entityType: 'message', clientEntityId: 'm1', syncId: 10, serverVersion: 2 });
+    });
+    const text = new TextDecoder().decode(await baseBytes(store.view()));
+    expect(text).not.toContain('mappingBlock');
+    expect(text).toContain('"mappings"');
+  });
+
   it('regression: an old base without blocks still folds', () => {
     const plain = [mapping('a'), mapping('b', { syncId: 11, serverId: '11', mappedSeq: 2 })];
     const bytes = encodeDeltaFrame({

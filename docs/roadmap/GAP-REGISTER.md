@@ -94,11 +94,7 @@
     - Bind, which this change did not touch, also slowed by 4–6×, so this is probably machine load. A regression from pruning inside drain-triggered compactions is not ruled out.
   - **Blocker:** an idle machine to re-run `scratchpad/drain-probe` on the 263 MB store copy.
   - **Fix:** if the drain is still slow when idle, prune only at heartbeat compactions, not at drain-triggered ones.
-  - **Open is O(whole store) and is now the VSIX's ~35 s load (measured 2026-11-27, machine under load).** The live journal is 538.7 MB: a 484 MB base plus a 54 MB tail of 5,157 frames; 216,323 records (177,140 messages, 34,388 usage), 208,048 mappings.
-    - Timed on that file: read 19.3 s, crc walk + parse + fold 42.4 s, then the second index pass 4.8 s.
-    - The uncommitted `adoptInitialState` change removes only the 4.8 s pass. Read and parse are untouched.
-    - **Fix:** the open must stop costing the whole history. Open from a small index (chat list, pending events, cursors) and load a chat's messages when it is opened; keep message bodies out of the frames parsed at boot. This is a storage-format change (Opus review).
-    - **Blocker:** operator decision on the format direction (lazy per-chat segments vs. a binary base that is not JSON-parsed whole).
+  - The open-time part (the VSIX's ~35 s load) is resolved: partitioned chat history, see DONE.md 2026-11-27.
 - `AE-G032` **Knowledge view: one stage, cameras are placements, semantic zoom ([PRD 43](../../docs/specs/make.md) B1a, operator 2026-11-10).** Today every camera re-renders the same data on its own stack: SVG transit/tower/mind map, canvas Graph2D and R3F 3D. The result is flicker, inconsistent shapes, slow switches and no zoom path from system to code.
   - **Done and committed:** P0b, P0c, P1a, the P1 stage, the P2–P5 placements and the 4+1 Physical view (see DONE.md 2026-11-10).
   - **Every camera except List runs on the stage and the `kg.stage` flag is gone** (verified 2026-11-17). Left (PRD 43 B8): delete `Graph2D`, `MindMap`/`MindBranches`, the TransitMap SVG and transit marks, `useCardAnchor`, `usePanZoom`, `useSvgScale` and the `PathStrip` SVG sequence, migrating their tests per B8; `compileAsync` and the three.js prefetch; the `labelPlacement` grid; worker task priority; `failIfMajorPerformanceCaveat` plus a telemetry event; the Playwright perf done-checks. Full list: [make.md › PRD 43](../../docs/specs/make.md#prd-43--one-3d-stage-for-every-knowledge-camera).

@@ -68,7 +68,9 @@ const sorted = (snapshot: LocalFirstSnapshot) => ({
 
 const BOUND = { kind: "bound", platformInstance: "https://example.test", tenantId: "1" } as const;
 
-describe("a store with a partition declared", () => {
+// Every commit fsyncs and renames real files; on a Windows disk under a scanner a rename costs ~15ms, so a
+// multi-commit regression outgrows vitest's 5s default when the suite runs in parallel. Bounded by the awaits.
+describe("a store with a partition declared", { timeout: 30_000 }, () => {
   it("regression: v3 -> v4 migration exports equal, and main holds no message row", async () => {
     const root = await directory();
     const v3 = createDurableLocalFirstStore(root);

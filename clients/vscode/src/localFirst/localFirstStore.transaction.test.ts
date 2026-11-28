@@ -88,8 +88,12 @@ describe("local-first journal transaction", () => {
 
     await writing.persistence.sendMessages(chat.id, [{ role: "user", content: "saved offline" }]);
     const committed = framesOf(writing.durableStore.journalFile).at(-1);
+    // Message rows live in their chat's partition file (AE-G031): the main frame holds their stubs.
     const messageIds = new Set(
-      committed?.records.filter((record) => record.entityType === "message").map((record) => record.id) ?? [],
+      [
+        ...(committed?.records.filter((record) => record.entityType === "message") ?? []),
+        ...(committed?.stubs?.filter((stub) => stub.entityType === "message") ?? []),
+      ].map((row) => row.id),
     );
     expect(messageIds.size).toBeGreaterThan(0);
     expect(committed?.events.some((event) => event.entityType === "message" && messageIds.has(event.clientEntityId))).toBe(true);

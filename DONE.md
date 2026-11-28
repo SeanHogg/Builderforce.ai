@@ -1,3 +1,38 @@
+## ✅ RESOLVED 2026-11-27 — The VSIX opens without reading every chat message (AE-G031, open time)
+
+- **Problem.** The VS Code extension took about 35 s to load. Boot read and folded the whole 538.7 MB `local-first-v3.journal`, which holds 216k records. Of those, 177k are message rows (370 MB across 121 chats).
+- **Fix: partitioned chat history.** Design: [make.md › Partitioned chat history](docs/specs/make.md).
+  - Message rows live in one journal file per chat: `local-first-v4.partitions/`.
+  - The main journal `local-first-v4.journal` keeps the other rows, every mapping, a slim stub per message row, and a pointer per chat file.
+  - A chat's file is loaded on the first read that touches it.
+  - It is a store mechanism declared as data (`defineRecordPartition` in `@builderforce/local-first`). `MESSAGE_PARTITION` lives in brain-embedded. A store that declares no partition is unchanged.
+  - `nextId`, `chatSync`, `messageRecordById` and `touchesChatMessages` read stubs, so none of them loads a chat.
+- **Storage (VSIX).**
+  - **Commit order:** the partition frames are fsynced first, then the main frame, which is the commit point.
+  - **Compaction:** partitions compact in two phases.
+  - **Migration:** v3 to v4 runs in two phases.
+  - **Old windows:** writes made in v3 by windows still on an older build are merged as one v4 commit, including deletions, acknowledgements, mappings and receipts.
+  - **Retirement:** v3 is retired only after it has been fully merged and has stayed quiet for 14 days.
+  - **Damaged partition:** recovery never fails the open. A transient EPERM or EBUSY lock is retried and reported, never treated as damage.
+  - **Damaged main journal:** rebuilt from the partition files, bounded by each frame's `commitSeq`.
+- **Measured on a copy of the operator's store, same session:**
+
+  | | Open | Journal |
+  |---|---|---|
+  | v3 | 27–37 s | 539 MB |
+  | v4 | 5.6–6.0 s | 92 MB main |
+
+  - v4 opens 4.8–6× faster, with one file per chat.
+  - The one-time migration takes about 93 s.
+  - Opening the largest chat (14,166 messages) the first time takes 1.3–2.2 s.
+- **Review.** An Opus review found three data-loss blockers before anything shipped, and all three were fixed:
+  - a transient lock installed an empty chat;
+  - a transient lock caused a healthy partition to be set aside;
+  - v3 was retired right after migration.
+
+  The seven should-fix findings were also fixed. Versions: VSIX 2026.11.236, brain-embedded 2026.10.98, local-first 2026.10.28.
+- **Still open, under AE-G031:** confirming drain time on an idle machine. That is a separate concern and keeps its own blocker.
+
 ## ✅ RESOLVED 2026-11-27 — Creation Canvas legacy routes and tutorial telemetry (UX-G001, UX-G002, UX-G003)
 
 - `/workflows` now forwards to the shared Create library with its workflow filter and project scope. Workflow run history and definition deletion are available in the Canvas inspector.
