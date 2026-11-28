@@ -25,10 +25,10 @@ import { ABORT_GRACE_MS, FixStepError, HOST_CHECK_IDS, ReviewFailure } from '@bu
 import type { FixCheckResult } from '@builderforce/knowledge-graph-view';
 import type {
   KnowledgeBaseline, KnowledgeGraphSource, KnowledgeReviewEvent, KnowledgeScopeSummary, KnowledgeSearchHit, NotReviewedHere, PinpointResult,
-  ReviewControl, ReviewRequest, ReviewTarget, SourceRange, SourceText, SymbolRecord, SyncStatus, TryRequest, TryResponse,
+  ComposeFn, ReviewControl, ReviewRequest, ReviewTarget, RunTraces, SourceRange, SourceText, SymbolRecord, SyncStatus, TryRequest, TryResponse,
 } from '@builderforce/knowledge-graph-view';
 import type {
-  KnowledgeCall, KnowledgeCheckReply, KnowledgeEvent, KnowledgeDomainLayout, KnowledgeFixPreview, KnowledgeFixResult, KnowledgeHistoryResult, KnowledgeLoadTrace, KnowledgePlanReply, KnowledgeTargetRow,
+  KnowledgeCall, KnowledgeCheckReply, KnowledgeEvent, KnowledgeDomainLayout, KnowledgeFixPreview, KnowledgeFixResult, KnowledgeHistoryResult, KnowledgeLoadTrace, KnowledgePlanReply, KnowledgeTargetRow, RunTraces as HostRunTraces,
 } from '../../../src/knowledge/knowledgeProtocol';
 import { hostReviewRuns } from './hostReviewRuns';
 import { hostAgentRuns } from './hostAgentRuns';
@@ -37,7 +37,14 @@ export interface KnowledgeTransport {
   call<T>(call: KnowledgeCall): Promise<T>;
   /** Every `knowledge.event`; returns the unsubscribe. */
   onEvent(cb: (event: KnowledgeEvent) => void): () => void;
+  /** Every `knowledge.sources` frame (a root's data-source files changed), with the root's id; returns the unsubscribe. Absent ⇒ none arrive. */
+  onSources?(cb: (rootId: string) => void): () => void;
 }
+
+// The view restates the host's RunTraces shape; this fails to compile when either side drifts from the other.
+type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const runTracesParity: Equal<RunTraces, HostRunTraces> = true;
+void runTracesParity;
 
 export interface HostKnowledgeSourceOptions {
   /** Marks the files changed since the graph was built (the shared Live overlay). */
@@ -128,8 +135,9 @@ async function planOverStream(t: KnowledgeTransport, req: ReviewRequest, signal:
 }
 
 /** The Agent runs drawer's Fix action: a composed prompt seeds the host's ONE composer (a fresh chat). */
-export function composeThrough(t: KnowledgeTransport): (text: string) => void {
-  return (text) => { void t.call({ op: 'compose', text }).catch(() => undefined); };
+export function composeThrough(t: KnowledgeTransport): ComposeFn {
+  // `send` rides along only when asked for: every other caller keeps the pre-fill call shape.
+  return (text, opts) => { void t.call({ op: 'compose', text, ...(opts?.send ? { send: true } : {}) }).catch(() => undefined); };
 }
 
 export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: HostKnowledgeSourceOptions = {}): KnowledgeGraphSource {
@@ -243,6 +251,10 @@ export function createHostKnowledgeGraphSource(t: KnowledgeTransport, opts: Host
         return { commits: out.commits.map((c) => ({ sha: c.sha, ...(c.parent ? { parent: c.parent } : {}), title: c.title, at: c.at, refs: c.refs, ...(c.author ? { author: c.author } : {}) })) };
     },
     syncStatus: (rootId: string) => t.call<SyncStatus>({ op: 'syncStatus', rootId }),
+    // Recorded runs (`.builderforce/traces/*.jsonl`): the view derives the transitions and the recorded values from them.
+    runTraces: (rootId: string) => t.call<RunTraces>({ op: 'runTraces', rootId }),
+    // A data source's files of the root changed (any root the view has read the sync status of, Running or not): `knowledge.sources` frames.
+    onSourcesChanged: (rootId, cb) => t.onSources?.((changed) => { if (changed === rootId) cb(); }) ?? (() => undefined),
     // Retry upload: the extension clears the root's recorded failures and drains its replica queue now.
     retrySync: async (rootId: string) => { await t.call({ op: 'retrySync', rootId }); },
     // Exclude from review (PRD 41 A9): the host appends the folder to the root's `.builderforce/ignore`; the view then runs its normal Re-review.

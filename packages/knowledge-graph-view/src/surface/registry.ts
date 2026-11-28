@@ -11,7 +11,7 @@ import type { Finding, KEdge, KNode, KnowledgeGraph } from '@seanhogg/builderfor
 import type { KnowledgeGraphLabels, StringLabelKey } from '../labels';
 import type { LensDef } from '../lenses';
 import type { Revision } from '../revision';
-import type { FindingEvidence, KnowledgeGraphSource, SourceLocation, SyncStatus, ViewMode } from '../types';
+import type { ComposeFn, FindingEvidence, KnowledgeGraphSource, SourceLocation, SyncStatus, ViewMode } from '../types';
 import type { RunPanelData } from './run/useReviewRunRecord';
 import type { HistoryRead } from './TimeSlider';
 import type { Diagnostics } from '../diagnosticSection';
@@ -56,7 +56,7 @@ export interface SceneProps {
     onCamera?: ((mode: ViewMode) => void) | undefined;
     /** The cameras available now (what `onCamera` may switch to). */
     cameras?: readonly ViewMode[] | undefined;
-    onCompose?: ((text: string) => void) | undefined;
+    onCompose?: ComposeFn | undefined;
     evidence?: ((f: Finding) => FindingEvidence[]) | undefined;
     onOpenSource?: ((location: SourceLocation) => void) | undefined;
 }
@@ -94,6 +94,8 @@ export interface PanelProps {
     diagnostics?: (() => Diagnostics) | undefined;
     /** The host's sync status, read ONCE by the root (`useSyncStatus`); the Sync drawer draws it and fetches nothing. */
     sync?: SyncStatus | null | undefined;
+    /** Moves when the host reports a data source of the root changed (a trace was written): a panel that reads one (Simulate's recorded runs) reads it again. */
+    sourcesTick?: number | undefined;
     /** The root's ONE history read (the time slider's); the Server tab's commits-since-the-last-review feed draws it and fetches nothing. */
     history?: HistoryRead | undefined;
     /** Starts the view's review flow again for this root, forcing every file (the confirm still asks); absent when the host cannot review. */
@@ -107,7 +109,7 @@ export interface PanelProps {
     labels: KnowledgeGraphLabels;
     surface: SurfaceModel;
     onShow(refs: string[]): void;
-    onCompose?: ((text: string) => void) | undefined;
+    onCompose?: ComposeFn | undefined;
     /** Before/After, when the host keeps a baseline; the Resolve flow repeats the header menu's toggle. */
     revision?: { value: Revision; hasBefore: boolean; onChange(r: Revision): void } | undefined;
     /** Switches the scene (Patterns: Show in Tower). `cameras` are the ones available now. */

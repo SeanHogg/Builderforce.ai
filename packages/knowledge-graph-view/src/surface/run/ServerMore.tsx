@@ -5,7 +5,7 @@
  */
 
 import type { KnowledgeGraphLabels } from '../../labels';
-import type { KnowledgeGraphSource, SyncStatus } from '../../types';
+import type { ComposeFn, KnowledgeGraphSource, SyncStatus } from '../../types';
 import type { HistoryRead } from '../TimeSlider';
 import { SyncDelta } from '../drawers/SyncDelta';
 import { SyncExcluded } from '../drawers/SyncExcluded';
@@ -19,7 +19,7 @@ export interface ServerMoreProps {
     source?: KnowledgeGraphSource | undefined;
     history?: HistoryRead | undefined;
     lastReviewedAt?: string | undefined;
-    onCompose?: ((text: string) => void) | undefined;
+    onCompose?: ComposeFn | undefined;
     /** Opens another drawer (a source's "Generate" opens the API drawer). */
     onOpenPanel(id: string): void;
     onResend?: (() => void) | undefined;

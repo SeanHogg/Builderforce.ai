@@ -66,12 +66,14 @@ export interface ChatViewProps {
    *  presses send. Taken once — `onDraftSeedTaken` clears it, so a later remount of the
    *  chat does not put it back. */
   draftSeed?: string | null;
+  /** The seed is submitted as a message (Knowledge's *Turn on*) instead of being left in the box. */
+  draftSeedSend?: boolean;
   onDraftSeedTaken?(): void;
   /** A chat answer's knowledge chip (Open in graph, Choose a folder to review) → the Knowledge tab. */
   onOpenKnowledge?(intent: KnowledgeChipIntent): void;
 }
 
-export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSettings, draftSeed, onDraftSeedTaken, onOpenKnowledge }: ChatViewProps) {
+export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSettings, draftSeed, draftSeedSend = false, onDraftSeedTaken, onOpenKnowledge }: ChatViewProps) {
   // A deterministic answer's line and chips, in Rovr's words; its knowledge chips open the tab.
   const prefetch = useMemo(() => (onOpenKnowledge ? rovrPrefetchTimeline(t, onOpenKnowledge) : undefined), [onOpenKnowledge]);
   const services = useServices();
@@ -96,9 +98,10 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   const draftStore = useComposerDraftStore();
   useEffect(() => {
     if (!draftSeed) return;
-    draftStore.set(draftSeed);
+    // A seed to SEND is submitted below (`answer`), never left in the box as well.
+    if (!draftSeedSend) draftStore.set(draftSeed);
     onDraftSeedTaken?.();
-  }, [draftSeed, onDraftSeedTaken, draftStore]);
+  }, [draftSeed, draftSeedSend, onDraftSeedTaken, draftStore]);
   const chat = chats.find((c) => c.id === chatId);
   const chatOptions = useRovrChatOptions(chat, onChatsChanged);
   // The transcript's copy — and the pending question's, from the same `brain.timeline` catalog.
@@ -207,6 +210,10 @@ export function ChatView({ chats, chatId, onNewChat, onChatsChanged, onOpenSetti
   const answer = useCallback((text: string) => {
     void turns.submit(text).then((kept) => { if (!kept) giveBack(text); });
   }, [turns.submit, giveBack]);
+  // The same commit that took the seed: submit it as the person's turn (a failed send gives it back to the box).
+  useEffect(() => {
+    if (draftSeed && draftSeedSend) answer(draftSeed);
+  }, [draftSeed, draftSeedSend, answer]);
 
   // The question this chat is blocked on, restated above the composer — the same
   // predicate the transcript's card uses, so banner and card never disagree.

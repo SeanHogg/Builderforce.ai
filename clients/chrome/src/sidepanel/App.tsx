@@ -22,6 +22,7 @@ import { SettingsView } from './SettingsView';
 import { TasksView } from './TasksView';
 import type { KnowledgeChipIntent } from '@builderforce/knowledge-browser';
 import type { KnowledgeTabIntent } from './knowledge/knowledgeChips';
+import type { ComposeFn } from '@builderforce/knowledge-graph-view';
 
 /** The Knowledge destination is a lazy chunk (its graph view, and that view's 3D scene a
  *  chunk further) — opening the panel never parses it. */
@@ -167,9 +168,10 @@ function Shell() {
 
   // THE ONE composer, seeded from another view (Knowledge's *Fix with agent*): the text
   // lands in the open chat's draft and the person presses send — never a send of its own.
-  const [draftSeed, setDraftSeed] = useState<string | null>(null);
-  const composeDraft = useCallback((text: string) => {
-    setDraftSeed(text);
+  // `send: true` (Knowledge's *Turn on*) submits the seed as a message instead of leaving it in the box.
+  const [draftSeed, setDraftSeed] = useState<{ text: string; send: boolean } | null>(null);
+  const composeDraft = useCallback<ComposeFn>((text, opts) => {
+    setDraftSeed({ text, send: opts?.send === true });
     setHistoryOpen(false);
     setView('chat');
   }, []);
@@ -205,7 +207,8 @@ function Shell() {
             onNewChat={newChat}
             onChatsChanged={reloadChats}
             onOpenSettings={openSettings}
-            draftSeed={draftSeed}
+            draftSeed={draftSeed?.text ?? null}
+            draftSeedSend={draftSeed?.send ?? false}
             onOpenKnowledge={openKnowledge}
             onDraftSeedTaken={draftSeedTaken}
           />

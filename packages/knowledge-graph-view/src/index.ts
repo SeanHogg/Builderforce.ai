@@ -35,7 +35,7 @@ export type {
     SourceLocation, FindingEvidence, ViewMode, PinpointResult, SyncStatus, SkippedFile, TryRequest, TryResponse, SymbolRecord,
     SourceRange, SourceText, EditorView, NotReviewedHere, ReplicaState, ReviewRunsPort, ReviewRunSummary, StoredReviewRun,
     AgentRunSeverity, AgentRunSummary, AgentRunTurnKind, AgentRunTurn, AgentRunEvidence, AgentRunFinding, AgentRunFile,
-    AgentRunReport, AgentRunsPort, KnowledgeGraphPatch, KnowledgeEdgeKey, LiveGraphDecorate,
+    AgentRunReport, AgentRunsPort, KnowledgeGraphPatch, KnowledgeEdgeKey, LiveGraphDecorate, ComposeFn, RunTrace, RunTraceStep, RunTraces,
 } from './types';
 export { applyGraphPatch } from './graphPatch';
 export { isNotReviewedHere } from './types';

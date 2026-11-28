@@ -7,7 +7,7 @@
  * Presentational: the composition (session, project, source) is `KnowledgeDestination`.
  */
 
-import { KnowledgeGraphView, type KnowledgeGraphLabels, type KnowledgeGraphSource } from '@builderforce/knowledge-graph-view';
+import { KnowledgeGraphView, type ComposeFn, type KnowledgeGraphLabels, type KnowledgeGraphSource } from '@builderforce/knowledge-graph-view';
 import { t } from '../../i18n/t';
 import type { KnowledgeTabIntent } from './knowledgeChips';
 
@@ -18,8 +18,8 @@ export interface KnowledgeViewProps {
   source: KnowledgeGraphSource | null;
   gap: KnowledgeGap | null;
   labels: KnowledgeGraphLabels;
-  /** *Fix with agent*: seeds Rovr's ONE composer (the person presses send). */
-  onCompose?(text: string): void;
+  /** *Fix with agent* / *Turn on*: seeds Rovr's ONE composer (the person presses send), or with `{ send: true }` submits it. */
+  onCompose?: ComposeFn;
   onOpenSettings(): void;
   /** Open on a chat chip's intent; a new `seq` remounts the view on it. */
   intent?: KnowledgeTabIntent | null;

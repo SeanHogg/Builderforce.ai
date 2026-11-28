@@ -54,6 +54,8 @@ export interface KnowledgeGraphState {
     focusRefs(refs: string[]): void;
     search(q: string): Promise<void>;
     reload(): void;
+    /** Moves when the host reports a data source of the open root changed (a trace was written): readers of the Sync status re-read. */
+    sourcesTick: number;
 }
 
 const newestFirst = (a: KnowledgeScopeSummary, b: KnowledgeScopeSummary): number =>
@@ -284,6 +286,15 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
     // `reviewEpoch`: a finished review may have opened (and so made watchable) this very root.
     useLiveGraph(source, { rootId: held || !running ? null : rootId, epoch: reviewEpoch, graphRef, focusRef, paint });
 
+    // A data source of the open root changing on the host (a trace written) moves `sourcesTick`: the Sync status and the recorded runs are read
+    // again. Independent of the live session: it holds for a root that is not Running and for a held snapshot.
+    const sourcesRoot = held ? held.graph.scope.rootId : rootId;
+    const [sourcesTick, setSourcesTick] = useState(0);
+    useEffect(() => {
+        if (!sourcesRoot || !source.onSourcesChanged) return undefined;
+        return source.onSourcesChanged(sourcesRoot, () => setSourcesTick((n) => n + 1));
+    }, [source, sourcesRoot]);
+
     // A finished review is a new "after", and its previous review the host's new "before".
     const onReviewDone = useCallback((doneRoot: string) => {
         searchSeq.current += 1;
@@ -385,13 +396,13 @@ export function useKnowledgeGraph(source: KnowledgeGraphSource, opts: KnowledgeG
             rootId: heldRoot, graph: held.graph, baseline: held.baseline ?? null, lens, requested: LENSES[lensId], lenses, selected, focus, query, hits, review,
             stale: false, refreshFailed: false, running: true, run: () => undefined,
             selectRoot: () => undefined, setLens: setLensId, select: setSelected, setFocus, focusRefs, search,
-            reload,
+            reload, sourcesTick,
         };
     }
     return {
         status, notHere, scopes, rootId, graph, baseline, lens, requested: LENSES[lensId], lenses, selected, focus, query, hits, review,
         stale, refreshFailed, running, run,
         selectRoot, setLens: setLensId, select: setSelected, setFocus, focusRefs, search,
-        reload,
+        reload, sourcesTick,
     };
 }

@@ -81,7 +81,9 @@ export type SyncStatus = {
     replica?: ReplicaState;
     /** Absent ⇒ unknown: no review recorded what it skipped (never read as "nothing skipped"). `bytes` absent ⇒ not measured. */
     skipped?: { path: string; bytes?: number; reason: string }[];
-    sources: { id: 'code' | 'docs' | 'coverage' | 'usage' | 'traces' | 'openapi' | 'history' | 'owners'; state: 'collected' | 'estimated' | 'absent'; note?: string }[];
+    sources: { id: 'code' | 'docs' | 'coverage' | 'usage' | 'traces' | 'openapi' | 'history' | 'owners'; state: 'collected' | 'estimated' | 'absent'; note?: string;
+        /** Traces row: recorded runs read, when the newest started (ISO), and trace lines that could not be read. `absent` with `unparsed > 0` ⇒ files exist but nothing could be read. */
+        runs?: number; latest?: string; unparsed?: number }[];
 };
 
 export interface KnowledgeScopeSummary {
@@ -176,6 +178,16 @@ export interface KnowledgeGraphPatch {
 /** What a host hands with a patch: its own decoration of the patched graph (the editor's live overlay); absent ⇒ none. */
 export type LiveGraphDecorate = (graph: KnowledgeGraph) => KnowledgeGraph;
 
+/** Puts a request in the host's ONE composer: pre-filled for the person to send, or (`send: true`) submitted as a message. */
+export type ComposeFn = (text: string, opts?: { send?: boolean }) => void;
+
+/** One call a recorded run entered (`<root>/.builderforce/traces/<run-id>.jsonl`); the VS Code host restates this shape (`knowledgeProtocol.ts`). */
+export interface RunTraceStep { path: string; fn?: string; line?: number; args?: Record<string, string>; ret?: string }
+/** One recorded run: its id, when it started, and the calls it entered in order. */
+export interface RunTrace { id: string; at: string; steps: RunTraceStep[] }
+/** The root's recorded runs, oldest first, and how many trace lines the host could not read. */
+export interface RunTraces { runs: RunTrace[]; skippedLines: number }
+
 export interface KnowledgeGraphSource {
     scopes(): Promise<KnowledgeScopeSummary[]>;
     load(rootId: string, opts?: { focus?: string[]; maxNodes?: number }): Promise<KnowledgeGraph | NotReviewedHere | null>;
@@ -193,6 +205,13 @@ export interface KnowledgeGraphSource {
      * the view applies to the graph on screen (`applyGraphPatch`), with the host's decoration of the result.
      */
     subscribeLive?(rootId: string, cb: (g: KnowledgeGraph) => void, onPatch?: (patch: KnowledgeGraphPatch, decorate?: LiveGraphDecorate) => void): () => void;
+    /**
+     * A data source's files of the root changed (a trace was written, coverage landed): `cb` runs and the Sync status and recorded runs are worth re-reading.
+     * Independent of the live session (it works for a root that is not Running); returns the unsubscribe. Absent ⇒ never pushed.
+     */
+    onSourcesChanged?(rootId: string, cb: () => void): () => void;
+    /** The runs recorded under the root's `.builderforce/traces/`, oldest first (feeds Simulate's transitions and recorded values). Absent ⇒ no traces. */
+    runTraces?(rootId: string): Promise<RunTraces>;
     /**
      * The host builds nothing until the person presses Run (VS Code: building a large root blocks the editor). Opening the
      * view paints `lastSeen` or a Run card; Run loads the root once and starts `subscribeLive`. Absent ⇒ the view loads on open.

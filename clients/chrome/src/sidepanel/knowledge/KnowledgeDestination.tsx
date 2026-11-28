@@ -13,12 +13,13 @@ import { pageClientFirst } from '@seanhogg/builderforce-brain-embedded';
 import { t } from '../../i18n/t';
 import { useServices, useSetting, useSignedIn } from '../hooks';
 import { rovrKnowledgeLabels } from './knowledgeLabels';
+import type { ComposeFn } from '@builderforce/knowledge-graph-view';
 import { KnowledgeView, type KnowledgeGap } from './KnowledgeView';
 import { createRovrKnowledgeSource } from './rovrKnowledgeSource';
 import type { KnowledgeTabIntent } from './knowledgeChips';
 
 export interface KnowledgeDestinationProps {
-  onCompose(text: string): void;
+  onCompose: ComposeFn;
   onOpenSettings(): void;
   /** What a chat answer's chip opened the tab on (focused refs, or the review launcher). */
   intent?: KnowledgeTabIntent | null;

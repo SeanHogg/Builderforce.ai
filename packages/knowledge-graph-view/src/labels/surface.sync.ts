@@ -8,7 +8,7 @@ export interface SyncLabels {
     sync: Record<
         'skippedRow' | 'skippedRowNoSize' | 'skippedUnknown' | 'sourcesTitle' | 'excludedTitle' | 'excludedNote' | 'excludedNone' | 'excludedFolder'
         | 'deltaTitle' | 'deltaEmpty' | 'deltaSummary' | 'deltaPending' | 'deltaApplied' | 'deltaLoading'
-        | 'actionSetUpV8' | 'actionTurnOn' | 'actionGenerate' | 'setUpV8Request' | 'turnOnRequest' | 'resend' | 'resendNote'
+        | 'actionSetUpV8' | 'actionTurnOn' | 'actionGenerate' | 'setUpV8Request' | 'turnOnRequest' | 'tracesRunsOne' | 'tracesRunsOther' | 'tracesUnparsed' | 'resend' | 'resendNote'
         | 'replicaTitle' | 'replicaIdle' | 'replicaSending' | 'replicaWaiting' | 'replicaWhy429' | 'replicaWhyNetwork' | 'replicaWhyServer' | 'replicaFailedRow' | 'replicaLastSync' | 'replicaPack' | 'replicaParts' | 'replicaUnitB' | 'replicaUnitKB' | 'replicaUnitMB'
         | 'replicaPausedAuth' | 'replicaPausedUnreachable' | 'replicaPausedProject'
         | 'replicaReasonAuth' | 'replicaReasonBadRequest' | 'replicaReasonTooLarge' | 'replicaReasonRate' | 'replicaReasonServer' | 'replicaReasonNetwork' | 'replicaReasonOther',
@@ -43,7 +43,12 @@ export const SYNC_DEFAULTS: SyncLabels = {
         actionTurnOn: 'Turn on',
         actionGenerate: 'Generate',
         setUpV8Request: 'Set up v8 coverage for the project: add a coverage script and config, run the tests with coverage on, and report the coverage files it writes.',
-        turnOnRequest: 'Turn on runtime traces for the project: add tracing to the entry points, run it once and report where the traces are written.',
+        turnOnRequest: 'Turn on local runtime traces for this project so the BuilderForce map can read them: at each entry point and the functions it calls, append one JSON line per call to .builderforce/traces/RUN_ID.jsonl with the fields run, at, file (root-relative path), fn, line, args, ret (values as short strings). Keep it local, no hosted tracing service. Add .builderforce/traces/ to .gitignore, run the project once, and confirm the file was written.',
+        /** The traces row: `{count}` recorded runs and when the newest started (`{when}`, a locale-formatted date); One/Other pick by the count. */
+        tracesRunsOne: '{count} recorded run · latest {when}',
+        tracesRunsOther: '{count} recorded runs · latest {when}',
+        /** Trace files exist but no line could be read: `{count}` lines skipped. */
+        tracesUnparsed: 'Trace files found, but no line could be read ({count} skipped)',
         resend: 'Review again to retry skipped files',
         resendNote: 'Starts the whole review again for this folder. You confirm it first.',
         replicaTitle: 'Sending to the project',

@@ -20,13 +20,22 @@ import { runRequest, saveTestRequest, testFileName } from '../simulate/simulateR
 import { SimulateInputs } from '../simulate/SimulateInputs';
 import { SimulateCode, SimulateResult, SimulateVariables } from '../simulate/SimulateState';
 import { useRecordedRun } from '../simulate/useRecordedRun';
+import { recordedRunOfTraces } from '../simulate/recordedRunOfTraces';
+import { stationSequencesOf } from '../simulate/runTraceStations';
+import { useRunTraces } from '../simulate/useRunTraces';
 import { Segmented } from '../ui';
 import { Section } from './ui';
 
-export function SimulatePanel({ graph, labels, surface, source, rootId, onCompose }: PanelProps) {
+export function SimulatePanel({ graph, labels, surface, source, rootId, sourcesTick, onCompose }: PanelProps) {
     const t = labels.surface.simulate;
     const stops = surface.path.stops;
-    const { run } = useRecordedRun(source, rootId, useMemo(() => stops.map((s) => s.id), [stops]));
+    const stopIds = useMemo(() => stops.map((s) => s.id), [stops]);
+    // The recorded runs the host holds drive both the transitions and the values: a host with `runTraces` is read through them;
+    // another host's own `recordedValues` still fills in when the traces give nothing for this path.
+    const traces = useRunTraces(source, rootId, sourcesTick);
+    const traceRun = useMemo(() => (rootId ? recordedRunOfTraces(traces, rootId, surface.stations, stopIds) : null), [traces, rootId, surface.stations, stopIds]);
+    const hosted = useRecordedRun(source, rootId, stopIds).run;
+    const run = traceRun ?? hosted;
     const [edits, setEdits] = useState<Record<string, string>>({});
     const [stubs, setStubs] = useState<ReadonlySet<string>>(new Set());
     const [sent, setSent] = useState<'run' | 'test' | null>(null);
@@ -36,7 +45,8 @@ export function SimulatePanel({ graph, labels, surface, source, rootId, onCompos
     // Another path is another simulation: its edits, stubs and start belong to the old one.
     useEffect(() => { setEdits({}); setStubs(new Set()); setSent(null); setStartAt(0); }, [pathKey]);
     const index = useMemo(() => nodeIndex(graph), [graph]);
-    const transitions = useMemo(() => transitionTableOf(graph, surface.stations), [graph, surface.stations]);
+    const sequences = useMemo(() => (rootId ? stationSequencesOf(traces, rootId, surface.stations) : []), [traces, rootId, surface.stations]);
+    const transitions = useMemo(() => transitionTableOf(graph, surface.stations, sequences), [graph, surface.stations, sequences]);
     const steps = useMemo(() => {
         const notes = new Map(stops.flatMap((s) => { const n = stationNote(surface.stations.byId.get(s.id), labels); return n ? [[s.id, n] as const] : []; }));
         return simulate({

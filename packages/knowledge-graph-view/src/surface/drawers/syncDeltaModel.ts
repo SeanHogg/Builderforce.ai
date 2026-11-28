@@ -6,6 +6,7 @@
  * reported; nothing is invented.
  */
 
+import { fillTemplate } from '../../template';
 import type { Commit, SkippedFile, SyncStatus } from '../../types';
 
 export type DeltaState = 'pending' | 'applied';
@@ -81,9 +82,20 @@ export type SourceAction =
     | { kind: 'panel'; label: 'actionGenerate'; panel: 'api' }
     | { kind: 'none' };
 
+/** What a source row says under its name: the traces row from its structured fields (runs, newest, unreadable lines), any other row its host `note`. */
+export function sourceNote(src: SourceRow, t: Record<'tracesRunsOne' | 'tracesRunsOther' | 'tracesUnparsed', string>): string | undefined {
+    if (src.id !== 'traces') return src.note;
+    if (src.state === 'absent') return src.unparsed ? fillTemplate(t.tracesUnparsed, { count: src.unparsed.toLocaleString() }) : undefined;
+    if (!src.runs) return undefined;
+    const at = src.latest ? new Date(src.latest) : null;
+    const when = at && !Number.isNaN(at.getTime()) ? at.toLocaleDateString(undefined, { dateStyle: 'medium' }) : '';
+    return fillTemplate(src.runs === 1 ? t.tracesRunsOne : t.tracesRunsOther, { count: src.runs.toLocaleString(), when });
+}
+
 export function sourceAction(src: SourceRow): SourceAction {
     if (src.id === 'coverage' && src.state !== 'collected') return { kind: 'compose', label: 'actionSetUpV8', request: 'setUpV8Request' };
-    if (src.id === 'traces' && src.state === 'absent') return { kind: 'compose', label: 'actionTurnOn', request: 'turnOnRequest' };
+    // Files that exist but could not be read are not "off": turning tracing on again would not fix them.
+    if (src.id === 'traces' && src.state === 'absent' && !src.unparsed) return { kind: 'compose', label: 'actionTurnOn', request: 'turnOnRequest' };
     if (src.id === 'openapi' && src.state !== 'collected') return { kind: 'panel', label: 'actionGenerate', panel: 'api' };
     return { kind: 'none' };
 }

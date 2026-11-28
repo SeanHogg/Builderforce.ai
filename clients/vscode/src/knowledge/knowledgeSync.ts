@@ -14,7 +14,7 @@
  */
 
 import type * as vscode from "vscode";
-import { graphCounts, type GraphCounts } from "@builderforce/agent-tools/knowledge";
+import { graphCounts, readRunTraces, type GraphCounts, type RunTraces } from "@builderforce/agent-tools/knowledge";
 import { gitHistoryPort } from "@builderforce/agent-tools/node-git-history";
 import { vscodeKnowledgeFs } from "./knowledgeFs";
 import type { KnowledgeSyncStatus } from "./knowledgeProtocol";
@@ -83,8 +83,14 @@ export async function rootSyncStatus(
     ...(replica ? { replica } : {}),
     skipped: record?.skipped,
     reviewed: !!record || !!measured || !!server,
+    report: (source, detail) => log(`sources ${source}`, detail),
     hasHistory: (await gitHistoryPort(root.rootPath, { onWarn: (m) => log("history", m) })) !== undefined,
   });
+}
+
+/** The `runTraces` call: the recorded runs under the root (`.builderforce/traces/*.jsonl`); a file that cannot be read is logged, never silently dropped. */
+export function rootRunTraces(root: KnowledgeRoot): Promise<RunTraces> {
+  return readRunTraces({ fs: vscodeKnowledgeFs(), rootPath: root.rootPath }, (file, problem, error) => log("run traces", `${file}: ${problem}${error ? ` (${String(error)})` : ""}`));
 }
 
 /** Retry upload: clears the root's recorded upload failures and drains its replica queue now; resolves once the pump has started (not when it ends). A root that is not linked has nothing to send. */

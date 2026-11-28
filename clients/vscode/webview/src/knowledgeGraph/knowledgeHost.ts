@@ -6,10 +6,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import type { EditorView, KnowledgeGraphSource, SourceLocation } from '@builderforce/knowledge-graph-view';
+import type { ComposeFn, EditorView, KnowledgeGraphSource, SourceLocation } from '@builderforce/knowledge-graph-view';
 import { onHostMessage, request } from '../bridge/vscodeBridge';
 import {
-  KNOWLEDGE_CALL, KNOWLEDGE_EDITOR, KNOWLEDGE_EVENT, KNOWLEDGE_FOCUS, type KnowledgeEditorFrame, type KnowledgeEventFrame, type KnowledgeFocusFrame,
+  KNOWLEDGE_CALL, KNOWLEDGE_EDITOR, KNOWLEDGE_EVENT, KNOWLEDGE_FOCUS, KNOWLEDGE_SOURCES, type KnowledgeEditorFrame, type KnowledgeEventFrame, type KnowledgeFocusFrame, type KnowledgeSourcesFrame,
 } from '../../../src/knowledge/knowledgeProtocol';
 import { composeThrough, createHostKnowledgeGraphSource, reviewCount, type KnowledgeTransport } from './hostKnowledgeGraphSource';
 
@@ -17,6 +17,7 @@ import { composeThrough, createHostKnowledgeGraphSource, reviewCount, type Knowl
 export const bridgeKnowledgeTransport: KnowledgeTransport = {
   call: (call) => request(KNOWLEDGE_CALL, call as unknown as Record<string, unknown>),
   onEvent: (cb) => onHostMessage<KnowledgeEventFrame>(KNOWLEDGE_EVENT, (frame) => { if (frame.event) cb(frame.event); }),
+  onSources: (cb) => onHostMessage<KnowledgeSourcesFrame>(KNOWLEDGE_SOURCES, (frame) => { if (frame.rootId) cb(frame.rootId); }),
 };
 
 export interface KnowledgeHost {
@@ -25,7 +26,7 @@ export interface KnowledgeHost {
   focus: KnowledgeFocusFrame | null;
   focusRequests: number;
   /** Fix with agent → the ONE composer (a chat seeded with the request). */
-  compose(text: string): void;
+  compose: ComposeFn;
   /** A review is in flight (planning, confirm or running): the panel holds its view still. */
   reviewing: boolean;
   /** "Open at line": the extension opens the file of the loaded root with the lines selected. */

@@ -15,7 +15,7 @@ import { openWorkspace } from "../workspace/openWorkspace";
 import { SELECTED_TENANT_KEY } from "../project/projectState";
 import { getHostKnowledgeIndex } from "./index/hostKnowledgeIndex";
 import {
-  KNOWLEDGE_EVENT, type KnowledgeCall, type KnowledgeEvent, type KnowledgeFixResult, type KnowledgeFocusFrame, type KnowledgeScopeRow,
+  KNOWLEDGE_EVENT, KNOWLEDGE_SOURCES, type KnowledgeCall, type KnowledgeEvent, type KnowledgeFixResult, type KnowledgeFocusFrame, type KnowledgeScopeRow,
   type KnowledgeTargetRow,
 } from "./knowledgeProtocol";
 import { KnowledgeFixSession } from "./knowledgeFixSession";
@@ -25,7 +25,8 @@ import { KnowledgeLastSeenHost } from "./knowledgeLastSeenHost";
 import { vscodeFixPorts } from "./knowledgeFixesHost";
 import { rootHistory } from "./knowledgeHistory";
 import { pinpointRoot } from "./knowledgePinpointHost";
-import { retryRootSync, rootSyncStatus } from "./knowledgeSync";
+import { retryRootSync, rootRunTraces, rootSyncStatus } from "./knowledgeSync";
+import { KnowledgeSourceWatcher } from "./knowledgeSourceWatcher";
 import { rootSymbols, SymbolsGate } from "./knowledgeSymbols";
 import { openSource, readSource, readSourceAt } from "./sourcePort";
 import { tryRequestOf } from "./knowledgeTryRequestHost";
@@ -75,6 +76,8 @@ export interface KnowledgeBridgeHost {
 export class KnowledgeBridge implements vscode.Disposable {
   private readonly reviews: KnowledgeReviewSessions;
   private readonly live = new Map<string, () => void>();
+  /** Watches the data-source files of every root whose sync status the view read; posts a `knowledge.sources` frame on a change. */
+  private readonly sources = new KnowledgeSourceWatcher((rootId) => this.host.post({ type: KNOWLEDGE_SOURCES, rootId }));
   /** One symbols read per root at a time; an identical request shares the answer on its way. */
   private readonly symbolsGate = new SymbolsGate();
   /** The root the view last loaded — whose facts a fact action is about. */
@@ -173,11 +176,17 @@ export class KnowledgeBridge implements vscode.Disposable {
       case "factActions": return { canDelete: await this.canDelete(call.ref) };
       case "deleteFact": return this.deleteFact(call.ref);
       case "baseline": return this.trace.run("baseline", call.rootId, () => this.baseline(call.rootId), (b) => graphFields(b.graph as KnowledgeGraph));
-      case "compose": await openWorkspace(this.host.ctx, { kind: "seed", text: call.text }); return null;
+      case "compose": await openWorkspace(this.host.ctx, { kind: "seed", text: call.text, ...(call.send ? { send: true } : {}) }); return null;
       case "takeFocus": { const focus = pendingFocus; pendingFocus = null; return focus; }
       case "pinpoint": return pinpointRoot(this.secrets, this.rootOf(call.rootId), call.image);
       case "history": return rootHistory(this.rootOf(call.rootId).rootPath, call.rootId, { onWarn: (m) => log("history", m) });
-      case "syncStatus": return this.trace.run("syncStatus", call.rootId, async () => rootSyncStatus(this.secrets, this.rootOf(call.rootId), { lastBuilt: () => this.built.get(call.rootId) }));
+      case "syncStatus": return this.trace.run("syncStatus", call.rootId, async () => {
+        const root = this.rootOf(call.rootId);
+        // The first status read of a root starts watching its sources (idempotent); a root that does not resolve threw above and watches nothing.
+        this.sources.attach(call.rootId, root.rootPath);
+        return rootSyncStatus(this.secrets, root, { lastBuilt: () => this.built.get(call.rootId) });
+      });
+      case "runTraces": return this.trace.run("runTraces", call.rootId, async () => rootRunTraces(this.rootOf(call.rootId)));
       case "retrySync": await retryRootSync(this.secrets, this.rootOf(call.rootId)); return null;
       case "applyFix": return this.applyFix(call.rootId, call.finding);
       case "runFixCheck": return this.fixes.check(call.rootId, this.rootOf(call.rootId).rootPath, call.check, call.finding);
@@ -412,6 +421,7 @@ export class KnowledgeBridge implements vscode.Disposable {
   dispose(): void {
     for (const stop of this.live.values()) stop();
     this.live.clear();
+    this.sources.dispose();
     this.reviews.dispose();
     this.fixes.dispose();
   }

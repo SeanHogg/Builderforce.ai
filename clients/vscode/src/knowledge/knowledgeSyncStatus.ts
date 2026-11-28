@@ -12,7 +12,7 @@
  */
 
 import {
-  CODEOWNERS_LOCATIONS, coverageSourceState, reviewRecordStore, type KnowledgeFs, type ReplicaState,
+  CODEOWNERS_LOCATIONS, coverageSourceState, reviewRecordStore, traceSourceState, type KnowledgeFs, type ReplicaState,
 } from "@builderforce/agent-tools/knowledge";
 import type { KnowledgeSyncCounts, KnowledgeSyncSkipped, KnowledgeSyncStatus } from "./knowledgeProtocol";
 
@@ -21,6 +21,8 @@ type Source = KnowledgeSyncStatus["sources"][number];
 /** Where an OpenAPI description is looked for: the root and these folders directly under it. */
 const OPENAPI_FOLDERS = ["", "docs", "api", "spec", "specs", "openapi"];
 const OPENAPI_NAMES = ["openapi.json", "openapi.yaml", "openapi.yml", "swagger.json"];
+/** Every root-relative place an OpenAPI description is looked for (the sync status and the source watcher share it). */
+export const OPENAPI_LOCATIONS: readonly string[] = OPENAPI_FOLDERS.flatMap((folder) => OPENAPI_NAMES.map((name) => (folder ? `${folder}/${name}` : name)));
 
 export interface RecordMemento {
   get<T>(key: string): T | undefined;
@@ -72,14 +74,21 @@ export interface SyncStatusInput {
   reviewed: boolean;
   /** True when the folder is a git work tree (a `HistoryPort` exists). */
   hasHistory: boolean;
+  /** Where a source's read problem is reported (a log line); a problem never turns into a silent "absent". */
+  report?: (source: string, detail: string) => void;
 }
 
 export async function buildSyncStatus(input: SyncStatusInput): Promise<KnowledgeSyncStatus> {
   const { fs, rootPath } = input;
-  const [coverage, owners, openapi] = await Promise.all([
+  const [coverage, traces, owners, openapi] = await Promise.all([
     coverageSourceState({ fs, rootPath }).catch(() => "absent" as const),
+    traceSourceState({ fs, rootPath }, (file, problem, error) => input.report?.("traces", `${file}: ${problem}${error ? ` (${String(error)})` : ""}`))
+      .catch((error: unknown) => {
+        input.report?.("traces", String(error));
+        return { state: "absent" as const };
+      }),
     anyExists(fs, rootPath, CODEOWNERS_LOCATIONS),
-    anyExists(fs, rootPath, OPENAPI_FOLDERS.flatMap((folder) => OPENAPI_NAMES.map((name) => (folder ? `${folder}/${name}` : name)))),
+    anyExists(fs, rootPath, OPENAPI_LOCATIONS),
   ]);
   const have = (ok: boolean): Source["state"] => (ok ? "collected" : "absent");
   const coverageSkips = (input.skipped ?? []).filter((s) => s.reason.startsWith("coverage-")).length;
@@ -89,7 +98,7 @@ export async function buildSyncStatus(input: SyncStatusInput): Promise<Knowledge
     { id: "docs", state: have(input.reviewed && input.local.docs > 0) },
     { id: "coverage", state: coverage, ...(coverageSkips > 0 ? { note: `${coverageSkips} coverage file(s) skipped (too large or older than their source).` } : {}) },
     { id: "usage", state: "absent", note: "No runtime usage source is connected." },
-    { id: "traces", state: "absent", note: "No trace source is connected." },
+    { id: "traces", ...traces },
     { id: "openapi", state: have(openapi) },
     { id: "history", state: have(input.hasHistory) },
     { id: "owners", state: have(owners) },

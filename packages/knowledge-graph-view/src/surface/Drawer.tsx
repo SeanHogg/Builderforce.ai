@@ -12,7 +12,7 @@ import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import type { KnowledgeGraphLabels } from '../labels';
 import { cssVar } from '../scene/themeColors';
 import { muted } from '../styles';
-import type { KnowledgeGraphSource, ViewMode } from '../types';
+import type { ComposeFn, KnowledgeGraphSource, ViewMode } from '../types';
 import { availablePanels } from './PanelDock';
 import { DRAWER_ORDER, PANELS } from './panels';
 import type { PanelDef, PanelProps, SurfaceEnv } from './registry';
@@ -39,6 +39,7 @@ export interface DrawerProps {
     onChanged?: (() => void) | undefined;
     diagnostics?: PanelProps['diagnostics'];
     sync?: { status: PanelProps['sync'] } | undefined;
+    sourcesTick?: PanelProps['sourcesTick'];
     runs?: PanelProps['runs'];
     reviews?: PanelProps['reviews'];
     lastReviewedAt?: string | undefined;
@@ -47,7 +48,7 @@ export interface DrawerProps {
     onCamera?: ((mode: ViewMode) => void) | undefined;
     cameras?: readonly ViewMode[] | undefined;
     onShow(refs: string[]): void;
-    onCompose?: ((text: string) => void) | undefined;
+    onCompose?: ComposeFn | undefined;
     revision?: PanelProps['revision'];
     /** Overrides the registry (tests); the app uses the real one. */
     panels?: readonly PanelDef[];
@@ -111,7 +112,7 @@ export function Drawer(p: DrawerProps) {
                             </h3>
                         )}
                         <Body
-                            graph={graph} source={p.source} rootId={p.rootId} rootTitle={p.rootTitle} onChanged={p.onChanged} diagnostics={p.diagnostics} sync={p.sync?.status} history={p.history}
+                            graph={graph} source={p.source} rootId={p.rootId} rootTitle={p.rootTitle} onChanged={p.onChanged} diagnostics={p.diagnostics} sync={p.sync?.status} sourcesTick={p.sourcesTick} history={p.history}
                             runs={p.runs} reviews={p.reviews} lastReviewedAt={p.lastReviewedAt} onResendSkipped={p.onResendSkipped} onCamera={p.onCamera} cameras={p.cameras} labels={labels}
                             surface={p.surface} onShow={p.onShow} onCompose={p.onCompose} revision={p.revision} onClose={drawer.close}
                         />

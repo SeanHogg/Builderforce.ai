@@ -30,6 +30,17 @@ describe('useSyncStatus', () => {
         await waitFor(() => expect(result.current.status?.local.files).toBe(2));
     });
 
+    it('reads again when the host reports a data source changed (sourcesTick), through the same read', async () => {
+        let n = 0;
+        const read = vi.fn(async () => status(++n));
+        const source = sourceOf(read);
+        const { result, rerender } = renderHook(({ tick }) => useSyncStatus(source, 'a', 'g', tick), { initialProps: { tick: 0 } });
+        await waitFor(() => expect(result.current.status?.local.files).toBe(1));
+        rerender({ tick: 1 });
+        await waitFor(() => expect(result.current.status?.local.files).toBe(2));
+        expect(read).toHaveBeenCalledTimes(2);
+    });
+
     it('drops the last root\'s status the moment the root changes', async () => {
         let release!: (s: SyncStatus) => void;
         const read = vi.fn((rootId: string) => (rootId === 'a' ? Promise.resolve(status(1)) : new Promise<SyncStatus>((r) => { release = r; })));

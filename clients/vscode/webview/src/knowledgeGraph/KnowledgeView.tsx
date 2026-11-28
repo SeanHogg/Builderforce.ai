@@ -7,7 +7,7 @@
 
 import type { ReactNode } from 'react';
 import {
-  KnowledgeGraphView, setWorkerFactory, type EditorView, type KnowledgeGraphLabels, type KnowledgeGraphSource, type SourceLocation,
+  KnowledgeGraphView, setWorkerFactory, type ComposeFn, type EditorView, type KnowledgeGraphLabels, type KnowledgeGraphSource, type SourceLocation,
 } from '@builderforce/knowledge-graph-view';
 // The compute worker as a BLOB worker (`?worker&inline`): a webview may refuse a worker loaded from its resource origin, and the
 // view would then compute on the main thread, the freeze the worker exists to prevent. Registered before the first view renders.
@@ -23,7 +23,7 @@ export interface KnowledgeViewProps {
   /** Moves whenever a focus is asked for again, so the same refs re-focus. */
   focusKey?: number;
   /** Fix with agent → the ONE composer. */
-  onCompose?(text: string): void;
+  onCompose?: ComposeFn;
   /** "Open at line" → the extension opens the file in the editor. */
   onOpenSource?(location: SourceLocation): void;
   /** What the editor shows of a file of the loaded root: the code band follows it. */

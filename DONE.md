@@ -1,3 +1,13 @@
+## ✅ RESOLVED 2026-11-27 — Server tab › Traces "Turn on" now turns traces on, and the row updates itself (AE-G069; VSIX 2026.11.239)
+
+- **Problem.** "Turn on" only pre-filled the chat with a vague request; the agent enabled Cloudflare Workers Observability, which the map cannot read. `knowledgeSyncStatus.ts` hard-coded `traces: absent`, nothing re-read the status when source files appeared, and nothing in the view consumed traces.
+- **Contract.** Local trace files `.builderforce/traces/<run>.jsonl`, one JSON line per call (`run`, `at`, `file`, `fn`, `line`, `args`, `ret`). agent-tools `runTraces.ts` reads them: absolute and `file://` paths under the root made relative, newest 20 files, 2 MB per file, 20,000 steps total, parsed files memoised by size + mtime, bad lines counted.
+- **Status.** The traces row is structured (`runs`, `latest`, `unparsed`) and formatted by the view in all five locales; "Turn on" is hidden when trace files exist but cannot be read.
+- **Refresh.** `knowledgeSourceWatcher.ts` watches traces, coverage (`COVERAGE_FILES`), OpenAPI and CODEOWNERS for every root the view has asked `syncStatus` of — Running or not — and posts a `knowledge.sources` frame (500 ms debounce, 3 s max wait, `node_modules` ignored). The Server tab and Simulate re-read on it. "Set up v8" gets the same fix.
+- **Consumers.** Simulate's transition table takes trace sequences; recorded values come from the same traces through the one `stationOfStep` mapping (first call per stop).
+- **Send.** "Turn on" / "Set up v8" submit through the composer's one submit path (`BrainIntent.send`), in VS Code and the Chrome side panel; the request names the contract precisely.
+- **Proof.** Opus review → fixes; targeted tests pass (runTraces 11, sync status + packRoots 9, view 50, i18n messages 126); VSIX 2026.11.239 packaged and installed.
+
 ## ✅ RESOLVED 2026-11-27 — The VSIX opens without reading every chat message (AE-G031, open time)
 
 - **Problem.** The VS Code extension took about 35 s to load. Boot read and folded the whole 538.7 MB `local-first-v3.journal`, which holds 216k records. Of those, 177k are message rows (370 MB across 121 chats).

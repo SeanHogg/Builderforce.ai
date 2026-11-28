@@ -206,7 +206,10 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   const rail = useTicketRail({ init, apiReq, serverChatId, chatClientId: activeChat?.clientId ?? null, chats, persistence, reloadChats, reloadMessages: conv.reloadMessages });
   const { ticketAdapter, ticketRefresh, linkTicket } = rail;
   // A host intent switches chat the way a row does: History closes onto it.
-  useHostIntents({ persistence, projectId: init.project?.id ?? null, setChatId: openChat, setInput: draftStore.set, reloadChats, linkTicket, t });
+  // A seed with `send` bumps this; the effect below submits once the seeded chat + draft have rendered.
+  const [seedSendToken, setSeedSendToken] = useState(0);
+  const requestSeedSend = useCallback(() => setSeedSendToken((n) => n + 1), []);
+  useHostIntents({ persistence, projectId: init.project?.id ?? null, setChatId: openChat, setInput: draftStore.set, reloadChats, linkTicket, requestSend: requestSeedSend, t });
 
   // Multi-party chat: who a message goes to (the BRAIN executes; an invited agent/human is
   // talked to), and the live sub-agents a message can steer.
@@ -244,6 +247,13 @@ export function VsCodeChatSurface({ init }: { init: InitData }) {
   // `/` commands are answered by the HOST before the turn door (never a model turn); the `/` menu's Actions tab.
   const composerCommands = useComposerCommands({ init, draftStore, submit, seed: pickStarter });
   const { queueOr } = composerCommands;
+  // The seed's auto-send goes through the composer's one submit (the `/` command check + the turn door), never a second path.
+  const submitSeed = composerCommands.submit;
+  useEffect(() => {
+    if (seedSendToken > 0) submitSeed();
+    // Fires on a new token only: `submitSeed` changes identity every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedSendToken]);
   const queueOrCommand = useMemo(() => queueOr(queueAfter), [queueOr, queueAfter]);
 
   // The groups the memoized composer and rail are handed: one identity until what is in them moves, so a streamed token

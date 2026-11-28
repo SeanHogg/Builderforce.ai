@@ -111,6 +111,8 @@ export interface BrainIntent {
   chatId?: number;
   /** For 'seed': a prompt pre-filled into a fresh chat (editor entry points). */
   text?: string;
+  /** For 'seed': submit the text as the first message instead of only pre-filling it. */
+  send?: boolean;
   task?: { id: number; key?: string; title: string; taskType?: "task" | "epic" | "gap"; projectId?: number; dispatched?: boolean };
   /** Auto-link this work item to the chat once it's created (task/roadmap/etc.). For
    *  a 'seed' intent this also forces the chat to be created eagerly so the link

@@ -32,6 +32,22 @@ describe("buildSyncStatus", () => {
     });
   });
 
+  it("states traces from the recorded runs under .builderforce/traces", async () => {
+    const line = (run: string, at: string) => JSON.stringify({ run, at, file: "src/a.ts" });
+    const files: Record<string, string> = {
+      "/repo/.builderforce/traces/r1.jsonl": line("r1", "2026-11-26T09:00:00Z"),
+      "/repo/.builderforce/traces/r2.jsonl": line("r2", "2026-11-27T10:00:00Z"),
+    };
+    const fs: KnowledgeFs = {
+      ...fsWith(...Object.keys(files)),
+      readFile: async (path) => new TextEncoder().encode(files[path] ?? ""),
+    };
+    const traces = (await buildSyncStatus({ ...base, fs, skipped: [], reviewed: true })).sources.find((s) => s.id === "traces");
+    expect(traces).toEqual({ id: "traces", state: "collected", runs: 2, latest: "2026-11-27T10:00:00Z" });
+    const none = (await buildSyncStatus({ ...base, fs: fsWith(), skipped: [], reviewed: true })).sources.find((s) => s.id === "traces");
+    expect(none).toEqual({ id: "traces", state: "absent" });
+  });
+
   it("says code and docs are absent for a root that was never reviewed", async () => {
     const status = await buildSyncStatus({ ...base, fs: fsWith(), skipped: undefined, reviewed: false, hasHistory: false });
     expect(status.sources.filter((s) => s.id === "code" || s.id === "docs").map((s) => s.state)).toEqual(["absent", "absent"]);

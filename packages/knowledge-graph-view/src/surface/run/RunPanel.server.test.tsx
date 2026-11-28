@@ -160,9 +160,9 @@ describe('the Server tab keeps the Sync drawer\'s other sections', () => {
         const openPanel = vi.fn();
         open(status, { ...base, onCompose, openPanel });
         fireEvent.click(document.querySelector('[data-source="coverage"] button')!);
-        expect(onCompose).toHaveBeenCalledWith(L.surface.sync.setUpV8Request);
+        expect(onCompose).toHaveBeenCalledWith(L.surface.sync.setUpV8Request, { send: true });
         fireEvent.click(document.querySelector('[data-source="traces"] button')!);
-        expect(onCompose).toHaveBeenCalledWith(L.surface.sync.turnOnRequest);
+        expect(onCompose).toHaveBeenCalledWith(L.surface.sync.turnOnRequest, { send: true });
         fireEvent.click(document.querySelector('[data-source="openapi"] [data-action="actionGenerate"]')!);
         expect(openPanel).toHaveBeenCalledWith('api');
         expect(document.querySelector('[data-source="code"] button')).toBeNull();

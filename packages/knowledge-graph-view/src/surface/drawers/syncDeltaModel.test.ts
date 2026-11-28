@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deltaFeed, pendingCount, sourceAction, splitSkipped } from './syncDeltaModel';
+import { deltaFeed, pendingCount, sourceAction, sourceNote, splitSkipped } from './syncDeltaModel';
 
 const commit = (sha: string, at: string, refs: string[] = ['a']) => ({ sha, title: `t ${sha}`, at, refs });
 
@@ -51,7 +51,23 @@ describe('sourceAction', () => {
         expect(sourceAction({ id: 'coverage', state: 'absent' })).toMatchObject({ kind: 'compose', label: 'actionSetUpV8' });
         expect(sourceAction({ id: 'coverage', state: 'collected' })).toEqual({ kind: 'none' });
         expect(sourceAction({ id: 'traces', state: 'absent' })).toMatchObject({ label: 'actionTurnOn' });
+        // Files that exist but could not be read are not "off": no Turn on.
+        expect(sourceAction({ id: 'traces', state: 'absent', unparsed: 4 })).toEqual({ kind: 'none' });
+        expect(sourceAction({ id: 'traces', state: 'absent', unparsed: 0 })).toMatchObject({ label: 'actionTurnOn' });
         expect(sourceAction({ id: 'openapi', state: 'estimated' })).toMatchObject({ kind: 'panel', panel: 'api' });
         expect(sourceAction({ id: 'code', state: 'absent' })).toEqual({ kind: 'none' });
+    });
+});
+
+describe('sourceNote', () => {
+    const t = { tracesRunsOne: 'one {count} {when}', tracesRunsOther: 'many {count} {when}', tracesUnparsed: 'unread {count}' };
+    it('words the traces row from its runs, newest run and unreadable lines', () => {
+        expect(sourceNote({ id: 'traces', state: 'collected', runs: 1, latest: '2026-11-27T10:00:00Z' }, t)).toMatch(/^one 1 .*2026/);
+        expect(sourceNote({ id: 'traces', state: 'collected', runs: 3, latest: '2026-11-27T10:00:00Z' }, t)).toMatch(/^many 3 /);
+        expect(sourceNote({ id: 'traces', state: 'absent', unparsed: 7 }, t)).toBe('unread 7');
+        expect(sourceNote({ id: 'traces', state: 'absent' }, t)).toBeUndefined();
+    });
+    it('leaves any other row its host note', () => {
+        expect(sourceNote({ id: 'coverage', state: 'estimated', note: 'from tests' }, t)).toBe('from tests');
     });
 });

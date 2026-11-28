@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KnowledgeGraphSource, SyncStatus } from '../types';
 
-/** While an upload is under way or waiting, the status is read again this often (the host pushes nothing). */
+/** While an upload is under way or waiting, the status is read again this often (the host pushes no progress). */
 export const SYNC_POLL_MS = 2000;
 /** The longest a backed-off poll waits: a queue that is not moving (offline, or reads failing) is read at most this often. */
 export const SYNC_POLL_MAX_MS = 60_000;
@@ -33,12 +33,12 @@ export interface SyncRead {
 
 /**
  * The host's sync status for a root: the ONE read, shared by the review action (status chip + button on the ask-bar row) and the Reviews panel (Server and Diagnostics tabs).
- * Re-read when `refreshKey` changes (a new graph landed), on `refresh()`, and while the replica is sending or waiting with changes and nothing has failed (uploads the person did not
+ * Re-read when `refreshKey` changes (a new graph landed), when `sourcesTick` moves (the host reported a data source's files changed, e.g. a trace was written), on `refresh()`, and while the replica is sending or waiting with changes and nothing has failed (uploads the person did not
  * start included). A sending queue is read every `SYNC_POLL_MS`; a queue that is dirty but not sending, or a read that FAILED while it was uploading, backs off exponentially up to
  * `SYNC_POLL_MAX_MS`. A failed read clears the status (it is stale). Polling pauses while the page is hidden and resumes, from the short interval, when it is shown again.
  * Polling stops when the queue is idle and when the view unmounts. A new root starts from nothing, never from the last root's status.
  */
-export function useSyncStatus(source: KnowledgeGraphSource, rootId: string | null, refreshKey: unknown): SyncRead {
+export function useSyncStatus(source: KnowledgeGraphSource, rootId: string | null, refreshKey: unknown, sourcesTick = 0): SyncRead {
     const [status, setStatus] = useState<SyncStatus | null>(null);
     const [failed, setFailed] = useState(false);
     const [again, setAgain] = useState(0);
@@ -79,7 +79,7 @@ export function useSyncStatus(source: KnowledgeGraphSource, rootId: string | nul
             },
         );
         return () => { live = false; };
-    }, [read, source, rootId, refreshKey, again]);
+    }, [read, source, rootId, refreshKey, sourcesTick, again]);
     const refresh = useCallback(() => setAgain((n) => n + 1), []);
     /** The pending poll, so a read started by the page becoming visible cancels it (one read, not two). */
     const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

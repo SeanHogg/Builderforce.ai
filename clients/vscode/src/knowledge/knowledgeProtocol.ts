@@ -18,17 +18,24 @@
  * Types only, plus the frame names: no `vscode`, no React.
  */
 
-import type { DomainLayout, PinpointMatchResult, ReplicaState } from "@builderforce/agent-tools/knowledge";
+import type { DomainLayout, PinpointMatchResult, ReplicaState, RunTrace, RunTraceStep, RunTraces } from "@builderforce/agent-tools/knowledge";
 import type { CallSite, Finding, KEdge, KNode, KnowledgeGraph, ReviewPlan, ReviewFailure, ReviewProgress, ReviewReport, ReviewRun } from "@seanhogg/builderforce-memory/knowledge";
 import type { IndexLevelStatus } from "./indexLevels";
 
-export type { IndexLevelStatus, DomainLayout as KnowledgeDomainLayout };
+export type { IndexLevelStatus, DomainLayout as KnowledgeDomainLayout, RunTrace, RunTraceStep, RunTraces };
 
 export const KNOWLEDGE_CALL = "knowledge.call";
 export const KNOWLEDGE_EVENT = "knowledge.event";
 export const KNOWLEDGE_FOCUS = "knowledge.focus";
 /** host → webview: the editor's view of a file of the loaded root ({@link KnowledgeEditorFrame}), throttled. */
 export const KNOWLEDGE_EDITOR = "knowledge.editor";
+/**
+ * host → webview: a data source's files under `rootId` changed (traces, coverage, OpenAPI, CODEOWNERS), debounced
+ * (500 ms, at most 3 s late while changes keep arriving). Posted for every root whose `syncStatus` the view has read,
+ * whether or not the root is running: re-read `syncStatus` (and `runTraces`).
+ */
+export const KNOWLEDGE_SOURCES = "knowledge.sources";
+export interface KnowledgeSourcesFrame { rootId: string }
 
 /** The view's review request (the view package's `ReviewRequest`, restated for the host). */
 export interface KnowledgeReviewRequest {
@@ -65,7 +72,10 @@ export type KnowledgeCall =
   | { op: "factActions"; ref: string }
   | { op: "deleteFact"; ref: string }
   | { op: "baseline"; rootId: string }
-  | { op: "compose"; text: string }
+  // `send`: submit the text as the chat's first message instead of only pre-filling the composer.
+  | { op: "compose"; text: string; send?: boolean }
+  // The recorded runs under the root (`.builderforce/traces/*.jsonl`, newest 20 files): the view's trace overlay. Unreadable files are logged, not returned.
+  | { op: "runTraces"; rootId: string }
   | { op: "takeFocus" }
   // The screenshot rides as a base64 data URL (a Blob does not survive postMessage reliably).
   | { op: "pinpoint"; rootId: string; image: string }
@@ -248,6 +258,12 @@ export interface KnowledgeSyncStatus {
     id: "code" | "docs" | "coverage" | "usage" | "traces" | "openapi" | "history" | "owners";
     state: "collected" | "estimated" | "absent";
     note?: string;
+    /** `traces` only: recorded runs found (state "collected"). */
+    runs?: number;
+    /** `traces` only: ISO time of the newest recorded run. */
+    latest?: string;
+    /** `traces` only: trace lines that were not valid steps (state "absent" with this = files present, no run parsed). */
+    unparsed?: number;
   }[];
 }
 

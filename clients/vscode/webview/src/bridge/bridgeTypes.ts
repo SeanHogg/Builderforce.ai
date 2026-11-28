@@ -27,6 +27,8 @@ export interface BrainIntent {
    *  editor entry point (review PRs / fix errors / open a PR) hands the unified Brain a
    *  job to do with its shared platform + git tools. */
   text?: string;
+  /** For 'seed': submit the text as the first message (through the composer's one submit door) instead of only pre-filling it. */
+  send?: boolean;
   /** For 'task': the BuilderForce task to scope a new chat to. `dispatched` marks a
    *  task that was just handed to the platform runtime, so the seed nudges the Brain
    *  to monitor the run (via the `executions.*` platform tools) rather than start work. */

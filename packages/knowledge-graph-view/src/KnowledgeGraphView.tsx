@@ -82,7 +82,7 @@ import { useSurface } from './surface/useSurface';
 import { useCompare } from './surface/useCompare';
 import { useCompareActions } from './surface/useCompareActions';
 import { RestructureContext } from './surface/useRestructure';
-import type { EvidenceSide, KnowledgeConfirm, KnowledgeGraphSource, KnowledgePanelRenderer, LensId, EditorView, SourceLocation, SourceRange, ViewMode } from './types';
+import type { ComposeFn, EvidenceSide, KnowledgeConfirm, KnowledgeGraphSource, KnowledgePanelRenderer, LensId, EditorView, SourceLocation, SourceRange, ViewMode } from './types';
 import { createRenderTrace, RenderTraceContext } from './renderTrace';
 import { buildCodeHierarchy, type HierarchyView } from './surface/codeHierarchy';
 
@@ -93,7 +93,7 @@ export interface KnowledgeGraphViewProps {
     /** Host words over the English defaults: `resolveLabels` merges every map key by key, so a host may pass a subset. */
     labels?: Partial<KnowledgeGraphLabels>;
     /** Puts a Fix-with-agent request in the host's ONE composer. Absent ⇒ no Fix button. */
-    onCompose?(text: string): void;
+    onCompose?: ComposeFn;
     initialFocus?: string[];
     /** Open on the review launcher (a host's "Choose a folder to review" chip). */
     openReview?: boolean;
@@ -140,7 +140,7 @@ function KnowledgeGraphSurface({
     const [showAll, setShowAll] = useState(false), [tracing, setTracing] = useState(false);
     const [narrowCode, setNarrowCode] = useState(false);
     const targets = useReviewTargets(source); // read ONCE: the empty state's launcher uses it
-    const sync = useSyncStatus(source, kg.rootId, kg.graph); // read ONCE: the pill, the banner and the Sync drawer share it
+    const sync = useSyncStatus(source, kg.rootId, kg.graph, kg.sourcesTick); // read ONCE: the pill, the banner and the Sync drawer share it
     const zoom = useZoomHost();
 
     // ONE compare state (PRD 43 C5): Before/After, a restructure and a picked commit all drive it. A two-graph comparison draws ONE union graph for its whole run.
@@ -383,7 +383,7 @@ function KnowledgeGraphSurface({
                     <Drawer
                         drawer={drawer} sheet={layout.drawerSheet}
                         graph={graph} env={surfaceEnv} labels={labels} surface={surface} source={source} rootId={kg.rootId ?? undefined}
-                        rootTitle={titleOf(graph.scope.rootId)} onChanged={kg.reload} diagnostics={diagnostics} sync={sync} history={history} runs={runs} reviews={reviews}
+                        rootTitle={titleOf(graph.scope.rootId)} onChanged={kg.reload} diagnostics={diagnostics} sync={sync} sourcesTick={kg.sourcesTick} history={history} runs={runs} reviews={reviews}
                         lastReviewedAt={kg.scopes.find((x) => x.rootId === kg.rootId)?.lastReviewedAt}
                         revision={keepsBaseline ? compare.revision : undefined}
                         onResendSkipped={source.review && kg.rootId ? () => { const id = kg.rootId!; setPanel(null); kg.review.start({ rootId: id, force: true }); } : undefined}

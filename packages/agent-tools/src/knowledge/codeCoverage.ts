@@ -20,7 +20,8 @@ import { slashPath } from './rootRelative.js';
 const MAX_DEPTH = 4;
 const MAX_DIRS = 4_000;
 export const MAX_FILE_BYTES = 40 * 1024 * 1024;
-const COVERAGE_FILES = ['coverage-final.json', 'lcov.info'] as const;
+/** The coverage files read in a folder (the source watcher globs the same names). */
+export const COVERAGE_FILES = ['coverage-final.json', 'lcov.info'] as const;
 
 export type CoverageSourceState = 'collected' | 'absent';
 

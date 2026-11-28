@@ -9,7 +9,10 @@ import { useEffect } from 'react';
 import type { BrainPersistenceAdapter } from '@seanhogg/builderforce-brain-embedded';
 import { onIntent, type BrainIntent } from '../bridge/vscodeBridge';
 
-export function useHostIntents({ persistence, projectId, setChatId, setInput, reloadChats, linkTicket, t }: {
+/** A seeded chat that could not be created or opened is reported (the webview's console, as its other catches do), never dropped. */
+const reportIntentError = (error: unknown): void => console.error('[builderforce] host intent failed', error);
+
+export function useHostIntents({ persistence, projectId, setChatId, setInput, reloadChats, linkTicket, requestSend, t }: {
   persistence: BrainPersistenceAdapter;
   /** The sidebar's project — a seeded chat lands there when its item names none. */
   projectId: number | null;
@@ -17,6 +20,8 @@ export function useHostIntents({ persistence, projectId, setChatId, setInput, re
   setInput: (text: string) => void;
   reloadChats: () => void;
   linkTicket: (chatId: number, ticket: { kind: string; ref: string }) => Promise<void>;
+  /** A seed with `send`: submit the seeded draft through the composer's ONE submit door (once the seeded chat has rendered). */
+  requestSend: () => void;
   t: (key: string, fallback: string) => string;
 }) {
   useEffect(() => {
@@ -37,13 +42,15 @@ export function useHostIntents({ persistence, projectId, setChatId, setInput, re
               setInput(intent.text ?? '');
               reloadChats();
               void linkTicket(chat.id, ticket);
+              if (intent.send) requestSend();
             })
-            .catch(() => {});
+            .catch(reportIntentError);
         } else {
           // Ticket-less editor entry point (review PRs / fix errors / open a PR): open a
           // fresh chat with the prompt pre-filled; the user can tweak before sending.
           setChatId(null);
           setInput(intent.text ?? '');
+          if (intent.send) requestSend();
         }
       } else if (intent.kind === 'focus' && intent.chatId != null) {
         setChatId(intent.chatId);
@@ -66,10 +73,10 @@ export function useHostIntents({ persistence, projectId, setChatId, setInput, re
               ?? { kind: task.taskType === 'epic' ? 'epic' : task.taskType === 'gap' ? 'gap' : 'task', ref: String(task.id) };
             void linkTicket(chat.id, ticket);
           })
-          .catch(() => {});
+          .catch(reportIntentError);
       }
     });
     // Same keys as before the lift: `setChatId` / `setInput` are stable setters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [persistence, reloadChats, t, linkTicket, projectId]);
+  }, [persistence, reloadChats, t, linkTicket, projectId, requestSend]);
 }

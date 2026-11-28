@@ -75,6 +75,7 @@ describe("loaded packs as read-only knowledge-view roots", () => {
       { op: "pinpoint", rootId: FOREIGN_ROOT, image: "data:" },
       { op: "history", rootId: FOREIGN_ROOT },
       { op: "syncStatus", rootId: FOREIGN_ROOT },
+      { op: "runTraces", rootId: FOREIGN_ROOT },
       { op: "applyFix", rootId: FOREIGN_ROOT, finding: {} as never },
     ];
     for (const call of refused) expect(() => assertWritable(call, undefined)).toThrow(/read-only/);
