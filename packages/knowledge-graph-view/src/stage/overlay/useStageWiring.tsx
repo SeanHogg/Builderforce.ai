@@ -18,9 +18,10 @@ import { useComputed } from '../../compute/useComputed';
 import { fillTemplate } from '../../labels';
 import { nodeIndex, pathOf } from '../../graphModel';
 import { entryFileOf, fileRefOf, stationOfRef } from '../../surface/stations';
+import { folderIdOfMark } from '../../surface/transit/levelFrames';
 import type { SceneProps } from '../../surface/registry';
 import { stageBus, StageBusContext } from '../anchor/stageBus';
-import { ZOOM_BANDS } from '../labels/lod';
+import { useLadderSteps } from './useLadderSteps';
 import { cssVar } from '../../scene/themeColors';
 import { TYPE } from '../../surface/ui/type';
 import { questionGlyph } from '../../surface/ui/glyphs';
@@ -50,8 +51,6 @@ import { CallSiteCard } from './CallSiteCard';
 import { StageCard, stationCardOf } from './StageCard';
 import { SymbolCard, type SymbolCardState } from './SymbolCard';
 
-/** The Map's bands, in ladder order (system, class, method, code). */
-const BAND_ORDER = ZOOM_BANDS.map((b) => b.band);
 /** A mark type for a symbol drawn after the MarkSet (a drilled level's), by what the record is. */
 const SYMBOL_MARK_TYPE: Readonly<Record<RailKind, MarkType>> = { class: 'class', method: 'function', field: 'data' };
 
@@ -99,6 +98,8 @@ export interface StageWiring {
     wheelStep(dir: 1 | -1): void;
     /** The ladder: go to band `target` (0 system … 3 code). */
     toBand(target: number): void;
+    /** The level rail's click: go to rung `rung` (0 System … 4 Line). */
+    toRung(rung: number): void;
     /** The method whose code is open (the code band's, or one opened across): the Sequence placement's `method`. */
     method: string | null;
     /** The Map placement with the unfold patch applied (memoized: the same placement in, the same out). */
@@ -192,6 +193,9 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     }, [map, drill, surface, p, dock.onCodeRef]);
 
     const onDrill = useCallback((key: string) => {
+        // A system or an app is a folder mark: it enters through the same zoom as a station.
+        const folder = folderIdOfMark(bus.placement?.level, key) ?? (key.startsWith('dir:') ? key : null);
+        if (folder) { if (drill.canEnter(folder).can) zoom.zoomInto(folder); return; }
         // A method is a station too (the method band's marks), so a station that cannot be entered falls through to its code.
         const station = map.stationOfKey(key);
         const file = drill.view ? (station && drill.view.leaves.has(station.id) ? station.refs[0] : undefined) : entryFileOf(station);
@@ -201,7 +205,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
         if (!key.startsWith('node:')) return;
         const ref = key.slice('node:'.length);
         if (!zoom.enterCode(ref)) toast.show(fillTemplate(t.toastNoCalls, { name: index.get(ref)?.label ?? ref }));
-    }, [map, drill, zoom, toast.show, t, index]);
+    }, [map, drill, zoom, bus, toast.show, t, index]);
 
     // Empty space (or Escape) clears the pick: the stage's selection, its card, the call-site card, and the drilled
     // level's or the surface's own selection.
@@ -222,13 +226,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
 
     // The Map's wheel and ladder go one band at a time; a step with nothing to enter says so at the method band.
     const atCodeLevel = !!zoom.code;
-    const bandIndex = BAND_ORDER.indexOf(zoom.band);
-    const { stepIn, outToBand, closeCode: popCode, toBand: goToBand } = zoom;
-    const wheelStep = useCallback((dir: 1 | -1) => {
-        if (dir > 0) { if (!stepIn(selected) && bandIndex === BAND_ORDER.length - 2) toast.show(t.toastNoMethod); return; }
-        if (atCodeLevel) popCode(); else if (bandIndex > 0) outToBand(bandIndex - 1);
-    }, [stepIn, outToBand, popCode, atCodeLevel, bandIndex, selected, toast.show, t]);
-    const toBand = useCallback((target: number) => goToBand(target, selected, () => toast.show(t.toastNoMethod)), [goToBand, selected, toast.show, t]);
+    const { wheelStep, toBand, toRung } = useLadderSteps(zoom, selected, toast.show, t.toastNoMethod);
 
     // The code dock: docked or read, what it reads and what that drives on the map (`useCodeDock`).
     const d = useCodeDock({ p, bus, map, zoom, selected, codeRef: dock.codeRef, onCodeRef: dock.onCodeRef, setSelected, cardKey, toast: toast.show, width, slotOf, shown: dock.shown ?? true, onToggle: dock.onToggleCode, sequence: dock.sequence, factsGraph: dock.factsGraph });
@@ -236,7 +234,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
     const layers = p.labels.surface.layers;
     const groups = useMemo(() => drill.view ? undefined : new Map(map.stations.stations.map((station) => [station.id, architectureGroupsOf(station, systems, p.rootTitle, layers)])), [drill.view, map.stations, systems, p.rootTitle, layers]);
     const [rootCrumb, ...drillCrumbs] = depthCrumbs(drill.stack, p.rootTitle, p.labels.surface.depth);
-    const component = surface.stations.byId.get(drill.stack[0]?.ref ?? '');
+    const component = surface.stations.byId.get((drill.stack.find((frame) => frame.level === 'package') ?? drill.stack[0])?.ref ?? '');
     const fileFrame = drill.stack.find((frame) => frame.level === 'class');
     const fileGroups = fileFrame ? dock.codeFiles?.get(fileFrame.ref)?.architecture : undefined;
     const singleFile = component?.refs.length === 1;
@@ -396,7 +394,7 @@ export function useStageWiring(p: SceneProps, renderer: StageRenderer, marks: Ma
             dock.onCodeRef?.(ref);
             drill.loadFileSymbols?.(fileRefOf(ref));
             d.openCode();
-        }, zoom, selected, onSelect, onDrill, onOut: out, onEscape, clearSelection, dismissed, wheelStep, toBand, method: methodTarget?.ref ?? null, patchMap, card, code,
+        }, zoom, selected, onSelect, onDrill, onOut: out, onEscape, clearSelection, dismissed, wheelStep, toBand, toRung, method: methodTarget?.ref ?? null, patchMap, card, code,
     };
 }
 

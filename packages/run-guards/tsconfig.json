@@ -16,6 +16,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "paths": {
+      "@builderforce/tool-output-policy": ["../tool-output-policy/src/index.ts"],
       "@builderforce/code-shield": ["../code-shield/src/index.ts"],
       "@builderforce/secret-redaction": ["../secret-redaction/src/index.ts"],
       "@builderforce/sarif": ["../sarif/src/index.ts"],

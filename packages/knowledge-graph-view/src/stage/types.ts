@@ -236,7 +236,7 @@ export interface LevelDescriptor {
     level: 'world' | 'system' | 'app' | 'package' | 'class' | 'function';
     ref: string | null;
     name: string;
-    children: { slot: number; key: string; name: string; kind: string; form: string; w: number; d: number; h: number; files: number; minis: number }[];
+    children: { slot: number; key: string; folder?: string; name: string; kind: string; form: string; w: number; d: number; h: number; files: number; minis: number }[];
     total: number;
     notOnMap: { stations: number; files: number; examples: string[] };
 }

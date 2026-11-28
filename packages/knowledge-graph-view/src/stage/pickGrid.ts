@@ -18,7 +18,7 @@ export interface GridOptions {
     extrudeScale: number;
 }
 
-export type GridMarks = Pick<Placement, 'position' | 'scale' | 'liftWithDepth'> & { extrude?: Float32Array };
+export type GridMarks = Pick<Placement, 'position' | 'scale' | 'liftWithDepth' | 'aspect'> & { extrude?: Float32Array };
 
 export interface Segments { x0: Float64Array; y0: Float64Array; x1: Float64Array; y1: Float64Array; batch: Int32Array; seg: Int32Array; group: Int32Array; slot: Int32Array }
 
@@ -68,6 +68,26 @@ export class PickGrid {
         this.projectLinks();
         this.bucket();
     }
+
+    /**
+     * How far past the pick target (px) a mark's footprint reaches along its LONG side: the target covers the short side, so a
+     * rectangle (`Placement.aspect` ≠ 1) is hit anywhere on it. 0 for a square mark.
+     */
+    slackOf(slot: number): number {
+        const asp = this.marks.aspect?.[slot];
+        return asp === undefined || asp === 1 ? 0 : (this.marks.scale[slot] ?? 0) * Math.abs(1 - asp) * this.projector.pxPerWorld;
+    }
+
+    /** The largest {@link slackOf} of any shown mark (the cells a query reads widen by it). */
+    get maxSlack(): number {
+        if (this.slackMax < 0) {
+            let m = 0;
+            if (this.marks.aspect) for (let s = 0; s < this.n; s++) if (this.ok[s]) m = Math.max(m, this.slackOf(s));
+            this.slackMax = m;
+        }
+        return this.slackMax;
+    }
+    private slackMax = -1;
 
     /** The slot an entry stands for (a glyph selects its slot). */
     slotOf(entry: number): number { return entry < this.n ? entry : this.glyphSlot[entry - this.n]!; }

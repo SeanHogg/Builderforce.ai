@@ -14,9 +14,8 @@
  * band's threshold; the crossing does the rest). With no rig (no stage yet) it drills directly, as before.
  */
 
-import { drillKeyOf } from '../../compute/tasks/placement/request';
 import { entryFileOf } from '../../surface/stations';
-import { folderOfKey, structuralDepth } from '../../surface/transit/levelFrames';
+import { folderOfKey, markOfFolderId, structuralDepth } from '../../surface/transit/levelFrames';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DrillModel } from '../../surface/transit/useDrill';
 import type { StageBus } from '../anchor/stageBus';
@@ -26,8 +25,9 @@ import { bandOf, drawnPx, focusOf, sequenceLodOf, stepBand, zoomForBand } from '
 import { now, TWEEN_MS } from '../tween';
 import type { Placement } from '../types';
 import { codeTargetOf, type CodeTarget } from './codeText';
-import { RUNG_METHOD, RUNG_OF_BAND, rungOf, stackLengthForRung } from './levelRung';
-import { drillOfPlacement, nestEntryOf, type NestBasis, type NestEntry } from './nest';
+import { RUNG_OF_BAND, rungOf } from './levelRung';
+import { drillOfPlacement, nestEntryOf, type NestBasis } from './nest';
+import { CODE, folderCandidates, useLevelSteps, type Candidate, type ZoomState } from './useLevelSteps';
 import { useNestEntries } from './useNestEntries';
 import type { StageMap } from './useStageMap';
 
@@ -82,23 +82,9 @@ export interface SemanticZoom {
 export const REACH_PX = 48;
 /** The Sequence has no code band: its last is the method band. */
 const SEQUENCE_LAST = 2;
-const CODE = 3;
 
 const cameraOf = (p: Placement): string => p.cacheKey.split('|')[1] ?? '';
 const hasSemanticMap = (camera: string): boolean => camera === 'map' || camera === '3d';
-
-interface Candidate { id: string; key: string }
-
-/** The folder marks (systems, apps) the placement on show draws as its level's children, when the drill may enter them. */
-function folderCandidates(p: Placement, drill: DrillModel): Candidate[] {
-    return (p.level?.children ?? []).flatMap((c) => (folderOfKey(c.key) !== null && drill.canEnter(c.key).can ? [{ id: c.key, key: c.key }] : []));
-}
-
-/** What the frame-time evaluator reads (kept in a ref so it is never stale); the code key and trail are written back from it. */
-interface ZoomState {
-    drill: DrillModel; map: StageMap; entries: ReadonlyMap<string, NestEntry>;
-    codeKey: string | null; trail: readonly string[]; seqBand: number; band: number; candidates: Candidate[];
-}
 
 export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap, reducedMotion: boolean): SemanticZoom {
     const { entries, add, nest, setBasis, awaitsBasis, nests } = useNestEntries(drill);
@@ -175,7 +161,7 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
                 s.drill.openFile(file);
                 return;
             }
-            const e = nestEntryOf(p, focus.slot, `${check.level}:${check.ref}`);
+            const e = nestEntryOf(p, focus.slot, `${check.level}:${check.ref}`, c.key);
             if (e) add(e);
             pending.current = true;
             s.drill.enter(c.id);
@@ -198,42 +184,13 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
     // A level or its symbols arriving can make the mark under the zoom enterable without the camera moving.
     useEffect(() => { evaluate(); }, [evaluate, candidates]);
 
-    // The skip rule: a system or an app that holds exactly one child is not stood on, its child is entered in its place. The
-    // placement's own level descriptor says what the level holds; the nest entry follows the frame it was recorded for.
-    useEffect(() => bus.onPlacement(() => {
-        const p = bus.placement, s = state.current;
-        const top = s.drill.stack.at(-1), level = p?.level;
-        if (!p || !top || !level || level.level !== top.level || level.ref !== top.ref || level.children.length !== 1 || level.total !== 1) return;
-        if (top.level !== 'system' && top.level !== 'app') return;
-        const only = level.children[0]!;
-        // A folder mark is asked about by its slot key, a station by its id.
-        const id = only.key.startsWith('st:') ? only.key.slice('st:'.length) : only.key;
-        const check = s.drill.canEnter(id);
-        if (!check.can || pending.current) return;
-        const was = s.entries.get(drillKeyOf(top) ?? '');
-        if (was) add({ ...was, drill: `${check.level}:${check.ref}` });
-        pending.current = true;
-        s.drill.enter(id, true);
-    }), [bus, add]);
-
     const ms = reducedMotion ? 0 : TWEEN_MS;
-    const stepGoal = useRef<() => boolean>(() => false);
-    const walk = useCallback(() => {
-        if (goal.current < 0) return;
-        // The goal is a rail rung (`levelRung.ts`): a system or an app is a rung of its own, though no band.
-        if (rungOf(state.current.drill.stack, !!state.current.codeKey) >= goal.current) { goal.current = -1; return; }
-        if (pending.current || bus.tweening) return;
-        if (!stepGoal.current()) { goal.current = -1; blocked.current(); }
-    }, [bus]);
-    // The ladder walks on: each level reached, each level that finishes loading and each landed tween takes the next step toward its goal.
-    useEffect(() => { walk(); }, [walk, band, candidates, drill.stack]);
-    useEffect(() => bus.onSettle(walk), [bus, walk]);
 
     const zoomInto = useCallback((stationId: string) => {
         const s = state.current, p = bus.placement, rig = rigOf(bus);
         // A folder mark (a system, an app) is named by its slot key; a station by its id.
         const station = s.map.stations.byId.get(stationId);
-        const slot = station ? bus.slotOf(s.map.keyOfStation(station)) : folderOfKey(stationId) !== null ? bus.slotOf(stationId) : -1;
+        const slot = station ? bus.slotOf(s.map.keyOfStation(station)) : folderOfKey(stationId) !== null ? bus.slotOf(markOfFolderId(p?.level, stationId)) : -1;
         const scale = p && slot >= 0 ? p.scale[slot] ?? 0 : 0;
         if (!rig || !p || !(scale > 0) || s.band >= CODE || !hasSemanticMap(cameraOf(p))) { s.drill.enter(stationId); return; }
         rig.flyTo(p.position[slot * 3]!, p.position[slot * 3 + 2]!, zoomForBand(s.band + 1, scale), now(), ms, p.position[slot * 3 + 1]);
@@ -290,32 +247,6 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         rigOf(bus)?.fit(now(), ms);
     }, [bus, ms, leaveCode]);
 
-    // The rail's click out to `rung`: close the code, then keep the frames up to that rung (System is the world).
-    const outToRung = useCallback((rung: number) => {
-        const s = state.current;
-        goal.current = -1;
-        if (s.codeKey) {
-            if (rung >= RUNG_METHOD) { leaveCode(); return; }
-            s.codeKey = null; s.trail = []; setTrail([]);
-        }
-        const keep = stackLengthForRung(s.drill.stack, rung);
-        if (keep >= s.drill.stack.length) return;
-        pending.current = true;
-        s.drill.climb(keep);
-        rigOf(bus)?.fit(now(), ms);
-    }, [bus, ms, leaveCode]);
-
-    // One step out: the code, else the band, else the system or app the drill is inside.
-    const outOne = useCallback(() => {
-        const s = state.current;
-        if (s.band === CODE) { if (s.trail.length > 1) codeBack(s.trail.length - 2); else leaveCode(); return; }
-        if (s.band > 0) { outToBand(s.band - 1); return; }
-        if (s.drill.stack.length === 0) return;
-        pending.current = true;
-        s.drill.out();
-        rigOf(bus)?.fit(now(), ms);
-    }, [bus, ms, codeBack, leaveCode, outToBand]);
-
     const closeCode = useCallback(() => {
         const s = state.current;
         if (s.trail.length > 1) codeBack(s.trail.length - 2); else leaveCode();
@@ -353,14 +284,8 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
         zoomInto(c.id);
         return true;
     }, [bus, enterCode, zoomInto]);
-    stepGoal.current = () => stepIn(null);
 
-    // In toward rail rung `rung` step by step; `walk` takes the next step as each level lands.
-    const walkIn = useCallback((rung: number, prefer: string | null, onBlocked: () => void) => {
-        blocked.current = onBlocked;
-        goal.current = rung;
-        if (!stepIn(prefer)) { goal.current = -1; onBlocked(); }
-    }, [stepIn]);
+    const { outOne, walkIn, toRung } = useLevelSteps({ bus, state, pending, goal, blocked, add, setTrail, ms, band, candidates, stack: drill.stack, leaveCode, codeBack, outToBand, stepIn });
 
     const toBand = useCallback((target: number, prefer: string | null, onBlocked: () => void) => {
         const s = state.current;
@@ -372,12 +297,6 @@ export function useSemanticZoom(bus: StageBus, drill: DrillModel, map: StageMap,
     }, [outToBand, walkIn]);
 
     const rung = rungOf(drill.stack, !!codeKey);
-    const toRung = useCallback((target: number, prefer: string | null, onBlocked: () => void) => {
-        const s = state.current, now_ = rungOf(s.drill.stack, !!s.codeKey);
-        if (target < now_) { outToRung(target); return; }
-        if (target === now_) { goal.current = -1; return; }
-        walkIn(target, prefer, onBlocked);
-    }, [outToRung, walkIn]);
 
     const code = useMemo(() => {
         const target = codeKey ? codeTargetOf(codeKey.slice('node:'.length), drill.symbols) : null;

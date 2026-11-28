@@ -7,7 +7,7 @@ import { StationCard } from './StationCard';
 
 const t = L.surface.map.card;
 const base: CardModel = {
-    name: 'API', meta: '2 files · Presentation', issues: ['Layer violation'], issueMore: 2, enter: { can: true, level: 'package' }, unfold: 3, unfolded: false,
+    name: 'API', meta: '2 files · Presentation', issues: ['Layer violation'], issueMore: 2, enter: { can: true, level: 'package', ref: 'x' }, unfold: 3, unfolded: false,
     hasApi: true, hasPatterns: true, leaf: false,
     stats: [
         { key: 'issues', label: 'Issues', value: 'high', tone: 'sev3' }, { key: 'complexity', label: 'Complexity', value: '—', tone: null },

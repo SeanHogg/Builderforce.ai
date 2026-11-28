@@ -12,7 +12,7 @@ const findings = new Map(graph.findings.map((f) => [f.id, f] as const));
 const index = nodeIndex(graph);
 const card = (name: string, over = {}) => buildCard({
     station: model.stations.find((s) => s.name === name)!, labels: L, layerName: 'Layer', findings, index,
-    enter: { can: true, level: 'package' }, satellites: 2, unfolded: false, leaf: false, ...over,
+    enter: { can: true, level: 'package', ref: 'x' }, satellites: 2, unfolded: false, leaf: false, ...over,
 });
 
 describe('buildCard', () => {
@@ -54,7 +54,7 @@ describe('buildCard', () => {
         expect(api.hasPatterns).toBe(true);
         expect(api.meta).toBe('2 files · Layer');
         // Singular: "1 file", never "1 files".
-        const one = buildCard({ station: { ...model.stations.find((s) => s.name === 'API')!, files: 1 }, labels: L, layerName: 'Layer', findings, index, enter: { can: true, level: 'package' }, satellites: 2, unfolded: false, leaf: false });
+        const one = buildCard({ station: { ...model.stations.find((s) => s.name === 'API')!, files: 1 }, labels: L, layerName: 'Layer', findings, index, enter: { can: true, level: 'package', ref: 'x' }, satellites: 2, unfolded: false, leaf: false });
         expect(one.meta).toBe('1 file · Layer');
         const repo = card('repositories');
         expect(repo.hasApi).toBe(false);

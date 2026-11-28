@@ -482,7 +482,13 @@ Last measured 2026-07-26: 6 of 767 tickets fully autonomous; 69% of 6,195 runs f
   - `stage/host/StageHost.regenerate.test.tsx`, 1 failing: drill level `undefined`, expected `'package'`. No verdict yet on whether this is stale or real.
   - `KnowledgeGraphView.lenses.test.tsx`: last edited after its final run, so it is unverified.
   - The edited test files and `testPicks.ts` have not been typechecked since the last edits.
-- `AE-G059` **The 3D view is copied per surface, the canvas Room is a separate scene, and app components and agents are not drawn in 3D** (user, 2026-11-26).
+- `AE-G070` **The Map/3D level scene (VSIX .237, 2026-11-27) shipped with parts skipped for speed.** Map/3D now draws one hierarchy level, system → app → area → file → symbol, with the mockup geometry. These pieces are still open:
+  - The nothing-selected level-summary card ("N systems · F files") and its `levelSummary` label in the en/zh/es/fr/de catalogs.
+  - Selecting a `dir:` (system/app) mark opens no card; only entering it works.
+  - `useStageWiring`: the focus-return key after popping a system or app frame.
+  - Tests for the skip rule, `toRung` (now in `stage/drill/useLevelSteps.ts`) and `levelChildren` drills. vitest has not been run since the change; `level.test.ts` may assert the old `TIER_Z` sign and `dir:` keys.
+  - The Map/3D scene no longer draws the describes-links to docs or the HTTP walls. Re-add them as level links if they are wanted.
+  - In the other 3D cameras, source/system/unit marks now stand on the square outline instead of their silhouettes.- `AE-G059` **The 3D view is copied per surface, the canvas Room is a separate scene, and app components and agents are not drawn in 3D** (user, 2026-11-26).
   - There are four `<Canvas>` roots and three camera systems: the KG `stage/*`, `world3d/WorldViewport`+`Scene3D`, `RoomScene` and `Model3dViewport`.
   - Agents appear only as generic Room seats, and nothing renders an `AppBlueprint`.
   - Fix: extract `@builderforce/stage3d` from the KG stage, and add one content source each for code, blueprint, agents, room, model3d and brain. Walk becomes a rig camera mode. Delete the per-surface canvases.
@@ -736,7 +742,7 @@ Gaps:
 - `MEM-G110` **There is no local↔cloud fact sync.** The VS Code import teaches Evermind but does not write `project_facts`.
 - `MEM-G111` Implemented in source. Memory MCP uses the canonical per-machine snapshot and imports legacy facts, archives and experience when the canonical files are absent. Older host configurations that pin the legacy path need an installer refresh.
 - `MEM-G112` Implemented. A shared platform registry owns the `team:` and `run-outcome:` namespaces and uses the memory package's existing `codemap:` prefix. Compaction owns the absorbed content marker.
-- `MEM-G113` Cloud memory supports Cloudflare bge-m3 and OpenRouter fallback in their respective spaces. Browser knowledge memory rejects mismatched fingerprints and vector widths, and local recall checks vector width. Remaining fingerprints need end-to-end verification.
+- `MEM-G113` Implemented in source. The memory audit lists each store and its fingerprint. Learned-memory vectors now carry the current Evermind artifact stamp and can be refreshed through reindex.
 - `MEM-G114` **There are 2 brain-map UIs**: `EvermindBrainMap` and `EvermindBrain3D`. Merge them onto the shared 3D stage (`AE-G059`).
 - `MEM-G115` Implemented in source. Browser RAM management lives under `src/residency`, and the memory audit documents the product terminology.
 - `MEM-G116` Implemented in webcontainers source. Browser memory uses the shared chunker, BM25 scoring, RRF and decay. The code ships with the next webcontainers release.
@@ -764,31 +770,17 @@ Details, paths and migration order: `docs/specs/tasks/platform-duplication-audit
 
 ### Shell and file tools consolidation `[platform]`
 
-Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §6. The tool definitions are shared in `packages/agent-tools`; the code beneath them is not.
+See `docs/specs/tasks/platform-duplication-audit.md` §6 for the 17 closed findings and the remaining release step.
 
-- `SHELL-G008` **agent-runtime's native `read`, `exec` and `process` are not converged** onto the shared tools.
-- `SHELL-G009` **No command policy exists outside agent-runtime.** Port `exec-approvals` into `agent-tools` as a deny-list plus a confirm port. Details are in the local security findings file.
-- `SHELL-G012` **The editor and container share the background job cap and eviction policy.** Job lifecycle and the native `bash-process-registry.ts` still need to converge.
-- `SHELL-G014` **Tool-name tables are spread over more than 8 files** in agent-runtime, brain-embedded, the api and agent-tools.
-- `SHELL-G015` **Error shape and wording differ by host.** Standardize on `{ok:false, error, code}`.
-- `SHELL-G016` **The browser shell has no jobs, background runs or tree cancel.**
-- `SHELL-G017` **There is no cross-host conformance suite** for file and command tools.
+- `SHELL-G016` **Canvas registers browser shell start, poll and stop.** The WebContainers 2026.11.30 candidate builds and passes the focused cancellation tests. Publish it and verify Canvas consumes the release.
 
 ### Auth and cloud client consolidation `[platform]`
 
-Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §7. The server side and the TypeScript device flow are shared; the client session code is not.
+See `docs/specs/tasks/platform-duplication-audit.md` §7 for the 19 closed findings and the remaining compatibility cutover.
 
-- `AUTH-G002` **VS Code and Chrome share the key exchange, expiry policy and retry.** Session storage, workspace selection and native parity remain open.
-- `AUTH-G004` **The Chrome client has no workspace switch.**
-- `AUTH-G005` **Agent-runtime has a shared base URL resolver and bearer transport.** Connection registration, run context, personality events and error reporting use it. Move the other raw callers onto it.
-- `AUTH-G006` **The default base URL is split:** `api.builderforce.ai` (web, agent-runtime, SDK) vs `builderforce.ai/gateway` (VS Code, Chrome).
-- `AUTH-G007` **Configuration names and aliases are inconsistent** across hosts. Keep one documented table and deprecate the aliases.
-- `AUTH-G012` **Agent-runtime client coverage remains incomplete.** Chrome has session and retry tests, and Rust and TypeScript share the device-flow fixture.
-- `AUTH-G013` **Origin configuration still varies across hosts.** VS Code uses one resolver and verifies the same origin cases as Rust.
-- `AUTH-G016` **Security-sensitive client and credential findings.** The local security findings file also covers `AUTH-G017` through `AUTH-G019`. See DONE.md for the resolution of `AUTH-G015` and `AUTH-G018`.
 - `AUTH-G021` **15-minute web and workspace tokens write about 2 `auth_tokens` rows every 11 minutes per active session,** each kept 7 days by the expired-credential sweep. Neon core storage was last noted at 504/512 MB.
   - Fix: a shorter sweep grace for superseded rows (`superseded_by IS NOT NULL`), keeping just enough for reuse detection, plus a row-count check on the storage dashboard.
-- `AUTH-G020` **The neutral workspace-switch route is implemented.** VS Code and Spawn prefer `POST /api/auth/workspace-token`, with fallback for older gateways. Retire the deprecated path after clients roll out.
+- `AUTH-G020` **The neutral workspace-switch route is implemented.** VS Code and Spawn prefer `POST /api/auth/workspace-token`, with fallback for older gateways. Verify deployed client versions and production request counts for `POST /api/vscode/tenants/:id/token` before retiring it.
 
 ### Security policy consolidation `[platform]`
 

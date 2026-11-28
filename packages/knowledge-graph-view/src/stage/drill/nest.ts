@@ -25,15 +25,17 @@ export interface NestEntry {
     /** The parent mark's world centre and drawn diameter (2 × its scale) when the zoom entered it. */
     centre: Vec3;
     diameter: number;
+    /** The mark key it was entered from, in the level above (a folder drawn on a borrowed station slot is `st:`): kept apart from `drill`, which the skip rule rewrites. */
+    mark?: string;
     /** The placement on show when the zoom entered: hidden slots stay where it had them; its bounds and rig are kept. */
     outer: Placement;
 }
 
 /** The entry for going into slot `slot` of the placement on show; null when that slot is not drawn. */
-export function nestEntryOf(outer: Placement, slot: number, drill: string): NestEntry | null {
+export function nestEntryOf(outer: Placement, slot: number, drill: string, mark?: string): NestEntry | null {
     const scale = outer.scale[slot] ?? 0;
     if (slot < 0 || !(scale > 0)) return null;
-    return { drill, centre: [outer.position[slot * 3]!, outer.position[slot * 3 + 1]!, outer.position[slot * 3 + 2]!], diameter: 2 * scale, outer };
+    return { drill, ...(mark === undefined ? {} : { mark }), centre: [outer.position[slot * 3]!, outer.position[slot * 3 + 1]!, outer.position[slot * 3 + 2]!], diameter: 2 * scale, outer };
 }
 
 /** The drill key a placement was built for (its cache key's drill field); '' for none. */
@@ -108,7 +110,7 @@ export function slotInPlacement(marks: Pick<MarkSet, 'keys'>, p: Pick<Placement,
 }
 
 /** The slot key of the mark a frame was entered from, in the level above it: a folder (system, app), a station (package) or a node (class, function). */
-export const markKeyOf = (frame: Pick<DrillFrame, 'level' | 'ref'>): string =>
+const markKeyOf = (frame: Pick<DrillFrame, 'level' | 'ref'>): string =>
     frame.level === 'system' || frame.level === 'app' ? `dir:${frame.ref}` : `${frame.level === 'package' ? 'st' : 'node'}:${frame.ref}`;
 
 /**
@@ -124,8 +126,9 @@ export function deriveNestEntries(stack: readonly Pick<DrillFrame, 'level' | 're
     for (let i = 0; i < stack.length && outer; i++) {
         const frame = stack[i]!, key = drillKeyOf(frame);
         if (!key || !entries.has(key)) break;
-        const slot = slotInPlacement(basis.marks, outer, markKeyOf(frame));
-        const e = nestEntryOf(outer, slot, key);
+        const mark = entries.get(key)!.mark ?? markKeyOf(frame);
+        const slot = slotInPlacement(basis.marks, outer, mark);
+        const e = nestEntryOf(outer, slot, key, mark);
         if (!e) break;
         out.set(key, e);
         const next: Placement | undefined = basis.levels[i + 1];

@@ -8,6 +8,7 @@
     "jsx": "react-jsx",
     "types": ["chrome", "node"],
     "paths": {
+      "@builderforce/tool-output-policy": ["../../packages/tool-output-policy/src/index.ts"],
       "@builderforce/api-errors": ["../../packages/api-errors/src/index.ts"],
       "@seanhogg/builderforce-mcp": ["../../packages/builderforce-mcp/src/index.ts"],
       "@builderforce/agent-tools": ["../../packages/agent-tools/src/index.ts"],

@@ -23,6 +23,7 @@
     // No `baseUrl`: TypeScript 6 removed it (TS5102), and without one a `paths`
     // target resolves relative to THIS file — which is what these already are.
     "paths": {
+      "@builderforce/tool-output-policy": ["../../../packages/tool-output-policy/src/index.ts"],
       "@builderforce/asset-limits": ["../../../packages/asset-limits/src/index.ts"],
       "@builderforce/agent-loop": ["../../../packages/agent-loop/src/index.ts"],
       "@builderforce/agent-skills": ["../../../packages/agent-skills/src/index.ts"],

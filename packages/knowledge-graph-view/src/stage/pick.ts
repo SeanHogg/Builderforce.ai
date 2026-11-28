@@ -86,7 +86,9 @@ export class PickIndex {
     pickMark(sx: number, sy: number): number {
         const g = this.grid, t = this.target;
         let best = -1, bestD = t * t, cells = 0, tested = 0;
-        const c0 = g.col(sx - t), c1 = g.col(sx + t), r0 = g.row(sy - t), r1 = g.row(sy + t);
+        // A rectangle (`Placement.aspect`) is hit anywhere on its footprint: the target covers its short side, the slack its long one.
+        const reach = t + g.maxSlack;
+        const c0 = g.col(sx - reach), c1 = g.col(sx + reach), r0 = g.row(sy - reach), r1 = g.row(sy + reach);
         for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
             const at = r * g.cols + c, end = g.start[at + 1]!;
             cells++;
@@ -94,7 +96,9 @@ export class PickIndex {
                 tested++;
                 const e = g.items[k]!;
                 if (e < 0) continue;
-                const d = distSq(sx, sy, g.ax[e]!, g.ay[e]!, g.bx[e]!, g.by[e]!);
+                let d = distSq(sx, sy, g.ax[e]!, g.ay[e]!, g.bx[e]!, g.by[e]!);
+                const slack = g.slackOf(g.slotOf(e));
+                if (slack > 0) d = Math.max(0, Math.sqrt(d) - slack) ** 2;
                 if (d > bestD) continue;
                 if (best < 0 || d < bestD || this.beats(g.slotOf(e), g.slotOf(best))) { best = e; bestD = d; }
             }

@@ -35,6 +35,8 @@ export interface LevelRailInput {
     band: number;
     /** At the code band, a line or call is picked: the Line level. */
     linePicked: boolean;
+    /** The Map's rung (0 System … 4 Line) from the drill; when given, `toBand` receives a rung and `band` / `linePicked` are not read. */
+    rung?: number | undefined;
     /** Go to band `i` (the Map's ladder, or the Sequence's band control). */
     toBand(i: number): void;
     /** The station the zoom would go inside next (the pick), else null. */
@@ -55,18 +57,19 @@ export interface LevelRailModel {
 }
 
 /** The rail's levels, the current one, where a click goes and the hint (going inside, back out, deepest, or how to zoom). */
-export function useLevelRail({ zoom, sequence, band, linePicked, toBand, into, backTo, selected }: LevelRailInput): LevelRailModel {
+export function useLevelRail({ zoom, sequence, band, linePicked, rung, toBand, into, backTo, selected }: LevelRailInput): LevelRailModel {
     const levels = sequence ? SEQUENCE_LEVELS : MAP_LEVELS;
-    const current = Math.max(0, Math.min(levels.length - 1, !sequence && band >= CODE_BAND && linePicked ? CODE_BAND + 1 : band));
+    // The Map reads the drill's own rung (`levelRung.ts`: world/system → System, app/package → Component, class, function → Method, code → Line).
+    const current = Math.max(0, Math.min(levels.length - 1, !sequence && rung !== undefined ? rung : !sequence && band >= CODE_BAND && linePicked ? CODE_BAND + 1 : band));
     // The last zoom went out: the hint says where the next one goes back to, until the person zooms in or picks again.
     const [out, setOut] = useState(false);
     useEffect(() => { setOut(false); }, [selected]);
     const noteStep = useCallback((dir: 1 | -1) => setOut(dir < 0), []);
     const go = useCallback((i: number) => {
         setOut(i < current);
-        toBand(Math.min(i, sequence ? levels.length - 1 : CODE_BAND));
-    }, [current, toBand, sequence, levels.length]);
-    const deepest = sequence ? current >= levels.length - 1 : band >= CODE_BAND;
+        toBand(Math.min(i, sequence || rung !== undefined ? levels.length - 1 : CODE_BAND));
+    }, [current, toBand, sequence, levels.length, rung]);
+    const deepest = sequence || rung !== undefined ? current >= levels.length - 1 : band >= CODE_BAND;
     const hint = out && backTo ? fillTemplate(zoom.hintBack, { name: backTo })
         : deepest ? zoom.hintDeepest : into ? fillTemplate(zoom.hintInto, { name: into }) : zoom.hintIn;
     return { levels, current, go, hint, noteStep };

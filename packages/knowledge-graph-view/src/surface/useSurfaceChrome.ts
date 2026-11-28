@@ -86,9 +86,15 @@ export function useSurfaceChrome(i: SurfaceChromeInput) {
             else spineItems.push({ kind: 'symbol', id: definition, label: labelFor(index, definition) });
         }
     } else if (i.hierarchy === 'picture' || i.hierarchy === 'architecture') {
-        const component = surface.stations.byId.get(drill.stack[0]?.ref ?? '') ?? spineStation;
-        spineItems = [root, ...architectureGroupsOf(component, surface.lines.systems, rootTitle, s.layers).map(({ id, name }): SpineItem => ({ kind: 'system', id, label: name }))];
-        for (const [depth, frame] of drill.stack.entries()) spineItems.push({ kind: 'level', id: frame.ref, label: frame.name, depth: depth + 1 });
+        const component = surface.stations.byId.get(drill.stack.find((frame) => frame.level === 'package')?.ref ?? '') ?? spineStation;
+        // root › system › app › area › file › symbol: a system or app the drill stands in is its own frame (named as the outline names it);
+        // the groups of the component fill in only what the drill has not already said.
+        const stood = new Set(drill.stack.map((frame) => `${frame.level}:${frame.ref}`));
+        const groups = architectureGroupsOf(component, surface.lines.systems, rootTitle, s.layers).filter((group) => !stood.has(group.id));
+        spineItems = [root];
+        for (const [depth, frame] of drill.stack.entries()) if (frame.level === 'system' || frame.level === 'app') spineItems.push({ kind: 'level', id: frame.ref, label: frame.name, depth: depth + 1 });
+        spineItems.push(...groups.map(({ id, name }): SpineItem => ({ kind: 'system', id, label: name })));
+        for (const [depth, frame] of drill.stack.entries()) if (frame.level !== 'system' && frame.level !== 'app') spineItems.push({ kind: 'level', id: frame.ref, label: frame.name, depth: depth + 1 });
         const member = drill.view?.stations.byId.get(drill.selected ?? '') ?? (!drill.view ? component : null);
         if (member && !drill.stack.some((frame) => frame.ref === member.id)) spineItems.push({ kind: 'station', id: member.id, label: member.name });
     } else if (i.hierarchy === 'filesystem') {

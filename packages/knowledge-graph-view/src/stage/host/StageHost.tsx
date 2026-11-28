@@ -22,6 +22,7 @@ import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState, t
 import { fillTemplate } from '../../labels';
 import { useComputed } from '../../compute/useComputed';
 import { viewportBandOf } from '../../compute/tasks/placement/request';
+import { placementReqOf } from './placementRequest';
 import { useContainerSize } from '../../environment';
 import { cssVar, useThemeColors } from '../../scene/themeColors';
 import { EdgesCapped } from '../../surface/CapNote';
@@ -44,7 +45,7 @@ import { ColourLegend } from './ColourLegend';
 import { SystemVisibility, useSystemVisibility } from './SystemVisibility';
 import { LevelRail, useLevelRail } from './LevelRail';
 import { depthCrumbs } from '../../surface/DepthTrail';
-import { PanelChevron } from '../../surface/ui/PanelChevron';
+import { levelSceneTrace, levelTag } from '../../surface/levelDiagnostics';import { PanelChevron } from '../../surface/ui/PanelChevron';
 import { CODE_BAR_PX } from '../overlay/CodeTrail';
 import { useStageWiring } from '../overlay/useStageWiring';
 import type { StageRenderer } from '../renderer';
@@ -185,7 +186,7 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     const activeDiagram = diagramPick?.root === graph.scope.rootId && diagramPick.camera === camera ? diagramPick.id
         : camera === 'sequence' ? 'sequenceDiagram' : null;
     const activeFrame = surface.drill.stack.at(-1);
-    const graphScope = activeFrame?.level !== 'package' ? activeFrame?.ref ?? null : null;
+    const graphScope = activeFrame?.level === 'class' || activeFrame?.level === 'function' ? activeFrame.ref : null;
     const activeFile = surface.station?.refs[0];
     const selectedCode = codeRef ?? p.selected;
     const diagramScope = graphScope && (!selectedCode || fileRefOf(selectedCode) !== fileRefOf(graphScope))
@@ -259,14 +260,8 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     useEffect(() => { setMethodOpen(methodOpen); }, [setMethodOpen, methodOpen]);
     // The tilt the worker bakes in: Flat is 0 on every placement; 3D is the Map's full tower, the orbit's, else the placement's resting tilt.
     const mapDepth = flat ? 0 : 1;
-    const place = (cam: PlacementCamera, depth: number | undefined, drill: string | null, l: number, path: string | null, m: string | null = null) => ({
-        graph, generation, camera: cam, drill, unfolded: null, pins: [], pathId: path, viewportBand: band, lod: l, channels,
-        ...(depth === undefined ? {} : { depth }),
-        ...(m ? { method: m } : {}),
-        ...((cam === 'map' || cam === '3d') && !drill && hiddenStations.length ? { hiddenStations } : {}),
-        // Flow reads symbols only inside a drilled level; at system level they are not an input (nor part of its key).
-        ...(drill || cam === 'sequence' || (cam === 'graph' && path) ? { symbols } : {}),
-    });
+    const place = (cam: PlacementCamera, depth: number | undefined, drill: string | null, l: number, path: string | null, m: string | null = null) =>
+        placementReqOf({ graph, generation, viewportBand: band, channels, symbols, hiddenStations }, cam, depth, drill, l, path, m);
     const mapResult = useComputed('placement', place(mapCamera, mapDepth, wiring.map.drill, 0, null), [graph, generation, band, channels, mapCamera, wiring.map.drill, symbols, mapDepth, hiddenStations], null, { enabled: !!marks, scope: [generation, mapCamera, wiring.map.drill] });
     const map = mapResult.value;
     const other = isMap ? 'graph' : camera;
@@ -304,8 +299,11 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     useEffect(() => {
         if (!frame) return;
         const { placement: placed } = frame;
-        trace('placement ready', `camera=${camera} level=${drillIdentity} generation=${placed.generation} size=${width}x${height} marks=${placed.a11y.length} bounds=${placed.bounds.min.join(',')} to ${placed.bounds.max.join(',')}`);
-    }, [trace, camera, drillIdentity, frame?.placement, width, height]);
+        const lv = placed.level;
+        trace('placement ready', `camera=${camera} level=${drillIdentity} generation=${placed.generation} size=${width}x${height} marks=${placed.a11y.length} bounds=${placed.bounds.min.join(',')} to ${placed.bounds.max.join(',')}${levelTag(lv)}`);
+        // The level scene's own report (`levelDiagnostics.ts`): joins the copied report through the render trace.
+        if (lv && codeFiles) trace('level scene', levelSceneTrace({ camera, flat, level: lv, stack: surface.drill.stack, rootTitle: p.rootTitle, files: codeFiles, stations: surface.stations.stations.length, symbols: surface.drill.symbols }));
+    }, [trace, camera, drillIdentity, frame?.placement, width, height]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // The selection: the stage's own (a mark picked here), else the surface's (a search hit, the List).
     const fileSlot = p.codeRef && frame ? frame.marks.keys.indexOf(`node:${p.codeRef}`) : -1;
@@ -330,7 +328,9 @@ function StageBody({ renderer, onLost, onRenderError, onComputeError, camera, sc
     const crumbs = depthCrumbs(drill.stack, null, labels.surface.depth);
     const rail = useLevelRail({
         zoom, sequence: sequenceRail, band: sequenceRail ? seqBand : MAP_BANDS.indexOf(wiring.zoom.band), linePicked: !!wiring.zoom.code && !!selected,
-        toBand: sequenceRail ? zoomToBand : wiring.toBand, into: picked && drill.canEnter(picked.id).can ? picked.name : null,
+        rung: sequenceRail ? undefined : wiring.zoom.rung,
+        toBand: sequenceRail ? zoomToBand : wiring.toRung,
+        into: picked && drill.canEnter(picked.id).can ? picked.name : selected ? drill.frameOf(selected)?.name ?? null : null,
         // The next zoom out lands in the drilled level (from the code), else in the level above it.
         backTo: sequenceRail ? null : (wiring.zoom.code ? crumbs.at(-1) : crumbs.at(-2))?.name ?? null, selected,
     });

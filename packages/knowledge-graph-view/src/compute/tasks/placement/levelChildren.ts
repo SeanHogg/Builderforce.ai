@@ -23,17 +23,19 @@ import { modulesOfFiles, primarySystems, systemName, systemsOf } from '../../../
 import type { DrillFrame, DrillLevel } from '../../../surface/transit/drillView';
 import type { SymbolRecord } from '../../../types';
 import type { StageModel } from '../stageModel';
-import { dirKey, dirSlotsOf } from '../markSet';
+import { dirSlotsOf } from '../markSet';
 import { drillLevel } from './drillLevel';
 import { MAX_CHILDREN, type Tier } from './levelGeometry';
 import { tierOf } from './tierLayout';
 
 /** A drilled level draws more than a structural one: a package's files are the level (the design's areas hold dozens). */
-export const MAX_DRILL_CHILDREN = 48;
+const MAX_DRILL_CHILDREN = 48;
 
 export interface LevelChild {
-    /** The identity the frame is entered by: `dir:<path>` (system, app), `st:<id>` (a station), else the slot's key. */
+    /** The slot's real mark key (`marks.keys[slot]`): `dir:<path>` for a folder the MarkSet holds, `st:<id>` for a station or a borrowed station slot. */
     key: string;
+    /** A system or an app: its folder path (the frame is entered by it, whatever slot it was drawn on). */
+    folder?: string;
     slot: number;
     role: 'system' | 'app' | 'station' | 'node';
     name: string;
@@ -102,6 +104,8 @@ export function levelOf(g: KnowledgeGraph, model: StageModel, frame: Pick<DrillF
     const typeAt = (marks: StageModel['marks'], slot: number): MarkType => MARK_TYPE_ORDER[marks.type[slot]!] ?? 'source';
     const dirAt = dirSlotsOf(model.marks.keys);
     const systems = systemsOf(g), byRef = new Map(g.nodes.map((n) => [n.ref as string, n] as const));
+    // A folder that is both a system and an app is its system (`folderFrameOf`): it is never an app child of itself.
+    const systemPaths = new Set(systems.map((s) => s.path));
 
     const stationChild = (e: Entry): LevelChild | null => {
         const slot = model.stationSlot.get(e.s.id);
@@ -122,7 +126,7 @@ export function levelOf(g: KnowledgeGraph, model: StageModel, frame: Pick<DrillF
         const layers = new Map<string, number>();
         for (const e of held) if (e.s.layer) layers.set(e.s.layer, (layers.get(e.s.layer) ?? 0) + e.refs.length);
         return {
-            key: dirKey(path), slot, role, name, type: 'system', tier: tierOf(dominant(layers)), files: held.reduce((n, e) => n + e.refs.length, 0),
+            key: model.marks.keys[slot]!, folder: path, slot, role, name, type: 'system', tier: tierOf(dominant(layers)), files: held.reduce((n, e) => n + e.refs.length, 0),
             refs: held.flatMap((e) => e.refs), stationIds: held.map((e) => e.s.id), cx: undefined,
             importance: held.reduce((n, e) => n + e.s.use, 0), risky: held.some((e) => e.s.anti >= 3), ghost: false,
         };
@@ -137,7 +141,7 @@ export function levelOf(g: KnowledgeGraph, model: StageModel, frame: Pick<DrillF
     const appsAndLoose = (held: readonly Entry[]): LevelChild[] => {
         const used = new Set<number>(), out: LevelChild[] = [];
         for (const [app, list] of group(held, (e) => e.app)) {
-            if (!app) { out.push(...stations(list)); continue; }
+            if (!app || systemPaths.has(app)) { out.push(...stations(list)); continue; }
             const child = folderChild('app', app, tailOf(app), list, used);
             if (child) out.push(child); else out.push(...stations(list));
         }
@@ -186,6 +190,12 @@ export function levelOf(g: KnowledgeGraph, model: StageModel, frame: Pick<DrillF
     return drilledLevel(g, model, frame as Pick<DrillFrame, 'level' | 'ref'> & { level: Exclude<DrillLevel, 'system' | 'app'> }, symbols, notOnMap);
 }
 
+/** Every code station a system or an app holds (the same entries `levelOf` groups): the cameras without a level scene show only these. */
+export function stationIdsOfFrame(g: KnowledgeGraph, model: StageModel, frame: Pick<DrillFrame, 'level' | 'ref'>): Set<string> {
+    const held = entriesOf(g, model).code.filter((e) => (frame.level === 'system' ? e.system : e.app) === frame.ref);
+    return new Set(held.map((e) => e.s.id));
+}
+
 /** The members of a package, class or function level, from the ONE drilled build; neighbours are ghost leaves. */
 function drilledLevel(g: KnowledgeGraph, model: StageModel, frame: { level: Exclude<DrillLevel, 'system' | 'app'>; ref: string }, symbols: readonly SymbolRecord[], notOnMap: Level['notOnMap']): Level {
     const drilled = drillLevel(g, model, frame, symbols);
@@ -208,7 +218,8 @@ function drilledLevel(g: KnowledgeGraph, model: StageModel, frame: { level: Excl
     });
     const members = all.filter((c) => !c.ghost).sort((a, b) => b.importance - a.importance), leaves = all.filter((c) => c.ghost);
     const name = frame.level === 'package' ? model.stations.byId.get(frame.ref)?.name ?? tailOf(frame.ref) : level.marks.label[model.nodeSlot.get(frame.ref) ?? NO_SLOT] ?? tailOf(frame.ref);
-    const list = [...members.slice(0, MAX_DRILL_CHILDREN - leaves.length), ...leaves];
+    const kept = leaves.slice(0, MAX_DRILL_CHILDREN);
+    const list = [...members.slice(0, Math.max(0, MAX_DRILL_CHILDREN - kept.length)), ...kept];
     return { level: frame.level, ref: frame.ref, name, model: level, children: list, total: members.length + leaves.length, notOnMap, drilled, below: () => [] };
 }
 

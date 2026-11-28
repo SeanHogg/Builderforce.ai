@@ -55,7 +55,7 @@ in vec4 paint;       // tone, tone2, fill, flags
 uniform float uForm; uniform float uHoverInst;
 uniform float uT; uniform float uLin; uniform float uSpan; uniform float uDur; uniform float uFlip; uniform float uPxPerWorld; uniform float uDpr; uniform float uDepth; uniform vec2 uMinMarkPx; uniform vec2 uLiftDepth;
 uniform vec3 uPalette[${PALETTE_SIZE}];
-out vec2 vUv; out float vPart; out vec3 vColor; out vec3 vColor2; out float vFill; out float vFlags; out float vPx;
+out vec2 vUv; out float vPart; out vec3 vColor; out vec3 vColor2; out float vFill; out float vFlags; out float vPx; out float vAsp;
 out float vLight; out float vY; out float vHover; out float vFade;
 ${FLAG_GLSL}
 ${LIGHT_GLSL}
@@ -109,8 +109,9 @@ void main() {
         vLight = stageLight(n); vY = position.y + 0.5;
     }
     vHover = float(gl_InstanceID) == uHoverInst ? 1.0 : 0.0;
-    // Rings and dashes are measured in px along the outline: on a rectangle take the geometric mean of its two scales.
-    vPart = aPart; vPx = px * sqrt(asp); vFill = fillv; vFlags = flags;
+    // Dashes and the shadow's falloff are measured along the outline: on a rectangle take the geometric mean of its two scales.
+    // The distance to the outline itself is exact (the fragment SDF is taken in the stretched space, see vAsp).
+    vPart = aPart; vPx = px * sqrt(asp); vAsp = asp; vFill = fillv; vFlags = flags;
     vColor = uPalette[int(tone + 0.5)]; vColor2 = uPalette[int(tone2 + 0.5)];
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p + local, 1.0);
 }`;
@@ -126,7 +127,7 @@ uniform vec3 uText; uniform vec3 uViolation; uniform vec3 uChanged; uniform vec3
 uniform float uForm;
 in float vFade;
 in float vLight; in float vY; in float vHover;
-in vec2 vUv; in float vPart; in vec3 vColor; in vec3 vColor2; in float vFill; in float vFlags; in float vPx;
+in vec2 vUv; in float vPart; in vec3 vColor; in vec3 vColor2; in float vFill; in float vFlags; in float vPx; in float vAsp;
 out vec4 fragColor;
 const float PI = 3.14159265;
 bool bit(float flags, float b) { return mod(floor(flags / b), 2.0) > 0.5; }
@@ -144,14 +145,14 @@ float wallEdge() {
 }
 // The hover tint: the lit accent as emissive, on top of the lighting.
 vec3 shaded(vec3 base) { return mix(clamp(base * vLight, 0.0, 1.0), uHover, 0.4 * vHover); }
-// Exact signed distance to the outline polygon (negative inside).
-float sdPolygon(vec2 p) {
-    float d = dot(p - uOutline[0], p - uOutline[0]);
+// Exact signed distance to the outline polygon with its y scaled by sc.y (a rectangle's depth ÷ width; negative inside).
+float sdPolygon(vec2 p, vec2 sc) {
+    float d = dot(p - uOutline[0] * sc, p - uOutline[0] * sc);
     float sgn = 1.0;
     for (int i = 0; i < ${MAX_OUTLINE}; i++) {
         if (i >= uCount) break;
         int j = i == 0 ? uCount - 1 : i - 1;
-        vec2 vi = uOutline[i], vj = uOutline[j];
+        vec2 vi = uOutline[i] * sc, vj = uOutline[j] * sc;
         vec2 e = vj - vi, w = p - vi;
         vec2 b = w - e * clamp(dot(w, e) / dot(e, e), 0.0, 1.0);
         d = min(d, dot(b, b));
@@ -171,7 +172,7 @@ float dashAt(float c, vec2 pattern) {
 void main() {
     bool dim = bit(vFlags, F_DIM);
     // The polygon SDF (a 40-iteration loop) is computed ONCE per fragment, here, for the shadow and the cap alike; a wall needs none.
-    float d = vPart > 0.5 ? sdPolygon(vUv) * vPx : 0.0;     // device px from the outline
+    float d = vPart > 0.5 ? sdPolygon(vec2(vUv.x, vUv.y * vAsp), vec2(1.0, vAsp)) * (vPx / sqrt(vAsp)) : 0.0;     // device px from the outline
     if (vPart > 1.5) {
         float sd = d;
         float a = (1.0 - smoothstep(-0.15 * vPx, 0.5 * vPx, sd)) * (dim ? 0.12 : 0.32);

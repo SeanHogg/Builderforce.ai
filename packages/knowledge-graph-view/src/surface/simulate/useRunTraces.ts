@@ -25,5 +25,5 @@ export function useRunTraces(source: KnowledgeGraphSource | undefined, rootId: s
         );
         return () => { live = false; };
     }, [read, source, rootId, sourcesTick]);
-    return read && state?.rootId === rootId ? state.traces : null;
+    return read && state && state.rootId === rootId ? state.traces : null;
 }

@@ -5,7 +5,7 @@
  * {@link ROW_MAX} in a row the level reads as a grid instead. Children keep the order given (the caller ranks them). Pure.
  */
 
-import { FLOOR, ROW_MAX, SINGLE_ROW_MAX, TIER_Z, type Tier } from './levelGeometry';
+import { ROW_MAX, SINGLE_ROW_MAX, TIER_Z, type Tier } from './levelGeometry';
 
 /** What the layout needs of a child: its tier and its footprint (design units, before the row clips it). */
 export interface TierItem { tier: Tier; w: number; d: number }
@@ -48,6 +48,3 @@ export function layTiers(items: readonly TierItem[]): Spot[] {
     for (const tier of Object.keys(by) as Tier[]) row(items, by[tier], TIER_Z[tier], 3.4, out);
     return out;
 }
-
-/** The floor's centre in world units' own frame is the origin of {@link Spot}; the placement shifts it by half the floor. */
-export const FLOOR_CENTRE = { x: FLOOR.w / 2, z: FLOOR.d / 2 } as const;

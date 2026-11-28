@@ -4,14 +4,15 @@
  */
 
 import type { DepthLabels } from '../labels/surface.act';
+import type { DrillLevel } from './transit/drillView';
 
 /** A drill frame, as the trail reads it (package → module, class → class, function → method). */
 export interface DepthFrame {
-    level: 'package' | 'class' | 'function';
+    level: DrillLevel;
     name: string;
 }
 
-export type DepthLevel = 'system' | 'module' | 'class' | 'method';
+export type DepthLevel = 'system' | 'app' | 'module' | 'class' | 'method';
 
 export interface DepthCrumb {
     /** 0 is the system. 1 is the first drilled frame. */
@@ -20,7 +21,7 @@ export interface DepthCrumb {
     name: string;
 }
 
-const LEVEL_OF: Record<DepthFrame['level'], DepthLevel> = { package: 'module', class: 'class', function: 'method' };
+const LEVEL_OF: Record<DepthFrame['level'], DepthLevel> = { system: 'system', app: 'app', package: 'module', class: 'class', function: 'method' };
 
 /** The drill stack as crumbs, system first. An empty stack is just the system. */
 export function depthCrumbs(stack: readonly DepthFrame[], systemName: string | null | undefined, labels: DepthLabels): DepthCrumb[] {

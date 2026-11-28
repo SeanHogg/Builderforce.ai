@@ -12,8 +12,8 @@ import type { LevelChild } from './levelChildren';
 import { FOOT, kindOfChild, MINI, MINIS_MAX, OUTLINE_SPAN, ROUND_KINDS, U } from './levelGeometry';
 import { layTiers } from './tierLayout';
 
-/** A shape standing on the floor: where (world x, z), how big (design units, full width × depth) and how high its roof is (world y). */
-export interface RoofParent { x: number; z: number; w: number; d: number; roof: number }
+/** A shape standing on the floor: where (world x, z), how big (design units, full width × depth) and how high its roof is (world y: its depth-scaled extrude, so Flat flattens the minis with it; `depth` is the request's). */
+export interface RoofParent { x: number; z: number; w: number; d: number; roof: number; depth: number }
 
 /** Places `kids` (the parent's children, ranked) on the roof of `parent`; `aspect` receives each mini's depth ÷ width. */
 export function roofMinis(d: Draft, aspect: Float32Array, parent: RoofParent, kids: readonly LevelChild[]): number {
@@ -25,7 +25,7 @@ export function roofMinis(d: Draft, aspect: Float32Array, parent: RoofParent, ki
     const fx = (MINI.share * parent.w) / MINI.refW, fz = (MINI.share * parent.d) / MINI.refD;
     fresh.forEach((kid, i) => {
         const at = spots[i]!, w = at.w * fx, depth = (ROUND_KINDS.has(kindOfChild(kid.role, kid.type)) ? at.w : at.d) * fz;
-        show(d, kid.slot, parent.x + at.x * fx * U, parent.roof, parent.z + at.z * fz * U, (w * U) / OUTLINE_SPAN, MINI.height * U);
+        show(d, kid.slot, parent.x + at.x * fx * U, parent.roof, parent.z + at.z * fz * U, (w * U) / OUTLINE_SPAN, MINI.height * U * parent.depth);
         aspect[kid.slot] = ROUND_KINDS.has(kindOfChild(kid.role, kid.type)) ? 1 : depth / Math.max(w, 1e-6);
     });
     return fresh.length;

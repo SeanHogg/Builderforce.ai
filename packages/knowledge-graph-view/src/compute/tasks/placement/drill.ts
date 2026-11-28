@@ -22,16 +22,23 @@ import type { StageModel } from '../stageModel';
 import { associationLinks } from './associations';
 import { drillLevel } from './drillLevel';
 import { placeLevel } from './level';
+import { stationIdsOfFrame } from './levelChildren';
 import { placeMap } from './map';
 import { drillFrameOf, type PlacementReq } from './request';
 
 /** The cameras that draw one level at a time (`level.ts`), drilled or not. */
-export const isLevelCamera = (camera: PlacementReq['camera']): boolean => camera === 'map' || camera === '3d';
+const isLevelCamera = (camera: PlacementReq['camera']): boolean => camera === 'map' || camera === '3d';
 
 export function placeDrill(g: KnowledgeGraph, model: StageModel, req: PlacementReq): Placement {
     if (isLevelCamera(req.camera)) return placeLevel(g, model, req);
     const frame = drillFrameOf(req.drill);
     if (!frame) return placeMap(model, { ...req, drill: null });
+    // A system or an app has no view of its own: the world map with every station outside it hidden.
+    if (frame.level === 'system' || frame.level === 'app') {
+        const inside = stationIdsOfFrame(g, model, frame);
+        const outside = model.stations.stations.map((s) => s.id).filter((id) => !inside.has(id));
+        return placeMap(model, { ...req, hiddenStations: [...new Set([...(req.hiddenStations ?? []), ...outside])] });
+    }
     const { level, view, append, stationSlot } = drillLevel(g, model, frame, req.symbols ?? []);
     const placed = placeMap(level, req);
     // The level's members by the ref they draw (a file at the class band, a symbol at the method band): the association

@@ -1,3 +1,24 @@
+## ✅ RESOLVED 2026-11-28 — Map/3D level scene: Opus review findings fixed (part of AE-G070; VSIX 2026.11.240)
+
+- **Scope.** The Opus review of the `Placement` contract change that introduced the one-level Map/3D scene (`aspect`, `level`, `LevelDescriptor`, system/app drill frames).
+- **Navigation.**
+  - A level child's `key` is now the slot's real mark key, and a separate `folder` field carries its path.
+  - Entering a child, zooming into it, and nest entries resolve through `folderIdOfMark` / `markOfFolderId` (`levelFrames.ts`) instead of parsing keys. Nest entries record the mark they were entered from, so a rebuild keeps zoom in place.
+  - An app whose path equals its system's path folds into its stations, so the system can be entered.
+  - Flow inside a system/app drill draws the world map with stations outside that frame hidden (`stationIdsOfFrame`). It no longer shows an empty stage.
+  - `hiddenStations` / `symbols` are gated on structural levels.
+- **Geometry.**
+  - `TIER_Z` is `{ front: 3.9, mid: 0, back: -3.9 }`, matching the mockup.
+  - Roof minis flatten in Flat.
+  - Rings, picking and the cap SDF honour the footprint aspect.
+  - The level child list is capped without a negative slice.
+- **Diagnostics.** A one-system world is compared with the outline at the apps level, and a capped level no longer reports a false MISMATCH.
+- **Hygiene.**
+  - Dead exports deleted: `FLOOR_CENTRE`, `frameOfChildKey`, `packageFrameOf`.
+  - Split into new files: `stage/drill/useLevelSteps.ts`, `stage/host/placementRequest.ts`, `stage/overlay/useLadderSteps.ts`. `useSemanticZoom.ts` is 315 lines.
+  - The source-package-graph guard's missing `tsconfig` paths for `@builderforce/tool-output-policy` and `@builderforce/agent-tools/shell-conformance` were added.
+- **Proof.** `tsc -p .` in `packages/knowledge-graph-view` is clean, and VSIX 2026.11.240 is packaged. vitest was not run; the remaining test work is in AE-G070.
+
 ## ✅ RESOLVED 2026-11-27 — Server tab › Traces "Turn on" now turns traces on, and the row updates itself (AE-G069; VSIX 2026.11.239)
 
 - **Problem.** "Turn on" only pre-filled the chat with a vague request; the agent enabled Cloudflare Workers Observability, which the map cannot read. `knowledgeSyncStatus.ts` hard-coded `traces: absent`, nothing re-read the status when source files appeared, and nothing in the view consumed traces.

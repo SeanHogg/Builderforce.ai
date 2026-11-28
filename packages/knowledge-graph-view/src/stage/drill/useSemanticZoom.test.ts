@@ -97,7 +97,7 @@ describe('the 3D architecture camera uses the Map drill', () => {
         const map = { ...mapAt(''), drill: null, stations: { stations: [station], byId: new Map([['entry', station]]) },
             keyOfStation: () => 'st:entry' } as unknown as StageMap;
         const openFile = vi.fn();
-        const world = { ...drill, stack: [], canEnter: () => ({ can: true, level: 'package' }), openFile } as DrillModel;
+        const world = { ...drill, stack: [], canEnter: () => ({ can: true, level: 'package', ref: 'x' }), openFile } as DrillModel;
         const camera = { ...bus, slotOf: () => 0, placement: { cacheKey: '1|3d||', scale: new Float32Array([10]),
             position: new Float32Array(3), extrude: new Float32Array(1) }, projector: {
             width: 400, height: 300, pxPerWorld: 10,

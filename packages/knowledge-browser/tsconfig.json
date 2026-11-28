@@ -13,6 +13,7 @@
     "noEmit": true,
     "typeRoots": ["../../frontend/node_modules/@types"],
     "paths": {
+      "@builderforce/tool-output-policy": ["../tool-output-policy/src/index.ts"],
       "@builderforce/agent-tools": ["../agent-tools/src/index.ts"],
       "@builderforce/agent-tools/knowledge-index": ["../agent-tools/src/knowledge-index.ts"],
       "@builderforce/agent-tools/prefetch": ["../agent-tools/src/prefetch/index.ts"],

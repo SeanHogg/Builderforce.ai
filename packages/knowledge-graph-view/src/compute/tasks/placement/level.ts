@@ -59,8 +59,8 @@ export function placeLevel(g: KnowledgeGraph, model: StageModel, req: PlacementR
         corners.push({ x: x - (w * U) / 2, y: z - (dd * U) / 2 }, { x: x + (w * U) / 2, y: z + (dd * U) / 2 });
         labels.push(chipLabel(c.slot, c.name, (dd * U) / 2, c.importance, c.risky, marks.tooltip[c.slot]));
         a11y.push({ slot: c.slot, label: marks.tooltip[c.slot] ?? c.name });
-        roofs.push({ x, z, w, d: dd, roof: shape.h * U });
-        info.push({ slot: c.slot, key: c.key, name: c.name, kind: shape.kind, form: TYPE_FORM[c.type], w: round(w), d: round(dd), h: round(shape.h), files: c.files, minis: 0 });
+        roofs.push({ x, z, w, d: dd, roof: extrude, depth });
+        info.push({ slot: c.slot, key: c.key, ...(c.folder === undefined ? {} : { folder: c.folder }), name: c.name, kind: shape.kind, form: TYPE_FORM[c.type], w: round(w), d: round(dd), h: round(shape.h), files: c.files, minis: 0 });
     });
     // Every child stands first; a roof then takes only the slots no child holds.
     kids.forEach((c, i) => {

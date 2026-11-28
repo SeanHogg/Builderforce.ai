@@ -24,7 +24,7 @@ export const ROUND_KINDS: ReadonlySet<LevelKind> = new Set<LevelKind>(['store', 
 const FIXED_HEIGHT: Readonly<Partial<Record<LevelKind, number>>> = { component: 0.45, system: 0.45, store: 1.0, table: 0.7 };
 
 /** The complexity badge, clamped to the design's 1..3. */
-export const complexityOf = (cx: number | undefined): number => Math.min(3, Math.max(1, cx ?? 1));
+const complexityOf = (cx: number | undefined): number => Math.min(3, Math.max(1, cx ?? 1));
 
 /** A shape's height, design units: a fixed plate or tub, else it grows with its complexity (a method less than a file). */
 export function heightOf(kind: LevelKind, cx: number | undefined): number {
@@ -48,7 +48,7 @@ export function kindOfChild(role: 'system' | 'app' | 'station' | 'node', type: M
 export const FLOOR = { w: 17.6, d: 13.6, thick: 0.3 } as const;
 
 /** The three rows by tier (design z): entry and presentation in front, application and domain in the middle, the rest behind. */
-export const TIER_Z = { front: -3.9, mid: 0, back: 3.9 } as const;
+export const TIER_Z = { front: 3.9, mid: 0, back: -3.9 } as const;
 export type Tier = keyof typeof TIER_Z;
 
 /** The most children a level draws; the rest are counted (the caption says shown of total). */

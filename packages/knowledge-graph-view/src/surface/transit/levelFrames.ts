@@ -11,10 +11,9 @@
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { dirKey } from '../../compute/tasks/markSet';
 import { tailOf } from '../outlineGraph';
-import type { StationModel } from '../stations';
+import type { LevelDescriptor } from '../../stage/types';
 import { modulesOfFiles, systemName, systemsOf } from '../systems';
 import type { DrillFrame, DrillLevel } from './drillView';
-import { anchorFilesOf } from './reanchorDrill';
 
 /** How deep a level is: a frame may only be entered from a shallower one. */
 export const LEVEL_RANK: Readonly<Record<DrillLevel | 'world', number>> = { world: 0, system: 1, app: 2, package: 3, class: 4, function: 5 };
@@ -46,15 +45,17 @@ export function folderFrameOf(graph: KnowledgeGraph, path: string): DrillFrame |
     return appsOf(graph).has(path) ? { level: 'app', ref: path, name: tailOf(path) } : null;
 }
 
-/** A station's own frame (a package). */
-export const packageFrameOf = (world: StationModel, id: string): DrillFrame | null => {
-    const station = world.byId.get(id);
-    return station ? { level: 'package', ref: id, name: station.name, files: anchorFilesOf(world, id) } : null;
-};
-
-/** The frame of a child mark of a structural level (its slot key: `dir:<path>` or `st:<id>`), else null. */
-export function frameOfChildKey(graph: KnowledgeGraph, world: StationModel, key: string): DrillFrame | null {
-    const folder = folderOfKey(key);
-    if (folder !== null) return folderFrameOf(graph, folder);
-    return key.startsWith('st:') ? packageFrameOf(world, key.slice('st:'.length)) : null;
+/**
+ * What the drill is asked to enter for the child of the level on show whose mark key is `key`: `dir:<folder>` when the child is
+ * a system or an app (by its descriptor's `folder`, whatever slot it was drawn on), else null (a station is entered by its id).
+ */
+export function folderIdOfMark(level: Pick<LevelDescriptor, 'children'> | undefined, key: string): string | null {
+    const folder = level?.children.find((c) => c.key === key)?.folder;
+    return folder === undefined ? null : `${FOLDER}${folder}`;
 }
+
+/** The mark key a folder id (`dir:<path>`) is drawn on in the level on show; the id itself when it is not a child there. */
+export const markOfFolderId = (level: Pick<LevelDescriptor, 'children'> | undefined, id: string): string => {
+    const folder = folderOfKey(id);
+    return folder === null ? id : level?.children.find((c) => c.folder === folder)?.key ?? id;
+};
