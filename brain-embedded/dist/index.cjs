@@ -3429,8 +3429,8 @@ var PRICE_SNAPSHOT = {
   "~anthropic/claude-opus-latest": [4e-6, 2e-5],
   "~anthropic/claude-sonnet-latest": [2e-6, 1e-5],
   "~deepseek/deepseek-flash-latest": [36e-9, 5e-7],
-  "~deepseek/deepseek-pro-latest": [111e-9, 444e-8],
-  "~deepseek/deepseek-v4-flash-latest": [47e-9, 3e-7],
+  "~deepseek/deepseek-pro-latest": [999e-10, 5e-6],
+  "~deepseek/deepseek-v4-flash-latest": [4532e-11, 13596e-11],
   "~google/gemini-flash-latest": [15e-7, 75e-7],
   "~google/gemini-pro-latest": [2e-6, 1e-5],
   "~moonshotai/kimi-latest": [1824e-10, 110055e-10],
@@ -3507,12 +3507,12 @@ var PRICE_SNAPSHOT = {
   "deepseek/deepseek-v3.2": [26e-8, 38e-8],
   "deepseek/deepseek-v3.2-exp": [27e-8, 41e-8],
   "deepseek/deepseek-v4-flash": [9e-8, 18e-8],
-  "deepseek/deepseek-v4-flash-0731": [6e-8, 18e-8],
+  "deepseek/deepseek-v4-flash-0731": [456e-10, 3e-7],
   "deepseek/deepseek-v4-flash-0731:batch": [48e-9, 144e-9],
-  "deepseek/deepseek-v4-flash-vision-exp": [44e-8, 132e-8],
-  "deepseek/deepseek-v4-pro": [888188e-12, 15082e-10],
-  "deepseek/deepseek-v4-pro-0813": [111e-9, 444e-8],
-  "deepseek/deepseek-v4.1-flash": [14e-8, 42e-8],
+  "deepseek/deepseek-v4-flash-vision-exp": [2156e-10, 6468e-10],
+  "deepseek/deepseek-v4-pro": [45137e-11, 15227e-10],
+  "deepseek/deepseek-v4-pro-0813": [999e-10, 5e-6],
+  "deepseek/deepseek-v4.1-flash": [51e-9, 567e-9],
   "deepseek/deepseek-v4.1-flash-1017": [15e-8, 6e-7],
   "deepseek/deepseek-v4.1-flash-1017:batch": [35e-9, 149e-9],
   "deepseek/deepseek-v4.1-flash:batch": [5e-8, 15e-8],
@@ -3559,9 +3559,9 @@ var PRICE_SNAPSHOT = {
   "google/gemini-omni-1.2-flash": [15e-7, 9e-6],
   "google/gemma-2-27b-it": [65e-8, 65e-8],
   "google/gemma-3-12b-it": [5e-8, 15e-8],
-  "google/gemma-3-27b-it": [8e-8, 45e-8],
+  "google/gemma-3-27b-it": [8e-8, 16e-8],
   "google/gemma-3-4b-it": [4e-8, 5e-8],
-  "google/gemma-4-26b-a4b-it": [9e-8, 3e-7],
+  "google/gemma-4-26b-a4b-it": [675e-10, 225e-9],
   "google/gemma-4-26b-a4b-it:free": [0, 0],
   "google/gemma-4-31b-it": [2e-7, 4e-7],
   "google/gemma-4-31b-it:free": [0, 0],
@@ -3573,7 +3573,8 @@ var PRICE_SNAPSHOT = {
   "inclusionai/ling-3.0-flash-vl": [6e-8, 18e-8],
   "inclusionai/ling-3.0-tiny": [15e-9, 45e-9],
   "inclusionai/ling-3.1-flash": [75e-9, 225e-9],
-  "inclusionai/ling-3.2-flash:free": [0, 0],
+  "inclusionai/ling-3.2-flash": [3e-7, 9e-7],
+  "inclusionai/lingsante-3.1-air-vl": [6e-8, 18e-8],
   "inference-net/schematron-v2-small": [5e-8, 23e-8],
   "inference-net/schematron-v2-turbo": [3e-8, 15e-8],
   "kt/midm-k-3.0-pro": [2e-7, 8e-7],
@@ -3584,12 +3585,12 @@ var PRICE_SNAPSHOT = {
   "meta-llama/llama-3.1-70b-instruct": [72e-8, 72e-8],
   "meta-llama/llama-3.1-8b-instruct": [5e-8, 8e-8],
   "meta-llama/llama-3.2-3b-instruct": [5e-8, 33e-8],
-  "meta-llama/llama-3.3-70b-instruct": [71e-8, 71e-8],
+  "meta-llama/llama-3.3-70b-instruct": [59e-8, 79e-8],
   "meta-llama/llama-4-maverick": [35e-8, 1e-6],
   "meta-llama/llama-4-scout": [1e-7, 3e-7],
   "meta-llama/llama-guard-4-12b": [18e-8, 18e-8],
   "meta/muse-ember": [1e-7, 5e-7],
-  "meta/muse-glimmer-30b": [35e-8, 15e-7],
+  "meta/muse-glimmer-30b": [3e-7, 12e-7],
   "meta/muse-glimmer-30b:batch": [24e-8, 96e-8],
   "meta/muse-spark-1.1": [125e-8, 425e-8],
   "meta/muse-spark-1.2": [125e-8, 425e-8],
@@ -3630,7 +3631,9 @@ var PRICE_SNAPSHOT = {
   "mistralai/voxtral-small-24b-2507": [1e-7, 3e-7],
   "moondream/moondream3-preview": [3e-7, 25e-7],
   "moondream/moondream3.1-9b-a2b": [3e-7, 25e-7],
-  "moonshotai/kimi-k2.5": [5e-7, 25e-7],
+  "moonshotai/kimi-k2": [57e-8, 23e-7],
+  "moonshotai/kimi-k2-0905": [6e-7, 25e-7],
+  "moonshotai/kimi-k2.5": [6e-7, 3e-6],
   "moonshotai/kimi-k2.6": [65e-8, 341e-8],
   "moonshotai/kimi-k2.7-code": [6e-7, 3e-6],
   "moonshotai/kimi-k3": [192e-9, 16e-6],
@@ -3652,9 +3655,9 @@ var PRICE_SNAPSHOT = {
   "nvidia/nemotron-3-ultra-550b-a55b": [5e-7, 22e-7],
   "nvidia/nemotron-3-ultra-550b-a55b:free": [0, 0],
   "nvidia/nemotron-3.5-content-safety": [2e-7, 2e-7],
-  "nvidia/nemotron-3.5-lightning": [7e-8, 2e-7],
+  "nvidia/nemotron-3.5-lightning": [5e-8, 2e-7],
   "nvidia/nemotron-3.5-lightning:free": [0, 0],
-  "nvidia/nemotron-3.5-super-vl": [15e-8, 47e-8],
+  "nvidia/nemotron-3.5-super-vl": [15e-8, 45e-8],
   "nvidia/nemotron-3.5-super-vl:free": [0, 0],
   "nvidia/switchyard": [0, 0],
   "openai/gpt-3.5-turbo-0613": [1e-6, 2e-6],
@@ -3787,7 +3790,6 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen2.5-vl-72b-instruct": [8e-7, 1e-6],
   "qwen/qwen3-14b": [12e-8, 24e-8],
   "qwen/qwen3-235b-a22b-2507": [14e-8, 8e-7],
-  "qwen/qwen3-235b-a22b-thinking-2507": [45e-8, 35e-7],
   "qwen/qwen3-30b-a3b": [12e-8, 5e-7],
   "qwen/qwen3-30b-a3b-instruct-2507": [1e-7, 3e-7],
   "qwen/qwen3-32b": [8e-8, 28e-8],
@@ -3803,7 +3805,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen3.5-27b": [26e-8, 26e-7],
   "qwen/qwen3.5-35b-a3b": [14e-8, 1e-6],
   "qwen/qwen3.5-397b-a17b": [5e-7, 36e-7],
-  "qwen/qwen3.5-9b": [1e-7, 25e-8],
+  "qwen/qwen3.5-9b": [85e-9, 125e-9],
   "qwen/qwen3.5-flash-02-23": [65e-9, 26e-8],
   "qwen/qwen3.5-plus-02-15": [26e-8, 156e-8],
   "qwen/qwen3.5-plus-20260420": [3e-7, 18e-7],
@@ -3826,7 +3828,7 @@ var PRICE_SNAPSHOT = {
   "qwen/qwen4-max": [1425e-9, 4275e-9],
   "radixark/daisyrose-27b": [15e-8, 1875e-9],
   "recursive/flint-v1.0:free": [0, 0],
-  "reflection/beam-1.0-501b-a23b": [3e-7, 1e-6],
+  "reflection/beam-1.0-501b-a23b": [25e-8, 1e-6],
   "rekaai/reka-edge": [1e-7, 1e-7],
   "rekaai/reka-flash-3": [1e-7, 2e-7],
   "relace/relace-apply-3": [85e-8, 125e-8],
@@ -3853,8 +3855,8 @@ var PRICE_SNAPSHOT = {
   "thedrummer/skyfall-36b-v2": [55e-8, 8e-7],
   "thedrummer/unslopnemo-12b": [4e-7, 4e-7],
   "thinkingmachines/inkling": [1e-6, 405e-8],
-  "thinkingmachines/inkling-2-mini": [75e-9, 3e-7],
-  "thinkingmachines/inkling-2-small": [3e-7, 1e-6],
+  "thinkingmachines/inkling-2-mini": [6e-8, 24e-8],
+  "thinkingmachines/inkling-2-small": [15e-8, 5e-7],
   "thinkingmachines/inkling-small": [45e-8, 12e-7],
   "thinkingmachines/inkling-small:batch": [36e-8, 96e-8],
   "tngtech/deepseek-r1t2-chimera": [1e-6, 2625e-9],
@@ -10029,7 +10031,7 @@ function whitespaceSplice(content, lines, i, old, fits, map, newString, endsWith
 function matchEdit(content, oldString, newString, replaceAll, eol) {
   const decide = (tier2, splices) => {
     if (splices.length === 0) return null;
-    if (splices.length > 1 && !replaceAll) return { ambiguous: true };
+    if (splices.length > 1 && !replaceAll) return { ambiguous: true, matchCount: splices.length };
     return { tier: tier2, splices };
   };
   const spliced = (spans, text2) => spans.map(([start, end]) => ({ start, end, text: text2 }));
@@ -10096,7 +10098,8 @@ function applyStringEdit(content, oldString, newString, replaceAll = false) {
   if (match && "ambiguous" in match) {
     return {
       ok: false,
-      error: "oldString is not unique; add more surrounding context or set replaceAll"
+      error: "oldString is not unique; add more surrounding context or set replaceAll",
+      matchCount: match.matchCount
     };
   }
   if (match) {
@@ -11374,6 +11377,7 @@ var CallbackOwnerScan = class {
 var SYMBOL_KINDS = [
   "function",
   "method",
+  "field",
   "class",
   "interface",
   "type",
@@ -11444,6 +11448,10 @@ var JS_METHOD = new RegExp(
 var JS_ABSTRACT_METHOD = new RegExp(
   `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID2})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`
 );
+var JS_INTERFACE_METHOD = new RegExp(`^(?:\\t|  |    )(${ID2})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`);
+var JS_FIELD = new RegExp(
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|declare)\\s+)*(#?${ID2})[!?]?\\s*(?:(?::|=(?!=))[^;]*;|:[^;{]*\\{)\\s*$`
+);
 var JS_METHOD_OPEN = new RegExp(
   `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|async|get|set)\\s+)*\\*?\\s*(${ID2})\\s*(?:<[^>]*>)?\\s*\\(\\s*$`
 );
@@ -11459,9 +11467,14 @@ function closesWithBody(lines, at2) {
 }
 function extractJs(lines, out, path = "") {
   let cls;
+  let isInterface = false;
+  let memberIndent;
   const owners = new CallbackOwnerScan(path);
   eachLine(lines, out, (line, lineNo) => {
-    if (/^\}/.test(line)) cls = void 0;
+    if (/^\}/.test(line)) {
+      cls = void 0;
+      isInterface = false;
+    }
     if (owners.inBody(line)) return;
     owners.track(line);
     for (const rule of JS_RULES) {
@@ -11471,7 +11484,11 @@ function extractJs(lines, out, path = "") {
       if (!exported && /^\s/.test(line)) continue;
       const name2 = group(m, 2).replace(/^["']|["']$/g, "");
       out.push({ name: name2, kind: rule.kind, line: lineNo, exported });
-      if (rule.kind === "class") cls = name2;
+      if (rule.kind === "class" || rule.kind === "interface") {
+        cls = /\}\s*;?\s*$/.test(line) ? void 0 : name2;
+        isInterface = rule.kind === "interface";
+        memberIndent = void 0;
+      }
       return;
     }
     if (cls === void 0) {
@@ -11479,10 +11496,21 @@ function extractJs(lines, out, path = "") {
       if (owner2) out.push(owner2);
       return;
     }
+    if (/^\s*$/.test(line)) return;
+    const indent = /^\s*/.exec(line)?.[0] ?? "";
+    memberIndent ??= indent;
+    if (indent !== memberIndent) return;
     const open2 = JS_METHOD_OPEN.exec(line);
-    const method = JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line) ?? (open2 && closesWithBody(lines, lineNo - 1) ? open2 : null);
+    const method = isInterface ? JS_INTERFACE_METHOD.exec(line) : JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line) ?? (open2 && closesWithBody(lines, lineNo - 1) ? open2 : null);
     const name = method ? group(method, 1) : "";
-    if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
+    if (name && !JS_KEYWORDS.has(name)) {
+      out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
+    } else {
+      const field2 = JS_FIELD.exec(line);
+      if (field2 && !JS_KEYWORDS.has(group(field2, 1))) {
+        out.push({ name: group(field2, 1), kind: "field", line: lineNo, exported: false, container: cls });
+      }
+    }
   });
 }
 function extractPython(lines, out) {
@@ -11769,7 +11797,14 @@ async function readOneFile(path, opts, caps, leverOn2) {
   const r = await caps.repoRead.readFile(path);
   if (!r.ok) return r;
   const gzip = isGzipPath(r.path ?? path) && typeof r.content === "string" && r.content.length > 0;
-  if (gzip) r.content = await readGzipText(latin1Bytes(r.content));
+  if (gzip) {
+    if (r.truncated) return { ok: false, path, code: "too_large", error: "gzip file exceeds the read limit" };
+    try {
+      r.content = await readGzipText(latin1Bytes(r.content));
+    } catch {
+      return { ok: false, path, code: "io", error: "could not decompress gzip file" };
+    }
+  }
   if (opts.key) return { ...readFileKey(r.path ?? path, r, opts.key), ...gzip ? { decompressed: true } : {} };
   const content = r.content ?? "";
   if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn2) && r.truncated !== true) {
@@ -13618,6 +13653,28 @@ var import_ingest = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
 var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/skipDirs.ts
+var OUTPUT_DIRS = /* @__PURE__ */ new Set([
+  "node_modules",
+  ".git",
+  ".hg",
+  ".svn",
+  ".next",
+  ".nuxt",
+  "dist",
+  "build",
+  "out",
+  ".cache",
+  ".turbo",
+  ".vercel",
+  "coverage",
+  ".venv",
+  "venv",
+  "__pycache__",
+  ".vscode-test"
+]);
+var WORKSPACE_SKIP_DIRS = /* @__PURE__ */ new Set([...OUTPUT_DIRS, "vendor", "target", ".idea"]);
 
 // ../packages/agent-tools/src/knowledge/statWalk.ts
 var import_knowledge3 = require("@seanhogg/builderforce-memory/knowledge");

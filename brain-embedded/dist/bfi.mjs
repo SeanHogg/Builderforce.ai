@@ -18,14 +18,14 @@ import {
   servePageEngines,
   webGpuSupport,
   withTimeout
-} from "./chunk-G4W2ZGYE.mjs";
+} from "./chunk-KSEHZPD7.mjs";
 import {
   PageEngineError,
   abortReason,
   errorMessage,
   memoizedProbe,
   reportPageEngineFailure
-} from "./chunk-SLI7C3HD.mjs";
+} from "./chunk-A5TKRKGR.mjs";
 
 // src/pageEngines/bfiChunks.ts
 function closingChunk(finalJson) {
