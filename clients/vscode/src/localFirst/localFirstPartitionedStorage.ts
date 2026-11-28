@@ -40,6 +40,7 @@ import { createPartitionCompactor, type PartitionCompactor } from "./localFirstP
 import { createPartitionLoader } from "./localFirstPartitionLoader";
 import { createPartitionRecovery } from "./localFirstPartitionRecovery";
 import { V4_JOURNAL_FILE } from "./localFirstPartitionNames";
+import { reconcilePartitions } from "./localFirstPartitionRebuild";
 import { retireOldFormats } from "./localFirstRetire";
 import { migrateV3ToV4, partitionizeSnapshot, withBacklogMigrated } from "./localFirstV4Migration";
 import { mergeV3Writes, type RowLookup } from "./localFirstV4Merge";
@@ -80,7 +81,7 @@ export interface PartitionedStorage {
   /** Before the first read: cut v4 out of v3 when v4 does not exist yet. */
   ensureV4(): Promise<void>;
   /** An open-time delta of rows (a v2 merge) gets the stubs its partitioned rows need. */
-  complete(delta: LocalFirstDelta): LocalFirstDelta;
+  complete(delta: LocalFirstDelta): Promise<LocalFirstDelta>;
   /** The versions of these rows in the store, by lookup (`view().records` holds no partitioned row). */
   versionsOf(rows: LocalFirstSnapshot["records"]): Promise<RowVersions>;
   /** A snapshot an import or rebuild produced: its partitioned rows are written to partition files. */
@@ -107,6 +108,7 @@ export function createPartitionedStorage(config: PartitionedStorageConfig): Part
     pointerOf: (id) => pointers.get(id),
     refreshMain: () => host.refreshMain(),
     onDamaged: damaged,
+    onBackgroundError: config.onBackgroundError,
   });
 
   /** Rows by lookup: a partitioned row through its stub (and `get`), any other through `get`. */
@@ -138,6 +140,7 @@ export function createPartitionedStorage(config: PartitionedStorageConfig): Part
         view: () => host.memory.view(),
         serialized: host.serialized,
         exclusive: host.exclusive,
+        evict: (ids) => host.memory.evictPartitions(ids),
         commitMain: (delta) => host.commitOpenDelta(delta),
         onBackgroundError: config.onBackgroundError,
       });
@@ -148,6 +151,7 @@ export function createPartitionedStorage(config: PartitionedStorageConfig): Part
         exclusive: host.exclusive,
         commitMain: (delta) => host.commitOpenDelta(delta),
         onDamaged: damaged,
+        onBackgroundError: config.onBackgroundError,
       });
     },
     compactor: () => compactor,
@@ -163,21 +167,34 @@ export function createPartitionedStorage(config: PartitionedStorageConfig): Part
     async ensureV4() {
       try {
         if ((await fs.stat(nodePath.join(directory, V4_JOURNAL_FILE))).size > 0) return;
-      } catch {
-        // no v4 yet
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; // ENOENT: no v4 yet
       }
       await migrateV3ToV4({ directory, partitions, lock: config.lock, openWaitMs: config.openWaitMs, onBackgroundError: config.onBackgroundError });
     },
 
-    complete(delta) {
+    async complete(delta) {
       const have = new Set((delta.stubs ?? []).map((stub) => `${stub.entityType}/${stub.id}`));
-      const added = [];
-      for (const row of delta.records ?? []) {
-        const partition = byType.get(row.entityType);
-        const stub = partition && !have.has(`${row.entityType}/${row.id}`) ? stubOf(partition, row) : undefined;
-        if (stub) added.push(stub);
+      const missing = (delta.records ?? []).filter((row) => byType.has(row.entityType) && !have.has(`${row.entityType}/${row.id}`));
+      if (missing.length === 0) return delta;
+      const stored = await lookup(missing); // a row whose home changed leaves its old partition
+      const added: NonNullable<LocalFirstDelta["stubs"]> = [];
+      const deletedStubs = [...(delta.deletedStubs ?? [])];
+      const deletedRecords = [...(delta.deletedRecords ?? [])];
+      for (const row of missing) {
+        const stub = stubOf(byType.get(row.entityType)!, row);
+        if (!stub) continue;
+        added.push(stub);
+        const prior = stored.get(`${row.entityType}/${row.id}`);
+        if (prior?.home !== undefined && prior.home !== stub.home) {
+          deletedStubs.push({ entityType: row.entityType, id: row.id, home: prior.home });
+          deletedRecords.push({ entityType: row.entityType, id: row.id });
+        }
       }
-      return added.length > 0 ? Object.assign(delta, { stubs: [...(delta.stubs ?? []), ...added] }) : delta;
+      return Object.assign(delta, {
+        ...(added.length > 0 ? { stubs: [...(delta.stubs ?? []), ...added] } : {}),
+        ...(deletedStubs.length > 0 ? { deletedStubs, deletedRecords } : {}),
+      });
     },
 
     async versionsOf(rows) {
@@ -185,8 +202,12 @@ export function createPartitionedStorage(config: PartitionedStorageConfig): Part
     },
 
     async prepareSnapshot(snapshot) {
-      // A snapshot that already carries stubs is a v4 state: its `records` lack the partitioned rows the planner would look for.
-      const stamped = withBacklogMigrated(snapshot, new Date().toISOString(), !snapshot.stubs?.length);
+      // A snapshot that already carries stubs or pointers is a v4 state (a cache, a prefix, this window's own): its
+      // pointers can name generations a compaction since deleted, so they are rebuilt from the files
+      // (`localFirstPartitionRebuild.ts`). Its `records` lack the partitioned rows the planner would look for.
+      const v4 = !!(snapshot.stubs?.length || snapshot.partitionPointers);
+      const source = v4 ? await reconcilePartitions(directory, partitions, snapshot, config.onBackgroundError) : snapshot;
+      const stamped = withBacklogMigrated(source, new Date().toISOString(), !v4);
       const base = await partitionizeSnapshot(directory, partitions, stamped);
       await base.publish(); // under the lock (the caller's): a rebuild or import writes the main journal right after
       return base.main;
@@ -221,7 +242,7 @@ export function createPartitionedStorage(config: PartitionedStorageConfig): Part
     }),
 
     async retire() {
-      await retireOldFormats(directory).catch(config.onBackgroundError);
+      await retireOldFormats(directory, config.onBackgroundError);
     },
   };
 }

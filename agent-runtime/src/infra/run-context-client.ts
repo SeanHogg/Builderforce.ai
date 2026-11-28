@@ -26,7 +26,7 @@
 import { renderPlatformContextSection, type RunContextEnvelope } from "@builderforce/run-context";
 import { loadProjectContext } from "../builderforce/project-context-store.js";
 import { logDebug } from "../logger.js";
-import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
+import { requestBuilderforce } from "./builderforce-http.js";
 import { readSharedEnvVar } from "./env-file.js";
 
 /** How long a run may wait for platform context before proceeding without it. */
@@ -70,16 +70,14 @@ export async function fetchRunContextEnvelope(
   const agentHostId = ctx?.builderforce?.instanceId;
   if (!projectId || !Number.isFinite(projectId) || !agentHostId) return null;
 
-  const base = normalizeBaseUrl(readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai");
   const qs = new URLSearchParams();
   if (req.taskId != null) qs.set("taskId", String(req.taskId));
   if (req.sessionKey) qs.set("scope", `session:${req.sessionKey}`.slice(0, 160));
   if (req.query?.trim()) qs.set("query", req.query.trim().slice(0, 2000));
 
   try {
-    const res = await fetch(`${base}/api/agent/projects/${projectId}/run-context?${qs.toString()}`, {
+    const res = await requestBuilderforce(`/api/agent/projects/${projectId}/run-context?${qs.toString()}`, apiKey, {
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         "X-AgentHost-Id": String(agentHostId),
       },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),

@@ -106,6 +106,10 @@ export function slotInPlacement(marks: Pick<MarkSet, 'keys'>, p: Pick<Placement,
     return at >= 0 ? p.append!.base + at : -1;
 }
 
+/** The slot key of the mark a frame was entered from, in the level above it: a folder (system, app), a station (package) or a node (class, function). */
+export const markKeyOf = (frame: Pick<DrillFrame, 'level' | 'ref'>): string =>
+    frame.level === 'system' || frame.level === 'app' ? `dir:${frame.ref}` : `${frame.level === 'package' ? 'st' : 'node'}:${frame.ref}`;
+
 /**
  * The nest entries of a drill stack again, from a new generation's placements: the frame `i`'s mark is looked up in the
  * level above (nested into ITS own entry, as the zoom saw it), so the chain stays one continuous zoom. Only frames the
@@ -119,7 +123,7 @@ export function deriveNestEntries(stack: readonly Pick<DrillFrame, 'level' | 're
     for (let i = 0; i < stack.length && outer; i++) {
         const frame = stack[i]!, key = drillKeyOf(frame);
         if (!key || !entries.has(key)) break;
-        const slot = slotInPlacement(basis.marks, outer, `${i === 0 ? 'st' : 'node'}:${frame.ref}`);
+        const slot = slotInPlacement(basis.marks, outer, markKeyOf(frame));
         const e = nestEntryOf(outer, slot, key);
         if (!e) break;
         out.set(key, e);

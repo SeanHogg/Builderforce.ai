@@ -730,9 +730,9 @@ The fact engine, Memory MCP, experience model, `EvermindConsole`, and `memory_*`
 
 Gaps:
 
-- `MEM-G101` **There are 9 fact-store shapes, with no declared owner per scope.**
-- `MEM-G102` **There are 6 recall formulas.** The cloud `memorySemanticRecall` ranks with its own formula instead of M's `recallRanked`.
-- `MEM-G103` **VS Code memory tools are named `recall_facts`/`remember_fact`, not `memory_*`** (`clients/vscode/src/memory/cognition.ts`).
+- `MEM-G101` The fact-store audit identifies the cloud and local owners. Local and cloud durable facts still need a scoped sync contract.
+- `MEM-G102` Project-only and governed cloud recall share candidate reads and ranking. The local memory store still ranks facts differently.
+- `MEM-G103` **Implemented.** VS Code advertises `memory__recall` and `memory__remember` through the shared `MemoryCapability` tools. Saved calls retain their existing dispatch IDs.
 - `MEM-G104` **agent-runtime keeps a second memory index.**
   - It uses sqlite-vec with provider embedders, and exposes `memory_search`/`memory_get`.
   - Location: `agent-runtime/src/memory/*`.
@@ -742,13 +742,13 @@ Gaps:
 - `MEM-G110` **There is no local↔cloud fact sync.** The VS Code import teaches Evermind but does not write `project_facts`.
 - `MEM-G111` **There are two live memory file locations**: `~/.builderforce-memory` and the legacy `~/.claude/builderforce-memory`. Whichever is newest wins, which risks a split brain.
 - `MEM-G112` **Fact key prefixes have no registry**: `team:`, `run-outcome:`, `codemap:` and `[absorbed→…]`.
-- `MEM-G113` **There are 5 incompatible embedding spaces**, and cloud memory is pinned to one vendor with no failover.
+- `MEM-G113` Embedding fingerprints still differ across stores. Cloud memory already supports Cloudflare bge-m3 and OpenRouter fallback in their respective vector spaces.
 - `MEM-G114` **There are 2 brain-map UIs**: `EvermindBrainMap` and `EvermindBrain3D`. Merge them onto the shared 3D stage (`AE-G059`).
 - `MEM-G115` **Names collide:**
   - "memory" means RAM in webcontainers but facts elsewhere;
   - "Evermind" means the model, the facts or the console;
   - "brain" means the chat or the map.
-- `MEM-G116` **webcontainers `memoryIntegration` re-implements chunking, BM25, RRF and decay**, which M `retrieval` already provides.
+- `MEM-G116` Implemented in webcontainers source. Browser memory uses the shared chunker, BM25 scoring, RRF and decay. The code ships with the next webcontainers release.
 
 ### Chat consolidation `[platform]`
 
@@ -775,15 +775,9 @@ Details, paths and migration order: `docs/specs/tasks/platform-duplication-audit
 
 Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §6. The tool definitions are shared in `packages/agent-tools`; the code beneath them is not.
 
-- `SHELL-G003` **There are four process-tree kill implementations.** Make one shared `node-process` helper. The Node hosts are done: `packages/agent-tools/src/node-process.ts`, awaiting review. Still open: `clients/vscode/src/process/killTree.ts` stays as a re-export until `knowledge/knowledgeShell.ts` imports `node-process` directly; the container JS (`api/container/sandboxJobs.mjs`, `sandboxCore.mjs`, `previewProcess.mjs`) has its own kill logic and needs the container generator (`scripts/gen-container-shared.mjs`).
-- `SHELL-G005` **Output caps are hard-coded per host** (VS Code 60,000 characters and 4 MB, browser 16,000, native 50 KB, 2 MB reads). Take them from `tool-output-policy`.
-- `SHELL-G006` **Command timeout defaults and units differ** (seconds vs ms; 5 vs 10 min). Add one `DEFAULT_COMMAND_TIMEOUT_MS`.
 - `SHELL-G008` **agent-runtime's native `read`, `exec` and `process` are not converged** onto the shared tools.
 - `SHELL-G009` **No command policy exists outside agent-runtime.** Port `exec-approvals` into `agent-tools` as a deny-list plus a confirm port. Details are in the local security findings file.
-- `SHELL-G010` **`LIST_MAX_FILES` and the file walker are copied three times** (on-prem, sandbox, VS Code).
-- `SHELL-G011` **The container's glob pruning is copied by hand** (`workspaceAgent.mjs:364`). Generate it from `glob.ts`.
-- `SHELL-G012` **Shell job tables are duplicated** (`MAX_JOBS = 32` in two places, plus `bash-process-registry.ts`).
-- `SHELL-G013` **The native edit matcher duplicates `applyStringEdit`.**
+- `SHELL-G012` **The editor and container share the background job cap and eviction policy.** Job lifecycle and the native `bash-process-registry.ts` still need to converge.
 - `SHELL-G014` **Tool-name tables are spread over more than 8 files** in agent-runtime, brain-embedded, the api and agent-tools.
 - `SHELL-G015` **Error shape and wording differ by host.** Standardize on `{ok:false, error, code}`.
 - `SHELL-G016` **The browser shell has no jobs, background runs or tree cancel.**
@@ -794,21 +788,17 @@ Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §6. 
 
 Details, paths and order: `docs/specs/tasks/platform-duplication-audit.md` §7. The server side and the TypeScript device flow are shared; the client session code is not.
 
-- `AUTH-G001` **The Rust device flow (`builderforce-spawn/crates/bf-cloud`/src/device.rs) duplicates `packages/device-auth`,** with no shared contract fixture. `bf-cloud` moved from builderforce-inference to builderforce-spawn on 2026-11-27, where Spawn is its only consumer.
-- `AUTH-G002` **There are three copies of the editor-key session** (VS Code `bfApi/session.ts`, Chrome `auth/session.ts`, Rust `builderforce-spawn/crates/bf-cloud`/src/session.rs). Extract a host-neutral `packages/editor-session`.
+- `AUTH-G002` **VS Code and Chrome share the key exchange, expiry policy and retry.** Session storage, workspace selection and native parity remain open.
 - `AUTH-G004` **The Chrome client has no workspace switch.**
-- `AUTH-G005` **agent-runtime has about 56 hand-built Bearer fetches and about 18 `BUILDERFORCE_URL` fallbacks.** Replace them with one `builderforceClient`.
+- `AUTH-G005` **Agent-runtime has a shared base URL resolver and bearer transport.** Connection registration, run context, personality events and error reporting use it. Move the other raw callers onto it.
 - `AUTH-G006` **The default base URL is split:** `api.builderforce.ai` (web, agent-runtime, SDK) vs `builderforce.ai/gateway` (VS Code, Chrome).
 - `AUTH-G007` **Configuration names and aliases are inconsistent** across hosts. Keep one documented table and deprecate the aliases.
-- `AUTH-G008` **Error flattening is copied four times** (web, Chrome, SDK, and Rust `builderforce-spawn/crates/bf-cloud` `CloudError`, which misses the nested `{error:{message,code}}` form).
-- `AUTH-G009` **Rust `bf-cloud` uses a 900 s fallback when the server omits `expiresIn`.** The API and the TypeScript clients now share the 3600 s default.
-- `AUTH-G012` **Chrome session, Rust parity and agent-runtime client coverage remain open.** Chrome now tests the 401 retry.
-- `AUTH-G013` **Rust (`builderforce-spawn/crates/bf-cloud` `web_base_of`) and VS Code derive the web origin from the API URL by hand.**
-- `AUTH-G014` **Not yet audited:** Chrome SettingsView sign-in, webcontainers `aiGateway`/`hostRelay`, `knowledge-client`, `provider-connect`.
+- `AUTH-G012` **Agent-runtime client coverage remains incomplete.** Chrome has session and retry tests, and Rust and TypeScript share the device-flow fixture.
+- `AUTH-G013` **Origin configuration still varies across hosts.** VS Code uses one resolver and verifies the same origin cases as Rust.
 - `AUTH-G016` **Security-sensitive client and credential findings.** The local security findings file also covers `AUTH-G017` through `AUTH-G019`. See DONE.md for the resolution of `AUTH-G015` and `AUTH-G018`.
 - `AUTH-G021` **15-minute web and workspace tokens write about 2 `auth_tokens` rows every 11 minutes per active session,** each kept 7 days by the expired-credential sweep. Neon core storage was last noted at 504/512 MB.
   - Fix: a shorter sweep grace for superseded rows (`superseded_by IS NOT NULL`), keeping just enough for reuse detection, plus a row-count check on the storage dashboard.
-- `AUTH-G020` **The workspace-switch route `/api/vscode/tenants/:id/token` is VS Code-named but used by every editor host.** Alias it host-neutrally (expand/contract).
+- `AUTH-G020` **The neutral workspace-switch route is implemented.** VS Code and Spawn prefer `POST /api/auth/workspace-token`, with fallback for older gateways. Retire the deprecated path after clients roll out.
 
 ### Security policy consolidation `[platform]`
 

@@ -21,6 +21,7 @@
 
 import nodeFs from "node:fs";
 import {
+  EVENT_BACKLOG_MIGRATED,
   eventBacklogMigrated,
   planEventBacklogMigration,
   type EventBacklogMigrationPlan,
@@ -54,6 +55,8 @@ export interface EventMigrationPorts {
   view(): LocalFirstSnapshot | Promise<LocalFirstSnapshot>;
   /** Keep a copy of the journal before the first frame (default). A v4 store's migration is main-only and keeps none. */
   backup?: boolean;
+  /** Record `EVENT_BACKLOG_MIGRATED` when the plan finds nothing to do (default off). */
+  stampWhenClean?: boolean;
   /** Run `work` holding the cross-window lock, with the state caught up with the journal. */
   locked<T>(work: () => Promise<T>): Promise<T>;
   /** Append `delta` as one journal frame (fsynced), then apply it to the state. Under the lock. */
@@ -75,7 +78,17 @@ export async function migrateEventBacklog(ports: EventMigrationPorts): Promise<E
     return undefined;
   }
   const probe = planEventBacklogMigration(seen);
-  if (probe.stripped + probe.dropped === 0) return undefined;
+  if (probe.stripped + probe.dropped === 0) {
+    // A v4 store records that it was clean, so later opens skip the plan (whose lookups would load chats).
+    if (ports.stampWhenClean) {
+      await ports.locked(async () => {
+        if (!eventBacklogMigrated(await ports.view())) {
+          await ports.commit({ cursors: { [EVENT_BACKLOG_MIGRATED]: new Date(ports.now?.() ?? Date.now()).toISOString() } });
+        }
+      });
+    }
+    return undefined;
+  }
   return ports.locked(async () => {
     const current = await ports.view();
     if (eventBacklogMigrated(current)) return undefined;

@@ -103,6 +103,7 @@ __export(src_exports, {
   MAX_STOP_HOOK_ROUNDS: () => MAX_STOP_HOOK_ROUNDS,
   MAX_SUMMARY_CHUNKS: () => MAX_SUMMARY_CHUNKS,
   MAX_TOOL_RESULT_CHARS: () => MAX_TOOL_RESULT_CHARS,
+  MESSAGE_PARTITION: () => MESSAGE_PARTITION,
   MODALITY_PERSONAS: () => MODALITY_PERSONAS,
   MODEL_CATEGORIES: () => MODEL_CATEGORIES,
   NEW_CHAT_MODE: () => NEW_CHAT_MODE,
@@ -2900,6 +2901,19 @@ function destinationKey(destination) {
 }
 var DESTINATION_KEYS = /* @__PURE__ */ new Map();
 
+// ../packages/local-first/src/recordIndex.ts
+function defineRecordIndex(entityType, name, keyOf2) {
+  return Object.freeze({ entityType, name, keyOf: keyOf2 });
+}
+function indexKeyOf(index, row) {
+  if (row.deletedAt) return void 0;
+  try {
+    return index.keyOf(row);
+  } catch {
+    return void 0;
+  }
+}
+
 // ../packages/local-first/src/payloadHash.ts
 function fnv1a32(text2, seed = 2166136261) {
   let hash = seed >>> 0;
@@ -2960,17 +2974,9 @@ async function ensureRecordPayloadFence(tx, destination) {
   await tx.deadLetter(fence.eventId, RECORD_PAYLOAD_FENCE_REASON, at2);
 }
 
-// ../packages/local-first/src/recordIndex.ts
-function defineRecordIndex(entityType, name, keyOf2) {
-  return Object.freeze({ entityType, name, keyOf: keyOf2 });
-}
-function indexKeyOf(index, row) {
-  if (row.deletedAt) return void 0;
-  try {
-    return index.keyOf(row);
-  } catch {
-    return void 0;
-  }
+// ../packages/local-first/src/recordPartition.ts
+function defineRecordPartition(partition) {
+  return Object.freeze({ ...partition });
 }
 
 // ../packages/local-first/src/storeContract.ts
@@ -3160,6 +3166,10 @@ var importKey = (type, id) => `${type}:${id}:import`;
 function isOwnRecord(row, deviceId) {
   return row.provenance?.source !== "imported" || row.provenance.deviceId === deviceId;
 }
+function isOwnStub(stub, deviceId) {
+  return stub.source !== "imported" || stub.deviceId === deviceId;
+}
+var isLiveOwnStub = (stub, deviceId) => !stub.deleted && isOwnStub(stub, deviceId);
 function isImported(mapping) {
   return mapping !== void 0 && mapping.serverVersion > BOUND_ONLY_VERSION;
 }
@@ -6423,6 +6433,31 @@ function liveRecords(tx, type, deviceId, where) {
   return selectRecords(tx, type, (row) => isLiveOwn(row, deviceId) && (!where || where(row)));
 }
 var MESSAGES_BY_CHAT = defineRecordIndex("message", "brain.message.chatId", (row) => row.payload.chatId);
+var MESSAGE_PARTITION = defineRecordPartition({
+  index: MESSAGES_BY_CHAT,
+  homeOf: (row) => row.payload.chatId,
+  ordinalOf: (row) => row.payload.message.id
+});
+async function scanLiveMessageStubs(tx, deviceId, visit) {
+  if (!tx.scanStubs) return false;
+  let any = false;
+  await tx.scanStubs("message", (stub) => {
+    any = true;
+    if (isLiveOwnStub(stub, deviceId)) return visit(stub);
+    return void 0;
+  });
+  return any;
+}
+async function highestMessageId(tx, deviceId) {
+  let highest = 0;
+  const fromStubs = await scanLiveMessageStubs(tx, deviceId, (stub) => {
+    highest = Math.max(highest, stub.ordinal ?? 0);
+  });
+  if (!fromStubs) await scanLive(tx, "message", deviceId, (row) => {
+    highest = Math.max(highest, row.payload.message.id);
+  });
+  return highest;
+}
 function scanChatMessages(tx, deviceId, chatId, visit) {
   return scanByIndex(tx, MESSAGES_BY_CHAT, chatId, (row) => {
     if (isLiveOwn(row, deviceId)) visit(row);
@@ -6472,6 +6507,16 @@ async function messageRecordById(tx, deviceId, messageId, chatId) {
     });
   }
   if (!found) {
+    let stubId;
+    const fromStubs = await scanLiveMessageStubs(tx, deviceId, (stub) => {
+      if (stub.ordinal !== messageId) return void 0;
+      stubId = stub.id;
+      return SCAN_STOP;
+    });
+    if (fromStubs) {
+      const row = stubId !== void 0 ? await tx.get("message", stubId) : void 0;
+      return row && isLiveOwn(row, deviceId) ? row : void 0;
+    }
     await tx.scan("message", (row) => {
       if (row.payload.message.id !== messageId || !isLiveOwn(row, deviceId)) return void 0;
       found = row;
@@ -7279,10 +7324,7 @@ function createLocalBrainPersistence(options) {
     await scanLive(tx, "chat", options.deviceId, (row) => {
       highest = Math.max(highest, row.payload.chat.id);
     });
-    await scanLive(tx, "message", options.deviceId, (row) => {
-      highest = Math.max(highest, row.payload.message.id);
-    });
-    return highest + 1;
+    return Math.max(highest, await highestMessageId(tx, options.deviceId)) + 1;
   };
   const touchesChatMessages = (chatId, change) => {
     const ids2 = change.records.get("message");
@@ -7290,6 +7332,11 @@ function createLocalBrainPersistence(options) {
     if (ids2.size > MESSAGE_ID_CHECK_LIMIT) return Promise.resolve(true);
     return options.store.read(async (tx) => {
       for (const id of ids2) {
+        const stub = await tx.stub?.("message", id);
+        if (stub) {
+          if (stub.home === chatId) return true;
+          continue;
+        }
         const row = await tx.get("message", id);
         if (!row || row.payload.chatId === chatId) return true;
       }
@@ -8860,19 +8907,11 @@ function prefetchConfirmOf(pending) {
 // src/localChat/chatSync.ts
 async function bindChatHistoryForSync(store, deviceId, destination) {
   if (destination.kind !== "bound") return 0;
-  const unbound = (row) => row.destination.kind === "unbound" && isOwnRecord(row, deviceId);
   const anything = await store.read(async (tx) => {
-    let found = false;
-    for (const type of ["chat", "message", "usage"]) {
-      if (found) break;
-      await tx.scan(type, (row) => {
-        if (unbound(row)) {
-          found = true;
-          return SCAN_STOP;
-        }
-      });
+    for (const type of BIND_TYPES) {
+      if ((await unboundRows(tx, type, deviceId, 1)).length > 0) return true;
     }
-    return found;
+    return false;
   });
   if (!anything) return 0;
   const rebind = async (tx, row) => {
@@ -8880,13 +8919,13 @@ async function bindChatHistoryForSync(store, deviceId, destination) {
     await tx.put(moved);
     return moved;
   };
-  const chats = await bindInSlices(store, "chat", unbound, async (tx, chat) => {
+  const chats = await bindInSlices(store, "chat", deviceId, async (tx, chat) => {
     await queueImport(tx, await rebind(tx, chat));
   });
-  await bindInSlices(store, "message", unbound, async (tx, message2) => {
+  await bindInSlices(store, "message", deviceId, async (tx, message2) => {
     await queueImport(tx, await rebind(tx, message2), message2.payload.chatClientId);
   });
-  await bindInSlices(store, "usage", unbound, async (tx, usage) => {
+  await bindInSlices(store, "usage", deviceId, async (tx, usage) => {
     const moved = await rebind(tx, usage);
     if (syncsToPlatform(usage.payload)) await queueImport(tx, moved, usage.payload.clientChatId);
     else await dropPending(tx, moved);
@@ -8894,17 +8933,37 @@ async function bindChatHistoryForSync(store, deviceId, destination) {
   return chats.filter((chat) => !chat.deletedAt).length;
 }
 var BIND_SLICE = 1e3;
-async function bindInSlices(store, type, select, bind) {
+var BIND_TYPES = ["chat", "message", "usage"];
+async function unboundRows(tx, type, deviceId, limit) {
+  const ids2 = [];
+  let sawStubs = false;
+  await tx.scanStubs?.(type, (stub) => {
+    sawStubs = true;
+    if (!stub.unbound || !isOwnStub(stub, deviceId)) return void 0;
+    ids2.push(stub.id);
+    return ids2.length >= limit ? SCAN_STOP : void 0;
+  });
+  if (sawStubs) {
+    const rows2 = [];
+    for (const id of ids2) {
+      const row = await tx.get(type, id);
+      if (row) rows2.push(row);
+    }
+    return rows2;
+  }
+  const rows = [];
+  await tx.scan(type, (row) => {
+    if (row.destination.kind !== "unbound" || !isOwnRecord(row, deviceId)) return void 0;
+    rows.push(row);
+    return rows.length >= limit ? SCAN_STOP : void 0;
+  });
+  return structuredClone(rows);
+}
+async function bindInSlices(store, type, deviceId, bind) {
   const bound = [];
   for (; ; ) {
     const slice = await store.transact(async (tx) => {
-      const rows = [];
-      await tx.scan(type, (row) => {
-        if (!select(row)) return;
-        rows.push(row);
-        if (rows.length >= BIND_SLICE) return SCAN_STOP;
-      });
-      const copies = structuredClone(rows);
+      const copies = await unboundRows(tx, type, deviceId, BIND_SLICE);
       for (const row of copies) await bind(tx, row);
       return copies;
     });
@@ -10029,7 +10088,7 @@ function whitespaceSplice(content, lines, i, old, fits, map, newString, endsWith
 function matchEdit(content, oldString, newString, replaceAll, eol) {
   const decide = (tier2, splices) => {
     if (splices.length === 0) return null;
-    if (splices.length > 1 && !replaceAll) return { ambiguous: true };
+    if (splices.length > 1 && !replaceAll) return { ambiguous: true, matchCount: splices.length };
     return { tier: tier2, splices };
   };
   const spliced = (spans, text2) => spans.map(([start, end]) => ({ start, end, text: text2 }));
@@ -10096,7 +10155,8 @@ function applyStringEdit(content, oldString, newString, replaceAll = false) {
   if (match && "ambiguous" in match) {
     return {
       ok: false,
-      error: "oldString is not unique; add more surrounding context or set replaceAll"
+      error: "oldString is not unique; add more surrounding context or set replaceAll",
+      matchCount: match.matchCount
     };
   }
   if (match) {
@@ -11374,6 +11434,7 @@ var CallbackOwnerScan = class {
 var SYMBOL_KINDS = [
   "function",
   "method",
+  "field",
   "class",
   "interface",
   "type",
@@ -11444,6 +11505,10 @@ var JS_METHOD = new RegExp(
 var JS_ABSTRACT_METHOD = new RegExp(
   `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID2})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`
 );
+var JS_INTERFACE_METHOD = new RegExp(`^(?:\\t|  |    )(${ID2})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`);
+var JS_FIELD = new RegExp(
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|declare)\\s+)*(#?${ID2})[!?]?\\s*(?:(?::|=(?!=))[^;]*;|:[^;{]*\\{)\\s*$`
+);
 var JS_METHOD_OPEN = new RegExp(
   `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|async|get|set)\\s+)*\\*?\\s*(${ID2})\\s*(?:<[^>]*>)?\\s*\\(\\s*$`
 );
@@ -11459,9 +11524,14 @@ function closesWithBody(lines, at2) {
 }
 function extractJs(lines, out, path = "") {
   let cls;
+  let isInterface = false;
+  let memberIndent;
   const owners = new CallbackOwnerScan(path);
   eachLine(lines, out, (line, lineNo) => {
-    if (/^\}/.test(line)) cls = void 0;
+    if (/^\}/.test(line)) {
+      cls = void 0;
+      isInterface = false;
+    }
     if (owners.inBody(line)) return;
     owners.track(line);
     for (const rule of JS_RULES) {
@@ -11471,7 +11541,11 @@ function extractJs(lines, out, path = "") {
       if (!exported && /^\s/.test(line)) continue;
       const name2 = group(m, 2).replace(/^["']|["']$/g, "");
       out.push({ name: name2, kind: rule.kind, line: lineNo, exported });
-      if (rule.kind === "class") cls = name2;
+      if (rule.kind === "class" || rule.kind === "interface") {
+        cls = /\}\s*;?\s*$/.test(line) ? void 0 : name2;
+        isInterface = rule.kind === "interface";
+        memberIndent = void 0;
+      }
       return;
     }
     if (cls === void 0) {
@@ -11479,10 +11553,21 @@ function extractJs(lines, out, path = "") {
       if (owner2) out.push(owner2);
       return;
     }
+    if (/^\s*$/.test(line)) return;
+    const indent = /^\s*/.exec(line)?.[0] ?? "";
+    memberIndent ??= indent;
+    if (indent !== memberIndent) return;
     const open2 = JS_METHOD_OPEN.exec(line);
-    const method = JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line) ?? (open2 && closesWithBody(lines, lineNo - 1) ? open2 : null);
+    const method = isInterface ? JS_INTERFACE_METHOD.exec(line) : JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line) ?? (open2 && closesWithBody(lines, lineNo - 1) ? open2 : null);
     const name = method ? group(method, 1) : "";
-    if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
+    if (name && !JS_KEYWORDS.has(name)) {
+      out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
+    } else {
+      const field2 = JS_FIELD.exec(line);
+      if (field2 && !JS_KEYWORDS.has(group(field2, 1))) {
+        out.push({ name: group(field2, 1), kind: "field", line: lineNo, exported: false, container: cls });
+      }
+    }
   });
 }
 function extractPython(lines, out) {
@@ -11769,7 +11854,14 @@ async function readOneFile(path, opts, caps, leverOn2) {
   const r = await caps.repoRead.readFile(path);
   if (!r.ok) return r;
   const gzip = isGzipPath(r.path ?? path) && typeof r.content === "string" && r.content.length > 0;
-  if (gzip) r.content = await readGzipText(latin1Bytes(r.content));
+  if (gzip) {
+    if (r.truncated) return { ok: false, path, code: "too_large", error: "gzip file exceeds the read limit" };
+    try {
+      r.content = await readGzipText(latin1Bytes(r.content));
+    } catch {
+      return { ok: false, path, code: "io", error: "could not decompress gzip file" };
+    }
+  }
   if (opts.key) return { ...readFileKey(r.path ?? path, r, opts.key), ...gzip ? { decompressed: true } : {} };
   const content = r.content ?? "";
   if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn2) && r.truncated !== true) {
@@ -13618,6 +13710,28 @@ var import_ingest = require("@seanhogg/builderforce-memory/ingest");
 
 // ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
 var import_knowledge6 = require("@seanhogg/builderforce-memory/knowledge");
+
+// ../packages/agent-tools/src/skipDirs.ts
+var OUTPUT_DIRS = /* @__PURE__ */ new Set([
+  "node_modules",
+  ".git",
+  ".hg",
+  ".svn",
+  ".next",
+  ".nuxt",
+  "dist",
+  "build",
+  "out",
+  ".cache",
+  ".turbo",
+  ".vercel",
+  "coverage",
+  ".venv",
+  "venv",
+  "__pycache__",
+  ".vscode-test"
+]);
+var WORKSPACE_SKIP_DIRS = /* @__PURE__ */ new Set([...OUTPUT_DIRS, "vendor", "target", ".idea"]);
 
 // ../packages/agent-tools/src/knowledge/statWalk.ts
 var import_knowledge3 = require("@seanhogg/builderforce-memory/knowledge");
@@ -23092,6 +23206,10 @@ function localStorageConfirmationPersistence(key) {
   };
 }
 
+// ../packages/asset-limits/src/index.ts
+var ASSET_MAX_BYTES = 10 * 1024 * 1024;
+var ASSET_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+
 // src/uploadUrls.ts
 function brainUploadUrl(baseUrl, key) {
   return `${baseUrl}/api/brain/uploads/${key}`;
@@ -23101,8 +23219,6 @@ function signedBrainFileUrl(baseUrl, key, signed) {
 }
 var BRAIN_UPLOAD_SIGN_PATH = "/api/brain/uploads/sign";
 var BRAIN_UPLOAD_PATH = "/api/brain/upload";
-var ASSET_MAX_BYTES = 10 * 1024 * 1024;
-var ASSET_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 // src/evermindMemory.ts
 var MAX_CITED_ANCHORS = 16;
@@ -27810,6 +27926,11 @@ function isChatReplyScope(toolScope) {
 
 // ../packages/tool-output-policy/src/caps.ts
 var DEFAULT_TOOL_OUTPUT_CHARS = 6e3;
+var DEFAULT_COMMAND_TIMEOUT_MS = 10 * 6e4;
+var MAX_BACKGROUND_JOBS = 32;
+var BACKGROUND_JOB_LIMIT_ERROR = `too many running background jobs (${MAX_BACKGROUND_JOBS}); stop one with command_stop first`;
+var EDITOR_COMMAND_BUFFER_CHARS = 4 * 1024 * 1024;
+var NATIVE_FILE_READ_MAX_BYTES = 50 * 1024;
 var TOOL_OUTPUT_CAPS = {
   read_file: 16e3,
   run_command: 2e4,
@@ -44411,6 +44532,7 @@ function useChatCreation({ chatId, create, autoTitle, onCaptureOriginalRequest }
   MAX_STOP_HOOK_ROUNDS,
   MAX_SUMMARY_CHUNKS,
   MAX_TOOL_RESULT_CHARS,
+  MESSAGE_PARTITION,
   MODALITY_PERSONAS,
   MODEL_CATEGORIES,
   NEW_CHAT_MODE,

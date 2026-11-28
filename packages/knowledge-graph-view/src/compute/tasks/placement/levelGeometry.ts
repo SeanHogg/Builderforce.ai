@@ -57,9 +57,12 @@ export const MAX_CHILDREN = 24;
 export const SINGLE_ROW_MAX = 4;
 export const ROW_MAX = 8;
 
-/** A floor link: a raised bar between two children. */
-export const LINK = { y: 0.1, thick: 0.08, width: 0.34 } as const;
+/** A floor link: a raised bar between two children. `y` is where its underside sits (the hall layer stands the bar ON the point's y, 0.24 x width thick: centre ~ the design's 0.1). */
+export const LINK = { y: 0.06, thick: 0.08, width: 0.34 } as const;
 
 /** Roof miniatures: at most this many per roof, 0.22 tall, their layout scaled by `1.25 × w / 17` by `1.25 × d / 13`. */
 export const MINIS_MAX = 12;
 export const MINI = { height: 0.22, share: 1.25, refW: 17, refD: 13 } as const;
+
+/** The square outline spans ±0.9 about a mark's centre: a footprint of width w world units is drawn with scale w / 1.8. */
+export const OUTLINE_SPAN = 1.8;

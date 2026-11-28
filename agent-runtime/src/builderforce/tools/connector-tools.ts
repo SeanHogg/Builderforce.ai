@@ -23,6 +23,7 @@
  * agent first needs a connector, which is the right price.
  */
 
+import { builderforceApiBase } from "../../infra/builderforce-http.js";
 import {
   CONNECTOR_EXTENSION_ID,
   createMcpRelay,
@@ -40,7 +41,7 @@ const GATEWAY_TIMEOUT_MS = 30_000;
 
 function resolveGateway(): { base: string; apiKey: string } | { error: string } {
   const apiKey = readSharedEnvVar("BUILDERFORCE_API_KEY");
-  const baseUrl = readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai";
+  const baseUrl = builderforceApiBase();
   if (!apiKey) {
     return {
       error:

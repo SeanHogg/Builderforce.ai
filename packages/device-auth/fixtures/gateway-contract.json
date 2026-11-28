@@ -1,0 +1,18 @@
+{
+  "deviceCode": {
+    "device_code": "dc",
+    "user_code": "ABCD",
+    "verification_uri": "https://app/activate",
+    "verification_uri_complete": "https://app/activate?c=ABCD",
+    "interval": 1,
+    "expires_in": 60
+  },
+  "approved": { "access_key": "fixture-key", "tenant_id": 7 },
+  "pollStatus": { "pending": 428, "slow_down": 429, "denied": 403, "expired": 410 },
+  "tenantSessionTtlSeconds": 3600,
+  "webOrigins": [
+    { "gateway": "https://builderforce.ai/gateway", "web": "https://builderforce.ai" },
+    { "gateway": "https://api.builderforce.ai", "web": "https://builderforce.ai" },
+    { "gateway": "http://localhost:8787/gateway", "web": "http://localhost:8787" }
+  ]
+}

@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import nodeFs from "node:fs";
 import nodeOs from "node:os";
 import nodePath from "node:path";
+import { derivePlatformWebBase } from "@builderforce/device-auth";
 import { gatewayCanChooseModel, gatewayModelIdentity, gatewayPlanModels, type ModelIdentityContext, NOT_SIGNED_IN } from "@seanhogg/builderforce-brain-embedded";
 import {
   BFI_DISCOVERY_ENV,
@@ -211,15 +212,7 @@ export function getSessionTabMode(): SessionTabMode {
 export function getWebBaseUrl(): string {
   const override = vscode.workspace.getConfiguration("builderforce").get<string>("webUrl");
   if (override) return override.replace(/\/+$/, "");
-  try {
-    const u = new URL(getBaseUrl());
-    u.hostname = u.hostname.replace(/^api\./, "");
-    u.pathname = "";
-    u.search = "";
-    return u.toString().replace(/\/+$/, "");
-  } catch {
-    return "https://builderforce.ai";
-  }
+  return derivePlatformWebBase(getBaseUrl());
 }
 
 /**

@@ -3,14 +3,13 @@
  * `modulesOfFiles`): a system or an app is a folder, drawn on the stage as the folder slot `dir:<path>`; its frame is
  * `system:<path>` / `app:<path>` (the ref is the stable folder path, so a rebuilt map never re-anchors it).
  *
- * What a level holds is `levelChildren` (the placement's own pure function): this file only turns a mark the person
- * zoomed into (a folder slot or a station) into the frame(s) to push, applying the one skip rule: a level with exactly one
- * child is not shown, the child is entered instead (the mockup's root opens straight onto areas). Pure.
+ * What a level holds is the placement's own `LevelDescriptor` (computed once, by `levelChildren`, in the compute realm):
+ * this file only turns a mark key the person zoomed into (a folder slot, or a station) into the frame to push. The skip rule
+ * (a level with exactly one child is not shown, the child is entered instead) reads that same descriptor, in the zoom. Pure.
  */
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
 import { dirKey } from '../../compute/tasks/markSet';
-import { levelChildren } from '../../compute/tasks/placement/levelChildren';
 import { tailOf } from '../outlineGraph';
 import type { StationModel } from '../stations';
 import { modulesOfFiles, systemName, systemsOf } from '../systems';
@@ -22,6 +21,9 @@ export const LEVEL_RANK: Readonly<Record<DrillLevel | 'world', number>> = { worl
 
 /** The levels whose marks are folders and stations, drawn by the level scene (no `DrillView` of their own). */
 export const isStructuralLevel = (level: DrillLevel | 'world'): level is 'world' | 'system' | 'app' => LEVEL_RANK[level] < LEVEL_RANK.package;
+
+/** How many frames of `stack` are structural (they are always the first ones). */
+export const structuralDepth = (stack: readonly Pick<DrillFrame, 'level'>[]): number => stack.filter((f) => isStructuralLevel(f.level)).length;
 
 const FOLDER = dirKey('');
 
@@ -50,24 +52,9 @@ export const packageFrameOf = (world: StationModel, id: string): DrillFrame | nu
     return station ? { level: 'package', ref: id, name: station.name, files: anchorFilesOf(world, id) } : null;
 };
 
-/** The frame of a child mark of a structural level (its slot key), else null. */
-function frameOfKey(graph: KnowledgeGraph, world: StationModel, key: string): DrillFrame | null {
+/** The frame of a child mark of a structural level (its slot key: `dir:<path>` or `st:<id>`), else null. */
+export function frameOfChildKey(graph: KnowledgeGraph, world: StationModel, key: string): DrillFrame | null {
     const folder = folderOfKey(key);
     if (folder !== null) return folderFrameOf(graph, folder);
     return key.startsWith('st:') ? packageFrameOf(world, key.slice('st:'.length)) : null;
-}
-
-/**
- * The frame to push to enter `target` (a system, app or package frame): the frame itself, or, when it holds exactly one
- * child, that child (skipped through as far as that rule goes).
- */
-export function frameToEnter(graph: KnowledgeGraph, world: StationModel, target: DrillFrame): DrillFrame {
-    let at = target;
-    for (let guard = 0; guard < 3 && isStructuralLevel(at.level); guard++) {
-        const kids = levelChildren(graph, world, at);
-        const only = kids.length === 1 ? frameOfKey(graph, world, kids[0]!.key) : null;
-        if (!only || LEVEL_RANK[only.level] <= LEVEL_RANK[at.level]) break;
-        at = only;
-    }
-    return at;
 }

@@ -7,7 +7,7 @@ export function flattenApiError(value: unknown, preferNested = false) {
   const outer = fields(value);
   const nested = fields(outer?.error);
   const primary = preferNested ? nested ?? outer : outer;
-  const secondary = preferNested ? outer : nested;
+  const secondary = preferNested ? undefined : nested;
   const message = [primary?.message, secondary?.message, primary?.error, secondary?.error]
     .find((entry): entry is string => typeof entry === 'string' && entry.length > 0);
   const code = [primary?.code, secondary?.code].find((entry) => typeof entry === 'string' || typeof entry === 'number');

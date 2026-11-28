@@ -157,6 +157,10 @@ export function tenantOfToken(token: string): number | undefined {
 const editorKeyRejected = new vscode.EventEmitter<string>();
 export const onEditorKeyRejected = editorKeyRejected.event;
 
+function requestBaseJwt(key: string) {
+  return exchangeEditorKey(getBaseUrl(), key, (url, init) => trackReachability(fetch(url, init)), Date.now);
+}
+
 /** Exchange the stored editor key for its OWN tenant JWT (the key's bound workspace). */
 async function exchangeBaseJwt(
   secrets: vscode.SecretStorage,
@@ -166,7 +170,7 @@ async function exchangeBaseJwt(
   const epoch = jwtEpoch;
   const key = await getApiKey(secrets);
   if (!key) return undefined;
-  const result = await exchangeEditorKey(getBaseUrl(), key, (url, init) => trackReachability(fetch(url, init)), Date.now);
+  const result = await requestBaseJwt(key);
   // Signed out or re-keyed meanwhile: this token belongs to the identity that left.
   if (epoch !== jwtEpoch) return undefined;
   if (!result.ok) {
@@ -188,7 +192,7 @@ export async function probeEditorKey(
 ): Promise<"ok" | "rejected" | "unreachable" | "none"> {
   const key = await getApiKey(secrets);
   if (!key) return "none";
-  const result = await exchangeEditorKey(getBaseUrl(), key, (url, init) => trackReachability(fetch(url, init)), Date.now);
+  const result = await requestBaseJwt(key);
   if (result.ok) {
     baseJwt = result.jwt;
     syncOutboxScope();

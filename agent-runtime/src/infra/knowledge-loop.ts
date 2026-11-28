@@ -9,7 +9,7 @@ import {
   toolCallPaths,
 } from "@builderforce/agent-tools";
 
-const DEFAULT_BUILDERFORCE_URL = "https://api.builderforce.ai";
+import { DEFAULT_BUILDERFORCE_API_URL } from "./builderforce-http.js";
 
 /**
  * Should this host contribute PRE-DIFFED weight deltas rather than raw run text?
@@ -446,7 +446,7 @@ export class KnowledgeLoopService {
       if (!apiKey || !agentNodeId) {
         return;
       }
-      const url = `${normalizeBaseUrl(baseUrl ?? DEFAULT_BUILDERFORCE_URL)}/api/agent-hosts/${agentNodeId}/tool-audit`;
+      const url = `${normalizeBaseUrl(baseUrl ?? DEFAULT_BUILDERFORCE_API_URL)}/api/agent-hosts/${agentNodeId}/tool-audit`;
       const body =
         "type" in event
           ? {
@@ -489,7 +489,7 @@ export class KnowledgeLoopService {
     const hostId = Number(agentNodeId);
     if (!apiKey || !Number.isInteger(hostId) || hostId <= 0 || !projectId) return null;
     return {
-      gatewayUrl: baseUrl ?? DEFAULT_BUILDERFORCE_URL,
+      gatewayUrl: baseUrl ?? DEFAULT_BUILDERFORCE_API_URL,
       apiKey,
       agentHostId: hostId,
       projectId: Number(projectId),
@@ -529,7 +529,7 @@ export class KnowledgeLoopService {
     const syncParams: SyncBuilderForceAgentsDirParams = {
       workspaceDir,
       apiKey,
-      baseUrl: baseUrl ?? DEFAULT_BUILDERFORCE_URL,
+      baseUrl: baseUrl ?? DEFAULT_BUILDERFORCE_API_URL,
       agentNodeId,
       projectId,
     };
@@ -554,7 +554,7 @@ export class KnowledgeLoopService {
     if (!apiKey || !agentNodeId) {
       return;
     }
-    const url = `${normalizeBaseUrl(baseUrl ?? DEFAULT_BUILDERFORCE_URL)}/api/teams/memory`;
+    const url = `${normalizeBaseUrl(baseUrl ?? DEFAULT_BUILDERFORCE_API_URL)}/api/teams/memory`;
     const payload = {
       agentNodeId,
       runId,
@@ -613,7 +613,7 @@ export class KnowledgeLoopService {
     if (!apiKey) {
       return [];
     }
-    const url = `${normalizeBaseUrl(baseUrl ?? DEFAULT_BUILDERFORCE_URL)}/api/teams/memory?limit=${limit}`;
+    const url = `${normalizeBaseUrl(baseUrl ?? DEFAULT_BUILDERFORCE_API_URL)}/api/teams/memory?limit=${limit}`;
     try {
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${apiKey}` },

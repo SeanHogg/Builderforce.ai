@@ -1,3 +1,4 @@
+import { builderforceApiBase, DEFAULT_BUILDERFORCE_API_URL } from "../infra/builderforce-http.js";
 import { confirm, note, select, spinner, text } from "@clack/prompts";
 import { loadProjectContext, updateProjectContextFields } from "../builderforce/project-context.js";
 import { buildLocalMachineProfile } from "../infra/builderforce-context.js";
@@ -19,7 +20,7 @@ export async function promptBuilderforceOnboarding(params: {
 }): Promise<string | null> {
   const existingKey = readSharedEnvVar("BUILDERFORCE_API_KEY");
   if (existingKey) {
-    const existingUrl = readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai";
+    const existingUrl = builderforceApiBase();
     const existingTenantId = readSharedEnvVar("BUILDERFORCE_TENANT_ID");
     const existingCtx = await loadProjectContext(params.projectRoot).catch(() => null);
     const agentNodeLabel =
@@ -59,12 +60,12 @@ export async function promptBuilderforceOnboarding(params: {
 
   const urlInput = await text({
     message: "Orchestration API URL (Builderforce):",
-    initialValue: "https://api.builderforce.ai",
+    initialValue: DEFAULT_BUILDERFORCE_API_URL,
   });
   if (typeof urlInput === "symbol") {
     return null;
   }
-  const serverUrl = normalizeBaseUrl(urlInput.trim()) || "https://api.builderforce.ai";
+  const serverUrl = normalizeBaseUrl(urlInput.trim()) || DEFAULT_BUILDERFORCE_API_URL;
 
   // ── Authentication ─────────────────────────────────────────────────────
   // Prefer browser-based auth when a display is available.

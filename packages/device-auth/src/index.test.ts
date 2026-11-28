@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { completeDeviceSignIn, DeviceAuthError, revokeKey, startDeviceSignIn, type DeviceAuthDeps } from './index';
+import { completeDeviceSignIn, derivePlatformWebBase, DeviceAuthError, revokeKey, startDeviceSignIn, TENANT_SESSION_TTL_SECONDS, type DeviceAuthDeps } from './index';
+import contract from '../fixtures/gateway-contract.json';
 
 const json = (status: number, body: unknown = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -26,7 +27,7 @@ function fakeDeps(responses: Array<Response | Error>) {
   return { deps, calls, opened };
 }
 
-const START = { device_code: 'dc', user_code: 'ABCD', verification_uri: 'https://app/activate', verification_uri_complete: 'https://app/activate?c=ABCD', interval: 1, expires_in: 60 };
+const START = contract.deviceCode;
 
 async function rejection(p: Promise<unknown>): Promise<DeviceAuthError> {
   try { await p; } catch (e) { if (e instanceof DeviceAuthError) return e; throw e; }
@@ -50,15 +51,15 @@ describe('startDeviceSignIn', () => {
 
 describe('completeDeviceSignIn', () => {
   it('opens the approval page, polls through pending / slow_down / a network blip, and yields the key', async () => {
-    const { deps, calls, opened } = fakeDeps([json(200, START), json(428), json(429), new Error('blip'), json(200, { access_key: 'bfk_1', tenant_id: 7 })]);
+    const { deps, calls, opened } = fakeDeps([json(200, START), json(contract.pollStatus.pending), json(contract.pollStatus.slow_down), new Error('blip'), json(200, contract.approved)]);
     const start = await startDeviceSignIn(deps);
-    await expect(completeDeviceSignIn(deps, start)).resolves.toEqual({ accessKey: 'bfk_1', tenantId: 7 });
+    await expect(completeDeviceSignIn(deps, start)).resolves.toEqual({ accessKey: contract.approved.access_key, tenantId: contract.approved.tenant_id });
     expect(opened).toEqual(['https://app/activate?c=ABCD']);
     expect(calls.slice(1).every((c) => c.url.endsWith('/api/auth/device/token'))).toBe(true);
   });
 
   it('maps denied, expired and an aborted wait to their reasons', async () => {
-    for (const [status, reason] of [[403, 'denied'], [410, 'expired'], [500, 'failed']] as const) {
+    for (const [status, reason] of [[contract.pollStatus.denied, 'denied'], [contract.pollStatus.expired, 'expired'], [500, 'failed']] as const) {
       const { deps } = fakeDeps([json(200, START), json(status)]);
       expect((await rejection(completeDeviceSignIn(deps, await startDeviceSignIn(deps)))).reason).toBe(reason);
     }
@@ -72,6 +73,16 @@ describe('completeDeviceSignIn', () => {
     const pending = Array.from({ length: 70 }, () => json(428));
     const { deps } = fakeDeps([json(200, START), ...pending]);
     expect((await rejection(completeDeviceSignIn(deps, await startDeviceSignIn(deps)))).reason).toBe('expired');
+  });
+});
+
+describe('shared gateway contract', () => {
+  it('uses the same editor token TTL in each client', () => {
+    expect(TENANT_SESSION_TTL_SECONDS).toBe(contract.tenantSessionTtlSeconds);
+  });
+
+  it.each(contract.webOrigins)('derives the portal origin from $gateway', ({ gateway, web }) => {
+    expect(derivePlatformWebBase(gateway)).toBe(web);
   });
 });
 

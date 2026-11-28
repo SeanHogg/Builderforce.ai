@@ -22,13 +22,16 @@ import {
 } from "@builderforce/local-first";
 import { writeWhole } from "./localFirstAtomicFile";
 import { yieldToEventLoop } from "./localFirstJournalIo";
-import { PARTITIONS_DIR, PARTITION_TEMP_PATTERN, partitionRelativePath } from "./localFirstPartitionNames";
+import { PARTITIONS_DIR, partitionRelativePath } from "./localFirstPartitionNames";
 
 const fs = nodeFs.promises;
 
 export class PartitionMissingError extends Error {
+  /** ENOENT: the file is gone (a compaction deleted it, or it is lost). Anything else (EPERM, EBUSY, EACCES) is a lock that will pass. */
+  readonly gone: boolean;
   constructor(readonly file: string, cause: unknown) {
     super(`local_first_partition_unavailable: ${file}: ${(cause as Error)?.message ?? String(cause)}`);
+    this.gone = (cause as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
   }
 }
 
@@ -119,10 +122,13 @@ export async function fsyncDirectory(directory: string): Promise<void> {
     } finally {
       await handle.close();
     }
-  } catch {
-    // best effort
+  } catch (error) {
+    // A platform that cannot open a directory (Windows) is not a failure; anything else is.
+    if (!NO_DIRECTORY_HANDLE.has((error as NodeJS.ErrnoException).code ?? "")) throw error;
   }
 }
+
+const NO_DIRECTORY_HANDLE = new Set(["EISDIR", "EPERM", "EACCES", "EINVAL", "ENOTSUP"]);
 
 /**
  * Append one frame at `from` (the caught-up POINTER, never a length this process tracked): anything past
@@ -160,8 +166,9 @@ export async function listPartitionFiles(directory: string): Promise<string[]> {
     return (await fs.readdir(nodePath.join(directory, PARTITIONS_DIR)))
       .filter((name) => name.endsWith(".journal"))
       .map(partitionRelativePath);
-  } catch {
-    return [];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
   }
 }
 
@@ -169,21 +176,34 @@ export async function listPartitionFiles(directory: string): Promise<string[]> {
  * Remove every partition file no pointer names. UNDER THE LOCK ONLY: with the lock held no commit is in
  * flight, so a file nothing names is a leftover (a compaction published past its main frame, a failed first
  * commit, a migration that never renamed). A reader that still holds an old generation gets ENOENT and
- * retries against the new pointer. Best effort: a file that will not go stays for the next pass.
+ * retries against the new pointer. A file that will not go stays for the next pass, and is REPORTED.
  */
-export async function removeUnreferencedPartitions(directory: string, referenced: ReadonlySet<string>): Promise<number> {
+export async function removeUnreferencedPartitions(directory: string, referenced: ReadonlySet<string>, onError: (error: unknown) => void): Promise<number> {
   let removed = 0;
   for (const file of await listPartitionFiles(directory)) {
     if (referenced.has(file)) continue;
     try {
       await fs.rm(nodePath.join(directory, file), { force: true });
       removed += 1;
-    } catch {
-      // left for the next pass
+    } catch (error) {
+      onError(error);
     }
   }
   return removed;
 }
 
-/** Temp names this module's writers leave behind (orphan cleanup, `localFirstMigration.ts`). */
-export const isPartitionTemp = (name: string): boolean => PARTITION_TEMP_PATTERN.test(name);
+/**
+ * Set aside every partition file no pointer names, instead of deleting it: a v4 journal that was quarantined
+ * can leave partitions that hold the only copy of real messages. Renamed `<file>.orphaned-<time>` (no longer
+ * a `.journal`, so nothing reads or lists it). Returns the names set aside.
+ */
+export async function setAsideUnreferencedPartitions(directory: string, referenced: ReadonlySet<string>): Promise<string[]> {
+  const aside: string[] = [];
+  for (const file of await listPartitionFiles(directory)) {
+    if (referenced.has(file)) continue;
+    const target = `${file}.orphaned-${Date.now()}`;
+    await fs.rename(nodePath.join(directory, file), nodePath.join(directory, target));
+    aside.push(target);
+  }
+  return aside;
+}

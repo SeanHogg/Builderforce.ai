@@ -18,7 +18,7 @@
  */
 
 export {
-  exchangeEditorKey, isTenantSessionFresh, requestWorkspaceToken, sendWithTenantSession, tenantSessionExpiresAt,
+  derivePlatformWebBase, exchangeEditorKey, isTenantSessionFresh, requestWorkspaceToken, sendWithTenantSession, tenantSessionExpiresAt,
   TENANT_SESSION_TTL_SECONDS, WORKSPACE_TOKEN_PATH, WORKSPACE_TOKEN_ROUTE,
 } from './tenantSession.js';
 

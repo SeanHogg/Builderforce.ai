@@ -37,7 +37,7 @@ The OpenVSCode-in-Tauri shell is not being built. Until the fork ships, the edit
 | INF-G007, INF-G011 | The `bf-local` copies (its fit share and its `models_dir()`) are gone. The rest remains open. |
 | INF-G015 | Closed. The `bfi` User-Agent comes from the crate version. |
 | INF-G012 | Still open. The `synapse` runtime id now means `bfi serve`. It keeps its "Synapse" label and stays a wire id until the rename. |
-| AUTH-G001, AUTH-G002, AUTH-G008, AUTH-G009, AUTH-G013 | Still open. `bf-cloud` and `bf-vault` moved to `builderforce-spawn`, their only consumer, so the Rust copies now live there. |
+| AUTH-G001, AUTH-G002, AUTH-G008, AUTH-G009, AUTH-G013 | Spawn keeps native auth and keyring adapters. Device-flow, origin and expiry fixtures now run in both languages. See §7.6 for session and configuration work. |
 | CIX-G012 | The never-offered Synapse embedder slot is removed. The fingerprint policy remains open. |
 | UP-G015 | Redefined: build Synapse as a VS Code fork. |
 
@@ -551,7 +551,7 @@ Synapse's `bf-memory` is a thin MCP client: no second store.
 | Recall / ranking | **6 formulas**:<br>- M hybrid RRF + importance + 90-day decay;<br>- api `memorySemanticRecall` (pgvector + lexical, its own formula);<br>- Evermind `/evermind/recall` (SSM cosine);<br>- agent-runtime `memory/hybrid` (wraps M math, own store);<br>- W `LexicalIndex` (its own BM25 + RRF);<br>- api `recallSops` (BM25). |
 | Remember / dedupe | `commitFact` (replace by key); `memoryService.remember` (scope specificity); `writeProjectFact`; agent-runtime vector dedupe; Evermind `learn-text` reconcile. |
 | Compaction | memory-mcp `compaction.ts` (reused by VS Code); M `working/consolidate` (codemap); `brainMemory` consolidation into `project_memories`; agent-runtime `memory-flush` (prompt-driven). |
-| Tool names | `memory_recall` / `memory_remember` / `memory_forget` (memory-mcp, agent-tools); **VS Code** `recall_facts` / `remember_fact`; agent-runtime legacy `memory_search` / `memory_get`. |
+| Tool names | Memory MCP and agent-tools define the fact operations. VS Code advertises `memory__recall` and `memory__remember` with stable editor dispatch IDs. Headless Markdown uses the Workspace provider with legacy call IDs preserved. |
 | Episodes / skills / runs schema | TS `memory-engine/experience/types.ts` **hand-mirrored in Rust** `I/crates/bf-teach/model.rs`. Synapse `facts_list` reads `memory.json` directly, bypassing the server. |
 | "Skill" | **3 unrelated meanings**:<br>(a) a Train-Once procedural skill (engine);<br>(b) a SKILL.md agent skill (`packages/agent-skills`, cloud `skills` / `tenant_skills` / `marketplace_skills` / `skill_files`, agent-runtime `skill-registry`);<br>(c) the Claude Code plugin skill (`plugins/builderforce-memory/skills`). |
 | Run ledgers | memory-engine `Run` / `RunStepLog` (`experience.json`), written by Synapse `runs.rs`; cloud `runDelta` / `runOutcomes`, `commitRunMemory` facts `run-outcome:<scope>:<id>`; `brain_chat_steps`; agent-runtime `run-outcome-memory.ts`. |
@@ -597,13 +597,26 @@ Synapse's `bf-memory` is a thin MCP client: no second store.
 | Embeddings | one fingerprint per store, declared; the cloud failover vendor stated | (same policy as `CIX-G012`) |
 | RAM manager naming | W `src/memory` → `src/residency` | It is not agent memory. W `memoryIntegration` reuses M `retrieval`/`ingest`. |
 
+Cloud durable project beliefs are owned by `project_facts`. Tenant and ticket beliefs
+are owned by the corresponding `agent_memory` scope. The separate `facts` relation stores
+subject-predicate-object records for the Facts API. The Evermind coordinator's `mem:`
+records track model contributions, and `project_facts` rows with source `qa-cache`
+serve exact-question lookups. Neither participates in governed durable-fact recall.
+Workspace Markdown remains a workspace-owned input and its SQLite index is derived.
+The local MCP snapshot remains locally owned until scoped fact sync is wired up.
+
+Cloud embedding failover already uses two declared spaces. Writes with the free
+embedding lever enabled try Cloudflare bge-m3 first and fall back to OpenRouter's
+text-embedding-3-small. Reads use a query vector stamped for each space they search.
+A platform-wide fingerprint policy for the remaining stores is still open.
+
 ### 4.4 Granular gaps
 
 | ID | Gap | Fix | Where |
 |---|---|---|---|
-| MEM-G101 | 9 fact-store shapes with no declared owner per scope | One owner table per scope; others become caches or imports | §4.1 row "Fact stores" |
-| MEM-G102 | 6 recall formulas; the cloud ranks with its own formula | Cloud calls M `recallRanked` | `api/.../memory/memorySemanticRecall.ts`, W `memoryIntegration`, agent-runtime `src/memory/*` |
-| MEM-G103 | VS Code memory tools are `recall_facts`/`remember_fact`, not `memory_*` | Adopt the `MemoryCapability` tools | `clients/vscode/src/memory/cognition.ts` |
+| MEM-G101 | Cloud and local owners are documented above. Local and cloud durable facts still need a synchronization contract | Follow the scoped sync contract in MEM-G110 | §4.1 row "Fact stores" |
+| MEM-G102 | Project-only and governed cloud recall now share candidate reads, one importance policy and the memory package's weighted fusion. The local `MemoryStore` still uses a different ranking policy | Align cloud and local fact ranking without giving up scoped ANN reads | `api/.../memory/memoryRecallRanking.ts`, M `MemoryStore` |
+| MEM-G103 | Implemented. VS Code advertises `memory__recall` and `memory__remember` and uses the shared `MemoryCapability` tools | Retain the saved editor dispatch IDs | `clients/vscode/src/memory/cognition.ts` |
 | MEM-G104 | agent-runtime keeps a second memory index (sqlite-vec + provider embedders) with tools `memory_search`/`memory_get` | Retire with the pi loop; the workspace-notes index moves to `code-index` (§2) | `agent-runtime/src/memory/*`, `agents/tools/memory-tool.ts` |
 | MEM-G105 | Experience types hand-mirrored in Rust `bf-teach` | Retire with the Synapse rebuild; until then, add a contract test | `I/crates/bf-teach/src/model.rs` |
 | MEM-G106 | Synapse reads `memory.json` directly (`facts_list`), bypassing memory-mcp | Go through the MCP tools | `I/app/src-tauri/src/agents/*` |
@@ -613,10 +626,10 @@ Synapse's `bf-memory` is a thin MCP client: no second store.
 | MEM-G110 | No local ↔ cloud fact sync | Facts over `/api/sync/v1` outbox | `packages/local-first`, `write-outbox`, memory-mcp backend |
 | MEM-G111 | Two live memory file locations; the newest wins (split-brain risk) | Migrate the legacy file once, then read one location | `memory-mcp` `resolveMemoryFile()` |
 | MEM-G112 | Fact key prefixes (`team:`, `run-outcome:`, `codemap:`, `[absorbed→…]`) are conventions with no registry | One key-namespace registry in M | M `memory`, api `runEndMemory.ts`, `teamMemoryFeed.ts` |
-| MEM-G113 | 5 incompatible embedding spaces; cloud memory is pinned to one vendor with no failover | Declare one fingerprint per store and a failover | `memorySemanticRecall.ts`, `evermindEmbed.ts`, agent-runtime embedders |
+| MEM-G113 | Cloud memory has two declared vector spaces and vendor failover. Local and cloud embedding spaces still differ | Declare and enforce fingerprints across the remaining stores | `memoryEmbedding.ts`, `memoryEmbeddingPolicy.ts`, `evermindEmbed.ts`, agent-runtime embedders |
 | MEM-G114 | 3 brain-map UIs (Synapse JS, `EvermindBrainMap`, `EvermindBrain3D`) | One, on the shared 3D stage (`AE-G059`) | `I/app/ui/js/views/brain/*`, frontend builder, the canvas station |
 | MEM-G115 | Name collisions: "memory" (RAM vs facts), "Evermind" (model vs facts vs console), "brain" (chat vs map) | Glossary + W rename `memory/` → `residency/` | W `packages/browser/src/memory` |
-| MEM-G116 | W `memoryIntegration` re-implements chunk + BM25 + RRF + decay | Reuse M `retrieval`/`ingest` | `W/packages/browser/src/memoryIntegration/*` |
+| MEM-G116 | Implemented. Browser memory uses the memory package's chunking, BM25 scoring, RRF and decay. The browser adapter owns its incremental postings and IndexedDB persistence | Ship with the next webcontainers release | `W/packages/browser/src/memoryIntegration/*` |
 
 ## 5. Chat: composer, transcript, streaming, persistence
 
@@ -856,7 +869,7 @@ Paths are relative to `Builderforce.ai` unless marked I (`builderforce-inference
 | SHELL-G014 | Tool-name tables spread over more than 8 files | see §6.4 |
 | SHELL-G015 | Error shape and wording differ by host | all providers; target `{ok:false, error, code}` |
 | SHELL-G016 | The browser shell has no jobs, background runs or tree cancel | `workspaceShell.ts`, W `packages/browser/src/node/processHost.ts` |
-| SHELL-G017 | No cross-host conformance suite for file and command tools | — |
+| SHELL-G017 | File-tool parity covers the on-prem, sandbox and reference providers. Host adapters and command conformance still need broader coverage | `agent-runtime/src/agents/cross-provider-smoke.test.ts` |
 | SHELL-G018 | Only one terminal component; new hosts must reuse it, not fork it | `frontend/src/components/Terminal.tsx` |
 
 ## 7. Auth, device sign-in and the cloud API client
@@ -884,7 +897,7 @@ Paths: BF = `Builderforce.ai`, I = `builderforce-inference`, M = `builderforce-m
 | Web `frontend/src/lib/{auth.ts, auth/*, apiClient.ts, builderforceApi.ts}` | password, MFA, OAuth, SSO, magic link, passkey | web JWT and tenant JWT (see `AUTH-G015`) | no refresh; tenant JWT through `/api/auth/tenant-token` | `apiRequest`: 401 clears the session and redirects to `/login`; 402 becomes a plan-limit error | `apiClient*.test`, `auth.test`, `AuthContext*.test` |
 | VS Code `clients/vscode/src/{auth/auth.ts, bfApi/session.ts, bfApi/transport.ts}` | `packages/device-auth`, with a paste-key fallback | `bfk_*` key in SecretStorage | key → `/api/auth/tenant-api-key-token` → `/api/vscode/tenants/:id/token`; 60 s margin, single-flight, epoch guard, park/drop workspace | `authed`: 401 forces a re-mint and retries once; 60 s timeout; `asTenant` pin | `session.mint`, `session.park`, `transport`, `gatewayAuth`, `editorKeyGuard` |
 | Chrome `clients/chrome/src/{auth/session.ts, api/apiClient.ts}` | device flow (`SettingsView`) | key in `chrome.storage.local` (see `AUTH-G016`) | same exchange; 60 s margin; a 400/401 on exchange clears the session; workspace switch open | forced refresh and one 401 retry for replayable requests; `ApiError{status}`; `Idempotency-Key` | `apiClient.test.ts`, `config.test` |
-| Synapse/Spawn `I/crates/bf-cloud/{device.rs, session.rs, account.rs, error.rs}` | **Rust copy of the device flow** | OS keyring (`bf-vault`), no plaintext fallback | same exchange; assumes 900 s when the server omits `expiresIn` (TypeScript hosts assume 3600 s) | `Session::api` retries once on 401 under a Mutex | 6 unit tests |
+| Spawn `builderforce-spawn/crates/bf-cloud/{device.rs, session.rs, account.rs, error.rs}` | Rust device flow | OS keyring (`bf-vault`) | same exchange and 3600 s fallback; prefers the neutral workspace-token route | `Session::api` retries once on 401 under a Mutex | `bf-cloud` unit tests |
 | agent-runtime `agent-runtime/src/commands/builderforce-connect.ts`, `infra/builderforce-relay.ts`, `run-context-client.ts` | `BUILDERFORCE_TOKEN` → `POST /api/agent-hosts` → API key | `~/.builderforce/.env` (see `AUTH-G017`) | static key | about 56 hand-built Bearer sites; no shared client | none for auth |
 | SDK `BF/sdk/src/infrastructure/httpClient.ts` | — | caller-supplied key | static | rich `BuilderforceApiError`, 180 s timeout, no 401 refresh | yes |
 | Memory `M/memory/src/wire/chatClient.ts`, `cache/FetchSemanticCacheBackend.ts` | — | static key | static | no 401 logic | — |
@@ -914,7 +927,7 @@ Paths: BF = `Builderforce.ai`, I = `builderforce-inference`, M = `builderforce-m
 - **Refresh.** Chrome and VS Code share the forced refresh and single retry. VS Code also deduplicates concurrent token exchanges. The web signs out on 401.
 - **Rejected key.** VS Code fires an event, Chrome clears the session, and Rust returns `KeyRejected` and signs out.
 - **Workspace switch.** The web uses `/api/auth/tenant-token`. VS Code and Rust use `/api/vscode/tenants/:id/token`, a VS Code-named route used by non-VS Code clients. Chrome has no workspace switch.
-- **Expiry fallback.** The API, Chrome and VS Code use the shared 3600 s default. Rust still uses 900 s.
+- **Expiry fallback.** The API, Chrome, VS Code and Spawn use 3600 s.
 - **Rust device poll** swallows non-status errors and has no distinct `cancelled` reason.
 
 ### 7.5 Target design and order
@@ -931,20 +944,20 @@ Paths: BF = `Builderforce.ai`, I = `builderforce-inference`, M = `builderforce-m
 
 | ID | Gap | Where |
 |---|---|---|
-| AUTH-G001 | Rust device flow duplicates TypeScript; no shared contract fixture | `I/crates/bf-cloud/src/device.rs`, `packages/device-auth` |
+| AUTH-G001 | Closed. TypeScript and Spawn test the same device-code, approval and poll-status fixtures | `packages/device-auth/fixtures/gateway-contract.json`, Spawn `bf-cloud` |
 | AUTH-G002 | VS Code and Chrome share key exchange, TTL and retry. Session storage, workspace selection and Rust flow remain open | `packages/device-auth/src/tenantSession.ts`, Spawn `bf-cloud` |
 | AUTH-G003 | Closed. Chrome uses the shared 401 forced refresh and one retry for replayable requests. Tests cover the idempotency key and workspace scope | `clients/chrome/src/api/apiClient.test.ts` |
 | AUTH-G004 | Chrome has no workspace switch | `clients/chrome/src/auth/session.ts` |
-| AUTH-G005 | agent-runtime has about 56 hand-built Bearer fetches and about 18 `BUILDERFORCE_URL` fallbacks | `agent-runtime/src/{infra,builderforce,commands}/*` |
+| AUTH-G005 | Agent-runtime has a shared base URL resolver and bearer transport. Connection registration, run context, personality events and error reporting use it. Remaining raw callers still need migration | `agent-runtime/src/infra/builderforce-http.ts` |
 | AUTH-G006 | Default base URL split (`api.` vs `/gateway`) | all clients |
 | AUTH-G007 | Inconsistent configuration names and aliases | see §7.4 |
 | AUTH-G008 | Closed. Web, Chrome and SDK share the error decoder. Spawn handles both flat and nested envelopes in its native decoder | `packages/api-errors`, Spawn `bf-cloud` |
-| AUTH-G009 | Closed. The API, TypeScript clients and Spawn use a 3600 s fallback | `packages/device-auth/src/tenantSession.ts`, Spawn `bf-cloud` |
+| AUTH-G009 | Closed. The API and TypeScript clients use the shared 3600 s fallback. Spawn's constant is generated from that same source | `packages/device-auth/src/tenantSession.ts`, `packages/device-auth/scripts/sync-spawn-contract.mjs` |
 | AUTH-G010 | Closed. The `device-auth` header names the current Chrome and VS Code entry points | `packages/device-auth/src/index.ts` |
-| AUTH-G011 | The web has no refresh; an expired token means a hard logout | `frontend/src/lib/apiClient.ts`, `auth/session.ts` |
+| AUTH-G011 | Closed. Web sessions renew in the background and retry after one renewal on 401 | `frontend/src/lib/auth/tokenRenewal.ts`, `DONE.md` |
 | AUTH-G012 | Chrome refresh, retry and session tests are in place. Rust device-flow parity and agent-runtime client coverage remain open | — |
-| AUTH-G013 | VS Code sign-in and deep links now use `getWebBaseUrl`. Cross-language URL parity remains open | Spawn `bf-cloud/src/lib.rs`, VS Code `gateway.ts` |
-| AUTH-G014 | Not yet audited: Chrome SettingsView sign-in, W `aiGateway`/`hostRelay`, `packages/knowledge-client`, `packages/provider-connect` | — |
+| AUTH-G013 | VS Code sign-in and deep links share a resolver. Rust and TypeScript test the same origin cases. Wider origin and configuration consolidation remains open | Spawn `bf-cloud/src/lib.rs`, VS Code `gateway.ts` |
+| AUTH-G014 | Audit complete. Chrome Settings uses shared device sign-in and stores the result through the session adapter. Webcontainers AI forwarding injects host credentials through `HostRelay`. Knowledge Client and Provider Connect accept host transport ports. Provider Connect's direct account probe uses the provider's credential | `SettingsView.tsx`, Webcontainers `aiGateway.ts` and `hostRelay.ts`, `packages/knowledge-client`, `packages/provider-connect` |
 | AUTH-G015–G019 | Security-sensitive; details in the local security findings file | — |
 | AUTH-G020 | Expanded. VS Code and Spawn call `/api/auth/workspace-token` and fall back on older gateways. Retire the deprecated alias after client rollout | `api/src/presentation/routes/workspaceTokenRoutes.ts`, `vscodeRoutes.ts` |
 

@@ -1,7 +1,8 @@
 /**
  * A damaged partition (AE-G031 "Recovery"): its file is not what its pointer says (frames that do not
- * parse, bytes missing, the file gone for good). It never fails an open or a read — the loader hands the
- * reader no rows and queues this job on the store's own serial queue, which, under the lock:
+ * parse, bytes missing, the file gone for good — NOT a lock that has not passed: EPERM, EBUSY and EACCES are
+ * reported and retried by the next read). It never fails an open: the loader rejects that one read (installing
+ * nothing) and queues this job on the store's own serial queue, which, under the lock:
  *
  *   1. sets the file aside (`<file>.corrupt-<time>`, never deleted),
  *   2. commits stub deletions for the partition's rows plus a pointer to a fresh, empty generation, so no
@@ -23,6 +24,8 @@ const fs = nodeFs.promises;
 export interface PartitionRecoveryPorts {
   directory: string;
   pointers: PointerTracker;
+  /** Drop these partitions' loaded segments: the next read loads them in full (`MemoryLocalFirstStore.evictPartitions`). */
+  evict(partitionIds: readonly string[]): void;
   /** The committed state (stubs included). */
   view(): LocalFirstSnapshot;
   serialized<T>(work: () => Promise<T>): Promise<T>;
@@ -44,9 +47,13 @@ export function createPartitionRecovery(ports: PartitionRecoveryPorts): OnPartit
     const path = nodePath.join(ports.directory, now.file);
     try {
       await foldPartitionFile(path, now.length);
-      return; // readable now: it was a transient failure
+      ports.evict([partitionId]); // readable now: it was transient; whatever a failed read left is dropped, the next read loads in full
+      return;
     } catch (error) {
-      if (!(error instanceof PartitionDamagedError || error instanceof PartitionMissingError)) throw error;
+      // Damage is a file that does not parse, or one that is GONE. A lock (EPERM, EBUSY, EACCES) is neither:
+      // it is reported (the queue's catch) and the partition is left alone.
+      const damage = error instanceof PartitionDamagedError || (error instanceof PartitionMissingError && error.gone);
+      if (!damage) throw error;
     }
     let setAside = "(the file was already gone)";
     try {

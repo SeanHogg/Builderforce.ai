@@ -289,11 +289,27 @@ export class PartitionTable {
     }
   }
 
+  /**
+   * Drop loaded segments so the next read of each loads it whole. A host calls it when a read
+   * left a partition's memory in doubt (a recovery). A partition with no pointer exists only in
+   * memory, and a store with no loader holds every row only in memory: neither is evicted.
+   */
+  evict(partitionIds: Iterable<string>): void {
+    if (!this.loader) return;
+    for (const id of partitionIds) if (this.pointers.has(id)) this.segments.delete(id);
+  }
+
+  /** Called only with a RESOLVED read: a loader that failed rejected, so nothing wrong is ever installed. */
   private install(id: string, pointer: PartitionPointer, read: LocalFirstDelta, whole: boolean): void {
     let segment = this.segments.get(id);
     if (!segment || whole) segment = this.createSegment(id);
+    // A file can hold a row its stub has since moved elsewhere (or never had): the stub is the truth.
+    const belongs = (record: LocalRecord): boolean => {
+      const stub = this.stubs.get(record.entityType)?.get(record.id);
+      return !!stub && partitionIdOf(stub.entityType, stub.home) === id;
+    };
     for (const gone of read.deletedRecords ?? []) segment.records.delete(gone.id);
-    for (const record of read.records ?? []) segment.records.set(record.id, record);
+    for (const record of read.records ?? []) if (belongs(record)) segment.records.set(record.id, record);
     segment.loadedTo = pointer;
     segment.stale = false;
   }

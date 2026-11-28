@@ -37,11 +37,10 @@ import {
 } from "@builderforce/local-first";
 import type { DurableLocalFirstStore, DurableLocalFirstStoreOptions } from "./durableLocalFirstStoreContract";
 import { LOCAL_FIRST_OPEN_BUSY_TIMEOUT_MS, createLocalFirstFileLock } from "./localFirstLock";
-import { legacyMoved, readLegacyMerge, writeLegacyBaseline } from "./localFirstLegacyMerge";
+import { createOpenMerges } from "./localFirstOpenMerges";
 import { createRecovery } from "./durableLocalFirstRecovery";
 import { writeSnapshotCache } from "./localFirstSnapshotCacheWrite";
 import { createCompactionScheduler } from "./localFirstCompactionScheduler";
-import { migrateEventBacklog } from "./localFirstEventMigration";
 import { createCompactionBackoff } from "./localFirstCompactionBackoff";
 import { createNodeJournalIo, yieldToEventLoop, type JournalStageTiming, type LoadedJournal, type TailRead } from "./localFirstJournalIo";
 import { createPartitionedStorage } from "./localFirstPartitionedStorage";
@@ -164,22 +163,6 @@ export function createDurableLocalFirstStore(
     ...(partitioned ? { prepareSnapshot: partitioned.prepareSnapshot, retireExtra: partitioned.retire } : {}),
   });
 
-  /**
-   * Writes an old window made to v2 after the import (`localFirstLegacyMerge.ts`). A lock-free
-   * check first — one stat plus the sidecar — so the usual open never takes the lock; then, under
-   * it and caught up with v3, merge what the baseline says is new as ONE v3 commit and move the baseline.
-   */
-  const mergeLegacyWrites = async (): Promise<void> => {
-    if (!(await legacyMoved(directory))) return;
-    await underOpenLock(async () => {
-      const merge = await readLegacyMerge(directory, memory.view(), yieldToEventLoop, partitioned?.versionsOf);
-      if (!merge) return;
-      if (merge.delta) await commitOpenDelta(merge.delta);
-      await writeLegacyBaseline(directory, merge.baseline);
-      if (merge.delta) onBackgroundError(new Error(`local-first: merged ${merge.rows} rows and ${merge.events} events an older window wrote to the v2 journal`));
-    });
-  };
-
   /** During the open: hold the cross-window lock, caught up with the journal (still unpublished — see `catchingUp`). */
   const underOpenLock = async <T,>(work: () => Promise<T>): Promise<T> => {
     await lock.acquire(openWaitMs);
@@ -194,7 +177,7 @@ export function createDurableLocalFirstStore(
   /** During the open, under its lock: one frame appended and applied. */
   const commitOpenDelta = async (delta: LocalFirstDelta): Promise<void> => {
     if (partitioned) {
-      await io.append(await partitioned.commit.prepare(partitioned.complete(delta), io.frames() === 0, snapshotAfter));
+      await io.append(await partitioned.commit.prepare(await partitioned.complete(delta), io.frames() === 0, snapshotAfter));
       partitioned.commit.committed(delta);
     } else {
       await io.append(encodeDeltaFrame(delta));
@@ -205,19 +188,13 @@ export function createDurableLocalFirstStore(
 
   /** Set when the open migrated the event backlog: the slim state is folded into a new base right after. */
   let compactAfterOpen = false;
-  // The one-time event-backlog migration (`localFirstEventMigration.ts`), as ordinary commits under the lock.
+  // The v2 merge and the one-time event-backlog migration, as ordinary commits under the lock (`localFirstOpenMerges.ts`).
+  const { mergeLegacyWrites, migrateBacklog: migrateEventBacklogOnce } = createOpenMerges({
+    directory, journalFile: io.journalFile, view: () => memory.view(), partitioned,
+    underOpenLock, commitOpenDelta, onBackgroundError,
+  });
   const migrateBacklog = async (): Promise<void> => {
-    const plan = await migrateEventBacklog({
-      journalFile: io.journalFile,
-      // v4: the planner reads rows through a transaction lookup, and there is no main-only backup to keep or restore.
-      view: partitioned ? partitioned.planSnapshot : () => memory.view(),
-      backup: !partitioned,
-      locked: underOpenLock,
-      commit: commitOpenDelta,
-    });
-    if (!plan) return;
-    compactAfterOpen = true;
-    hostLog(`local-first: migrated the event backlog — ${plan.stripped} payload copies became markers, ${plan.dropped} dead events dropped, ${plan.kept} kept (payload differs from the row)`);
+    if (await migrateEventBacklogOnce()) compactAfterOpen = true;
   };
 
   const openStore = async (): Promise<void> => {

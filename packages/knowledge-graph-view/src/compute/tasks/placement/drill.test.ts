@@ -112,13 +112,14 @@ describe('unfold on the stage (a placement patch; satellites are member slots)',
     it('shows the station\'s satellites at their own slots around it and changes nothing else', () => {
         const w = world();
         const sats = satelliteKeys(api, index, slotOf);
+        const before = [...w.scale];
         expect(sats.length).toBeGreaterThan(1);
         const p = unfoldPatch(w, apiSlot, sats, slotOf);
         expect(p).not.toBe(w);
         const satSlots = new Set(sats.map((s) => slotOf(s.key)));
         for (const s of satSlots) expect(p.scale[s]).toBeGreaterThan(0);
         for (let s = 0; s < w.scale.length; s++) if (!satSlots.has(s)) { expect(p.scale[s]).toBe(w.scale[s]); expect(at(p, s)).toEqual(at(w, s)); }
-        expect(w.scale[[...satSlots][0]!]).toBe(0);              // the source placement is untouched
+        expect([...w.scale]).toEqual(before);                     // the source placement is untouched
         const after = p.a11y.findIndex((a) => a.slot === apiSlot);
         expect(p.a11y.slice(after + 1, after + 1 + satSlots.size).map((a) => a.slot)).toEqual([...satSlots]);
         expect(p.labels.length).toBe(w.labels.length + satSlots.size);

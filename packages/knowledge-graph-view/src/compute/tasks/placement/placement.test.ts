@@ -32,7 +32,7 @@ describe('placement (PRD 43 B1a rule 4: visibility is scale)', () => {
         expect([d.scale[0], d.scale[1], d.scale[4]]).toEqual([1, 1, 8]);
     });
 
-    it('Map: shows the drawn stations; a node is a roof miniature on its station (at most 12) or sits at it at scale 0', () => {
+    it('Map: draws ONE level (a single-system root: its code stations); a file is a roof miniature on its station (at most 12) or sits at it at scale 0', () => {
         const p = place('map');
         const shown = p.a11y.map((a) => a.slot);
         expect(shown.length).toBeGreaterThan(0);
@@ -44,7 +44,7 @@ describe('placement (PRD 43 B1a rule 4: visibility is scale)', () => {
                 // A roof miniature: small, standing on its station's roof (the station's height), over its footprint.
                 expect(st).toBeGreaterThanOrEqual(0);
                 expect(p.scale[i]).toBeLessThan(p.scale[st]!);
-                expect(p.position[i * 3 + 1]).toBe(p.extrude[st]);
+                expect(p.position[i * 3 + 1]).toBeCloseTo(p.extrude[st]! / RESTING_DEPTH, 3);
                 minis.set(st, (minis.get(st) ?? 0) + 1);
             } else if (st >= 0) expect(at(p, i)).toEqual(at(p, st));
         }

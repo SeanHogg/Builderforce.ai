@@ -33,7 +33,7 @@
  * ordinary caught errors, `sendRuntimeErrorReport` for callers that own the log.
  */
 import { logDebug, logError } from "../logger.js";
-import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
+import { requestBuilderforce } from "./builderforce-http.js";
 import { isOfflineMode, isTruthyFlag, readRuntimeEnvVar, readSharedEnvVar } from "./env-file.js";
 
 /** How long a crash report may hold the process before it is abandoned. */
@@ -128,16 +128,12 @@ export async function sendRuntimeErrorReport(
 
   const projectIdRaw = ctx?.builderforce?.projectId ? Number(ctx.builderforce.projectId) : NaN;
   const projectId = Number.isFinite(projectIdRaw) && projectIdRaw > 0 ? projectIdRaw : null;
-  const base = normalizeBaseUrl(
-    readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai",
-  );
 
   try {
-    const res = await fetch(`${base}/api/quality-ingest/client-report`, {
+    const res = await requestBuilderforce("/api/quality-ingest/client-report", apiKey, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
         "X-AgentHost-Id": String(agentHostId),
       },
       body: JSON.stringify({

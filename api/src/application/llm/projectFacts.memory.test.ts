@@ -20,6 +20,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SQL } from 'drizzle-orm';
 import { anchorsAreStale, normalizeFileAnchors } from './projectFactsStore';
 import { recallProjectFacts, stampFactRecall } from './projectFactsRecall';
+import { recall } from '../memory/memoryService';
 import { decayUnrecalled, sweepUnrecalledFactDecay, sweepAllUnrecalledFactDecay } from './projectFactsDecay';
 import { upsertProjectFact } from './projectFactsWrite';
 import { MEMORY_EMBEDDING_DIMS } from '../memory/memoryEmbedding';
@@ -35,6 +36,7 @@ import type { Env } from '../../env';
 const doubles = vi.hoisted(() => ({
   embed: vi.fn(async (): Promise<number[]> => { throw new Error('no provider'); }),
   ann: vi.fn(async () => [] as unknown[]),
+  scopedAnn: vi.fn(async () => [] as unknown[]),
 }));
 
 // The 1536-d space: these tests drive the legacy embed double. The free-embeddings
@@ -55,6 +57,7 @@ beforeEach(() => {
   doubles.embed.mockImplementation(async () => { throw new Error('no provider'); });
   doubles.ann.mockReset();
   doubles.ann.mockResolvedValue([]);
+  doubles.scopedAnn.mockClear();
 });
 
 vi.mock('../memory/memoryEmbedding', async () => {
@@ -64,7 +67,7 @@ vi.mock('../memory/memoryEmbedding', async () => {
 
 vi.mock('../memory/memorySemanticRecall', async () => {
   const actual = await vi.importActual<typeof import('../memory/memorySemanticRecall')>('../memory/memorySemanticRecall');
-  return { ...actual, annRecallProject: doubles.ann };
+  return { ...actual, annRecallProject: doubles.ann, annRecallScoped: doubles.scopedAnn };
 });
 
 /** Flatten a drizzle SQL tree to text so a predicate can be asserted on. */
@@ -319,6 +322,30 @@ describe('vector recall (5301 req 4)', () => {
     // The semantic arm is wired to the SAME ANN read memoryService uses — not a
     // second keyword index wearing a vector's name.
     expect(doubles.ann.mock.calls.length).toBeGreaterThan(0);
+  });
+
+  it('embeds governed recall once and stamps only the project fact it returns', async () => {
+    const expiresAt = new Date('2099-01-01T00:00:00.000Z');
+    const { db, calls } = makeDb({
+      selectRows: (index) => index === 1 ? [
+        { key: 'requested-fact', content: 'auth invariant', expiresAt, importance: 1 },
+        { key: 'unused-fact', content: 'auth detail', expiresAt: null, importance: 0.5 },
+      ] : [],
+    });
+    doubles.embed.mockResolvedValueOnce(embedding());
+    const result = await recall(env, db as never, { tenantId: 7, projectId: 42 }, 'auth', 1);
+
+    expect(result).toEqual({
+      ok: true,
+      query: 'auth',
+      entries: [{ key: 'requested-fact', content: 'auth invariant', scope: 'project', origin: 'agent', expiresAt: expiresAt.toISOString() }],
+    });
+    expect(doubles.embed).toHaveBeenCalledTimes(1);
+    expect(doubles.ann).toHaveBeenCalledTimes(1);
+    expect(doubles.scopedAnn).toHaveBeenCalledTimes(1);
+    expect(calls.updates).toHaveLength(1);
+    expect(calls.updates[0]?.where).toContain('requested-fact');
+    expect(calls.updates[0]?.where).not.toContain('unused-fact');
   });
 
   it('fails SOFT to keyword when embeddings are unavailable', async () => {

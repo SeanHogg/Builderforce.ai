@@ -10,7 +10,7 @@ import { once } from '../handler';
 import type { StageModel } from '../stageModel';
 import { placeGraph } from './graph';
 import { placeFlow } from './flow';
-import { placeMap } from './map';
+import { placeLevel } from './level';
 import { placeMind } from './mindmap';
 import { placeSequence } from './sequence';
 import type { PlacementReq } from './request';
@@ -22,9 +22,9 @@ import { placeSystem } from './system';
 export type PlacementBuilder = (g: KnowledgeGraph, model: StageModel, req: PlacementReq) => IdleTask<Placement>;
 
 export const PLACEMENTS: Readonly<Record<PlacementCamera, PlacementBuilder>> = {
-    map: (g, model, req) => once(() => placeMap(model, req, g)),
+    map: (g, model, req) => once(() => placeLevel(g, model, req)),
     graph: placeGraph,
-    '3d': (g, model, req) => once(() => placeMap(model, req, g)),
+    '3d': (g, model, req) => once(() => placeLevel(g, model, req)),
     mind: (g, model, req) => once(() => placeMind(g, model, req)),
     sequence: (g, model, req) => once(() => placeSequence(g, model, req)),
     flow: (g, model, req) => once(() => placeFlow(g, model, req)),

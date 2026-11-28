@@ -2,6 +2,7 @@
  * CLI command for initializing builderForceAgents projects
  */
 
+import { builderforceApiBase, DEFAULT_BUILDERFORCE_API_URL } from "../infra/builderforce-http.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { confirm, intro, note, outro, password, select, spinner, text } from "@clack/prompts";
@@ -782,7 +783,7 @@ async function ensureProjectMappingFromStoredCreds(params: {
   projectName: string;
   description?: string;
 }): Promise<void> {
-  const serverUrl = readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai";
+  const serverUrl = builderforceApiBase();
   const storedWebToken = readSharedEnvVar("BUILDERFORCE_WEB_TOKEN");
   const tenantIdRaw = readSharedEnvVar("BUILDERFORCE_TENANT_ID");
   if (!storedWebToken || !tenantIdRaw) {
@@ -865,7 +866,7 @@ async function promptBuilderforceSetup(
   // ── Already connected? Check global ~/.builderforce/.env first ──────────────
   const existingKey = readSharedEnvVar("BUILDERFORCE_API_KEY");
   if (existingKey) {
-    const existingUrl = readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai";
+    const existingUrl = builderforceApiBase();
     const existingTenantId = readSharedEnvVar("BUILDERFORCE_TENANT_ID");
     // Also check project context for the agentNode slug
     const existingCtx = await loadProjectContext(projectRoot).catch(() => null);
@@ -909,12 +910,12 @@ async function promptBuilderforceSetup(
   // ── 1. Server URL ─────────────────────────────────────────────────────────
   const urlInput = await text({
     message: "Orchestration API URL (Builderforce):",
-    initialValue: "https://api.builderforce.ai",
+    initialValue: DEFAULT_BUILDERFORCE_API_URL,
   });
   if (typeof urlInput === "symbol") {
     return null;
   }
-  const serverUrl = normalizeBaseUrl(urlInput.trim()) || "https://api.builderforce.ai";
+  const serverUrl = normalizeBaseUrl(urlInput.trim()) || DEFAULT_BUILDERFORCE_API_URL;
 
   // ── 2-5. Login or register, pick tenant, get tenant-scoped JWT ────────────
   const webToken = await authenticateWithPassword({ serverUrl, defaultInstanceName });

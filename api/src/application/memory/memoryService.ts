@@ -53,18 +53,18 @@ import { agentMemory, projectFacts } from '../../infrastructure/database/schema'
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { QA_CACHE_SOURCE, projectFactsVersion, type FactFileAnchor } from '../llm/projectFactsStore';
-import { recallProjectFacts } from '../llm/projectFactsRecall';
+import { loadProjectFactRecallArms, stampFactRecall } from '../llm/projectFactsRecall';
 import { writeProjectFact } from '../knowledge/writeProjectFact';
 import { deleteKnowledgeFact, type FactDeleteActor } from '../knowledge/deleteKnowledgeFact';
 import { knowledgeWritePortsFor } from '../knowledge/knowledgeWritePorts';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { fuseHybridArms } from '@seanhogg/builderforce-memory/retrieval';
+import { rankMemoryArms } from './memoryRecallRanking';
 import { memoryVersionKey } from './memoryCacheVersion';
 import { memoryEmbeddingText } from './memoryEmbedding';
-import { memoryEmbeddingFieldsFor, memoryQueryVectors, type MemoryQueryVector } from './memoryEmbeddingPolicy';
-import { annRecallProject, annRecallScoped, type RecalledRow } from './memorySemanticRecall';
-import { cutRecall, type ScoredCandidate } from '../llm/retrievalK';
+import { memoryEmbeddingFieldsFor, memoryQueryVectors } from './memoryEmbeddingPolicy';
+import { annAcrossSpaces, annRecallScoped, type RecalledRow } from './memorySemanticRecall';
+import { cutRecall } from '../llm/retrievalK';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { clamp01 } from '../../domain/shared/numbers';
 import { queryTerms } from '../../domain/shared/queryTerms';
@@ -78,50 +78,6 @@ const CANDIDATE_MULTIPLIER = 4;
 
 const errMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const versionKey = memoryVersionKey;
-
-/**
- * Fuse the semantic and lexical arms of a recall into one ordering.
- *
- * This replaced a helper that could not do what its name claimed: with an
- * embedding key present it embedded a ~10-row window that had ALREADY been chosen
- * by `importance, updated_at` and re-ranked that, so a relevant memory outside the
- * window was unreachable. The vector arm below is an ANN read over the whole store
- * (migration 1134), and the two arms are combined with the SHARED 0.7/0.3 formula
- * — the same arithmetic the on-prem sqlite-vec + FTS5 store ranks with.
- */
-function fuseRecallArms(vectorRows: RecalledRow[], lexicalRows: RecalledRow[]): Array<ScoredCandidate<MemoryEntry>> {
-  return fuseHybridArms<RecalledRow, RecalledRow, ScoredCandidate<MemoryEntry>>({
-    vector: vectorRows,
-    text: lexicalRows,
-    vectorScoreOf: (r) => r.vectorScore,
-    // The lexical arm is an ILIKE: it either matched or it did not, so every hit
-    // carries the same evidence. Scoring them equally is honest about that, and the
-    // vector arm supplies the ordering within the overlap.
-    textScoreOf: () => 1,
-    // The fused score rides along so the cut (C4/C6, `cutRecall`) can size on it.
-    merge: (row, score) => ({
-      row: {
-        key: row.key,
-        content: row.content,
-        scope: row.scopeKind as MemoryScopeKind,
-        origin: row.origin,
-        expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
-      },
-      score,
-    }),
-  });
-}
-
-/** One ANN read per query vector (one per vector space — E3 dual-read), concatenated. */
-async function annAcrossSpaces(
-  vectors: readonly MemoryQueryVector[],
-  read: (literal: string, opts: { space: MemoryQueryVector['space']; onlyRowsLacking?: MemoryQueryVector['onlyRowsLacking'] }) => Promise<RecalledRow[]>,
-): Promise<RecalledRow[]> {
-  const arms = await Promise.all(
-    vectors.map((v) => read(v.literal, { space: v.space, ...(v.onlyRowsLacking ? { onlyRowsLacking: v.onlyRowsLacking } : {}) })),
-  );
-  return arms.flat();
-}
 
 /**
  * The COMPOSITE cache token for a scope context.
@@ -258,27 +214,31 @@ export async function recall(
 ): Promise<MemoryRecallResult> {
   const n = Math.min(Math.max(1, Math.trunc(limit ?? RECALL_DEFAULT)), RECALL_MAX);
   const chain = visibleScopeChain(ctx);
+  const projectScope = chain.find((scope) => scope.kind === 'project');
   try {
     const token = await scopeCacheToken(env, ctx, chain);
     const entries = await getOrSetCached(
       env,
-      `mem:recall:${ctx.tenantId}:${token}:${n}:${query}`,
+      `mem:recall:v2:${ctx.tenantId}:${token}:${n}:${query}`,
       async () => {
         // The semantic arm needs a query vector; without one (no key, or the vendor
         // failed) recall is the lexical arm alone, which is the pre-1134 behaviour.
         // One query vector per vector space the tenant reads (E3 dual-read).
-        const queryVectors = await memoryQueryVectors(env, ctx.tenantId, query);
+        const stores = projectScope ? ['agent_memory', 'project_facts'] as const : ['agent_memory'] as const;
+        const queryVectors = memoryQueryVectors(env, ctx.tenantId, query, stores).catch((error: unknown) => {
+          reportCaughtError(error, { source: 'memory-service', operation: 'query-embedding', level: 'warning' });
+          return [];
+        });
         // Pull more candidates per arm than the caller asked for, so fusion has
         // something to choose between rather than re-ordering the final N.
         const perArm = n * CANDIDATE_MULTIPLIER;
         const scopedKinds = chain.filter((s) => s.kind !== 'project');
-        const projectScope = chain.find((s) => s.kind === 'project');
 
         // Four reads, fanned out — not an N+1: each store answers its whole scope
         // chain in ONE query per arm.
-        const [scopedLexical, projectLexical, scopedVector, projectVector] = await Promise.all([
+        const [scopedLexical, project, scopedVector] = await Promise.all([
           scopedKinds.length === 0
-            ? Promise.resolve([] as Array<{ key: string; content: string; scopeKind: string; origin: string; expiresAt: Date | null }>)
+            ? Promise.resolve([] as Array<{ key: string; content: string; scopeKind: string; origin: string; expiresAt: Date | null; importance: number }>)
             : (() => {
                 const words = queryTerms(query);
                 const matchers = words.map((w) => ilike(agentMemory.content, `%${w}%`));
@@ -294,6 +254,7 @@ export async function recall(
                     scopeKind: agentMemory.scopeKind,
                     origin: agentMemory.origin,
                     expiresAt: agentMemory.expiresAt,
+                    importance: agentMemory.importance,
                   })
                   .from(agentMemory)
                   .where(scopedToTenant(agentMemory, ctx.tenantId, scopeClause, unexpiredNow, lexical))
@@ -301,47 +262,26 @@ export async function recall(
                   .limit(perArm);
               })(),
           projectScope
-            // A candidate ARM, so the facts path must not apply its own cut (C4/C6) —
-            // the union below is cut once, over both stores.
-            ? recallProjectFacts(env, db, ctx.tenantId, projectScope.id, { query, limit: perArm, candidatesOnly: true })
-            : Promise.resolve([] as Array<{ key: string; content: string }>),
+            ? loadProjectFactRecallArms(db, ctx.tenantId, projectScope.id, query, perArm, queryVectors).catch((error: unknown) => {
+                reportCaughtError(error, { source: 'memory-service', operation: 'project-recall', level: 'warning' });
+                return { vector: [], text: [] };
+              })
+            : Promise.resolve({ vector: [], text: [] }),
           scopedKinds.length > 0
-            ? annAcrossSpaces(queryVectors, (literal, opts) => annRecallScoped(db, ctx.tenantId, scopedKinds, literal, perArm, opts))
-            : Promise.resolve([] as RecalledRow[]),
-          projectScope
-            ? annAcrossSpaces(queryVectors, (literal, opts) => annRecallProject(db, ctx.tenantId, projectScope.id, literal, perArm, QA_CACHE_SOURCE, opts))
+            ? queryVectors.then((vectors) => annAcrossSpaces(vectors, (literal, opts) => annRecallScoped(db, ctx.tenantId, scopedKinds, literal, perArm, opts)))
             : Promise.resolve([] as RecalledRow[]),
         ]);
 
-        const lexicalRows: RecalledRow[] = [
-          ...scopedLexical.map((r) => ({
-            id: `scoped:${r.scopeKind}:${r.key}`,
-            key: r.key,
-            content: r.content,
-            scopeKind: r.scopeKind,
-            origin: r.origin,
-            expiresAt: r.expiresAt ? new Date(r.expiresAt) : null,
-            vectorScore: 0,
-          })),
-          ...(projectScope
-            ? projectLexical.map((r) => ({
-                id: `project:${r.key}`,
-                key: r.key,
-                content: r.content,
-                scopeKind: 'project',
-                origin: 'agent',
-                expiresAt: null,
-                vectorScore: 0,
-              }))
-            : []),
-        ];
-        const vectorRows = [...scopedVector, ...projectVector];
-
-        // Fuse, then collapse a key that appears at two scopes onto the narrower
-        // one. Dedupe runs AFTER fusion so the surviving row is the better-ranked
-        // of the two, not whichever arm happened to return first.
-        const fused = fuseRecallArms(vectorRows, lexicalRows);
-        const deduped = dedupeBySpecificity(fused.map((c) => ({ ...c, key: c.row.key, scope: c.row.scope })));
+        const scopedText: RecalledRow[] = scopedLexical.map((row) => ({
+          ...row,
+          id: `scoped:${row.scopeKind}:${row.key}`,
+          importance: Number(row.importance ?? 0.5),
+          vectorScore: 0,
+        }));
+        const fused = rankMemoryArms<RecalledRow>([...scopedVector, ...project.vector], [...scopedText, ...project.text]);
+        const deduped = dedupeBySpecificity(fused.map((candidate) => ({
+          ...candidate, key: candidate.row.key, scope: candidate.row.scopeKind as MemoryScopeKind,
+        })));
         // The cut: `n` as before, or reranked (C6) / adaptively sized (C4) when on.
         // The cache key above holds the REQUESTED `n`, so an adaptive cut never
         // fragments it.
@@ -349,7 +289,16 @@ export async function recall(
           env,
           tenantId: ctx.tenantId,
           query,
-          ranked: deduped.map((c) => ({ row: c.row, score: c.score })),
+          ranked: deduped.map(({ row, score, scope }) => ({
+            row: {
+              key: row.key,
+              content: row.content,
+              scope,
+              origin: row.origin,
+              expiresAt: row.expiresAt ? new Date(row.expiresAt).toISOString() : null,
+            },
+            score,
+          })),
           requested: n,
           textOf: (row) => memoryEmbeddingText(row.key, row.content),
         });
@@ -360,11 +309,14 @@ export async function recall(
     // Revalidate every cached entry at the return seam so neither L1 nor KV can keep
     // a lapsed belief alive for the remainder of its cache TTL.
     const now = new Date();
-    return {
-      ok: true,
-      query,
-      entries: entries.filter((entry) => !isExpired(entry.expiresAt, now)),
-    };
+    const live = entries.filter((entry) => !isExpired(entry.expiresAt, now));
+    if (projectScope) {
+      const keys = live.filter((entry) => entry.scope === 'project').map((entry) => entry.key);
+      await stampFactRecall(db, ctx.tenantId, projectScope.id, keys).catch((error: unknown) => {
+        reportCaughtError(error, { source: 'memory-service', operation: 'stamp-recall', level: 'warning' });
+      });
+    }
+    return { ok: true, query, entries: live };
   } catch (e) {
     return { ok: false, error: errMessage(e) };
   }

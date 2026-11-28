@@ -15,7 +15,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { agentMemory, projectFacts, runDeltaFindings } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant, type TenantOwnedTable } from '../../infrastructure/database/tenantScope';
 import { MEMORY_VECTOR_SPACES, type MemoryVectorSpace, type MemoryVectorSpaceId } from './memoryEmbedding';
-import type { Backfill1024Store } from './memoryEmbeddingPolicy';
+import type { Backfill1024Store, MemoryQueryVector } from './memoryEmbeddingPolicy';
 
 /**
  * Which column (and model stamp) holds each vector space, per store (1256). The ANN
@@ -43,6 +43,17 @@ export interface AnnSpaceOptions {
   onlyRowsLacking?: MemoryVectorSpaceId;
 }
 
+/** One ANN read per query vector (one per vector space — E3 dual-read), concatenated. */
+export async function annAcrossSpaces<T>(
+  vectors: readonly MemoryQueryVector[],
+  read: (literal: string, opts: AnnSpaceOptions) => Promise<T[]>,
+): Promise<T[]> {
+  const arms = await Promise.all(
+    vectors.map((v) => read(v.literal, { space: v.space, ...(v.onlyRowsLacking ? { onlyRowsLacking: v.onlyRowsLacking } : {}) })),
+  );
+  return arms.flat();
+}
+
 /** The space predicate + distance expression for one store. */
 function spaceClause(columns: Readonly<Record<MemoryVectorSpaceId, SpaceColumns>>, opts: AnnSpaceOptions | undefined) {
   const space = opts?.space ?? MEMORY_VECTOR_SPACES.legacy;
@@ -62,6 +73,7 @@ export interface RecalledRow {
   expiresAt: Date | null;
   /** Cosine similarity in [0,1] for a semantic hit; 0 for a lexical-only hit. */
   vectorScore: number;
+  importance: number;
 }
 
 /** `1 - cosine_distance`, floored at 0 so a fused score never goes negative. */
@@ -98,6 +110,7 @@ export async function annRecallScoped(
       scopeKind: agentMemory.scopeKind,
       origin: agentMemory.origin,
       expiresAt: agentMemory.expiresAt,
+      importance: agentMemory.importance,
       score: similarity(sql`${col.vector}`, queryVector),
     })
     .from(agentMemory)
@@ -120,6 +133,7 @@ export async function annRecallScoped(
     origin: r.origin,
     expiresAt: r.expiresAt ? new Date(r.expiresAt) : null,
     vectorScore: Number(r.score ?? 0),
+    importance: Number(r.importance ?? 0.5),
   }));
 }
 
@@ -132,15 +146,10 @@ export async function annRecallProject(
   limit: number,
   qaCacheSource: string,
   spaceOpts?: AnnSpaceOptions,
-): Promise<RecalledRow[]> {
+): Promise<Array<Pick<RecalledRow, 'key' | 'vectorScore'>>> {
   const { col, where: inSpace } = spaceClause(PROJECT_FACTS_SPACE_COLUMNS, spaceOpts);
   const rows = await db
-    .select({
-      key: projectFacts.key,
-      content: projectFacts.content,
-      expiresAt: projectFacts.expiresAt,
-      score: similarity(sql`${col.vector}`, queryVector),
-    })
+    .select({ key: projectFacts.key, score: similarity(sql`${col.vector}`, queryVector) })
     .from(projectFacts)
     .where(
       scopedToTenant(
@@ -157,15 +166,7 @@ export async function annRecallProject(
     )
     .orderBy(sql`${col.vector} <=> ${queryVector}::vector`)
     .limit(limit);
-  return rows.map((r) => ({
-    id: `project:${r.key}`,
-    key: r.key,
-    content: r.content,
-    scopeKind: 'project',
-    origin: 'agent',
-    expiresAt: r.expiresAt ? new Date(r.expiresAt) : null,
-    vectorScore: Number(r.score ?? 0),
-  }));
+  return rows.map((row) => ({ key: row.key, vectorScore: Number(row.score ?? 0) }));
 }
 
 /** Rows with no vector yet, oldest-updated first — the backfill sweep's claim. */

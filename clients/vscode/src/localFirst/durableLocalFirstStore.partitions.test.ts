@@ -60,6 +60,9 @@ const mainFramesOf = (root: string) => framesOf(nodePath.join(root, V4_JOURNAL_F
 const sorted = (snapshot: LocalFirstSnapshot) => ({
   records: [...snapshot.records].sort((a, b) => `${a.entityType}/${a.id}`.localeCompare(`${b.entityType}/${b.id}`)),
   events: [...snapshot.events].sort((a, b) => a.eventId.localeCompare(b.eventId)),
+  mappings: [...snapshot.mappings].sort((a, b) => `${a.entityType}:${a.clientEntityId}`.localeCompare(`${b.entityType}:${b.clientEntityId}`)),
+  receipts: [...snapshot.receipts].sort((a, b) => a.eventId.localeCompare(b.eventId)),
+  conflicts: [...snapshot.conflicts].sort((a, b) => a.id.localeCompare(b.id)),
   nextSequence: snapshot.nextSequence,
 });
 
@@ -70,7 +73,11 @@ describe("a store with a partition declared", () => {
     const root = await directory();
     const v3 = createDurableLocalFirstStore(root);
     await v3.transact(async (tx) => {
-      await tx.put(newLocalRecord({ id: "t1", entityType: "ticket", payload: { title: "t1" }, deviceId: "d1" }));
+      const ticket = newLocalRecord({ id: "t1", entityType: "ticket", payload: { title: "t1" }, deviceId: "d1" });
+      await tx.put(ticket);
+      await tx.putMapping({ destination: BOUND, entityType: "message", clientEntityId: "m1", syncId: 1, serverId: "1", serverVersion: 1 } as never);
+      await tx.putReceipt({ eventId: "ev-receipt", entityType: "message", clientEntityId: "m1", status: "accepted", receivedAt: "2026-11-01T00:00:00.000Z" });
+      await tx.putConflict({ id: "conflict-1", clientEntityId: "t1", entityType: "ticket", local: ticket, remote: ticket, reason: "test", createdAt: "2026-11-01T00:00:00.000Z" });
       for (let n = 1; n <= 9; n += 1) {
         const row = message(`m${n}`, (n % 3) + 1, n);
         await tx.put(row);
@@ -186,17 +193,21 @@ describe("a store with a partition declared", () => {
 
   it("regression: compaction of either kind never loses a row", async () => {
     const root = await directory();
-    const store = open(root, { partitionCompaction: { maxFrames: 3 }, compaction: { maxFrames: 4 } });
-    for (let n = 1; n <= 8; n += 1) await put(store, message(`c${n}`, 1 + (n % 2), n, `v${n}`));
+    const errors: unknown[] = [];
+    const store = open(root, { partitionCompaction: { maxFrames: 2 }, compaction: { maxFrames: 3 }, onBackgroundError: (error) => errors.push(error) });
+    for (let n = 1; n <= 6; n += 1) await put(store, message(`c${n}`, 1 + (n % 2), n, `v${n}`));
+    // `transact` queues the compaction its commit tripped before it resolves; `flush` waits for the queue to drain.
     await store.flush();
+    expect(errors).toEqual([]);
     expect(partitionFilesOf(root, 1)).toHaveLength(1); // old generations are gone once no pointer names them
     expect(partitionFilesOf(root, 2)).toHaveLength(1);
-    expect(await chat(store, 1)).toEqual(["c2", "c4", "c6", "c8"]);
+    expect(await chat(store, 1)).toEqual(["c2", "c4", "c6"]);
     const cold = open(root);
-    expect(await chat(cold, 1)).toEqual(["c2", "c4", "c6", "c8"]);
-    expect(await chat(cold, 2)).toEqual(["c1", "c3", "c5", "c7"]);
+    expect(await chat(cold, 1)).toEqual(["c2", "c4", "c6"]);
+    expect(await chat(cold, 2)).toEqual(["c1", "c3", "c5"]);
     expect(mainFramesOf(root).latest?.records.filter((row) => row.entityType === "message")).toEqual([]);
-  });
+    // Every commit and compaction fsyncs and renames: generous on a slow disk, bounded by the awaits above.
+  }, 30_000);
 
   it("regression: an old generation deleted under a reader is retried, not set aside", async () => {
     const root = await directory();
@@ -210,9 +221,10 @@ describe("a store with a partition declared", () => {
     const gate = new Promise<void>((resolve) => { release = resolve; });
     let reached!: () => void;
     const hit = new Promise<void>((resolve) => { reached = resolve; });
+    let armed = true;
     const real = nodeFs.promises.open.bind(nodeFs.promises);
     vi.spyOn(nodeFs.promises, "open").mockImplementation((async (path: nodeFs.PathLike, ...rest: unknown[]) => {
-      if (rest[0] === "r" && String(path).includes(`message.1.`) && String(path).includes(PARTITIONS_DIR)) {
+      if (armed && rest[0] === "r" && String(path).includes(`message.1.`) && String(path).includes(PARTITIONS_DIR)) {
         reached();
         await gate;
       }
@@ -221,6 +233,8 @@ describe("a store with a partition declared", () => {
 
     const first = chat(b, 1);
     await hit;
+    // Only b's read waits: from here on a's own fold of the file (its compaction) opens it freely.
+    armed = false;
     await put(a, message("g2", 1, 2)); // the second frame trips a's partition compaction: a new generation, the old one removed
     await a.flush();
     release();
@@ -307,7 +321,7 @@ describe("a store with a partition declared", () => {
 
     const errors: unknown[] = [];
     const store = open(root, { onBackgroundError: (error) => errors.push(error) });
-    expect(await chat(store, 1)).toEqual([]); // never fails the read
+    await expect(chat(store, 1)).rejects.toThrow(/damaged/); // that read fails and installs nothing: never an empty chat
     await store.flush(); // the recovery queued on the store's own queue
     expect((await store.view()).stubs?.map((stub) => stub.id)).toEqual(["d3"]);
     expect(errors.map(String).join("\n")).toMatch(/partition message\/1 is damaged/);
@@ -317,19 +331,108 @@ describe("a store with a partition declared", () => {
     expect(await chat(open(root), 1)).toEqual(["d4"]);
   });
 
-  it("regression: v3 is retired only once it has not grown for 14 days", async () => {
+  it("regression: v3 is retired only 14 days after v4 was cut from it, and only once fully merged", async () => {
     const root = await directory();
     const v3 = createDurableLocalFirstStore(root);
     await v3.transact((tx) => tx.put(message("r1", 1, 1)));
     await v3.flush();
     await chat(open(root), 1);
     const v3File = nodePath.join(root, JOURNAL_FILE);
+    const sidecar = nodePath.join(root, V4_IMPORT_SIDECAR_FILE);
+    // A v3 that was idle for 15 days BEFORE the cut survives the cut: the age counts from `migratedAt`.
+    const idle = new Date(Date.now() - RETIRE_AFTER_MS - 60_000);
+    await utimes(v3File, idle, idle);
     await chat(open(root), 1);
-    expect(nodeFs.existsSync(v3File)).toBe(true); // young: an old window may still write it
-    const old = new Date(Date.now() - RETIRE_AFTER_MS - 60_000);
-    await utimes(v3File, old, old);
+    expect(nodeFs.existsSync(v3File)).toBe(true);
+
+    // An unreadable sidecar keeps it, and is reported.
+    const errors: unknown[] = [];
+    nodeFs.writeFileSync(sidecar, "{not json");
+    await chat(open(root, { onBackgroundError: (error) => errors.push(error) }), 1);
+    expect(nodeFs.existsSync(v3File)).toBe(true);
+    expect(errors.length).toBeGreaterThan(0);
+
+    // Fully merged (the baseline sits at v3's end), the cut 15 days ago and v3 idle since: retired.
+    nodeFs.writeFileSync(sidecar, JSON.stringify({ v3Length: nodeFs.statSync(v3File).size, v3Generation: undefined, migratedAt: idle.toISOString() }));
     await chat(open(root), 1);
     expect(nodeFs.existsSync(v3File)).toBe(false);
     expect(await chat(open(root), 1)).toEqual(["r1"]);
+  });
+
+  it("regression: an old-window v3 deletion and acknowledgement are merged too", async () => {
+    const root = await directory();
+    const old = createDurableLocalFirstStore(root);
+    await old.transact(async (tx) => {
+      await tx.put(message("k1", 1, 1));
+      await tx.put(message("k2", 1, 2));
+      await tx.append({
+        idempotencyKey: "message:k1", clientEntityId: "k1", entityType: "message", operation: "update", schemaVersion: 1,
+        occurredAt: new Date().toISOString(), dependsOn: [], destination: BOUND, payload: { text: "x" },
+      });
+    });
+    await old.flush();
+    const eventId = (await old.export()).events[0]!.eventId;
+    await chat(open(root), 1); // v4 is cut here
+
+    await old.transact(async (tx) => {
+      await tx.delete("message", "k2");
+      await tx.acknowledge([eventId]);
+    });
+    const merged = open(root);
+    expect(await chat(merged, 1)).toEqual(["k1"]);
+    expect((await merged.export()).events).toEqual([]);
+    expect((await merged.view()).stubs?.map((stub) => stub.id)).toEqual(["k1"]);
+  });
+
+  it("regression: a re-merge after the old window compacted v3 does not re-queue an event already merged", async () => {
+    const root = await directory();
+    const old = createDurableLocalFirstStore(root, { compaction: { maxFrames: 1 } });
+    await old.transact((tx) => tx.put(message("q1", 1, 1)));
+    await old.flush();
+    await chat(open(root), 1); // v4 is cut here
+    const queue = (id: string) => old.transact(async (tx) => {
+      await tx.put(message(id, 1, 2));
+      await tx.append({
+        idempotencyKey: `message:${id}`, clientEntityId: id, entityType: "message", operation: "update", schemaVersion: 1,
+        occurredAt: new Date().toISOString(), dependsOn: [], destination: BOUND, payload: { text: id },
+      });
+    });
+    await queue("q2");
+    await old.flush(); // v3 compacted: a new generation, so the next open diffs it whole
+
+    const first = open(root);
+    expect(await chat(first, 1)).toEqual(["q1", "q2"]);
+    const merged = (await first.export()).events;
+    expect(merged).toHaveLength(1);
+    await first.transact((tx) => tx.acknowledge(merged.map((event) => event.eventId)));
+
+    await old.transact((tx) => tx.put(message("q3", 1, 3)));
+    await old.flush(); // compacted again
+    const second = open(root);
+    expect(await chat(second, 1)).toEqual(["q1", "q2", "q3"]);
+    expect((await second.export()).events).toEqual([]); // the acknowledged event is not queued again
+  });
+
+  it("regression: a transient EBUSY or EPERM rejects the load, empties no chat and deletes no stub", async () => {
+    const root = await directory();
+    const first = open(root);
+    await put(first, message("b1", 1, 1));
+    await first.flush();
+    for (const code of ["EBUSY", "EPERM"]) {
+      const errors: unknown[] = [];
+      const store = open(root, { onBackgroundError: (error) => errors.push(error) });
+      const real = nodeFs.promises.open.bind(nodeFs.promises);
+      const spy = vi.spyOn(nodeFs.promises, "open").mockImplementation(((path: nodeFs.PathLike, ...rest: unknown[]) =>
+        rest[0] === "r" && String(path).includes(PARTITIONS_DIR) && String(path).includes("message.1.")
+          ? Promise.reject(Object.assign(new Error(`${code} held by a scanner`), { code }))
+          : (real as (...args: unknown[]) => unknown)(path, ...rest)) as never);
+      await expect(chat(store, 1)).rejects.toThrow(/unavailable/);
+      await store.flush();
+      spy.mockRestore();
+      expect(errors.length).toBeGreaterThan(0); // reported
+      expect((await store.view()).stubs?.map((stub) => stub.id)).toEqual(["b1"]); // no stub deleted
+      expect(await chat(store, 1)).toEqual(["b1"]); // the next read loads it in full
+      expect(nodeFs.readdirSync(partitionDir(root)).some((name) => name.includes(".corrupt-"))).toBe(false);
+    }
   });
 });

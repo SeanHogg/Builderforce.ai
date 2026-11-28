@@ -10,6 +10,7 @@
  * `builderforce-local` engine — PRD 11 §5.5(a).)
  */
 
+import { builderforceApiBase } from "../../infra/builderforce-http.js";
 import { randomUUID } from "node:crypto";
 import { readSharedEnvVar } from "../../infra/env-file.js";
 import { loadHiredAgentsCached } from "../../infra/hired-agents-sync.js";
@@ -66,7 +67,7 @@ export interface OrchestrateOpts {
 async function refreshHiredAgentRoles(): Promise<void> {
   const apiKey = readSharedEnvVar("BUILDERFORCE_API_KEY");
   const agentNodeId = readSharedEnvVar("BUILDERFORCE_AGENT_NODE_ID");
-  const baseUrl = readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai";
+  const baseUrl = builderforceApiBase();
   if (!apiKey || !agentNodeId) {
     return;
   }
@@ -134,7 +135,7 @@ export async function runOrchestrate(opts: OrchestrateOpts, context: Orchestrati
         const resultValues = Array.from(results.values());
         const apiKey = readSharedEnvVar("BUILDERFORCE_API_KEY");
         const agentNodeId = readSharedEnvVar("BUILDERFORCE_AGENT_NODE_ID");
-        const baseUrl = readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai";
+        const baseUrl = builderforceApiBase();
         if (apiKey && agentNodeId) {
           void pushSpec(
             { baseUrl, agentNodeId, apiKey },
@@ -177,7 +178,7 @@ export async function runAgentFleet(projectRoot: string, opts: AgentFleetOpts): 
   const { onlineOnly = false, requireCapabilities } = opts;
   try {
     const apiKey = readSharedEnvVar("BUILDERFORCE_API_KEY");
-    const baseUrl = readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai";
+    const baseUrl = builderforceApiBase();
     if (!apiKey) {
       return { ok: false, error: "BUILDERFORCE_API_KEY not configured. Set it in ~/.builderforce/.env to enable fleet discovery." };
     }

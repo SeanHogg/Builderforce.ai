@@ -1,8 +1,9 @@
 /**
- * A drilled level as a placement of the SAME marks (PRD 43 B7: drill enter / exit; B1a rules 1, 4). The level is the
- * map's own `buildDrillView` (package → its files, class → a file's symbols, function → a symbol and its callees),
- * placed exactly like the world map (`placeMap`) over the level's stations and lines — ONE model, so the layout and the
- * lines can never disagree (the old Go-inside crash was a layout of one level drawn with another level's lines).
+ * A drilled level as a placement of the SAME marks (PRD 43 B7: drill enter / exit; B1a rules 1, 4). The Map and 3D cameras
+ * place every level, drilled or not, through the level scene (`level.ts`: one level at a time, the design's shapes). The
+ * other cameras place the level the map's own `buildDrillView` (`drillLevel.ts`: package → its files, class → a file's
+ * symbols, function → a symbol and its callees) builds, exactly like the transit map (`placeMap`) over the level's stations
+ * and lines — ONE model, so the layout and the lines can never disagree.
  *
  * Every level station is keyed by SLOT: a member by its node's slot, a neighbour (leaf) by its world station's slot.
  * Definitions the host loaded (`req.symbols`) that the resident graph does not hold become APPENDED slots after the
@@ -16,37 +17,19 @@
  */
 
 import type { KnowledgeGraph } from '@seanhogg/builderforce-memory/knowledge';
-import { buildDrillView, type DrillFrame } from '../../../surface/transit/drillView';
-import { fileNodesOf } from '../../../surface/outlineGraph';
-import { withSymbolRecords } from '../../../surface/transit/symbols';
 import type { Placement } from '../../../stage/types';
-import type { SymbolRecord } from '../../../types';
 import type { StageModel } from '../stageModel';
 import { associationLinks } from './associations';
+import { drillLevel } from './drillLevel';
+import { placeLevel } from './level';
 import { placeMap } from './map';
 import { drillFrameOf, type PlacementReq } from './request';
-import { symbolSlots } from './symbolSlots';
 
-/** A drilled level as a StageModel (its stations, lines and slots) plus what built it: the Map and the Flow place the SAME level. */
-export function drillLevel(g: KnowledgeGraph, model: StageModel, frame: Pick<DrillFrame, 'level' | 'ref'>, symbols: readonly SymbolRecord[]) {
-    const enriched = withSymbolRecords(g, symbols);
-    const view = buildDrillView(enriched, model.stations, { ...frame, name: '' } as DrillFrame, symbols);
-    const missing = new Set(view.stations.stations.filter((station) => !view.leaves.has(station.id)).flatMap((station) => station.refs)
-        .filter((ref) => !model.nodeSlot.has(ref)));
-    const files = missing.size ? fileNodesOf(g).filter((node) => missing.has(node.ref)) : [];
-    const full = files.length ? { ...enriched, nodes: [...enriched.nodes, ...files] } : enriched;
-    const { marks, append, nodeSlot } = symbolSlots(model, full, g.nodes.length);
-
-    const stationSlot = new Map<string, number>();
-    for (const s of view.stations.stations) {
-        const slot = view.leaves.has(s.id) ? model.stationSlot.get(s.id) : nodeSlot.get(s.refs[0] ?? '');
-        if (slot !== undefined) stationSlot.set(s.id, slot);
-    }
-    const level: StageModel = { ...model, stations: view.stations, lines: view.lines, marks, nodeSlot, stationSlot, order: view.order };
-    return { level, view, full, append, stationSlot };
-}
+/** The cameras that draw one level at a time (`level.ts`), drilled or not. */
+export const isLevelCamera = (camera: PlacementReq['camera']): boolean => camera === 'map' || camera === '3d';
 
 export function placeDrill(g: KnowledgeGraph, model: StageModel, req: PlacementReq): Placement {
+    if (isLevelCamera(req.camera)) return placeLevel(g, model, req);
     const frame = drillFrameOf(req.drill);
     if (!frame) return placeMap(model, { ...req, drill: null });
     const { level, view, append, stationSlot } = drillLevel(g, model, frame, req.symbols ?? []);

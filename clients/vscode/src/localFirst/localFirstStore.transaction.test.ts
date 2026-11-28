@@ -63,7 +63,7 @@ describe("local-first journal transaction", () => {
     const state = new Map<string, unknown>();
     const writing = localBrainApplication(host(root, state));
     expect(nodePath.basename(writing.durableStore.snapshotFile)).toBe("local-first-v1.json");
-    expect(nodePath.basename(writing.durableStore.journalFile)).toBe("local-first-v3.journal");
+    expect(nodePath.basename(writing.durableStore.journalFile)).toBe("local-first-v4.journal");
 
     let sawRecordAndEvent = false;
     let snapshotAtAck = true;
@@ -378,7 +378,8 @@ describe("local-first journal transaction", () => {
     const again = localBrainApplication(host(root, state));
     expect((await again.persistence.getMessages(chat.id)).map((message) => message.content)).toEqual(["after tear"]);
     const last = framesOf(again.durableStore.journalFile).at(-1);
-    expect(last?.records.some((record) => record.entityType === "message")).toBe(true);
+    // The message row lives in its chat's partition file; main holds its stub.
+    expect(last?.stubs?.some((stub) => stub.entityType === "message")).toBe(true);
     expect(last?.events.some((event) => event.entityType === "message")).toBe(true);
     expect(fetchSpy).not.toHaveBeenCalled();
   });

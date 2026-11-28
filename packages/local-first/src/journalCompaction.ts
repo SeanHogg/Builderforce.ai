@@ -60,19 +60,27 @@ export const DEFAULT_COMPACTION_FRAME: CompactionFrameLimits = Object.freeze({
 
 const SECTIONS = ['records', 'stubs', 'events', 'mappings', 'receipts', 'conflicts'] as const;
 type Section = typeof SECTIONS[number];
-/** Stubs and mappings are written as column blocks (`compactBlocks.ts`), so a chunk holds their rows, not their JSON. */
-type BlockSection = 'stubs' | 'mappings';
+/**
+ * Stubs are written as a column block (`compactBlocks.ts`), and so are mappings — but ONLY for a
+ * snapshot that has partitions. Any other store's base stays plain JSON, byte for byte, so an
+ * older reader that knows no block still reads every mapping.
+ */
 interface Chunk {
-  json: Partial<Record<Exclude<Section, BlockSection>, string[]>>;
+  json: Partial<Record<Exclude<Section, 'stubs'>, string[]>>;
   stubs?: RecordStub[];
+  /** Set only when mappings go out as a block. */
   mappings?: ServerMapping[];
 }
 
 /** What a block row weighs in a frame, near enough to close a chunk on: a column row is ~70 bytes plus its id. */
 const BLOCK_ROW_BYTES = 70;
 
+const hasPartitions = (snapshot: LocalFirstSnapshot): boolean =>
+  !!snapshot.stubs?.length || !!snapshot.partitionDeclarations?.length || Object.keys(snapshot.partitionPointers ?? {}).length > 0;
+
 /** The snapshot's rows, grouped into bounded chunks (JSON sections stringified once). Always yields at least one. */
 function* chunks(snapshot: LocalFirstSnapshot, limits: CompactionFrameLimits): Generator<Chunk> {
+  const columnar = hasPartitions(snapshot);
   let current: Chunk = { json: {} };
   let bytes = 0;
   let rows = 0;
@@ -82,7 +90,7 @@ function* chunks(snapshot: LocalFirstSnapshot, limits: CompactionFrameLimits): G
       if (section === 'stubs') {
         (current.stubs ??= []).push(row as RecordStub);
         bytes += BLOCK_ROW_BYTES + (row as RecordStub).id.length;
-      } else if (section === 'mappings') {
+      } else if (section === 'mappings' && columnar) {
         (current.mappings ??= []).push(row as ServerMapping);
         bytes += BLOCK_ROW_BYTES + (row as ServerMapping).clientEntityId.length;
       } else {
@@ -108,8 +116,7 @@ const encoder = new TextEncoder();
 /** One chunk's frame parts for `section`, in the frame's own key order. */
 function sectionParts(chunk: Chunk, section: Section): string[] {
   if (section === 'stubs') return chunk.stubs ? [`"stubBlock":${JSON.stringify(encodeStubBlock(chunk.stubs))}`] : [];
-  if (section === 'mappings') {
-    if (!chunk.mappings) return [];
+  if (section === 'mappings' && chunk.mappings) {
     const block = encodeMappingBlock(chunk.mappings);
     // A mapping the columns cannot reproduce exactly goes out plain: nothing is ever changed to fit.
     return [block ? `"mappingBlock":${JSON.stringify(block)}` : `"mappings":${JSON.stringify(chunk.mappings)}`];

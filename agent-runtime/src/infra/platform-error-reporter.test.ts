@@ -91,10 +91,10 @@ describe("sendRuntimeErrorReport", () => {
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0]!;
-    const headers = (init?.headers ?? {}) as Record<string, string>;
+    const headers = new Headers(init?.headers);
     expect(url).toBe("https://api.example.test/api/quality-ingest/client-report");
-    expect(headers.Authorization).toBe("Bearer host-key");
-    expect(headers["X-AgentHost-Id"]).toBe("77");
+    expect(headers.get("Authorization")).toBe("Bearer host-key");
+    expect(headers.get("X-AgentHost-Id")).toBe("77");
     const body = JSON.parse(String(init?.body));
     expect(body).toMatchObject({ source: "agent-runtime", projectId: 12 });
     expect(body.events[0]).toMatchObject({

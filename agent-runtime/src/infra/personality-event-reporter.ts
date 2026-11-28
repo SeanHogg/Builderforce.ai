@@ -15,7 +15,7 @@
  * failure NEVER affects the run.
  */
 import { logDebug } from "../logger.js";
-import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
+import { requestBuilderforce } from "./builderforce-http.js";
 import { readSharedEnvVar } from "./env-file.js";
 
 /** Body of POST /api/personality/events (mirrors the api route contract). */
@@ -48,13 +48,11 @@ export async function reportPersonalityEvent(report: PersonalityEventReport): Pr
   const apiKey = readSharedEnvVar("BUILDERFORCE_API_KEY");
   // Not linked to a Builderforce workspace → nowhere durable to write. Skip.
   if (!apiKey) return;
-  const base = normalizeBaseUrl(readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai");
   try {
-    const res = await fetch(`${base}/api/personality/events`, {
+    const res = await requestBuilderforce("/api/personality/events", apiKey, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({ ...report, agentRef }),
       signal: AbortSignal.timeout(10_000),

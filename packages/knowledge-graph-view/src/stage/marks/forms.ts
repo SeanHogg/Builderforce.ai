@@ -45,6 +45,9 @@ export const FORM_RISE: Readonly<Record<MarkForm, number>> = { slab: 0.25, puck:
 /** The lighter cap of a box is this share of its height (the design's 16%). */
 export const CAP_BAND = 0.16;
 
+/** An interface's body opacity (the design's translucent box, 0.16). */
+export const IFACE_ALPHA = 0.16;
+
 /** The lighter lid of a drum is this share of its height (the design's 12%). */
 export const DRUM_LID = 0.12;
 

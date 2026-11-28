@@ -24,12 +24,14 @@ import { toneIndex } from '../../../stage/tones';
 import { DASH_CYCLE, DASH_DESCRIBES, DASH_SOLID, DASH_UNTESTED, DASH_WALL, FLAG, type LinkBatch, type Placement } from '../../../stage/types';
 import { paintMarks } from '../markPaint';
 import { buildStageModel, type StageModel } from '../stageModel';
-import { PLACEMENTS, type PlacementReq } from './index';
+import { placeMap } from './map';
+import type { PlacementReq } from './index';
 import { channelBindings } from './request';
 
 const req = (m: StageModel, over: Partial<PlacementReq> = {}): PlacementReq =>
     ({ graph: 1, generation: m.marks.generation, camera: 'map', drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0, ...over });
-const run = (g: KnowledgeGraph, m: StageModel, r: PlacementReq): Placement => { const t = PLACEMENTS.map(g, m, r); while (!t.step()); return t.result(); };
+// The transit placement (`placeMap`): hops, walls, describes links and towers. The Map and 3D cameras draw the level scene (`level.test.ts`).
+const run = (g: KnowledgeGraph, m: StageModel, r: PlacementReq): Placement => placeMap(m, r, g);
 const family = (p: Placement, f: LinkBatch['family']) => p.links.find((b) => b.family === f);
 /** Each polyline's first segment index (a NaN point ends a polyline; its segment count is points − 1). */
 function firstSegments(b: LinkBatch): number[] {

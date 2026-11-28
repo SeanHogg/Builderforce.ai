@@ -1,3 +1,4 @@
+import { builderforceApiBase } from "./builderforce-http.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
@@ -162,9 +163,7 @@ export async function syncBuilderForceAgentsDirectoryOnStartup(params: {
   log: SyncLog;
 }): Promise<void> {
   const apiKey = readSharedEnvVar("BUILDERFORCE_API_KEY")?.trim();
-  const baseUrl = normalizeBaseUrl(
-    readSharedEnvVar("BUILDERFORCE_URL") ?? "https://api.builderforce.ai",
-  );
+  const baseUrl = builderforceApiBase();
   if (!apiKey) {
     return;
   }

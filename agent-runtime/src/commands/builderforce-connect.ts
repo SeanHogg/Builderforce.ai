@@ -12,9 +12,7 @@ import os from "node:os";
 import { updateProjectContextFields } from "../builderforce/project-context.js";
 import { buildLocalMachineProfile } from "../infra/builderforce-context.js";
 import { upsertSharedEnvVar } from "../infra/env-file.js";
-import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
-
-const DEFAULT_API_URL = "https://api.builderforce.ai";
+import { builderforceApiBase, requestBuilderforce } from "../infra/builderforce-http.js";
 
 export interface ConnectAgentHeadlessParams {
   /** Workspace JWT (from $BUILDERFORCE_TOKEN). Scopes the tenant + authorizes registration. */
@@ -54,7 +52,7 @@ export async function connectAgentHeadless(
   if (!token) {
     throw new Error("A workspace token is required (set BUILDERFORCE_TOKEN or pass --token).");
   }
-  const apiUrl = normalizeBaseUrl(params.apiUrl?.trim() || DEFAULT_API_URL);
+  const apiUrl = builderforceApiBase(params.apiUrl);
   const projectRoot = params.projectRoot ?? process.cwd();
   const name = (params.name ?? os.hostname()).trim() || os.hostname();
 
@@ -67,11 +65,11 @@ export async function connectAgentHeadless(
   });
 
   // Register against the SERVER contract: POST /api/agent-hosts -> { agentHost, apiKey }.
-  const res = await fetch(`${apiUrl}/api/agent-hosts`, {
+  const res = await requestBuilderforce("/api/agent-hosts", token, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, machineProfile }),
-  });
+  }, apiUrl);
   const body = (await res.json().catch(() => ({}))) as {
     agentHost?: { id: number | string; name?: string; slug?: string };
     apiKey?: string;

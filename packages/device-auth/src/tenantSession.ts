@@ -2,6 +2,17 @@ export const TENANT_SESSION_TTL_SECONDS = 3600;
 export const WORKSPACE_TOKEN_ROUTE = '/workspace-token';
 export const WORKSPACE_TOKEN_PATH = `/api/auth${WORKSPACE_TOKEN_ROUTE}`;
 
+export function derivePlatformWebBase(gateway: string): string {
+  try {
+    const url = new URL(gateway);
+    url.hostname = url.hostname.replace(/^api\./, '');
+    if (url.protocol === 'https:' || url.protocol === 'http:') return url.origin;
+  } catch {
+    // A malformed gateway setting has no browser origin.
+  }
+  return 'https://builderforce.ai';
+}
+
 const REFRESH_MARGIN_MS = 60_000;
 const MINT_TIMEOUT_MS = 10_000;
 

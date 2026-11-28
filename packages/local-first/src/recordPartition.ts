@@ -75,6 +75,8 @@ export interface PartitionDeclaration {
  * The host's reader of one partition. Returns the partition's ROWS only (`records`,
  * `deletedRecords`) as of `pointer`. With `from` it returns just what was appended after that
  * position of the same file; without, the whole partition. A load is a read: it never commits.
+ * It MUST REJECT on any failure it cannot fully recover from: the table installs only what a
+ * load resolved with, so an empty result would be read as "this partition has no rows".
  */
 export interface PartitionLoader {
   load(partitionId: string, pointer: PartitionPointer, from?: { file: string; length: number }): Promise<LocalFirstDelta>;
@@ -90,25 +92,21 @@ export const partitionTypeOf = (partitionId: string): LocalEntityType =>
 export const partitionDeclarationOf = (partition: AnyRecordPartition): PartitionDeclaration =>
   ({ entityType: partition.index.entityType, index: partition.index.name });
 
-/** A row's home: undefined when the row is unpartitioned, or `homeOf` cannot read it (a malformed payload). */
+/** A row's home: undefined when the row is unpartitioned. Throws when `homeOf` cannot read the row. */
 export function homeOfRow<T>(partition: RecordPartition<T>, row: Readonly<LocalRecord<T>>): RecordIndexKey | undefined {
-  try {
-    return partition.homeOf(row);
-  } catch {
-    return undefined;
-  }
+  return partition.homeOf(row);
 }
 
-/** The ONE stub builder. `undefined` when the row is unpartitioned. */
+/**
+ * The ONE stub builder. `undefined` when the row is unpartitioned. A `homeOf` or `ordinalOf`
+ * that throws THROWS out of here, so a write of a row they cannot read fails visibly: filing it
+ * in main would hide it from every stub reader, and a stub without its ordinal would let
+ * `nextId` re-issue that id.
+ */
 export function stubOf<T>(partition: RecordPartition<T>, row: Readonly<LocalRecord<T>>): RecordStub | undefined {
   const home = homeOfRow(partition, row);
   if (home === undefined) return undefined;
-  let ordinal: number | undefined;
-  try {
-    ordinal = partition.ordinalOf?.(row);
-  } catch {
-    ordinal = undefined;
-  }
+  const ordinal = partition.ordinalOf?.(row);
   return {
     id: row.id,
     entityType: row.entityType,

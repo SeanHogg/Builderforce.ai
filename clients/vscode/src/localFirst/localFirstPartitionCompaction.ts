@@ -44,6 +44,7 @@ export interface PartitionCompactionPorts {
   /** Append one main frame and apply it (under the lock). */
   commitMain(delta: LocalFirstDelta): Promise<void>;
   onDamaged(partitionId: string, pointer: VsixPartitionPointer, reason: string): void;
+  onBackgroundError(error: unknown): void;
 }
 
 export interface PartitionCompactor {
@@ -72,9 +73,12 @@ export function createPartitionCompactor(ports: PartitionCompactionPorts): Parti
       try {
         folded = await foldPartitionFile(nodePath.join(ports.directory, before.file), before.length);
       } catch (error) {
-        // Gone because another window compacted it, or really damaged: the loader tells those apart on the next read.
         if (error instanceof PartitionDamagedError) ports.onDamaged(partitionId, before, error.message);
-        else if (!(error instanceof PartitionMissingError)) throw error;
+        else if (error instanceof PartitionMissingError) {
+          // Gone: another window compacted it (the next read follows the new pointer, and the loader tells loss
+          // from that). A lock that has not passed is reported; this pass is skipped either way.
+          if (!error.gone) ports.onBackgroundError(error);
+        } else throw error;
         return false;
       }
       const generation = mintJournalGeneration();
@@ -107,7 +111,7 @@ export function createPartitionCompactor(ports: PartitionCompactionPorts): Parti
             tailFrames: copied.frames,
           };
           await ports.commitMain({ partitionPointers: { [partitionId]: next } });
-          await removeUnreferencedPartitions(ports.directory, ports.pointers.files());
+          await removeUnreferencedPartitions(ports.directory, ports.pointers.files(), ports.onBackgroundError);
           return true;
         });
       } catch (error) {

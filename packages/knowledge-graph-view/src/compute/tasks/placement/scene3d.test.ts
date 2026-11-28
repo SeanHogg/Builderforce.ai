@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { InstancedMesh, type BufferAttribute, type Object3D } from 'three';
 import { surfaceFixture } from '../../../testing';
 import { createWebGLStage } from '../../../stage/renderer';
-import { SLOT_STATION, type Placement } from '../../../stage/types';
+import type { Placement } from '../../../stage/types';
 import { buildStageModel } from '../stageModel';
 import { PLACEMENTS, type PlacementReq } from './index';
 
@@ -23,23 +23,29 @@ const place = (camera: PlacementReq['camera'], opts: Partial<PlacementReq> = {})
 
 const p3 = place('3d');
 
-describe('the 3D architecture placement', () => {
-    it('lays out named systems and module districts without journey routes', () => {
-        expect(p3.planes.filter((plane) => plane.kind === 'room')).toHaveLength(2);
-        expect(p3.captions.filter((caption) => caption.role === 'band').map(({ text }) => text)).toEqual(expect.arrayContaining(['api', 'db', 'site']));
-        expect(p3.a11y.length).toBeGreaterThan(0);
-        expect(p3.a11y.every(({ slot }) => marks.slotKind[slot] === SLOT_STATION && p3.extrude[slot]! > 0)).toBe(true);
+// Rewritten on purpose: 3D used to stack one plate per system with every station as a tower on it. It draws ONE level now
+// (the design's scene): at the world, the two systems, on one floor.
+describe('the 3D level scene at the world', () => {
+    it('draws the two systems on ONE floor, not every station', () => {
+        expect(p3.planes.filter((plane) => plane.kind === 'room')).toHaveLength(1);
+        expect(p3.level).toMatchObject({ level: 'world', ref: null, total: 2 });
+        expect(p3.level!.children.map((c) => c.name).sort()).toEqual(['backend', 'web']);
+        expect(p3.level!.children.every((c) => c.kind === 'system' && c.form === 'slab')).toBe(true);
+        expect(p3.a11y).toHaveLength(2);
+        expect(p3.a11y.every(({ slot }) => p3.scale[slot]! > 0 && p3.extrude[slot]! > 0)).toBe(true);
+        expect(p3.aspect).toHaveLength(marks.keys.length);
+        expect(p3.captions).toEqual([]);
         expect(p3.links.some((batch) => batch.family === 'edge')).toBe(false);
-        expect(p3.links.find((batch) => batch.family === 'hall')?.group).toHaveLength(0);
+        expect(p3.links.find((batch) => batch.family === 'hall')).toBeTruthy();
         expect(p3.position.every(Number.isFinite)).toBe(true);
         expect(p3.rig).toMatchObject({ projection: 'perspective', depth: { orbit: true } });
+        expect(marks.slotKind.length).toBe(p3.scale.length);
     });
 
-    it('hides a system and its module areas without changing the MarkSet', () => {
+    it('hides a system without changing the MarkSet', () => {
         const hiddenStations = model.stations.stations.filter(({ system }) => system === 'web').map(({ id }) => id);
         const filtered = place('3d', { hiddenStations });
-        expect(filtered.planes.filter((plane) => plane.kind === 'room')).toHaveLength(1);
-        expect(filtered.captions.some(({ text }) => text === 'site')).toBe(false);
+        expect(filtered.level!.children.map((c) => c.name)).toEqual(['backend']);
         expect(filtered.scale.length).toBe(marks.keys.length);
         for (const id of hiddenStations) expect(filtered.scale[model.stationSlot.get(id)!]).toBe(0);
     });

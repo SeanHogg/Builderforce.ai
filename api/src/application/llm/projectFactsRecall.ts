@@ -3,12 +3,12 @@
  * recall stamp the decay sweep relies on, and the ONE system-prompt block formatter
  * every surface injects. Primitives live in `projectFactsStore`.
  */
-import { and, desc, eq, gt, ilike, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gt, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { memoryEmbeddingText } from '../memory/memoryEmbedding';
-import { memoryQueryVectors } from '../memory/memoryEmbeddingPolicy';
-import { annRecallProject } from '../memory/memorySemanticRecall';
+import { memoryQueryVectors, type MemoryQueryVector } from '../memory/memoryEmbeddingPolicy';
+import { annAcrossSpaces, annRecallProject } from '../memory/memorySemanticRecall';
 import { cutRecall } from './retrievalK';
-import { fuseHybridArms } from '@seanhogg/builderforce-memory/retrieval';
+import { rankMemoryArms } from '../memory/memoryRecallRanking';
 import { projectFacts } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
@@ -49,9 +49,9 @@ const RECALL_CANDIDATE_MULTIPLIER = 4;
  * may be raised once per order" and the run simply started without it.
  *   1. LEXICAL (the original `ILIKE` arm) — kept, because an exact identifier ("QA_CACHE_SOURCE",
  *      "project_facts") is a lookup, not a similarity, and embeddings are worse at it.
- *   2. SEMANTIC — the same `annRecallProject` + `memoryEmbeddingText` path `memoryService`
- *      uses for `agent_memory`: same model, same 1536 dims, same cosine distance, same
- *      `fuseHybridArms` weighting. Not reinvention — the one implementation.
+ *   2. SEMANTIC � the project ANN read over the active embedding spaces.
+ *
+ * Governed recall consumes the same candidate arms and ranking policy.
  *
  * Without a `query`, returns the most important/recent. Degrades to [] on any error
  * (e.g. pre-migration table).
@@ -65,104 +65,21 @@ export async function recallProjectFacts(
     query?: string;
     limit?: number;
     readFileHash?: FileContentHashReader;
-    /** The caller is FUSING these as one arm of a wider recall (`memoryService`), so
-     *  return the first `limit` fused rows and leave the rerank / adaptive cut (C6/C4)
-     *  to the caller's single cut over the union. */
-    candidatesOnly?: boolean;
   },
 ): Promise<ProjectFact[]> {
   if (!Number.isInteger(projectId) || projectId <= 0) return [];
   const limit = Math.min(Math.max(1, Math.trunc(opts?.limit ?? RECALL_DEFAULT)), RECALL_MAX);
   const query = (opts?.query ?? '').trim();
-  const candidatesOnly = opts?.candidatesOnly === true;
   try {
     const token = await projectFactsVersion(env, tenantId, projectId);
     const cached = await getOrSetCached(
       env,
-      // Keyed on the REQUESTED limit, never the adaptive K a cut chose, so C4 cannot
-      // fragment the cache; a candidate-arm read is its own entry (it is not cut).
-      `project_facts:recall:${tenantId}:${projectId}:v:${token}:${limit}${candidatesOnly ? ':c' : ''}:${query}`,
+      `project_facts:recall:${tenantId}:${projectId}:v:${token}:${limit}:${query}`,
       async () => {
-        // Durable beliefs only — Q&A cache rows (source=qa-cache) are retrieved by
-        // exact question key (projectMemory), never surfaced as ambient RAG facts.
-        // An EXPIRED fact is already gone as far as recall is concerned (0371) — the
-        // read is the authority, the retention sweep is only housekeeping. Without
-        // this a lapsed belief keeps riding the prompt until a cron happens to run.
-        // And a RETIRED fact is gone the same way (1242): a belief the codebase has
-        // contradicted must stop reaching the prompt, or the fix that retired it is
-        // undone by the next recall.
-        const base = and(
-          eq(projectFacts.tenantId, tenantId),
-          eq(projectFacts.projectId, projectId),
-          ne(projectFacts.source, QA_CACHE_SOURCE),
-          isNull(projectFacts.supersededBy),
-          or(isNull(projectFacts.expiresAt), gt(projectFacts.expiresAt, new Date())),
-        );
-        // No lexical hit is not a dead end any more — the semantic arm runs regardless,
-        // and the caller's query is what gets embedded.
-        const words = queryTerms(query);
-        const lexicalWhere: SQL | undefined = words.length > 0
-          ? and(base, or(...words.map((w) => ilike(projectFacts.content, `%${w}%`))))
-          : base;
+        const vectors = memoryQueryVectors(env, tenantId, query, ['project_facts']);
         const pull = Math.min(limit * RECALL_CANDIDATE_MULTIPLIER, 100);
-
-        const lexicalRows: SemanticFactRow[] = (
-          await db
-            .select({ key: projectFacts.key, content: projectFacts.content, expiresAt: projectFacts.expiresAt, importance: projectFacts.importance, fileAnchors: projectFacts.fileAnchors })
-            .from(projectFacts)
-            .where(scopedToTenant(projectFacts, tenantId, lexicalWhere))
-            .orderBy(desc(projectFacts.importance), desc(projectFacts.updatedAt))
-            .limit(pull)
-        ).map((row) => ({
-          // The KEY is the fusion id, matching the semantic arm's — so a fact found by
-          // both is scored on both rather than counted twice.
-          id: row.key,
-          key: row.key,
-          content: row.content,
-          expiresAt: row.expiresAt ? new Date(row.expiresAt) : null,
-          // `?? 0.5` is the column default, restated so a caller (or a test double)
-          // that omits the field still ranks at neutral instead of poisoning the fused
-          // score with NaN.
-          importance: Number.isFinite(Number(row.importance)) ? Number(row.importance) : 0.5,
-          score: 1, // a lexical match is a full-text hit, so it scores 1 by construction
-          fileAnchors: normalizeFileAnchors(row.fileAnchors as FactFileAnchor[] | null),
-        }));
-
-        const semanticRows = await recallProjectFactsSemantically(
-          env,
-          db,
-          tenantId,
-          projectId,
-          query,
-          pull,
-        ).catch((err: unknown): SemanticFactRow[] => {
-          reportCaughtError(err, { source: 'project-facts', operation: 'semantic-recall', level: 'warning', context: { tenantId, projectId } });
-          return [];
-        });
-
-        // Fused ranking, identical weights to `memoryService`'s union recall (0.7
-        // semantic / 0.3 lexical) so a fact means the same score wherever it is read.
-        //
-        // `importance` enters as a MULTIPLIER on both arms rather than as a third
-        // weighted term, because it is not another way of matching the query — it is a
-        // property of the fact itself. As a term it would double-count against the
-        // lexical score (which is 1 for every row in the arm, so it would be a constant
-        // shift); as a multiplier it does what "this fact matters more" means, and it
-        // keeps a retired-and-replaced belief from outranking a live one that merely
-        // reads more fluently. Rows at the neutral 0.5 are untouched.
-        const ranked = fuseHybridArms<SemanticFactRow, SemanticFactRow, { row: SemanticFactRow; score: number }>({
-          vector: semanticRows,
-          text: lexicalRows,
-          vectorScoreOf: (r) => r.score * (0.5 + r.importance),
-          textScoreOf: (r) => (0.5 + r.importance),
-          merge: (row, score) => ({ row, score }),
-        });
-        // With no query the semantic arm is empty, and a stable sort of a
-        // constant-per-arm score preserves the SQL's importance-then-recency order.
-        // The cut: `limit` as before, or reranked (C6) / adaptively sized (C4) when on.
-        const kept = candidatesOnly
-          ? ranked.slice(0, limit).map((c) => c.row)
-          : await cutRecall<SemanticFactRow>({ env, tenantId, query, ranked, requested: limit, textOf: (row) => memoryEmbeddingText(row.key, row.content) });
+        const { vector, text } = await loadProjectFactRecallArms(db, tenantId, projectId, query, pull, vectors);
+        const kept = await cutRecall({ env, tenantId, query, ranked: rankMemoryArms(vector, text), requested: limit, textOf: (row) => memoryEmbeddingText(row.key, row.content) });
         return kept.map((row) => ({
           key: row.key,
           content: row.content,
@@ -227,96 +144,115 @@ export async function stampFactRecall(
       eq(projectFacts.projectId, projectId),
       inArray(projectFacts.key, wanted),
       isNull(projectFacts.supersededBy),
+      or(isNull(projectFacts.expiresAt), gt(projectFacts.expiresAt, new Date())),
     ));
 }
 
-/** One recalled fact plus the semantic similarity that found it. */
+function activeProjectFacts(tenantId: number, projectId: number) {
+  return scopedToTenant(
+    projectFacts,
+    tenantId,
+    eq(projectFacts.projectId, projectId),
+    ne(projectFacts.source, QA_CACHE_SOURCE),
+    isNull(projectFacts.supersededBy),
+    or(isNull(projectFacts.expiresAt), gt(projectFacts.expiresAt, new Date())),
+  );
+}
+
 interface SemanticFactRow {
-  /** The fact's key — the unique identity within (tenant, project), and therefore the
-   *  fusion id. Both arms return the same row for the same belief, so they agree. */
   id: string;
   key: string;
   content: string;
+  scopeKind: 'project';
+  origin: 'agent';
   expiresAt: Date | null;
   importance: number;
-  /** Cosine SIMILARITY in [0,1] (already floored at 0 by `memorySemanticRecall`), so it
-   *  is directly comparable with the lexical arm's 1. Higher is better, both arms. */
-  score: number;
-  /** The fact's anchors (1248), carried so the stale-anchor check sees them. */
-  fileAnchors?: Array<{ path: string; line?: number; contentHash?: string }> | null;
+  vectorScore: number;
+  fileAnchors: FactFileAnchor[] | null;
 }
 
-/**
- * The semantic arm of {@link recallProjectFacts}, by way of the SHARED ANN path.
- *
- * `annRecallProject` is the same read `memoryService` uses for project-scoped recall:
- * same `pgvector` cosine operator, same `MEMORY_EMBEDDING_MODEL` pin, same 1536-dim
- * column, same nearest-N ordering by distance. Reused as-is rather than reimplemented —
- * that is the whole point of it living in its own module.
- *
- * Its result is then re-joined against `project_facts` BY KEY, and that join is not
- * redundant. `annRecallProject` filters the qa-cache source and expiry but predates
- * the 1242 retirement columns, so it will happily return a row that has since been
- * superseded. Hydrating re-applies every live predicate in SQL — `superseded_by IS
- * NULL` included — against the table that actually owns those columns, so the
- * semantic arm can never widen what recall may return. It is also what turns the
- * composite `project:<key>` identity back into a full row.
- *
- * Returns [] when there is nothing to compare (no query, or no query embedding because
- * no provider), which is the caller's signal to fall back to lexical alone.
- */
-async function recallProjectFactsSemantically(
-  env: Env,
+const projectFactCandidateColumns = {
+  key: projectFacts.key,
+  content: projectFacts.content,
+  expiresAt: projectFacts.expiresAt,
+  importance: projectFacts.importance,
+  fileAnchors: projectFacts.fileAnchors,
+};
+
+function projectFactCandidate(
+  row: Pick<typeof projectFacts.$inferSelect, keyof typeof projectFactCandidateColumns>,
+  vectorScore: number,
+): SemanticFactRow {
+  return {
+    id: `project:${row.key}`,
+    key: row.key,
+    content: row.content,
+    scopeKind: 'project',
+    origin: 'agent',
+    expiresAt: row.expiresAt ? new Date(row.expiresAt) : null,
+    importance: Number(row.importance ?? 0.5),
+    vectorScore,
+    fileAnchors: normalizeFileAnchors(row.fileAnchors as FactFileAnchor[] | null),
+  };
+}
+
+/** Project candidates used by both project-only and governed memory recall. */
+export async function loadProjectFactRecallArms(
   db: Db,
   tenantId: number,
   projectId: number,
   query: string,
+  pull: number,
+  vectors: Promise<MemoryQueryVector[]>,
+): Promise<{ vector: SemanticFactRow[]; text: SemanticFactRow[] }> {
+  const matchers = queryTerms(query).map((word) => ilike(projectFacts.content, `%${word}%`));
+  const lexical = matchers.length > 0 ? or(...matchers) : undefined;
+
+  const semantic = vectors
+    .then((ready) => recallProjectFactsSemantically(db, tenantId, projectId, ready, pull))
+    .catch((err: unknown): SemanticFactRow[] => {
+      reportCaughtError(err, { source: 'project-facts', operation: 'semantic-recall', level: 'warning', context: { tenantId, projectId } });
+      return [];
+    });
+  const lexicalRows: SemanticFactRow[] = (
+    await db
+      .select(projectFactCandidateColumns)
+      .from(projectFacts)
+      .where(and(activeProjectFacts(tenantId, projectId), lexical))
+      .orderBy(desc(projectFacts.importance), desc(projectFacts.updatedAt))
+      .limit(pull)
+  ).map((row) => projectFactCandidate(row, 0));
+
+  return { vector: await semantic, text: lexicalRows };
+}
+
+/** Hydrate the ANN nominations with anchors and reapply active-fact predicates. */
+async function recallProjectFactsSemantically(
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  vectors: readonly MemoryQueryVector[],
   limit: number,
 ): Promise<SemanticFactRow[]> {
-  if (!query) return [];
-  // The RAW query is what gets embedded, not `memoryEmbeddingText(key, …)` — that one
-  // is for WRITE-side text. One vector per vector space the tenant reads (E3 dual-read),
-  // the same policy `memoryService.recall` uses.
-  const vectors = await memoryQueryVectors(env, tenantId, query, ['project_facts']);
-  if (!vectors.length) return [];
-  const hits = (
-    await Promise.all(
-      vectors.map((v) =>
-        annRecallProject(db, tenantId, projectId, v.literal, limit, QA_CACHE_SOURCE, {
-          space: v.space,
-          ...(v.onlyRowsLacking ? { onlyRowsLacking: v.onlyRowsLacking } : {}),
-        }),
-      ),
-    )
-  ).flat();
+  const hits = await annAcrossSpaces(vectors, (literal, opts) =>
+    annRecallProject(db, tenantId, projectId, literal, limit, QA_CACHE_SOURCE, opts),
+  );
   if (!hits.length) return [];
 
   const keys = hits.map((h) => h.key).filter(Boolean);
   if (!keys.length) return [];
   const rows = await db
-    .select({ key: projectFacts.key, content: projectFacts.content, expiresAt: projectFacts.expiresAt, importance: projectFacts.importance, fileAnchors: projectFacts.fileAnchors })
+    .select(projectFactCandidateColumns)
     .from(projectFacts)
     .where(and(
-      scopedToTenant(projectFacts, tenantId),
-      eq(projectFacts.projectId, projectId),
+      activeProjectFacts(tenantId, projectId),
       inArray(projectFacts.key, keys),
-      ne(projectFacts.source, QA_CACHE_SOURCE),
-      isNull(projectFacts.supersededBy),
-      or(isNull(projectFacts.expiresAt), gt(projectFacts.expiresAt, new Date())),
     ));
   // A key can only be found in one space (the fallback arm excludes rows the other
   // space covers), but take the best score defensively rather than the last one.
   const scoreByKey = new Map<string, number>();
   for (const h of hits) scoreByKey.set(h.key, Math.max(scoreByKey.get(h.key) ?? 0, h.vectorScore));
-  return rows.map((row) => ({
-    id: row.key,
-    key: row.key,
-    content: row.content,
-    expiresAt: row.expiresAt ? new Date(row.expiresAt) : null,
-    importance: Number.isFinite(Number(row.importance)) ? Number(row.importance) : 0.5,
-    score: scoreByKey.get(row.key) ?? 0,
-    fileAnchors: normalizeFileAnchors(row.fileAnchors as FactFileAnchor[] | null),
-  }));
+  return rows.map((row) => projectFactCandidate(row, scoreByKey.get(row.key) ?? 0));
 }
 
 /**

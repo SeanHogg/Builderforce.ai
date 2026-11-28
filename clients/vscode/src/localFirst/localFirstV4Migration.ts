@@ -32,8 +32,8 @@ import {
 } from "@builderforce/local-first";
 import { renameDurably, temporaryPathFor, writeFrameFile } from "./localFirstAtomicFile";
 import type { LocalFirstFileLock } from "./localFirstLock";
-import { createNodeJournalIo, yieldToEventLoop } from "./localFirstJournalIo";
-import { fsyncDirectory, removeUnreferencedPartitions } from "./localFirstPartitionFiles";
+import { JOURNAL_FILE, createNodeJournalIo, yieldToEventLoop } from "./localFirstJournalIo";
+import { fsyncDirectory, setAsideUnreferencedPartitions } from "./localFirstPartitionFiles";
 import {
   PARTITIONS_DIR,
   V4_JOURNAL_FILE,
@@ -166,6 +166,11 @@ export async function migrateV3ToV4(ports: V3ToV4Ports): Promise<boolean> {
   const { directory } = ports;
   const v4File = nodePath.join(directory, V4_JOURNAL_FILE);
   const startedAt = new Date().toISOString(); // taken BEFORE the fold: a v3 row written later carries a later `updatedAt`
+  // The size is read BEFORE the fold: frames an old window appends meanwhile show as "moved", never as seen.
+  const observedSize = await fs.stat(nodePath.join(directory, JOURNAL_FILE)).then((stat) => stat.size, (error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return 0;
+    throw error;
+  });
   const v3 = await createNodeJournalIo(directory).load(yieldToEventLoop);
   const folded = v3.corrupt && !v3.baseClosed ? undefined : v3.latest;
   if (!folded) return false;
@@ -182,9 +187,17 @@ export async function migrateV3ToV4(ports: V3ToV4Ports): Promise<boolean> {
         await fs.rm(temporary, { force: true });
         return false;
       }
-      // Nothing names a partition file yet: whatever is there is a leftover of an earlier attempt.
-      await removeUnreferencedPartitions(directory, new Set(Object.values(base.main.partitionPointers ?? {}).map((pointer) => pointer.file)));
-      await writeV3Baseline(directory, { v3Length: v3.committedBytes, v3Generation: v3.identity?.generation, migratedAt: startedAt });
+      // A partition file nothing names is a leftover of an earlier attempt — or the only copy of messages whose
+      // v4 journal was quarantined. It is set aside, never deleted.
+      const aside = await setAsideUnreferencedPartitions(directory, new Set(Object.values(base.main.partitionPointers ?? {}).map((pointer) => pointer.file)));
+      if (aside.length > 0) ports.onBackgroundError(new Error(`local-first: ${aside.length} partition files no journal names were set aside: ${aside.join(", ")}`));
+      await writeV3Baseline(directory, {
+        v3Length: v3.committedBytes,
+        v3Size: Math.max(observedSize, v3.committedBytes),
+        v3Generation: v3.identity?.generation,
+        migratedAt: startedAt,
+        eventIds: folded.events.map((event) => event.eventId),
+      });
       await base.publish();
       await renameDurably(temporary, v4File); // the commit point of the migration
       return true;

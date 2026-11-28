@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createMemoryLocalFirstStore,
   defineRecordIndex,
   defineRecordPartition,
   homeOfRow,
@@ -49,8 +50,15 @@ describe('record partition', () => {
 
   it('regression: a row with no home is unpartitioned and has no stub', () => {
     expect(stubOf(PARTITION, msg('m1', undefined))).toBeUndefined();
-    const throwing = defineRecordPartition<Msg>({ index: BY_CHAT, homeOf: () => { throw new Error('malformed'); } });
-    expect(stubOf(throwing, msg('m1', 1))).toBeUndefined(); // a payload `homeOf` cannot read stays in main
+  });
+
+  it('regression: a homeOf or ordinalOf that throws fails the write instead of hiding the row in main', async () => {
+    const badHome = defineRecordPartition<Msg>({ index: BY_CHAT, homeOf: () => { throw new Error('malformed'); } });
+    expect(() => stubOf(badHome, msg('m1', 1))).toThrow('malformed');
+    const badOrdinal = defineRecordPartition<Msg>({ index: BY_CHAT, homeOf: (row) => row.payload.chatId, ordinalOf: () => { throw new Error('no ordinal'); } });
+    const store = createMemoryLocalFirstStore(undefined, { partitions: [badOrdinal] });
+    await expect(store.transact((tx) => tx.put(msg('m1', 1)))).rejects.toThrow('no ordinal');
+    expect(store.view().stubs).toBeUndefined();
   });
 
   it('regression: provenance in the stub reads as isOwnRecord does', () => {

@@ -164,6 +164,19 @@ function destinationKey(destination) {
 }
 var DESTINATION_KEYS = /* @__PURE__ */ new Map();
 
+// ../packages/local-first/src/recordIndex.ts
+function defineRecordIndex(entityType, name, keyOf) {
+  return Object.freeze({ entityType, name, keyOf });
+}
+function indexKeyOf(index, row) {
+  if (row.deletedAt) return void 0;
+  try {
+    return index.keyOf(row);
+  } catch {
+    return void 0;
+  }
+}
+
 // ../packages/local-first/src/payloadHash.ts
 function fnv1a32(text, seed = 2166136261) {
   let hash = seed >>> 0;
@@ -224,17 +237,9 @@ async function ensureRecordPayloadFence(tx, destination) {
   await tx.deadLetter(fence.eventId, RECORD_PAYLOAD_FENCE_REASON, at2);
 }
 
-// ../packages/local-first/src/recordIndex.ts
-function defineRecordIndex(entityType, name, keyOf) {
-  return Object.freeze({ entityType, name, keyOf });
-}
-function indexKeyOf(index, row) {
-  if (row.deletedAt) return void 0;
-  try {
-    return index.keyOf(row);
-  } catch {
-    return void 0;
-  }
+// ../packages/local-first/src/recordPartition.ts
+function defineRecordPartition(partition) {
+  return Object.freeze({ ...partition });
 }
 
 // ../packages/local-first/src/storeContract.ts
@@ -424,6 +429,10 @@ var importKey = (type, id) => `${type}:${id}:import`;
 function isOwnRecord(row, deviceId) {
   return row.provenance?.source !== "imported" || row.provenance.deviceId === deviceId;
 }
+function isOwnStub(stub, deviceId) {
+  return stub.source !== "imported" || stub.deviceId === deviceId;
+}
+var isLiveOwnStub = (stub, deviceId) => !stub.deleted && isOwnStub(stub, deviceId);
 function isImported(mapping) {
   return mapping !== void 0 && mapping.serverVersion > BOUND_ONLY_VERSION;
 }
@@ -2896,7 +2905,7 @@ function whitespaceSplice(content, lines, i, old, fits, map, newString, endsWith
 function matchEdit(content, oldString, newString, replaceAll, eol) {
   const decide = (tier2, splices) => {
     if (splices.length === 0) return null;
-    if (splices.length > 1 && !replaceAll) return { ambiguous: true };
+    if (splices.length > 1 && !replaceAll) return { ambiguous: true, matchCount: splices.length };
     return { tier: tier2, splices };
   };
   const spliced = (spans, text) => spans.map(([start, end]) => ({ start, end, text }));
@@ -2963,7 +2972,8 @@ function applyStringEdit(content, oldString, newString, replaceAll = false) {
   if (match && "ambiguous" in match) {
     return {
       ok: false,
-      error: "oldString is not unique; add more surrounding context or set replaceAll"
+      error: "oldString is not unique; add more surrounding context or set replaceAll",
+      matchCount: match.matchCount
     };
   }
   if (match) {
@@ -4223,6 +4233,7 @@ var CallbackOwnerScan = class {
 var SYMBOL_KINDS = [
   "function",
   "method",
+  "field",
   "class",
   "interface",
   "type",
@@ -4293,6 +4304,10 @@ var JS_METHOD = new RegExp(
 var JS_ABSTRACT_METHOD = new RegExp(
   `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override)\\s+)*abstract\\s+(?:(?:public|private|protected|static|readonly|override|async)\\s+)*(${ID2})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`
 );
+var JS_INTERFACE_METHOD = new RegExp(`^(?:\\t|  |    )(${ID2})\\s*\\??\\s*(?:<[^>]*>)?\\s*\\(`);
+var JS_FIELD = new RegExp(
+  `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|abstract|declare)\\s+)*(#?${ID2})[!?]?\\s*(?:(?::|=(?!=))[^;]*;|:[^;{]*\\{)\\s*$`
+);
 var JS_METHOD_OPEN = new RegExp(
   `^(?:\\t|  |    )(?:(?:public|private|protected|static|readonly|override|async|get|set)\\s+)*\\*?\\s*(${ID2})\\s*(?:<[^>]*>)?\\s*\\(\\s*$`
 );
@@ -4308,9 +4323,14 @@ function closesWithBody(lines, at2) {
 }
 function extractJs(lines, out, path = "") {
   let cls;
+  let isInterface = false;
+  let memberIndent;
   const owners = new CallbackOwnerScan(path);
   eachLine(lines, out, (line, lineNo) => {
-    if (/^\}/.test(line)) cls = void 0;
+    if (/^\}/.test(line)) {
+      cls = void 0;
+      isInterface = false;
+    }
     if (owners.inBody(line)) return;
     owners.track(line);
     for (const rule of JS_RULES) {
@@ -4320,7 +4340,11 @@ function extractJs(lines, out, path = "") {
       if (!exported && /^\s/.test(line)) continue;
       const name2 = group(m, 2).replace(/^["']|["']$/g, "");
       out.push({ name: name2, kind: rule.kind, line: lineNo, exported });
-      if (rule.kind === "class") cls = name2;
+      if (rule.kind === "class" || rule.kind === "interface") {
+        cls = /\}\s*;?\s*$/.test(line) ? void 0 : name2;
+        isInterface = rule.kind === "interface";
+        memberIndent = void 0;
+      }
       return;
     }
     if (cls === void 0) {
@@ -4328,10 +4352,21 @@ function extractJs(lines, out, path = "") {
       if (owner) out.push(owner);
       return;
     }
+    if (/^\s*$/.test(line)) return;
+    const indent = /^\s*/.exec(line)?.[0] ?? "";
+    memberIndent ??= indent;
+    if (indent !== memberIndent) return;
     const open = JS_METHOD_OPEN.exec(line);
-    const method = JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line) ?? (open && closesWithBody(lines, lineNo - 1) ? open : null);
+    const method = isInterface ? JS_INTERFACE_METHOD.exec(line) : JS_METHOD.exec(line) ?? JS_ABSTRACT_METHOD.exec(line) ?? (open && closesWithBody(lines, lineNo - 1) ? open : null);
     const name = method ? group(method, 1) : "";
-    if (name && !JS_KEYWORDS.has(name)) out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
+    if (name && !JS_KEYWORDS.has(name)) {
+      out.push({ name, kind: "method", line: lineNo, exported: false, container: cls });
+    } else {
+      const field2 = JS_FIELD.exec(line);
+      if (field2 && !JS_KEYWORDS.has(group(field2, 1))) {
+        out.push({ name: group(field2, 1), kind: "field", line: lineNo, exported: false, container: cls });
+      }
+    }
   });
 }
 function extractPython(lines, out) {
@@ -4618,7 +4653,14 @@ async function readOneFile(path, opts, caps, leverOn2) {
   const r = await caps.repoRead.readFile(path);
   if (!r.ok) return r;
   const gzip = isGzipPath(r.path ?? path) && typeof r.content === "string" && r.content.length > 0;
-  if (gzip) r.content = await readGzipText(latin1Bytes(r.content));
+  if (gzip) {
+    if (r.truncated) return { ok: false, path, code: "too_large", error: "gzip file exceeds the read limit" };
+    try {
+      r.content = await readGzipText(latin1Bytes(r.content));
+    } catch {
+      return { ok: false, path, code: "io", error: "could not decompress gzip file" };
+    }
+  }
   if (opts.key) return { ...readFileKey(r.path ?? path, r, opts.key), ...gzip ? { decompressed: true } : {} };
   const content = r.content ?? "";
   if (opts.offset === void 0 && opts.limit === void 0 && outlineFirstApplies(content, leverOn2) && r.truncated !== true) {
@@ -6475,6 +6517,28 @@ import { hashText } from "@seanhogg/builderforce-memory/ingest";
 
 // ../packages/agent-tools/src/knowledge/fsDirectorySource.ts
 import { CONTENT_HASH_RULE, contentHash, mediaTypeOfPath as mediaTypeOfPath2, memoryHashCache, msToNs as msToNs2 } from "@seanhogg/builderforce-memory/knowledge";
+
+// ../packages/agent-tools/src/skipDirs.ts
+var OUTPUT_DIRS = /* @__PURE__ */ new Set([
+  "node_modules",
+  ".git",
+  ".hg",
+  ".svn",
+  ".next",
+  ".nuxt",
+  "dist",
+  "build",
+  "out",
+  ".cache",
+  ".turbo",
+  ".vercel",
+  "coverage",
+  ".venv",
+  "venv",
+  "__pycache__",
+  ".vscode-test"
+]);
+var WORKSPACE_SKIP_DIRS = /* @__PURE__ */ new Set([...OUTPUT_DIRS, "vendor", "target", ".idea"]);
 
 // ../packages/agent-tools/src/knowledge/statWalk.ts
 import { EMPTY_STAT_SET, isRacy, msToNs, reusedHash, sameRow } from "@seanhogg/builderforce-memory/knowledge";
@@ -12405,6 +12469,11 @@ function truncateMiddle(text, max, opts = {}) {
 
 // ../packages/tool-output-policy/src/caps.ts
 var DEFAULT_TOOL_OUTPUT_CHARS = 6e3;
+var DEFAULT_COMMAND_TIMEOUT_MS = 10 * 6e4;
+var MAX_BACKGROUND_JOBS = 32;
+var BACKGROUND_JOB_LIMIT_ERROR = `too many running background jobs (${MAX_BACKGROUND_JOBS}); stop one with command_stop first`;
+var EDITOR_COMMAND_BUFFER_CHARS = 4 * 1024 * 1024;
+var NATIVE_FILE_READ_MAX_BYTES = 50 * 1024;
 var TOOL_OUTPUT_CAPS = {
   read_file: 16e3,
   run_command: 2e4,
@@ -21510,12 +21579,15 @@ export {
   syncIdText,
   UNBOUND_DESTINATION,
   defineRecordIndex,
+  defineRecordPartition,
   SCAN_STOP,
   selectRecords,
   scanByIndex,
   newLocalRecord,
   BOUND_ONLY_VERSION,
   isOwnRecord,
+  isOwnStub,
+  isLiveOwnStub,
   isImported,
   dropPending,
   queueImport,
@@ -21840,4 +21912,4 @@ export {
   computeBrainDiagnostics,
   buildBrainTriageReport
 };
-//# sourceMappingURL=chunk-WVRARSU4.mjs.map
+//# sourceMappingURL=chunk-MMGGQZOY.mjs.map

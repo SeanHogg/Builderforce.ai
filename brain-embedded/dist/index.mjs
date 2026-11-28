@@ -198,6 +198,7 @@ import {
   defaultInferenceMode,
   defaultPipelineRouting,
   defineRecordIndex,
+  defineRecordPartition,
   describeBracketDelta,
   describeLiveStep,
   describeStreamFailure,
@@ -252,6 +253,7 @@ import {
   isFailedToolResult,
   isImported,
   isInferenceMode,
+  isLiveOwnStub,
   isLocalTicketCreateLabel,
   isLocalWorkspaceTool,
   isMalformedToolCall,
@@ -262,6 +264,7 @@ import {
   isMutationTool,
   isOpenLinkedStatus,
   isOwnRecord,
+  isOwnStub,
   isRateLimitFailure,
   isReadOnlyPlatformTool,
   isReadOnlyShellCall,
@@ -414,7 +417,7 @@ import {
   workFiledNotStaffedVerdict,
   workFinishPorts,
   workSupportsRoutingSample
-} from "./chunk-WVRARSU4.mjs";
+} from "./chunk-MMGGQZOY.mjs";
 import {
   ASK_USER_TOOL,
   ASK_USER_TOOL_SPEC,
@@ -3568,6 +3571,31 @@ function liveRecords(tx, type, deviceId, where) {
   return selectRecords(tx, type, (row) => isLiveOwn(row, deviceId) && (!where || where(row)));
 }
 var MESSAGES_BY_CHAT = defineRecordIndex("message", "brain.message.chatId", (row) => row.payload.chatId);
+var MESSAGE_PARTITION = defineRecordPartition({
+  index: MESSAGES_BY_CHAT,
+  homeOf: (row) => row.payload.chatId,
+  ordinalOf: (row) => row.payload.message.id
+});
+async function scanLiveMessageStubs(tx, deviceId, visit) {
+  if (!tx.scanStubs) return false;
+  let any = false;
+  await tx.scanStubs("message", (stub) => {
+    any = true;
+    if (isLiveOwnStub(stub, deviceId)) return visit(stub);
+    return void 0;
+  });
+  return any;
+}
+async function highestMessageId(tx, deviceId) {
+  let highest = 0;
+  const fromStubs = await scanLiveMessageStubs(tx, deviceId, (stub) => {
+    highest = Math.max(highest, stub.ordinal ?? 0);
+  });
+  if (!fromStubs) await scanLive(tx, "message", deviceId, (row) => {
+    highest = Math.max(highest, row.payload.message.id);
+  });
+  return highest;
+}
 function scanChatMessages(tx, deviceId, chatId, visit) {
   return scanByIndex(tx, MESSAGES_BY_CHAT, chatId, (row) => {
     if (isLiveOwn(row, deviceId)) visit(row);
@@ -3617,6 +3645,16 @@ async function messageRecordById(tx, deviceId, messageId, chatId) {
     });
   }
   if (!found) {
+    let stubId;
+    const fromStubs = await scanLiveMessageStubs(tx, deviceId, (stub) => {
+      if (stub.ordinal !== messageId) return void 0;
+      stubId = stub.id;
+      return SCAN_STOP;
+    });
+    if (fromStubs) {
+      const row = stubId !== void 0 ? await tx.get("message", stubId) : void 0;
+      return row && isLiveOwn(row, deviceId) ? row : void 0;
+    }
     await tx.scan("message", (row) => {
       if (row.payload.message.id !== messageId || !isLiveOwn(row, deviceId)) return void 0;
       found = row;
@@ -3882,10 +3920,7 @@ function createLocalBrainPersistence(options) {
     await scanLive(tx, "chat", options.deviceId, (row) => {
       highest = Math.max(highest, row.payload.chat.id);
     });
-    await scanLive(tx, "message", options.deviceId, (row) => {
-      highest = Math.max(highest, row.payload.message.id);
-    });
-    return highest + 1;
+    return Math.max(highest, await highestMessageId(tx, options.deviceId)) + 1;
   };
   const touchesChatMessages = (chatId, change) => {
     const ids = change.records.get("message");
@@ -3893,6 +3928,11 @@ function createLocalBrainPersistence(options) {
     if (ids.size > MESSAGE_ID_CHECK_LIMIT) return Promise.resolve(true);
     return options.store.read(async (tx) => {
       for (const id of ids) {
+        const stub = await tx.stub?.("message", id);
+        if (stub) {
+          if (stub.home === chatId) return true;
+          continue;
+        }
         const row = await tx.get("message", id);
         if (!row || row.payload.chatId === chatId) return true;
       }
@@ -4816,19 +4856,11 @@ function prefetchConfirmOf(pending) {
 // src/localChat/chatSync.ts
 async function bindChatHistoryForSync(store, deviceId, destination) {
   if (destination.kind !== "bound") return 0;
-  const unbound = (row) => row.destination.kind === "unbound" && isOwnRecord(row, deviceId);
   const anything = await store.read(async (tx) => {
-    let found = false;
-    for (const type of ["chat", "message", "usage"]) {
-      if (found) break;
-      await tx.scan(type, (row) => {
-        if (unbound(row)) {
-          found = true;
-          return SCAN_STOP;
-        }
-      });
+    for (const type of BIND_TYPES) {
+      if ((await unboundRows(tx, type, deviceId, 1)).length > 0) return true;
     }
-    return found;
+    return false;
   });
   if (!anything) return 0;
   const rebind = async (tx, row) => {
@@ -4836,13 +4868,13 @@ async function bindChatHistoryForSync(store, deviceId, destination) {
     await tx.put(moved);
     return moved;
   };
-  const chats = await bindInSlices(store, "chat", unbound, async (tx, chat) => {
+  const chats = await bindInSlices(store, "chat", deviceId, async (tx, chat) => {
     await queueImport(tx, await rebind(tx, chat));
   });
-  await bindInSlices(store, "message", unbound, async (tx, message) => {
+  await bindInSlices(store, "message", deviceId, async (tx, message) => {
     await queueImport(tx, await rebind(tx, message), message.payload.chatClientId);
   });
-  await bindInSlices(store, "usage", unbound, async (tx, usage) => {
+  await bindInSlices(store, "usage", deviceId, async (tx, usage) => {
     const moved = await rebind(tx, usage);
     if (syncsToPlatform(usage.payload)) await queueImport(tx, moved, usage.payload.clientChatId);
     else await dropPending(tx, moved);
@@ -4850,17 +4882,37 @@ async function bindChatHistoryForSync(store, deviceId, destination) {
   return chats.filter((chat) => !chat.deletedAt).length;
 }
 var BIND_SLICE = 1e3;
-async function bindInSlices(store, type, select, bind) {
+var BIND_TYPES = ["chat", "message", "usage"];
+async function unboundRows(tx, type, deviceId, limit) {
+  const ids = [];
+  let sawStubs = false;
+  await tx.scanStubs?.(type, (stub) => {
+    sawStubs = true;
+    if (!stub.unbound || !isOwnStub(stub, deviceId)) return void 0;
+    ids.push(stub.id);
+    return ids.length >= limit ? SCAN_STOP : void 0;
+  });
+  if (sawStubs) {
+    const rows2 = [];
+    for (const id of ids) {
+      const row = await tx.get(type, id);
+      if (row) rows2.push(row);
+    }
+    return rows2;
+  }
+  const rows = [];
+  await tx.scan(type, (row) => {
+    if (row.destination.kind !== "unbound" || !isOwnRecord(row, deviceId)) return void 0;
+    rows.push(row);
+    return rows.length >= limit ? SCAN_STOP : void 0;
+  });
+  return structuredClone(rows);
+}
+async function bindInSlices(store, type, deviceId, bind) {
   const bound = [];
   for (; ; ) {
     const slice = await store.transact(async (tx) => {
-      const rows = [];
-      await tx.scan(type, (row) => {
-        if (!select(row)) return;
-        rows.push(row);
-        if (rows.length >= BIND_SLICE) return SCAN_STOP;
-      });
-      const copies = structuredClone(rows);
+      const copies = await unboundRows(tx, type, deviceId, BIND_SLICE);
       for (const row of copies) await bind(tx, row);
       return copies;
     });
@@ -7951,6 +8003,10 @@ function localStorageConfirmationPersistence(key) {
   };
 }
 
+// ../packages/asset-limits/src/index.ts
+var ASSET_MAX_BYTES = 10 * 1024 * 1024;
+var ASSET_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+
 // src/uploadUrls.ts
 function brainUploadUrl(baseUrl, key) {
   return `${baseUrl}/api/brain/uploads/${key}`;
@@ -7960,8 +8016,6 @@ function signedBrainFileUrl(baseUrl, key, signed) {
 }
 var BRAIN_UPLOAD_SIGN_PATH = "/api/brain/uploads/sign";
 var BRAIN_UPLOAD_PATH = "/api/brain/upload";
-var ASSET_MAX_BYTES = 10 * 1024 * 1024;
-var ASSET_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 // src/evermindMemory.ts
 var MAX_CITED_ANCHORS = 16;
@@ -20147,6 +20201,7 @@ export {
   MAX_STOP_HOOK_ROUNDS,
   MAX_SUMMARY_CHUNKS,
   MAX_TOOL_RESULT_CHARS,
+  MESSAGE_PARTITION,
   MODALITY_PERSONAS,
   MODEL_CATEGORIES,
   NEW_CHAT_MODE,

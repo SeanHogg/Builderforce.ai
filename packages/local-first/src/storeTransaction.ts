@@ -301,34 +301,11 @@ export class Transaction implements LocalFirstTransaction {
   }
 
   async mappingByServerId(entityType: LocalEntityType, serverId: string | number, scope?: EntityScope): Promise<ServerMapping | undefined> {
-    const syncId = parseSyncId(serverId);
-    if (syncId !== null) {
-      // A row carrying the SyncId wins. Failing that, a row whose server said "not a SyncId of this
-      // type" (`syncId: null`, a run step) but whose key text is this number: the same server row,
-      // so an ingest of it must land on that row, not mint a second LocalId.
-      const text = syncIdText(syncId);
-      return this.earliestInScope(entityType, scope, (mapping) => mapping.syncId === syncId)
-        ?? this.earliestInScope(entityType, scope, (mapping) => (mapping.syncId ?? null) === null && mapping.serverId === text);
-    }
-    if (typeof serverId !== 'string' || serverId.trim() === '') return undefined;
-    const tier = parseEntityRef(serverId);
-    const externalRef = tier && 'tier' in tier ? tierRefText(tier.tier) : undefined;
-    return this.earliestInScope(entityType, scope, (mapping) =>
-      mapping.serverId === serverId || (externalRef !== undefined && mapping.externalRef === externalRef));
+    return clone(findByServerId(this.mappings.values(), entityType, serverId, scope));
   }
 
   async mappingByExternalRef(entityType: LocalEntityType, externalRef: string, scope?: EntityScope): Promise<ServerMapping | undefined> {
-    if (typeof externalRef !== 'string' || externalRef.trim() === '') return undefined;
-    return this.earliestInScope(entityType, scope, (mapping) => mapping.externalRef === externalRef);
-  }
-
-  /** The EARLIEST (`compareMappingAge`) mapping of `entityType` inside `scope` that `match` accepts. */
-  private earliestInScope(
-    entityType: LocalEntityType,
-    scope: EntityScope | undefined,
-    match: (mapping: ServerMapping) => boolean,
-  ): ServerMapping | undefined {
-    return clone(earliestMapping(this.mappings.values(), entityType, scope, match));
+    return clone(findByExternalRef(this.mappings.values(), entityType, externalRef, scope));
   }
 
   async putReceipt(receipt: SyncReceipt): Promise<void> {

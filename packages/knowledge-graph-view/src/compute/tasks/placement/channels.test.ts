@@ -11,13 +11,19 @@ import type { Placement } from '../../../stage/types';
 import { buildStageModel, type StageModel } from '../stageModel';
 import { PLACEMENT_WORD_KEYS } from './graph';
 import { PLACEMENTS, type PlacementReq } from './index';
+import { placeMap } from './map';
 import { channelBindings, placementCacheKey, type PlacementChannels } from './request';
 
 const graph = withSymbols(surfaceFixture());
 const model = buildStageModel(graph);
 const req = (camera: PlacementReq['camera'], over: Partial<PlacementReq> = {}): PlacementReq =>
     ({ graph: 1, generation: model.marks.generation, camera, drill: null, unfolded: null, pins: [], pathId: null, viewportBand: 2, lod: 0, ...over });
-const run = (g: KnowledgeGraph, m: StageModel, r: PlacementReq): Placement => { const t = PLACEMENTS[r.camera](g, m, r); while (!t.step()); return t.result(); };
+// The overlay's size and width channels move the TRANSIT map (`placeMap`, the layout the other cameras' drilled levels use); the Map and 3D
+// cameras draw the level scene's own fixed shapes (`level.test.ts`), so the channel readings are asserted on the transit placement.
+const run = (g: KnowledgeGraph, m: StageModel, r: PlacementReq): Placement => {
+    if (r.camera === 'map') return placeMap(m, r, g);
+    const t = PLACEMENTS[r.camera](g, m, r); while (!t.step()); return t.result();
+};
 
 const BOUND: PlacementChannels = { size: 'use', width: 'use' };
 

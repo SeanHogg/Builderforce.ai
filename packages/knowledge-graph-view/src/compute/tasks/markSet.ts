@@ -5,8 +5,10 @@
  *   `st:<id>`   per station aggregate (the surface's own `buildStations`),
  *   `dir:<path>` per mind-map folder (`buildDirs`, the mind map's own tree; `dir:` is the root).
  *
- * `type` is `markTypeOf` (`shapes.ts`, the ONE registry) as an index into `MARK_TYPE_ORDER`; an aggregate takes its
- * members' dominant type. `parentStation` / `parentFolder` are the forest a placement anchors hidden slots on (rule 4).
+ * `type` is `markTypeOf` (`shapes.ts`, the ONE registry) as an index into `MARK_TYPE_ORDER`; a folder takes its
+ * files' dominant type, except a system or app folder, which is `system` (a slab); a station is `data` (a drum, a store)
+ * when its files are mostly data (a document or knowledge station keeps its type), else `system` (a slab, a component), the design's
+ * two kinds. `parentStation` / `parentFolder` are the forest a placement anchors hidden slots on (rule 4).
  * Pure; runs in the worker.
  */
 
@@ -17,6 +19,7 @@ import { importanceOf } from '../../order';
 import { dominantOfCounts, dominantType, markTypeOf, MARK_TYPE_ORDER, type MarkType } from '../../shapes';
 import { tailOf } from '../../surface/outlineGraph';
 import { fileRefOf, stationOfRef, stationSourcePath, type StationModel } from '../../surface/stations';
+import { modulesOfFiles, systemsOf } from '../../surface/systems';
 import { capacityFor } from '../../stage/slots';
 import { SLOT_FOLDER, SLOT_NODE, SLOT_STATION, SLOT_UNIT, type MarkSet } from '../../stage/types';
 
@@ -93,7 +96,8 @@ export function buildMarkSet(g: KnowledgeGraph, stations: StationModel, generati
         keys[slot] = `st:${s.id}`; label[slot] = path ? tailOf(path) : s.name; tooltip[slot] = path ?? s.path ?? s.name;
         slotKind[slot] = SLOT_STATION; importance[slot] = s.use;
         const memberTypes = s.refs.map((ref) => { const at = nodeAt.get(ref); return at !== undefined ? nodeType[at]! : markTypeOf(asFile(ref)); });
-        type[slot] = typeIndex(dominantType(memberTypes));
+        // A station is a slab (a component) unless its files are mostly data: then it is a drum (a store), the design's two kinds.
+        type[slot] = typeIndex(stationTypeOf(dominantType(memberTypes)));
     });
     for (let i = 0; i < nodes.length; i++) {
         const id = stationOfRef(stations, nodes[i]!.ref);
@@ -105,6 +109,8 @@ export function buildMarkSet(g: KnowledgeGraph, stations: StationModel, generati
     const dirBase = stationBase + stations.stations.length;
     const dirAt = new Map<string, number>();
     dirs.forEach((d, k) => dirAt.set(d.path, dirBase + k));
+    // A folder that is a system or an app is itself a system (a slab): the level scene draws those as its shapes.
+    const scopePaths = new Set<string>([...systemsOf(g).map((s) => s.path), ...modulesOfFiles(g).values()]);
     const counts = new Map<string, Map<MarkType, number>>();
     for (let k = dirs.length - 1; k >= 0; k--) {
         const d = dirs[k]!, slot = dirBase + k;
@@ -112,7 +118,7 @@ export function buildMarkSet(g: KnowledgeGraph, stations: StationModel, generati
         slotKind[slot] = SLOT_FOLDER;
         const count = tally(d, nodeAt, nodeType, counts);
         counts.set(d.path, count);
-        type[slot] = typeIndex(dominantOfCounts(count));
+        type[slot] = typeIndex(scopePaths.has(d.path) ? 'system' : dominantOfCounts(count));
         if (d.depth > 0) parentFolder[slot] = dirAt.get(parentPath(d.path)) ?? -1;
     }
     for (let i = 0; i < nodes.length; i++) parentFolder[i] = folderSlotOf(nodes[i]!, nodeAt, nodes, dirAt);
@@ -166,3 +172,9 @@ export function batchesOf(type: Uint8Array): MarkSet['batches'] {
     }
     return batches;
 }
+
+/** Types a station keeps (a store, a document, knowledge): they are not the code the level scene draws as slabs. */
+const KEPT_STATION_TYPES: ReadonlySet<MarkType> = new Set<MarkType>(['data', 'doc', 'section', 'entity', 'claim', 'external', 'unit']);
+
+/** A station is a slab (a component, `system`) unless its files are mostly data (a drum, a store) or not code at all. */
+const stationTypeOf = (dominant: MarkType): MarkType => (KEPT_STATION_TYPES.has(dominant) ? dominant : 'system');

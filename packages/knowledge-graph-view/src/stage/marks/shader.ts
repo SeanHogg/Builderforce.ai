@@ -23,7 +23,7 @@ import { LIGHT_GLSL } from '../lighting';
 import { PALETTE_SIZE, toneIndex } from '../tones';
 import { STAGGER_MS, STAGGER_STEPS } from '../tween';
 import { ASPECT_GLSL } from './aspect';
-import { CAP_BAND, DRUM_LID, FORM_CODE, type MarkForm } from './forms';
+import { CAP_BAND, CAP_TOWARD_TOP, DRUM_LID, FORM_CODE, IFACE_ALPHA, type MarkForm } from './forms';
 import { FLAG } from '../types';
 
 /** Outline points the cap SDF accepts (the circle has 32). */
@@ -131,11 +131,16 @@ out vec4 fragColor;
 const float PI = 3.14159265;
 bool bit(float flags, float b) { return mod(floor(flags / b), 2.0) > 0.5; }
 // A cap is the lighter top of its body, toward the theme's top tone (the design's --s-node-top / --s-store-top): a box and
-// a drum a clear step, a prism a hint, a slab and a puck none.
+// a drum a clear step, a prism a hint, a slab, a puck and an interface none (their edges, not a cap, are the lighter tone).
 vec3 capOf(vec3 b) {
     bool drum = uForm > 2.5 && uForm < 3.5;
-    float k = (uForm > 0.5 && uForm < 1.5) || drum ? 0.45 : (uForm < 0.5 ? 0.15 : 0.0);
+    float k = (uForm > 0.5 && uForm < 1.5) || drum ? ${CAP_TOWARD_TOP.toFixed(2)} : (uForm < 0.5 ? 0.15 : 0.0);
     return mix(b, drum ? uStoreTop : uNodeTop, k);
+}
+// 1 on a 1 px line along a wall's top and bottom edges (a slab's outline, an interface's dashed edges).
+float wallEdge() {
+    float fy = max(fwidth(vY), 1e-4);
+    return 1.0 - smoothstep(0.5, 1.5, min(vY, 1.0 - vY) / fy);
 }
 // The hover tint: the lit accent as emissive, on top of the lighting.
 vec3 shaded(vec3 base) { return mix(clamp(base * vLight, 0.0, 1.0), uHover, 0.4 * vHover); }
@@ -182,10 +187,19 @@ void main() {
         return;
     }
     if (vPart < 0.5) {
-        // The wall is the body, lit (darker than the cap by the light's angle); a box's top band is its lighter cap.
-        vec3 base = (uForm > 0.5 && uForm < 1.5 && vY > ${(1 - CAP_BAND).toFixed(2)}) ? capOf(vColor) : vColor;
-        vec3 wall = shaded(base);
-        float wallA = (uForm > 4.5 ? 0.14 : 1.0) * (bit(vFlags, F_GHOST) ? 0.62 : 1.0) * vFade;   // an interface is see-through; a ghost is a neighbour
+        // The wall is the body, lit (darker than the cap by the light's angle); a box's top band and a drum's lid are the lighter cap.
+        bool boxBand = uForm > 0.5 && uForm < 1.5 && vY > ${(1 - CAP_BAND).toFixed(2)};
+        bool drumLid = uForm > 2.5 && uForm < 3.5 && vY > ${(1 - DRUM_LID).toFixed(2)};
+        vec3 wall = shaded(boxBand || drumLid ? capOf(vColor) : vColor);
+        float wallA = (uForm > 4.5 ? ${IFACE_ALPHA.toFixed(2)} : 1.0);   // an interface is see-through
+        if (uForm > 1.5 && uForm < 2.5) wall = mix(wall, shaded(uEdge), 0.85 * wallEdge());   // a slab: its edges outlined
+        if (uForm > 4.5) {
+            // An interface: dashed edges in the lighter tone along the top and bottom of its walls.
+            float line = wallEdge() * dashAt(0.0, vec2(4.0, 3.0));
+            wall = mix(wall, shaded(uNodeTop), line);
+            wallA = max(wallA, line);
+        }
+        wallA *= (bit(vFlags, F_GHOST) ? 0.62 : 1.0) * vFade;   // a ghost is a neighbour
         fragColor = vec4(dim ? mix(wall, uBg, 0.7) : wall, wallA);
         return;
     }
@@ -207,10 +221,11 @@ void main() {
     float outlineA = outlined ? band(d, ${f1(CAP_PX.outline)} * dpr, ${f1(CAP_PX.outlineWidth / 2)} * dpr, aa) * dashAt(${f1(CAP_PX.outline)} * dpr, vec2(2.0, 3.0)) : 0.0;
     float pulseBand = pulse ? band(d, pulseAt, ${f1(CAP_PX.pulseWidth / 2)} * dpr, aa) * pulseA : 0.0;
     float alpha = max(edge, max(outlineA, pulseBand));
+    float dashed = 0.0;
     if (uForm > 4.5) {
         // An interface: a see-through box whose top edge is a DASHED outline.
-        float dashed = band(d, -1.0 * dpr, 1.0 * dpr, aa) * dashAt(0.0, vec2(4.0, 3.0));
-        alpha = max(max(0.14 * edge, dashed), max(outlineA, pulseBand));
+        dashed = band(d, -1.0 * dpr, 1.0 * dpr, aa) * dashAt(0.0, vec2(4.0, 3.0));
+        alpha = max(max(${IFACE_ALPHA.toFixed(2)} * edge, dashed), max(outlineA, pulseBand));
     }
     alpha *= (bit(vFlags, F_GHOST) ? 0.62 : 1.0) * vFade;
     if (alpha <= 0.002) discard;
@@ -227,6 +242,7 @@ void main() {
         body = mix(uBg, vColor, b * on);
     }
     if (uForm > 1.5 && uForm < 2.5) body = mix(body, uEdge, 0.85 * band(d, -1.0 * dpr, 1.0 * dpr, aa)); // a slab: its edges outlined
+    if (uForm > 4.5) body = mix(body, uNodeTop, dashed);   // the dashed edges are the lighter tone, the fill the body's
     body = shaded(body);
     vec3 c = mix(body, uBg, smoothstep(-aa, aa, d));
     if (inter) c = mix(c, uText, smoothstep(back - aa, back + aa, d));

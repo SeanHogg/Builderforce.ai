@@ -14,7 +14,7 @@ import type { SymbolRecord } from '../../types';
 import { fileRefOf, stationOfRef, type StationModel } from '../stations';
 import { tailOf } from '../outlineGraph';
 import { buildDrillView, hasSymbols, type DrillFrame, type DrillLevel, type DrillView } from './drillView';
-import { folderFrameOf, folderOfKey, frameToEnter, isStructuralLevel, LEVEL_RANK } from './levelFrames';
+import { folderFrameOf, folderOfKey, isStructuralLevel, LEVEL_RANK } from './levelFrames';
 import { anchorFilesOf, reanchorDrill } from './reanchorDrill';
 import { SYMBOL_FILES, isClassLike, membersOfClass, symbolSort, symbolsOf, symbolsOfFile, withSymbolRecords } from './symbols';
 
@@ -41,7 +41,8 @@ export interface DrillModel {
     canEnter(id: string): EnterCheck;
     /** The frame `enter(id)` lands on (a level holding one child is skipped through), or null when it cannot be entered. */
     frameOf(id: string): DrillFrame | null;
-    enter(id: string): void;
+    /** `replace`: the frame takes the place of the innermost one (the skip rule: a level of exactly one child is never stood on). */
+    enter(id: string, replace?: boolean): void;
     openFile?(ref: string): void;
     hasMembers?(ref: string): boolean;
     /** Climb back to a depth. 0 is the system (the world map). A depth at or past the current one stays. */
@@ -156,22 +157,20 @@ export function useDrill(graph: KnowledgeGraph | null, world: StationModel, load
         return { can: true, level: next, ref: id };
     }, [stack, view, world, full, graph]);
 
-    // The frame an enter lands on: a package or deeper keeps its own name; a system or an app goes through the ONE skip rule.
+    // The frame an enter lands on: a system or an app is named as the outline names it; a package or deeper keeps its own name.
     const frameOf = useCallback((id: string): DrillFrame | null => {
         const check = canEnter(id);
         if (!check.can) return null;
-        if (check.level === 'system' || check.level === 'app') {
-            const own = graph ? folderFrameOf(graph, check.ref) : null;
-            return graph && own ? frameToEnter(graph, world, own) : null;
-        }
+        if (check.level === 'system' || check.level === 'app') return graph ? folderFrameOf(graph, check.ref) : null;
         const name = view?.stations.byId.get(id)?.name ?? world.byId.get(id)?.name ?? id;
         return check.level === 'package' ? { level: check.level, ref: id, name, files: anchorFilesOf(world, id) } : { level: check.level, ref: id, name };
     }, [canEnter, graph, view, world]);
 
-    const enter = useCallback((id: string) => {
+    const enter = useCallback((id: string, replace = false) => {
         const frame = frameOf(id);
         if (!frame) return;
-        setStack((s) => [...s, frame]);
+        // `replace`: the skip rule (a level with exactly one child is not shown) puts the child where that level stood.
+        setStack((s) => [...(replace ? s.slice(0, -1) : s), frame]);
         setSelected(null);
         setNotice(null);
         // The most important files first; the HOST applies the one real cap, this only keeps the request small.

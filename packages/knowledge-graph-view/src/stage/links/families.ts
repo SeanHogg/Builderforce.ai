@@ -30,4 +30,4 @@ export const LINK_FAMILY_STYLE: Readonly<Record<LinkFamily, LinkFamilyStyle>> = 
 };
 
 /** The hall family (raised flat bars, `links/HallLayer`): segments preallocated at mount, and the bar's thickness as a share of its width. */
-export const HALL_STYLE = { capacity: 2048, thickness: 0.4 } as const;
+export const HALL_STYLE = { capacity: 2048, thickness: 0.24 } as const;   // the design's bar: 0.08 thick on a 0.34 width
